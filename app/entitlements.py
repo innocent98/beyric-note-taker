@@ -114,12 +114,15 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
     An entry with any allocation is settled, so `hours.allocate` always leaves a row on an entry it
     could not cover in full (the shortfall is written off, never counted again). Usage after the
     pilot grant's expiry (set in S10) is never part of it: it was counted under S2."""
-    pilot = session.execute(
-        select(func.min(HourGrant.starts_at), func.max(HourGrant.expires_at)).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot"
-        )
+    since, until, open_ended = session.execute(
+        select(
+            func.min(HourGrant.starts_at),
+            func.max(HourGrant.expires_at),
+            func.count().filter(HourGrant.expires_at.is_(None)),
+        ).where(mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot")
     ).one()
-    since, until = pilot
+    if open_ended:  # one pilot grant never expires, so nothing is past its end
+        until = None
     if since is None:
         return 0
     query = select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(

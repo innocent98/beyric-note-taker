@@ -87,11 +87,14 @@ def record_usage(
 
     Returns the new ledger entry, or None when this meeting was counted before.
 
-    What else happens depends on `HOURS_MODE` (`app/hours.py`). `off`: nothing but the old 80%
-    notice. `shadow`: the recording is also split across the person's grants (so the grants stay
-    right for the day the rule is switched on), still with the old notice, and a failure there is
-    logged and goes no further. `enforce`: the same split, with the notices of spec 3.3 instead of
-    the old one, and a failure stops the counting (it is retried, and counted once).
+    What else happens depends on `HOURS_MODE` (`app/hours.py`). `off` and `shadow`: nothing but the
+    old 80% notice (shadow only logs at placement; it writes nothing here). `enforce`: the recording
+    is split across the person's grants and the notices of spec 3.3 are raised instead of the old
+    one. That bookkeeping is **best effort**: it runs in its own savepoints, a failure is logged
+    (exception class and ids only) and the transcript carries on, so a paying person's meeting is
+    never failed by it. A recording left without allocations is still counted in the ledger; for
+    a person holding a pilot grant `entitlements.unallocated_seconds` still takes it off their
+    hours, and `scripts/hours_reconcile_backlog.py` settles it.
     """
     if session.scalar(select(UsageEntry.id).where(UsageEntry.meeting_id == meeting.id)):
         return None
@@ -105,20 +108,8 @@ def record_usage(
     now = now or datetime.now(UTC)
     settings = settings or get_settings()
     if settings.hours_mode == "enforce":
-        _hours_module().after_counted(
-            session, owner, row, now, settings.max_poll_hours * 3600, notices=True
-        )
+        _hours_module().after_counted(session, owner, row, now, settings.max_poll_hours * 3600)
         return row
-    if settings.hours_mode == "shadow":
-        try:
-            with session.begin_nested():
-                _hours_module().after_counted(
-                    session, owner, row, now, settings.max_poll_hours * 3600, notices=False
-                )
-        except Exception as exc:  # the old rule decides in shadow: never stop a count for this
-            logger.error(
-                "hours_shadow allocation failed user=%s error=%s", owner.id, type(exc).__name__
-            )
     _warn_when_low(session, owner, now)
     return row
 

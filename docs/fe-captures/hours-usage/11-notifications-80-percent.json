@@ -22,9 +22,9 @@
           "kind": "usage.hours_low",
           "severity": "info",
           "title": "Most of your recorded hours are used",
-          "body": "You have used 4 of your 5 recorded hours. When they run out the note taker will not join new meetings.",
+          "body": "You have used 4 of the 5 recorded hours you have now. When they run out the note taker will not join new meetings.",
           "meeting_id": null,
-          "created_at": "2026-11-16T14:13:47.036409Z",
+          "created_at": "2026-11-16T14:32:06.692948Z",
           "read_at": null
         }
       ],

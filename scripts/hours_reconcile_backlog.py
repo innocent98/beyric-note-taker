@@ -1,4 +1,4 @@
-"""Settle the usage counted between migration 0049 and the first allocation (billing stage S2).
+"""Bring the grants in line with the old cap rule before `HOURS_MODE=enforce` (billing stage S2).
 
 Run it where the app's `.env` is. By default it only SHOWS what it would do (it does the work in a
 transaction and rolls it back); `--apply` keeps it:
@@ -6,21 +6,30 @@ transaction and rolls it back); `--apply` keeps it:
     docker compose exec -T web python scripts/hours_reconcile_backlog.py </dev/null
     docker compose exec -T web python scripts/hours_reconcile_backlog.py --apply </dev/null
 
-Why. Stage S1 recorded no allocations, so every recording counted after a person's pilot grant was
-made has no `usage_allocations` row. Until it does, `app/entitlements.py` takes those seconds off
-the person's grants anyway (`unallocated_seconds`), so **nobody's hours left change, before or
-after this script**. It matters later: when a pilot grant expires (stage S10) the same seconds
-would otherwise come off the person's paid hours. Run it once before `HOURS_MODE=enforce`; running
-it again changes nothing (an entry that has an allocation is settled).
+It does two things for each person, in this order:
 
-It writes only `usage_allocations`, and only on the person's own pilot grants, oldest recording
-first. It never prints a name, an email or a title: people appear as "user 1", "user 2", ranked by
-seconds settled. A recording longer than what the pilot grant had left is settled in full and the
-excess is written off, as at a live count (`app/hours.py`).
+1. **Cap raises.** The grants rule never reads `users.hours_cap_seconds`, so an admin's raise
+   (5 h to 10 h) made before `enforce` gave the person nothing. It gives them the difference as
+   `admin_gift` grants (`hours.sync_cap_gift`), derived from the cap as it stands, so a cap that
+   went down and up again is gifted once, and running it twice gifts nothing more. This is the only
+   step that adds hours, and it is shown as "gift".
+2. **The S1 backlog.** Stage S1 recorded no allocations, so every recording counted after a
+   person's pilot grant was made has none. Until it does, `app/entitlements.py` takes those seconds
+   off the grants anyway (`unallocated_seconds`). This step turns them into allocations on the
+   pilot grants, so they can never come off paid hours when a pilot grant later expires (S10).
+   Normally the hours left do not change. They CAN, when the backlog is larger than what the pilot
+   grant had left and the person holds other grants: the excess was coming off those grants and is
+   now written off. The script prints hours left before and after this step for every person,
+   marks a change, and **refuses `--apply` while any person's hours would change**, so the lead
+   sees it first.
+
+It writes only `usage_allocations` and `hour_grants`. It never prints a name, an email or a title:
+people appear as "user 1", "user 2", ranked by seconds settled.
 """
 
 import argparse
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,32 +42,60 @@ from app import entitlements, hours  # noqa: E402
 from app.models import HourGrant, User  # noqa: E402
 
 
-def reconcile(session: Session, now: datetime, max_poll_seconds: int) -> list[tuple[int, int, int]]:
-    """Settle every person's backlog. Returns `(user id, seconds settled, seconds left)` for each
-    person who had any, where `seconds left` is what they may record after, and writes nothing
-    but allocations. The caller commits or rolls back."""
-    ids = session.scalars(
-        select(HourGrant.user_id).where(HourGrant.kind == "pilot", HourGrant.user_id.is_not(None))
-    ).all()
+@dataclass(frozen=True)
+class Row:
+    user_id: int
+    gifted: int  # seconds given for a raised cap
+    settled: int  # seconds of backlog turned into allocations
+    before: int | None  # hours left before the backlog step (None: no limit)
+    after: int | None
+
+    @property
+    def changes_hours(self) -> bool:
+        return self.before != self.after
+
+
+def reconcile(session: Session, now: datetime, max_poll_seconds: int) -> list[Row]:
+    """Gift the raised caps, then settle every person's backlog. Returns a row for each person
+    something happened to. Writes nothing but grants and allocations; the caller commits or rolls
+    back."""
+    pilots = select(HourGrant.user_id).where(
+        HourGrant.kind == "pilot", HourGrant.user_id.is_not(None)
+    )
+    overridden = select(User.id).where(User.hours_cap_seconds.is_not(None))
     done = []
-    for user in session.scalars(select(User).where(User.id.in_(set(ids))).order_by(User.id)):
+    for user in session.scalars(
+        select(User).where(User.id.in_(pilots.union(overridden))).order_by(User.id)
+    ):
+        gifted = hours.sync_cap_gift(session, user)
+        before = entitlements.status(session, user, now, max_poll_seconds).seconds_left
         settled = hours.reconcile_backlog(session, user)
-        if settled:
-            left = entitlements.status(session, user, now, max_poll_seconds).seconds_left
-            done.append((user.id, settled, left))
+        after = entitlements.status(session, user, now, max_poll_seconds).seconds_left
+        if gifted or settled:
+            done.append(Row(user.id, gifted, settled, before, after))
     return done
 
 
-def render(rows: list[tuple[int, int, int]], *, apply: bool) -> str:
-    verb = "Settled" if apply else "Would settle (nothing was kept)"
+def _h(seconds: int | None) -> str:
+    return "no limit" if seconds is None else f"{seconds / 3600:.2f} h"
+
+
+def render(rows: list[Row], *, apply: bool) -> str:
     if not rows:
-        return "No usage is waiting to be settled."
-    lines = [f"{verb} the usage counted before allocations existed:"]
-    ranked = sorted(rows, key=lambda r: (-r[1], r[0]))
-    for rank, (_, settled, left) in enumerate(ranked, start=1):
+        return "Nothing to gift and no usage waiting to be settled."
+    verb = "Done" if apply else "Would do (nothing was kept)"
+    lines = [f"{verb}: cap raises gifted, and usage counted before allocations existed settled:"]
+    for rank, row in enumerate(sorted(rows, key=lambda r: (-r.settled, r.user_id)), start=1):
+        flag = "  <-- HOURS CHANGE" if row.changes_hours else ""
         lines.append(
-            f"user {rank}: {settled / 3600:.2f} h settled; {left / 3600:.2f} h left afterwards "
-            "(the same as before)"
+            f"user {rank}: gift {_h(row.gifted)}; settled {_h(row.settled)}; "
+            f"left {_h(row.before)} before settling, {_h(row.after)} after{flag}"
+        )
+    changed = sum(row.changes_hours for row in rows)
+    if changed:
+        lines.append(
+            f"{changed} person(s) would change hours left by settling: look at them first. "
+            "--apply refuses while that is so."
         )
     return "\n".join(lines)
 
@@ -74,11 +111,15 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(UTC)
     with SessionLocal() as session:
         rows = reconcile(session, now, settings.max_poll_hours * 3600)
-        if args.apply:
+        refused = args.apply and any(row.changes_hours for row in rows)
+        if args.apply and not refused:
             session.commit()
         else:
             session.rollback()
-    print(render(rows, apply=args.apply))
+    print(render(rows, apply=args.apply and not refused))
+    if refused:
+        print("Nothing was applied.")
+        return 2
     return 0
 
 

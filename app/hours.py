@@ -24,8 +24,8 @@ from datetime import datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import alerts, entitlements
-from app.models import HourGrant, UsageAllocation, UsageEntry, User
+from app import alerts, entitlements, usage
+from app.models import AppState, HourGrant, UsageAllocation, UsageEntry, User
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +103,13 @@ def reconcile_backlog(session: Session, user: User) -> int:
     """Settle the usage counted since the person's pilot grant began that has no allocation: turn it
     into allocations on the pilot grants, oldest recording first. Returns the seconds settled.
 
-    This is the one-off step before `HOURS_MODE=enforce`. It changes nobody's hours left: until it
-    runs `entitlements.unallocated_seconds` takes the same seconds off the grants in the same order
-    (the pilot grant is first, so the same grant). It only matters when the pilot grant later
-    expires, because then the backlog would otherwise come off the person's paid hours. Idempotent.
+    This is the one-off step before `HOURS_MODE=enforce`. Normally it changes nobody's hours left:
+    until it runs `entitlements.unallocated_seconds` takes the same seconds off the grants in the
+    same order, and the pilot grant is first. **It can change them** when the backlog is larger
+    than what the pilot grant had left and the person holds other grants: before, the excess came
+    off those grants; after, it is written off on the pilot grant (they did not pay for it). The
+    script prints both numbers and refuses to apply a change. It matters later when a pilot grant
+    expires, because the backlog would otherwise come off paid hours. Idempotent.
     """
     pilots = list(
         session.scalars(
@@ -120,7 +123,8 @@ def reconcile_backlog(session: Session, user: User) -> int:
         return 0
     _lock_person(session, user)
     since = min(g.starts_at for g in pilots)
-    until = max((g.expires_at for g in pilots if g.expires_at), default=None)
+    open_ended = any(g.expires_at is None for g in pilots)  # then nothing is past the end
+    until = None if open_ended else max(g.expires_at for g in pilots)
     spent = dict(
         session.execute(
             select(UsageAllocation.grant_id, func.sum(UsageAllocation.seconds))
@@ -153,6 +157,73 @@ def reconcile_backlog(session: Session, user: User) -> int:
     return settled
 
 
+# ---- an admin raising a cap ----
+
+CAP_GIFT_REASON = "Recorded-hours cap raised by an admin"
+
+
+def _cap_baseline(session: Session, user: User) -> int:
+    """The cap the person's hours were built from: their pilot grants plus what was already in the
+    ledger when those grants were made (migration 0049 made each grant as cap minus ledger). With
+    no pilot grant (an account made after 0049) the baseline is the app-wide default cap."""
+    pilots = list(
+        session.scalars(
+            select(HourGrant).where(
+                entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+                HourGrant.kind == "pilot",
+            )
+        )
+    )
+    if not pilots:
+        state = session.get(AppState, 1)
+        return state.default_hours_cap_seconds if state else usage.DEFAULT_CAP_SECONDS
+    since = min(g.starts_at for g in pilots)
+    before = session.scalar(
+        select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
+            entitlements.mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+            UsageEntry.counted_at <= since,
+        )
+    )
+    return sum(g.seconds for g in pilots) + int(before)
+
+
+def sync_cap_gift(session: Session, user: User) -> int:
+    """Make the person's cap gifts add up to what their cap says, and return the seconds just
+    gifted. The grants rule never reads `users.hours_cap_seconds`, so an admin who raised a person's
+    cap (5 h to 10 h) must have given them the difference as `admin_gift` grants (spec 1.3).
+
+    It is derived from state, never from the edit: the total gifted by this rule must equal
+    `cap - baseline` (never less than 0), so lowering a cap and raising it again, or clearing it and
+    setting it again, gives nothing twice. A cap that is lowered takes nothing back. Idempotent.
+    Gifts of this rule are recognised by their reason; any other `admin_gift` is left alone.
+    Does nothing for an admin (no cap) or a person with no cap."""
+    cap = usage.effective_cap(session, user)
+    if cap is None or user.is_admin:
+        return 0
+    _lock_person(session, user)
+    gifted = session.scalar(
+        select(func.coalesce(func.sum(HourGrant.seconds), 0)).where(
+            entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+            HourGrant.kind == "admin_gift",
+            HourGrant.reason == CAP_GIFT_REASON,
+        )
+    )
+    missing = cap - _cap_baseline(session, user) - int(gifted)
+    if missing <= 0:
+        return 0
+    session.add(
+        HourGrant(
+            user_id=user.id,
+            email_hash=usage.email_hash(user.email),
+            kind="admin_gift",
+            seconds=missing,
+            reason=CAP_GIFT_REASON,
+        )
+    )
+    session.flush()
+    return missing
+
+
 # ---- notices (one per person and period) ----
 
 
@@ -166,8 +237,8 @@ def notify_low(session: Session, user: User, status: entitlements.Status) -> Non
         severity="info",
         title=LOW_TITLE,
         body=(
-            f"You have used {_hours(used)} of your {_hours(held)} recorded hours. When they run "
-            "out the note taker will not join new meetings."
+            f"You have used {_hours(used)} of the {_hours(held)} recorded hours you have now. "
+            "When they run out the note taker will not join new meetings."
         ),
         dedupe_key=f"{LOW_KIND}:{status.period_key}",
         email_template=alerts.ALERT_TEMPLATE,
@@ -210,21 +281,33 @@ def notify_out_of_hours(
 
 
 def after_counted(
-    session: Session,
-    user: User,
-    entry: UsageEntry,
-    now: datetime,
-    max_poll_seconds: int,
-    *,
-    notices: bool,
+    session: Session, user: User, entry: UsageEntry, now: datetime, max_poll_seconds: int
 ) -> None:
-    """Allocate a counted recording and, when `notices` (enforce only), tell the person if they
-    have reached 80% or 100%. At 100% the 100% notice only: the 80% one would be stale."""
-    allocate(session, user, entry, now)
-    if not notices or user.is_admin:
+    """`HOURS_MODE=enforce` only: allocate a counted recording and tell the person if they have
+    reached 80% or 100% (at 100% the 100% notice only: the 80% one would be stale).
+
+    Best effort, each part in its own savepoint: whatever fails is logged by exception class and
+    ids (a database error's text carries bound parameters) and goes no further, so a transcript is
+    never stopped by bookkeeping. The recording stays counted in the ledger either way."""
+    try:
+        with session.begin_nested():
+            allocate(session, user, entry, now)
+    except Exception as exc:
+        logger.error(
+            "hours allocation failed user=%s entry=%s error=%s",
+            user.id,
+            entry.id,
+            type(exc).__name__,
+        )
         return
-    status = entitlements.status(session, user, now, max_poll_seconds)
-    if status.warning == entitlements.OUT:
-        notify_out(session, user, status)
-    elif status.warning == entitlements.LOW:
-        notify_low(session, user, status)
+    if user.is_admin:
+        return
+    try:
+        with session.begin_nested():
+            status = entitlements.status(session, user, now, max_poll_seconds)
+            if status.warning == entitlements.OUT:
+                notify_out(session, user, status)
+            elif status.warning == entitlements.LOW:
+                notify_low(session, user, status)
+    except Exception as exc:
+        logger.error("hours notice failed user=%s error=%s", user.id, type(exc).__name__)

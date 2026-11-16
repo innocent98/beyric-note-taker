@@ -448,10 +448,15 @@ def test_off_writes_no_allocation_and_raises_no_new_notice(session, ada):
     assert notices(session, ada, "usage.hours_out") == []
 
 
-def test_shadow_splits_the_recording_but_raises_no_new_notice(session, ada):
-    plan = grant(session, ada, HOLD)
+def test_shadow_only_logs_it_writes_no_allocation_takes_no_lock_and_raises_no_new_notice(
+    session, ada, monkeypatch
+):
+    grant(session, ada, HOLD)
+    monkeypatch.setattr(
+        hours, "after_counted", lambda *a, **k: pytest.fail("shadow must not write hours")
+    )
     entry = count(session, ada, HOLD, mode="shadow")
-    assert rows_of(session, entry) == [(plan.id, HOLD)]
+    assert rows_of(session, entry) == []
     assert notices(session, ada, "usage.hours_out") == []
     assert notices(session, ada, "usage.hours_low") == []  # the old once-ever rule needs a cap
 
@@ -462,34 +467,39 @@ def test_enforce_does_not_raise_the_old_once_ever_notice(session, ada):
     assert [n.dedupe_key for n in notices(session, ada, "usage.hours_low")] != ["usage.hours_low"]
 
 
-def test_a_failure_while_allocating_in_shadow_is_logged_and_stops_nothing(
-    session, ada, caplog, monkeypatch
-):
+def test_a_failure_while_allocating_never_stops_the_transcript(session, ada, caplog, monkeypatch):
+    """Enforce: the bookkeeping is best effort. The recording is still counted and the meeting
+    goes on; the failure is logged by class and ids, no message (it could carry parameters)."""
     grant(session, ada, HOLD)
 
     def boom(*args, **kwargs):
         raise RuntimeError("email ada@example.test hash abc")
 
     monkeypatch.setattr(hours, "allocate", boom)
-    with caplog.at_level(logging.ERROR, logger="app.usage"):
-        entry = count(session, ada, 100, mode="shadow")
-    assert entry is not None and entry.seconds == 100  # still counted
-    [line] = [r.getMessage() for r in caplog.records if "hours_shadow allocation" in r.getMessage()]
-    assert line == f"hours_shadow allocation failed user={ada.id} error=RuntimeError"
+    with caplog.at_level(logging.ERROR, logger="app.hours"):
+        entry = count(session, ada, 100)
+    assert entry is not None and entry.seconds == 100  # counted in the ledger
+    assert session.get(UsageEntry, entry.id) is not None
+    [line] = [r.getMessage() for r in caplog.records if "allocation failed" in r.getMessage()]
+    assert line == f"hours allocation failed user={ada.id} entry={entry.id} error=RuntimeError"
     assert "ada@" not in caplog.text
+    assert rows_of(session, entry) == []
 
 
-def test_a_failure_while_allocating_under_enforce_stops_the_count(session, ada, monkeypatch):
-    grant(session, ada, HOLD)
+def test_a_failure_in_the_notices_keeps_the_allocation_and_the_count(
+    session, ada, caplog, monkeypatch
+):
+    plan = grant(session, ada, HOLD)
 
     def boom(*args, **kwargs):
         raise RuntimeError("no")
 
-    monkeypatch.setattr(hours, "allocate", boom)
-    with pytest.raises(RuntimeError):
-        count(session, ada, 100)
-    session.rollback()
-    assert session.scalars(select(UsageEntry)).all() == []  # nothing half-counted
+    monkeypatch.setattr(hours, "notify_out", boom)
+    with caplog.at_level(logging.ERROR, logger="app.hours"):
+        entry = count(session, ada, HOLD)
+    assert rows_of(session, entry) == [(plan.id, HOLD)]
+    assert f"hours notice failed user={ada.id} error=RuntimeError" in caplog.text
+    assert session.get(UsageEntry, entry.id) is not None
 
 
 def test_with_the_flag_off_or_shadow_the_old_cap_rule_alone_decides(session, ada):
@@ -523,7 +533,7 @@ def test_the_80_percent_notice_goes_once_with_one_mail(session, ada):
     count(session, ada, 10, code="b-bbbb-bbb")  # exactly 80%
     [low] = notices(session, ada, "usage.hours_low")
     assert low.title == hours.LOW_TITLE
-    assert low.body.startswith("You have used 2.2 of your 2.8 recorded hours")  # one decimal
+    assert low.body.startswith("You have used 2.2 of the 2.8 recorded hours you have now")
     [mail] = mails_to(session, ada)
     assert (mail.template, mail.payload["title"]) == ("alert", hours.LOW_TITLE)
     count(session, ada, 500, code="c-cccc-ccc")  # still between 80% and 100%
@@ -830,7 +840,7 @@ def test_a_recording_counted_now_is_not_taken_off_twice_beside_a_backlog(session
     assert status(session, ada).seconds_left == 3 * HOUR  # 5 - 1 backlog - 1 new, once each
 
 
-def test_the_reconcile_script_shows_a_dry_run_and_keeps_nothing_until_asked(session, ada):
+def load_script():
     import importlib.util
     from pathlib import Path
 
@@ -840,13 +850,19 @@ def test_the_reconcile_script_shows_a_dry_run_and_keeps_nothing_until_asked(sess
     )
     script = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script)
+    return script
+
+
+def test_the_reconcile_script_shows_a_dry_run_and_keeps_nothing_until_asked(session, ada):
+    script = load_script()
     grant(session, ada, 3 * HOUR, kind="pilot", starts=T0 - 10 * DAY)
     s1_usage(session, ada, HOUR, T0 - 5 * DAY)
     rows = script.reconcile(session, T0, 6 * HOUR)
     text = script.render(rows, apply=False)
     session.rollback()  # the dry run
     assert session.scalars(select(UsageAllocation)).all() == []
-    assert "user 1: 1.00 h settled; 2.00 h left afterwards" in text and "nothing was kept" in text
+    assert "settled 1.00 h; left 2.00 h before settling, 2.00 h after" in text
+    assert "nothing was kept" in text and "HOURS CHANGE" not in text
     assert "ada" not in text.lower().replace("settled", "")  # a rank, never a name
     rows = script.reconcile(session, T0, 6 * HOUR)
     session.commit()
@@ -854,13 +870,81 @@ def test_the_reconcile_script_shows_a_dry_run_and_keeps_nothing_until_asked(sess
     assert script.reconcile(session, T0, 6 * HOUR) == []
 
 
-# ---- an admin raising a cap becomes a gift ----
+def spill_case(session, ada):
+    """The review's case: pilot grant 1 h, 3 h counted during S1, plus 5 h of another grant."""
+    grant(session, ada, HOUR, kind="pilot", starts=T0 - 10 * DAY)
+    grant(session, ada, 5 * HOUR, kind="admin_gift", starts=T0 - DAY)
+    s1_usage(session, ada, 3 * HOUR, T0 - 5 * DAY)
+
+
+def test_the_script_prints_the_true_before_and_after_and_flags_a_change(session, ada):
+    script = load_script()
+    spill_case(session, ada)
+    [row] = script.reconcile(session, T0, 6 * HOUR)
+    assert (row.before, row.after, row.changes_hours) == (3 * HOUR, 5 * HOUR, True)
+    text = script.render([row], apply=False)
+    assert "left 3.00 h before settling, 5.00 h after  <-- HOURS CHANGE" in text
+    assert "1 person(s) would change hours left" in text
+
+
+def test_the_script_refuses_to_apply_while_any_hours_would_change(
+    session, engine, ada, monkeypatch
+):
+    from sqlalchemy.orm import sessionmaker
+
+    import app.db
+
+    script = load_script()
+    spill_case(session, ada)
+    monkeypatch.setattr(app.db, "SessionLocal", sessionmaker(bind=engine))
+    assert script.main(["--apply"]) == 2
+    session.expire_all()
+    assert session.scalars(select(UsageAllocation)).all() == []  # nothing was kept
+    assert script.main([]) == 0  # the dry run still shows it
+
+
+def test_the_script_applies_when_nothing_changes(session, engine, ada, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    import app.db
+
+    script = load_script()
+    grant(session, ada, 3 * HOUR, kind="pilot", starts=T0 - 10 * DAY)
+    s1_usage(session, ada, HOUR, T0 - 5 * DAY)
+    monkeypatch.setattr(app.db, "SessionLocal", sessionmaker(bind=engine))
+    assert script.main(["--apply"]) == 0
+    session.expire_all()
+    assert len(session.scalars(select(UsageAllocation)).all()) == 1
+
+
+def test_a_pilot_grant_without_an_end_keeps_the_backlog_counted_past_another_ones_end(session, ada):
+    grant(session, ada, 3 * HOUR, kind="pilot", starts=T0 - 10 * DAY)  # never ends
+    grant(session, ada, HOUR, kind="pilot", starts=T0 - 10 * DAY, expires=T0 - 8 * DAY)
+    s1_usage(session, ada, HOUR, T0 - 5 * DAY)  # after the second one ended
+    assert entitlements.unallocated_seconds(session, ada) == HOUR
+
+
+# ---- an admin raising a cap becomes a gift (derived from state, never stacked) ----
+
+
+def gifts(session, user):
+    session.expire_all()
+    return [
+        g.seconds
+        for g in session.scalars(select(HourGrant).where(HourGrant.kind == "admin_gift"))
+        if g.user_id == user.id
+    ]
+
+
+def edit_cap(session, user, cap, mode="enforce"):
+    from app import admin
+
+    admin.update_user(session, user, {"hours_cap_seconds": cap}, modes(mode))
 
 
 def test_an_admin_raising_a_cap_gives_the_difference_as_a_gift(session, ada):
-    from app import admin
-
-    admin.update_user(session, ada, {"hours_cap_seconds": 10 * HOUR})  # 5 h default -> 10 h
+    edit_cap(session, ada, 10 * HOUR)  # 5 h default -> 10 h
+    session.expire_all()
     [gift] = session.scalars(select(HourGrant)).all()
     assert (gift.kind, gift.seconds, gift.expires_at, gift.user_id) == (
         "admin_gift",
@@ -868,13 +952,49 @@ def test_an_admin_raising_a_cap_gives_the_difference_as_a_gift(session, ada):
         None,
         ada.id,
     )
-    assert "raised" in gift.reason
+    assert gift.reason == hours.CAP_GIFT_REASON
 
 
-@pytest.mark.parametrize("cap", [3 * HOUR, None])
-def test_lowering_or_clearing_a_cap_takes_nothing_away_and_gives_nothing(session, ada, cap):
-    from app import admin
+def test_lowering_a_cap_and_raising_it_again_gifts_once_not_twice(session, ada):
+    """5 h to 10 h to 3 h to 10 h: the gifts add up to what the cap says (5 h), they do not stack
+    to 5 h plus 7 h."""
+    for cap in (10 * HOUR, 3 * HOUR, 10 * HOUR):
+        edit_cap(session, ada, cap)
+    assert gifts(session, ada) == [5 * HOUR]
 
-    admin.update_user(session, ada, {"hours_cap_seconds": 10 * HOUR})
-    admin.update_user(session, ada, {"hours_cap_seconds": cap})
-    assert [g.seconds for g in session.scalars(select(HourGrant))] == [5 * HOUR]  # only the first
+
+def test_clearing_a_cap_and_setting_it_again_gifts_once(session, ada):
+    for cap in (10 * HOUR, None, 10 * HOUR):
+        edit_cap(session, ada, cap)
+    assert gifts(session, ada) == [5 * HOUR]
+
+
+def test_a_higher_cap_later_gifts_only_the_new_difference(session, ada):
+    for cap in (10 * HOUR, 3 * HOUR, 12 * HOUR):
+        edit_cap(session, ada, cap)
+    assert sorted(gifts(session, ada)) == [2 * HOUR, 5 * HOUR]
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow"])
+def test_with_the_flag_off_or_shadow_a_cap_edit_changes_the_cap_and_nothing_else(
+    session, ada, mode
+):
+    edit_cap(session, ada, 10 * HOUR, mode)
+    session.expire_all()
+    assert session.scalars(select(HourGrant)).all() == []
+    assert session.get(type(ada), ada.id).hours_cap_seconds == 10 * HOUR
+
+
+def test_a_cap_raised_while_s1_was_live_is_gifted_by_the_script_once(session, ada):
+    """The cap was raised from 5 h to 8 h before S2 existed: no gift was made. The script makes
+    it from the cap and the pilot baseline (1 h grant + 4 h already used = 5 h), once."""
+    script = load_script()
+    grant(session, ada, HOUR, kind="pilot", starts=T0 - 10 * DAY)
+    s1_usage(session, ada, 4 * HOUR, T0 - 11 * DAY)  # used before the pilot grant was made
+    ada.hours_cap_seconds = 8 * HOUR
+    session.commit()
+    [row] = script.reconcile(session, T0 + 400 * DAY, 6 * HOUR)
+    assert row.gifted == 3 * HOUR
+    session.commit()
+    assert script.reconcile(session, T0 + 400 * DAY, 6 * HOUR) == []  # idempotent
+    assert gifts(session, ada) == [3 * HOUR]

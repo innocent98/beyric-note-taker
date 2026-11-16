@@ -138,7 +138,7 @@ not move. `seconds_left` stays `0` and **never goes negative**.
   "warning": null,
   "can_record": true,
   "unlimited": false,
-  "period_ends_at": "2026-12-13T15:13:46.707020+01:00",
+  "period_ends_at": "2026-12-13T15:32:06.356015+01:00",
   "trial_ends_at": null
 }
 ```
@@ -158,7 +158,7 @@ plan period's end. 22 hours held (20 plan + 2 pilot).
   "can_record": true,
   "unlimited": false,
   "period_ends_at": null,
-  "trial_ends_at": "2026-11-30T15:13:46.707020+01:00"
+  "trial_ends_at": "2026-11-30T15:32:06.356015+01:00"
 }
 ```
 
@@ -265,7 +265,7 @@ verbatim:
     "title": "You are out of recorded hours",
     "body": "You have used all of your recorded hours, so the note taker will not join new meetings. A meeting that is recording now will finish. Your notes, transcripts and exports stay as they are.",
     "meeting_id": null,
-    "created_at": "2026-11-16T14:13:47.271680Z",
+    "created_at": "2026-11-16T14:32:06.929004Z",
     "read_at": null
   },
   {
@@ -273,9 +273,9 @@ verbatim:
     "kind": "usage.hours_low",
     "severity": "info",
     "title": "Most of your recorded hours are used",
-    "body": "You have used 4 of your 5 recorded hours. When they run out the note taker will not join new meetings.",
+    "body": "You have used 4 of the 5 recorded hours you have now. When they run out the note taker will not join new meetings.",
     "meeting_id": null,
-    "created_at": "2026-11-16T14:13:47.036409Z",
+    "created_at": "2026-11-16T14:32:06.692948Z",
     "read_at": null
   }
 ]
@@ -316,8 +316,14 @@ HTTP**.
   account is in this state under `enforce`.
 * **Nothing can be bought yet.** Do not add a Buy button from these fields; the billing screens come with
   later stages.
-* `web/app/share/page.tsx` builds its own "for the pilot ... hello@beyrictech.com" sentence from `cap_seconds`
-  instead of showing the server's message; replace it with the 403's `message`.
+* **Pilot people's numbers reset when `enforce` is switched on.** `cap_seconds` and `used_seconds` are read
+  from the hours a person holds now, not the old 5 hours. A pilot person who had used 4 of 5 hours before the
+  hours model arrived holds a 1-hour grant, so their bar changes from "4 of 5 h" to "0 of 1 h", and the 80%
+  notice says "You have used 0.8 of the 1 recorded hours you have now." Tell them in the screen or release
+  note; do not present the new bar as a loss. (Open question for the owner: show the original pilot total
+  instead. Not decided; capture 06 shows a fresh 5-hour grant, which no real pilot account has.)
+* The share page (`web/app/share/page.tsx`) now shows the same plain words as the refusal (all used, or none
+  held), built from `can_record` and `cap_seconds`; it no longer says "pilot" or gives an address.
 
 ## Polling
 
