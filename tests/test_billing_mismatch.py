@@ -25,7 +25,6 @@ from tests.test_billing_inbox import (  # noqa: F401  (fixtures used by name)
 )
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
-PERIOD_END = NOW + timedelta(days=12)
 
 
 def seed_country(session, user, country):
@@ -39,7 +38,9 @@ def seed_country(session, user, country):
         ("NG", "NG"),
         ("ng", "NG"),
         (" US ", "US"),
-        ("NIGERIA NG", "NG"),  # Flutterwave's verify answer
+        ("NIGERIA NG", "NG"),
+        ("UNITED KINGDOM UK", None),  # UK is not a code (GB is): a stray word is not a country
+        ("CARD OF", None),  # Flutterwave's verify answer
         ("UNITED STATES US", "US"),
         ("", None),
         ("NGA", None),
@@ -107,21 +108,57 @@ def test_a_settled_payment_is_noted_and_never_refused(
     assert (paid.card_country, paid.country_mismatch) == (stored, flagged)
 
 
-def test_a_pending_country_change_is_not_what_the_card_is_compared_with(
-    client, fake, grants, session, payment, monkeypatch
+def seed_pending(session, user, *, billing, pending, effective_at):
+    """A person billed in `billing` whose change to `pending` is scheduled for `effective_at` (the
+    state a live subscription will make in S8; written directly, as nothing makes it yet)."""
+    seed_country(session, user, billing)
+    row = profiles.get_profile(session, user)
+    row.pending_billing_country = pending
+    row.pending_effective_at = effective_at
+    session.commit()
+
+
+def test_a_change_still_waiting_is_not_what_the_card_is_compared_with(
+    client, fake, grants, session, payment
 ):
     payer = session.get(User, payment.payer_user_id)
-    seed_country(session, payer, "NG")
-    monkeypatch.setattr(profiles, "live_subscription_period_end", lambda db, uid, now: PERIOD_END)
-    profiles.change_country(session, payer, "US", now=datetime.now(UTC))
-    session.commit()
-    assert profiles.get_profile(session, payer).pending_billing_country == "US"
+    seed_pending(
+        session,
+        payer,
+        billing="NG",
+        pending="US",
+        effective_at=datetime.now(UTC) + timedelta(days=5),
+    )
     fake.add_transaction(tx_for(payment, card_country="US"))
 
     send(client, fake, event_for(payment))
 
     # The payment was taken under the Nigerian route, so a US card is the odd one.
     assert reload_payment(session, payment).country_mismatch is True
+
+
+def test_a_change_that_came_due_is_the_country_even_if_nothing_has_written_it_yet(
+    client, fake, grants, session, payment
+):
+    """The period ended yesterday and nobody has read or changed the profile since: the first
+    payment through the new route is compared with the new country, not the old one."""
+    payer = session.get(User, payment.payer_user_id)
+    seed_pending(
+        session,
+        payer,
+        billing="NG",
+        pending="US",
+        effective_at=datetime.now(UTC) - timedelta(days=1),
+    )
+    fake.add_transaction(tx_for(payment, card_country="US"))
+
+    send(client, fake, event_for(payment))
+
+    paid = reload_payment(session, payment)
+    assert paid.status == "succeeded" and paid.country_mismatch is False  # US card, billed in US
+    # the note wrote nothing to the profile: applying is the change's and the renewal's job
+    row = profiles.get_profile(session, payer)
+    assert (row.billing_country, row.pending_billing_country) == ("NG", "US")
 
 
 def test_a_failure_in_the_note_cannot_stop_a_paid_customer(

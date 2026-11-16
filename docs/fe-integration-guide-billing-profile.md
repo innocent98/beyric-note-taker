@@ -22,8 +22,8 @@ profile and from the preview route below.**) The country is **chosen by the pers
 from their address, browser or card. Only the person changes their own; there is no route for anyone else's.
 
 **Nothing here is switched on yet.** All four routes answer a plain 404 while the server runs with
-`BILLING_ENABLED` off (the default), and also for an account that is not on the server's allow-list when there
-is one. The FE should treat a 404 `not_found` from any of them as "billing is not available to this person"
+`BILLING_ENABLED` off (the default), and also for every account the operator has not allow-listed (the list is
+closed by default; the operator can open it to everyone). The FE should treat a 404 `not_found` from any of them as "billing is not available to this person"
 and show nothing, not an error. No screen can use these routes until the owner switches billing on for an
 account.
 
@@ -360,7 +360,7 @@ PUT /api/billing/profile/country
       "currency": "USD",
       "provider": "flutterwave"
     },
-    "country_change_allowed_at": "2026-12-16T21:37:55.074579Z"
+    "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
   }
 }
 ```
@@ -469,12 +469,12 @@ GET /api/billing/profile
   "billing_email": "billing@example.test",
   "billing_country": "GB",
   "pending_billing_country": "NG",
-  "pending_effective_at": "2026-11-28T21:37:55.099611Z",
+  "pending_effective_at": "2026-11-28T22:02:15.275977Z",
   "route": {
     "currency": "USD",
     "provider": "flutterwave"
   },
-  "country_change_allowed_at": "2026-12-16T21:37:55.074579Z"
+  "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
 }
 ```
 
@@ -497,9 +497,9 @@ PUT /api/billing/profile/country
 }
 ```
 
-When the period ends, the next `GET /api/billing/profile` (or any write) makes the change take effect:
-`billing_country` becomes the pending one and the `pending_*` keys go null. That step is proved by tests
-(`tests/test_billing_profile.py`), not captured.
+When the period ends, the next `GET /api/billing/profile` already shows the change as applied (`billing_country`
+is the pending one and the `pending_*` keys are null). The read writes nothing; the database row is updated by
+the person's next change or by the renewal. Proved by tests (`tests/test_billing_profile.py`), not captured.
 
 ## Every error this area returns
 
@@ -507,7 +507,7 @@ When the period ends, the next `GET /api/billing/profile` (or any write) makes t
 |---|---|---|---|
 | 401 | `not_authenticated` | not signed in | `Log in first.` |
 | 403 | `csrf_rejected` | a write without the CSRF header | `Missing or wrong X-CSRF-Token header. Read it from GET /api/session.` |
-| 404 | `not_found` | billing is off, or the account is not on the allow-list | `Not found.` |
+| 404 | `not_found` | billing is off, or the account is not allowed (the allow-list is closed by default) | `Not found.` |
 | 422 | `billing_country_missing` | the country is empty | `Choose the country you are billed from.` |
 | 422 | `billing_country_invalid` | not a country code | `That is not a country code we know. Pick one from the list.` |
 | 422 | `billing_country_unsupported` | a real country with no route | `We cannot take payments from that country yet.` |
@@ -516,7 +516,7 @@ When the period ends, the next `GET /api/billing/profile` (or any write) makes t
 | 409 | `country_change_too_soon` | a change within 30 days of the last one | `You can change your billing country once every 30 days.` |
 | 409 | `country_change_pending` | a change is already waiting for the end of a period | `A change of billing country is already waiting for the end of your paid period.` |
 
-The 401 and 404 bodies:
+The 401 and 404 bodies (the 404 is the same whether billing is off or the account is not allowed):
 
 ```json
 // 401  (capture 05-visitor-profile.json)
@@ -551,8 +551,10 @@ The 401 and 404 bodies:
 * **A wrong first choice can be fixed once, straight away,** because the first choice does not count. After
   that, one change in 30 days.
 * **While `pending_billing_country` is set,** show that the change is waiting and when (`pending_effective_at`),
-  keep showing the old route, and offer no change control. (Never produced before stage S8.)
-* **A 404 on any of these means "not available to this person"** (billing off, or not on the allow-list), not
+  keep showing the old route, and offer no change control. **There is no way to cancel a waiting change:**
+  even a request for the current country gets 409 `country_change_pending`, so do not offer "undo".
+  (Never produced before stage S8.)
+* **A 404 on any of these means "not available to this person"** (billing off, or not allowed), not
   a fault: hide the billing profile section.
 * **Billing email is not the sign-in email.** It may be empty; mail about payments will use it when set.
 
@@ -590,7 +592,7 @@ with a fake provider, not by a live capture.
 | 409 `country_change_too_soon`, and that it writes nothing | live (capture 23; history rows in capture 25) |
 | 422 `billing_country_missing`, `billing_country_invalid` | live (captures 20, 21) |
 | 422 `billing_country_unsupported` (a provider switched off) | live (capture 33) |
-| 404 with billing off, and with an account off the allow-list | live (captures 03, 04, 36) |
+| 404 with billing off, with an account off the allow-list, and with billing on but the allow-list empty (closed by default) | live (captures 03, 04, 36, 39) |
 | 401 for a visitor, 403 without CSRF | live (captures 05, 17) |
 | One person never sees or changes another's profile | live for the read (capture 30); the writes by tests |
 | `scheduled` result, pending shape, 409 `country_change_pending` | **NOT LIVE**: needs a live subscription (stage S8). The waiting row was written by SQL; the read and the refusal are real HTTP (captures 26, 27). The `scheduled` response itself is tests only |

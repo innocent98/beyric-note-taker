@@ -282,13 +282,16 @@ class Settings(BaseSettings):
     # is built yet, so `true` still accepts nothing until Paystack (S6) or Flutterwave (S7) lands.
     billing_enabled: bool = False
     # Which currency and provider each billing country pays with (billing spec 5.2, stage S5):
-    # `COUNTRY=CURRENCY:provider` entries, `*` for every other country. The default is Nigeria
-    # to naira through Paystack and any other country to dollars through Flutterwave; remove an
-    # entry to switch that provider off (a country with no route is refused, never rerouted).
+    # `COUNTRY=CURRENCY:provider` or `COUNTRY=off` entries, `*` for every country with no entry of
+    # its own. Default: Nigeria to naira through Paystack, any other country to dollars through
+    # Flutterwave. A country with an entry never falls through to `*`. To switch a provider off
+    # write `off` for its countries (`NG=off,*=USD:flutterwave`); deleting the `NG` entry would
+    # send Nigeria to the `*` route. Only paystack (NGN) and flutterwave (USD) are accepted.
     billing_country_routes: str = "NG=NGN:paystack,*=USD:flutterwave"
     # The accounts that may use the billing routes while `BILLING_ENABLED` is true (S5): a
-    # comma-separated list of emails. Empty (default) means every account. An account not on the
-    # list gets the same 404 as billing being off. The pilot of the pay screens is this list.
+    # comma-separated list of emails. CLOSED by default: empty means no account may (spec section 8:
+    # "for allow-listed accounts only"); `*` in the list means every account. An account not allowed
+    # gets the same 404 as billing being off. The pilot of the pay screens is this list.
     billing_allowed_emails: str = ""
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags

@@ -7,9 +7,11 @@
 - `GET /api/billing/route?country=NG`: what a country would pay with. The screen states it before
   any payment ("Prices in naira, paid through Paystack").
 
-Dark: every route answers a plain 404 (`not_found`) while `BILLING_ENABLED` is false, and for an
-account that is not on `BILLING_ALLOWED_EMAILS` when that list is not empty. The check is the first
-thing a route does, so nothing is read or written. They sit under `/api/`, so `auth.guard` already
+Dark: every route answers a plain 404 (`not_found`) while `BILLING_ENABLED` is false, and for any
+account that is not on `BILLING_ALLOWED_EMAILS`. **The list is closed by default**: empty means no
+account may use the routes, and `*` in the list means every account (spec section 8: S5 is on "for
+allow-listed accounts only"). The check is the first thing a route does, so nothing is read or
+written. They sit under `/api/`, so `auth.guard` already
 gives them the login and CSRF rules of every other person route.
 
 Only the caller's own profile is ever read or written: the account is the signed-in user, never an
@@ -25,6 +27,7 @@ Errors, all in the API's one shape (`{"error": {"code", "message"}}`):
 - 409 `country_change_too_soon`, `country_change_pending`: the change rules.
 """
 
+import unicodedata
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -51,7 +54,7 @@ def billing_user(request: Request, user: User = Depends(auth.current_user)) -> U
     allowed = {
         part.strip().lower() for part in settings.billing_allowed_emails.split(",") if part.strip()
     }
-    if allowed and user.email.lower() not in allowed:
+    if "*" not in allowed and user.email.lower() not in allowed:
         raise HTTPException(404, "Not found.")
     return user
 
@@ -116,13 +119,14 @@ class CountryIn(Body):
 
 
 def _clean(value: str | None, *, multiline: bool) -> str | None:
-    """Trimmed text, or None when nothing is left. No control characters (a NUL cannot be stored);
+    """Trimmed text, or None when nothing is left. No control or invisible formatting characters
+    (a NUL cannot be stored; a right-to-left override or a zero-width space would reach invoices);
     an address may have line breaks."""
     if value is None:
         return None
     value = value.strip()
     allowed = {"\n"} if multiline else set()
-    if any(ord(ch) < 32 and ch not in allowed for ch in value):
+    if any(unicodedata.category(ch) in ("Cc", "Cf") and ch not in allowed for ch in value):
         raise ValueError("must not contain control characters")
     return value or None
 
@@ -140,6 +144,8 @@ def _route_of(country: str | None, routes_text: str) -> RouteOut | None:
 def _profile_out(
     db: Session, user: User, row: BillingProfile | None, routes_text: str, now: datetime
 ) -> ProfileOut:
+    """The profile as it applies at `now`: a scheduled change whose time has come is shown as
+    applied (`profiles.country_view`) without this read writing anything."""
     if row is None:
         return ProfileOut(
             name_or_company=None,
@@ -152,15 +158,16 @@ def _profile_out(
             route=None,
             country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
         )
+    view = profiles.country_view(row, now)
     return ProfileOut(
         name_or_company=row.name_or_company,
         address=row.address,
         tax_id=row.tax_id,
         billing_email=row.billing_email,
-        billing_country=row.billing_country,
-        pending_billing_country=row.pending_billing_country,
-        pending_effective_at=row.pending_effective_at,
-        route=_route_of(row.billing_country, routes_text),
+        billing_country=view.billing_country,
+        pending_billing_country=view.pending_billing_country,
+        pending_effective_at=view.pending_effective_at,
+        route=_route_of(view.billing_country, routes_text),
         country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
     )
 
@@ -171,12 +178,11 @@ def read_profile(
     db: Session = Depends(get_session),
     user: User = Depends(billing_user),
 ) -> ProfileOut:
-    """The caller's billing profile. Reading never creates a row: a person who has saved nothing
-    gets every field null."""
+    """The caller's billing profile. A read writes nothing: it never creates a row (a person who
+    has saved nothing gets every field null) and never commits; a scheduled change whose time has
+    come is shown as applied and is written by the next change or by the renewal."""
     now = datetime.now(UTC)
     row = profiles.get_profile(db, user)
-    if row is not None and profiles.apply_due_pending(row, now):
-        db.commit()  # a scheduled change whose time has come takes effect
     routes_text = request.app.state.settings.billing_country_routes
     return _profile_out(db, user, row, routes_text, now)
 

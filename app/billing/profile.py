@@ -21,10 +21,13 @@ Every applied or scheduled change writes one `billing_country_changes` row. A sc
 effect through `apply_due_pending` (called when the profile is read or changed, and by the renewal
 of stage S8); it writes no second row, the first already carries `effective_at`.
 
-**The live subscription is one question** (`live_subscription_period_end`): when does the paid
-period of this person's live subscription end, or None if they have none. The subscriptions table
-arrives with stage S8, so it answers None for everyone today and S8 fills it in. Tests replace it
-with a stub for the three branches.
+**The live subscription is one question** (`live_subscription`): the person's live subscription as
+`LiveSubscription(period_end, currency, provider)`, or None if they have none. The route it was
+SOLD on is what a change is compared with, not today's route table: an operator editing the table
+mid-period must not make a Nigerian naira subscription look like a dollar one. The subscriptions
+table arrives with stage S8, so today it answers None for everyone, and **S8 must replace it**:
+while it is the stub it raises as soon as a `subscriptions` table exists, and a test says the same.
+Tests replace it with a stub for the live branches.
 """
 
 from dataclasses import dataclass
@@ -37,12 +40,36 @@ from sqlalchemy.orm import Session
 
 from app.billing import routing
 from app.billing.types import BillingError
-from app.models import BillingCountryChange, BillingProfile, User
+from app.models import Base, BillingCountryChange, BillingProfile, User
 
 # At most one change in this many days. The first choice is not a change.
 CHANGE_WINDOW = timedelta(days=30)
 
 ChangeResult = Literal["applied", "scheduled", "unchanged"]
+
+
+@dataclass(frozen=True)
+class LiveSubscription:
+    """What a change needs to know about a live paid subscription: when its paid period ends and the
+    currency and provider it was sold on (stored on the subscription by stage S8)."""
+
+    period_end: datetime
+    currency: str
+    provider: str
+
+    @property
+    def route(self) -> routing.Route:
+        return routing.Route(self.currency, self.provider)
+
+
+@dataclass(frozen=True)
+class CountryView:
+    """The country that applies at one moment: a scheduled change whose time has come counts as
+    applied, whether or not anything has written it to the row yet."""
+
+    billing_country: str | None
+    pending_billing_country: str | None
+    pending_effective_at: datetime | None
 
 
 class CountryChangeRefused(BillingError):
@@ -59,11 +86,34 @@ class CountryChange:
     profile: BillingProfile
 
 
-def live_subscription_period_end(db: Session, user_id: int, now: datetime) -> datetime | None:
-    """When the paid period of the person's live subscription ends, or None when they have no live
-    subscription. **Stage S8 fills this in** (subscriptions do not exist yet); until then nobody has
-    one, so every change applies at once."""
+def _subscriptions_table_exists() -> bool:
+    return "subscriptions" in Base.metadata.tables
+
+
+def live_subscription(db: Session, user_id: int, now: datetime) -> LiveSubscription | None:
+    """The person's live paid subscription, or None. **Stage S8 replaces this function** (and
+    removes `is_stub`): subscriptions do not exist yet, so nobody has one and every change applies
+    at once. The tripwire: if a `subscriptions` table exists while this is still the stub, it raises
+    instead of quietly letting every crossing change through."""
+    if _subscriptions_table_exists():
+        raise RuntimeError(
+            "billing.profile.live_subscription is still the stage S5 stub but a subscriptions "
+            "table exists: stage S8 must replace it before any country change is allowed"
+        )
     return None
+
+
+live_subscription.is_stub = True
+
+
+def country_view(row: BillingProfile | None, at: datetime) -> CountryView:
+    """The profile's countries as they apply at `at` (without changing the row)."""
+    if row is None:
+        return CountryView(None, None, None)
+    pending, due = row.pending_billing_country, row.pending_effective_at
+    if pending is not None and due is not None and due <= at:
+        return CountryView(pending, None, None)
+    return CountryView(row.billing_country, pending, due)
 
 
 def get_profile(db: Session, user: User) -> BillingProfile | None:
@@ -87,12 +137,12 @@ def _locked_profile(db: Session, user: User) -> BillingProfile:
 
 
 def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:
-    """Make a scheduled country change take effect once its time has come. True if it did."""
-    if profile.pending_billing_country is None or profile.pending_effective_at is None:
+    """Make a scheduled country change take effect once its time has come, in the row. True if it
+    did. Call it with the row locked (`_locked_profile`); a read only uses `country_view`."""
+    view = country_view(profile, now)
+    if view.billing_country == profile.billing_country:
         return False
-    if profile.pending_effective_at > now:
-        return False
-    profile.billing_country = profile.pending_billing_country
+    profile.billing_country = view.billing_country
     profile.pending_billing_country = None
     profile.pending_effective_at = None
     profile.updated_at = now
@@ -175,13 +225,10 @@ def change_country(
                 "country_change_too_soon",
                 "You can change your billing country once every 30 days.",
             )
-        period_end = live_subscription_period_end(db, user.id, now)
-        if (
-            period_end is not None
-            and period_end > now
-            and _route_or_none(old, routes_text) != new_route
-        ):
-            scheduled_for = period_end
+        live = live_subscription(db, user.id, now)
+        # Crossing is judged against the route the subscription was sold on, not today's table.
+        if live is not None and live.period_end > now and live.route != new_route:
+            scheduled_for = live.period_end
 
     db.add(
         BillingCountryChange(
@@ -202,12 +249,3 @@ def change_country(
     profile.updated_at = now
     db.flush()
     return CountryChange(result, profile)
-
-
-def _route_or_none(country: str, routes_text: str) -> routing.Route | None:
-    """The route of a country already on the profile, or None if the table no longer has one (a
-    provider was switched off since): such a change counts as crossing, so it waits."""
-    try:
-        return routing.provider_for(country, routes_text)
-    except routing.RoutingError:
-        return None

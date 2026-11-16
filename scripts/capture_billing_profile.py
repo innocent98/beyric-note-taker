@@ -4,8 +4,10 @@
 
 Same setup as `scripts/capture_hours_usage.py` (it imports `capture_calendar_connect` for the HTTP
 recorder, the scratch database and the app server): real migrations, the real app under uvicorn,
-real HTTP. Four copies of the app run on one database: billing on with the default routes, billing
-off, and billing on with a route table that has only Nigeria and an allow-list of one account.
+real HTTP. Four copies of the app run on one database: billing on and open to every account,
+billing off, billing on with a route table that has only Nigeria and an allow-list of one account,
+and billing on with the allow-list left empty (closed).
+The first copy is open to every account (`BILLING_ALLOWED_EMAILS=*`): the list is closed by default.
 
 Files go to `docs/fe-captures/billing-profile/NN-name.json`. Passwords in login calls are
 placeholders; the people are placeholders (`ada@example.test` and so on). Times are the capture
@@ -77,7 +79,7 @@ def history(engine) -> list[dict]:
         ]
 
 
-def run(engine, server_base, off_base, narrow_base) -> None:
+def run(engine, server_base, off_base, narrow_base, closed_base) -> None:
     person(engine, ADA)
     person(engine, BEN)
 
@@ -273,6 +275,18 @@ def run(engine, server_base, off_base, narrow_base) -> None:
         note="Same server with `BILLING_ALLOWED_EMAILS=ada@example.test`: any other account gets "
         "the 404 `not_found` that billing-off gives.",
     )
+    _closed(closed_base)
+
+
+def _closed(closed_base: str) -> None:
+    closed = signed_in(closed_base, "ada closed-by-default", ADA)
+    closed.call(
+        "closed-by-default",
+        "GET",
+        "/api/billing/profile",
+        note="Billing on but `BILLING_ALLOWED_EMAILS` empty (its default): the list is closed, so "
+        "even a signed-in account gets the 404 `not_found`. `*` in the list opens it to everyone.",
+    )
 
 
 def main() -> None:
@@ -295,13 +309,14 @@ def main() -> None:
         )
 
     configs = [
-        settings_for(billing_enabled=True),
+        settings_for(billing_enabled=True, billing_allowed_emails="*"),  # open to everyone
         settings_for(billing_enabled=False),
         settings_for(
             billing_enabled=True,
             billing_country_routes="NG=NGN:paystack",
             billing_allowed_emails=ADA,
         ),
+        settings_for(billing_enabled=True),  # the allow-list left empty: closed
     ]
     apps = [create_app(c) for c in configs]
     for each in apps:
@@ -309,7 +324,7 @@ def main() -> None:
     started = [base.start_server(each) for each in apps]
     engine = create_engine(base.SCRATCH_URL)
     try:
-        run(engine, started[0][1], started[1][1], started[2][1])
+        run(engine, started[0][1], started[1][1], started[2][1], started[3][1])
         for path in OUT.glob("*.json"):  # no password, even a placeholder, stays in a file
             body = path.read_text()
             for secret in (PASSWORD, base.ADMIN_PASSWORD):

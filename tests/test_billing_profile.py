@@ -4,6 +4,8 @@ Part one is the service (`app/billing/profile.py`) on real Postgres with the liv
 replaced by a stub, because the subscriptions table is stage S8's. Part two is the routes
 (`app/billing/profile_api.py`) over HTTP."""
 
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -14,10 +16,10 @@ from sqlalchemy.orm import Session
 from app import auth
 from app.billing import profile as profiles
 from app.billing import routing
-from app.billing.profile import CHANGE_WINDOW, CountryChangeRefused
+from app.billing.profile import CHANGE_WINDOW, CountryChangeRefused, LiveSubscription
 from app.db import get_session
 from app.main import create_app
-from app.models import BillingCountryChange, BillingProfile, User
+from app.models import Base, BillingCountryChange, BillingProfile, User
 from tests.test_web import PASSWORD, make_settings, make_user
 
 CSRF = auth.CSRF_HEADER
@@ -30,12 +32,18 @@ def person(session) -> User:
     return make_user(session, "person@example.test")
 
 
+def sell(monkeypatch, sold_in="US", *, period_end=PERIOD_END, routes=routing.DEFAULT_ROUTES):
+    """Stage S8 will answer "what is this person's live subscription"; here a test says it is one
+    sold on the route that `sold_in` pays with, whose paid period ends at `period_end`."""
+    route = routing.provider_for(sold_in, routes)
+    live = LiveSubscription(period_end, route.currency, route.provider)
+    monkeypatch.setattr(profiles, "live_subscription", lambda db, user_id, now: live)
+
+
 @pytest.fixture
 def live_subscription(monkeypatch):
-    """Stage S8 will answer "when does the paid period end"; here a test says it does."""
-    monkeypatch.setattr(
-        profiles, "live_subscription_period_end", lambda db, user_id, now: PERIOD_END
-    )
+    """A live subscription sold in the US (dollars, Flutterwave), ending at `PERIOD_END`."""
+    sell(monkeypatch, "US")
 
 
 def history(session, user) -> list[tuple]:
@@ -63,7 +71,30 @@ def seed_country(session, user, country, *, asked_at=NOW - timedelta(days=100)):
 
 
 def test_the_stub_says_nobody_has_a_live_subscription_until_stage_s8(session, person):
-    assert profiles.live_subscription_period_end(session, person.id, NOW) is None
+    assert profiles.live_subscription(session, person.id, NOW) is None
+
+
+def test_the_stub_is_a_tripwire_for_stage_s8(session, person, monkeypatch):
+    """Subscriptions arrive with S8. If the table exists while this function is still the stub,
+    every crossing change would quietly apply at once: it raises instead."""
+    assert "subscriptions" not in Base.metadata.tables  # S5: no such table yet
+    assert profiles.live_subscription.is_stub  # S8 replaces the function and removes the marker
+    monkeypatch.setattr(profiles, "_subscriptions_table_exists", lambda: True)
+
+    with pytest.raises(RuntimeError, match="stage S8 must replace it"):
+        profiles.live_subscription(session, person.id, NOW)
+    seed_country(session, person, "US")
+    with pytest.raises(RuntimeError, match="stage S8 must replace it"):
+        set_country(session, person, "NG")  # and so no change can go through while it is
+
+
+def test_s8_cannot_add_the_subscriptions_table_and_keep_the_stub():
+    """The same tripwire, as a plain test: it fails the day both are true."""
+    stub = getattr(profiles.live_subscription, "is_stub", False)
+    assert not (stub and "subscriptions" in Base.metadata.tables), (
+        "stage S8 added `subscriptions` but profile.live_subscription is still the S5 stub: "
+        "replace it (return the live subscription's period end, currency and provider)"
+    )
 
 
 def test_the_first_choice_applies_at_once_and_is_written_to_the_history(session, person):
@@ -109,9 +140,7 @@ def test_every_row_of_the_change_table(
 ):
     seed_country(session, person, old)
     if live:
-        monkeypatch.setattr(
-            profiles, "live_subscription_period_end", lambda db, user_id, now: PERIOD_END
-        )
+        sell(monkeypatch, old)  # sold on the route the person's old country pays with
     rows_before = len(history(session, person))
 
     change = set_country(session, person, new)
@@ -152,10 +181,7 @@ def test_a_scheduled_change_keeps_the_old_route_until_its_time_then_takes_effect
 
 @pytest.mark.parametrize("days_later", [5, 40])  # inside the 30 days, and past them
 def test_a_second_change_while_one_is_waiting_is_refused(session, person, monkeypatch, days_later):
-    long_period_end = NOW + timedelta(days=60)
-    monkeypatch.setattr(
-        profiles, "live_subscription_period_end", lambda db, user_id, now: long_period_end
-    )
+    sell(monkeypatch, "US", period_end=NOW + timedelta(days=60))
     seed_country(session, person, "US")
     set_country(session, person, "NG")
 
@@ -168,23 +194,25 @@ def test_a_second_change_while_one_is_waiting_is_refused(session, person, monkey
 
 
 def test_a_period_end_in_the_past_is_not_a_live_subscription(session, person, monkeypatch):
-    monkeypatch.setattr(
-        profiles, "live_subscription_period_end", lambda db, user_id, now: NOW - timedelta(days=1)
-    )
+    sell(monkeypatch, "US", period_end=NOW - timedelta(days=1))
     seed_country(session, person, "US")
 
     assert set_country(session, person, "NG").result == "applied"
 
 
-def test_a_country_whose_route_was_removed_waits_rather_than_changes_at_once(
-    session, person, live_subscription
+def test_the_crossing_is_judged_on_the_route_the_subscription_was_sold_on(
+    session, person, monkeypatch
 ):
-    seed_country(session, person, "US")  # US had a route when it was chosen
-    only_nigeria = "NG=NGN:paystack"
+    """An operator edits the table mid-period (Paystack off the wrong way): a Nigerian naira
+    subscription must not start to look like a dollar one."""
+    seed_country(session, person, "NG")
+    sell(monkeypatch, "NG")  # sold in naira through Paystack
+    after_the_edit = "*=USD:flutterwave"  # today's table puts Nigeria and the US on one route
 
-    change = set_country(session, person, "NG", routes_text=only_nigeria)
+    change = set_country(session, person, "US", routes_text=after_the_edit)
 
-    assert change.result == "scheduled"  # the person is on a provider the table no longer has
+    assert change.result == "scheduled"  # the subscription is still naira: it waits
+    assert change.profile.billing_country == "NG"
 
 
 def test_one_change_in_30_days_and_not_a_minute_sooner(session, person):
@@ -296,7 +324,9 @@ API = "/api/billing"
 
 
 def api_client(engine, *, enabled=True, **settings):
-    """The app with billing on (or off), and a way to be signed in as any of its users."""
+    """The app with billing on (or off), open to every account unless a test says otherwise, and a
+    way to be signed in as any of its users."""
+    settings.setdefault("billing_allowed_emails", "*")
     app = create_app(make_settings(billing_enabled=enabled, **settings))
 
     def session_override():
@@ -465,6 +495,10 @@ def test_a_bad_billing_email_is_422(ada, body):
         {"name_or_company": "line\nbreak"},  # only an address has lines
         {"tax_id": "nul\x00byte"},
         {"address": "bell\x07"},
+        {"name_or_company": "del\x7fchar"},
+        {"name_or_company": "bidi \u202eoverride"},  # would reorder text on an invoice
+        {"tax_id": "zero\u200bwidth"},
+        {"address": "next\x85line"},
         {"name_or_company": 5},  # no coercion
         {"billing_country": "NG"},  # the country has its own route and its own rules
         {"surprise": 1},
@@ -572,7 +606,7 @@ def test_a_crossing_change_with_a_live_subscription_is_scheduled_and_the_old_rou
         BillingCountryChange.__table__.update().values(created_at=NOW - timedelta(days=90))
     )
     session.commit()
-    monkeypatch.setattr(profiles, "live_subscription_period_end", lambda db, uid, now: period_end)
+    sell(monkeypatch, "US", period_end=period_end)
 
     response = ada.put(f"{API}/profile/country", {"billing_country": "NG"})
 
@@ -591,20 +625,38 @@ def test_a_crossing_change_with_a_live_subscription_is_scheduled_and_the_old_rou
     )
 
 
-def test_reading_the_profile_after_the_period_ended_applies_the_waiting_change(session, ada):
+def test_reading_after_the_period_ended_shows_the_new_country_and_writes_nothing(session, ada):
     ada.put(f"{API}/profile/country", {"billing_country": "US"})
     row = session.scalar(select(BillingProfile))
+    due = datetime.now(UTC) - timedelta(minutes=1)
     row.pending_billing_country = "NG"
-    row.pending_effective_at = datetime.now(UTC) - timedelta(minutes=1)
+    row.pending_effective_at = due
     session.commit()
+    stamp = row.updated_at
 
     profile = ada.get(f"{API}/profile").json()
 
     assert profile["billing_country"] == "NG" and profile["pending_billing_country"] is None
     assert profile["pending_effective_at"] is None
     assert profile["route"] == {"currency": "NGN", "provider": "paystack"}
+    session.expire_all()  # the read changed no row: the change is written by the next write
+    row = session.scalar(select(BillingProfile))
+    assert (row.billing_country, row.pending_billing_country) == ("US", "NG")
+    assert row.pending_effective_at == due and row.updated_at == stamp
+
+
+def test_a_write_after_the_period_ended_writes_the_waiting_change_first(session, ada):
+    ada.put(f"{API}/profile/country", {"billing_country": "US"})
+    row = session.scalar(select(BillingProfile))
+    row.pending_billing_country = "NG"
+    row.pending_effective_at = datetime.now(UTC) - timedelta(minutes=1)
+    session.commit()
+
+    ada.put(f"{API}/profile", {"name_or_company": "Acme"})
+
     session.expire_all()
-    assert session.scalar(select(BillingProfile.billing_country)) == "NG"
+    row = session.scalar(select(BillingProfile))
+    assert (row.billing_country, row.pending_billing_country) == ("NG", None)
 
 
 def test_the_route_preview_states_the_result_before_anything_is_chosen(session, ada):
@@ -667,5 +719,105 @@ def test_only_allow_listed_accounts_use_billing_when_there_is_a_list(engine, ses
     ]
 
 
-def test_an_empty_allow_list_means_everyone_while_billing_is_on(ada):
-    assert ada.get(f"{API}/profile").status_code == 200
+def test_an_empty_allow_list_is_closed_not_open(engine, session):
+    """Billing on but nobody listed (a webhook test, a provider's test mode): no account may write
+    billing details or choose a country."""
+    make_user(session, "ada@example.test")
+    with api_client(engine, billing_allowed_emails="") as web:
+        ada = Person(web, "ada@example.test")
+        error(ada.get(f"{API}/profile"), 404, "not_found")
+        error(ada.put(f"{API}/profile", {"name_or_company": "x"}), 404, "not_found")
+        error(ada.put(f"{API}/profile/country", {"billing_country": "NG"}), 404, "not_found")
+        error(ada.get(f"{API}/route?country=NG"), 404, "not_found")
+    assert rows(session, BillingProfile) == 0
+
+
+def test_the_default_setting_is_closed():
+    assert make_settings().billing_allowed_emails == ""
+
+
+def test_a_star_opens_the_routes_to_every_account(engine, session):
+    make_user(session, "ada@example.test")
+    with api_client(engine, billing_allowed_emails="*") as web:
+        assert Person(web, "ada@example.test").get(f"{API}/profile").status_code == 200
+    with api_client(engine, billing_allowed_emails="someone@example.test, *") as web:
+        assert Person(web, "ada@example.test").get(f"{API}/profile").status_code == 200
+
+
+# ---- the row lock ---------------------------------------------------------------------------
+
+
+def test_two_simultaneous_changes_cannot_both_pass_the_30_day_rule(engine):
+    """Session A changes the country and holds the profile row (not committed yet). Session B's
+    change for the same person must wait for it, then see A's history row and be refused: two
+    changes in 30 days never both pass. (The next test shows the row lock on its own.)"""
+    with Session(engine) as setup:
+        user = make_user(setup, "race@example.test")
+        user_id = user.id
+        seed_country(setup, user, "NG")
+    a, b = Session(engine), Session(engine)
+    outcome: dict = {}
+
+    def second_change():
+        try:
+            profiles.change_country(b, b.get(User, user_id), "GB", now=NOW + timedelta(minutes=1))
+            outcome["result"] = "applied"
+        except CountryChangeRefused as exc:
+            outcome["result"] = exc.code
+        finally:
+            b.rollback()
+
+    try:
+        profiles.change_country(a, a.get(User, user_id), "US", now=NOW)  # holds the lock
+        worker = threading.Thread(target=second_change)
+        worker.start()
+        time.sleep(1.0)
+        assert worker.is_alive() and not outcome  # B is waiting on A's row lock
+        a.commit()
+        worker.join(15)
+        assert not worker.is_alive()
+    finally:
+        a.close()
+        b.close()
+
+    assert outcome == {"result": "country_change_too_soon"}
+    with Session(engine) as check:
+        changes = check.scalars(
+            select(BillingCountryChange).where(BillingCountryChange.user_id == user_id)
+        ).all()
+        assert [c.new_country for c in sorted(changes, key=lambda c: c.id)] == ["NG", "US"]
+        assert check.scalar(select(BillingProfile.billing_country)) == "US"
+
+
+def test_a_change_waits_for_the_profile_row_lock(engine):
+    """Session A takes only the profile row's lock (it changes nothing). Session B's change must
+    wait for it: this is what `FOR UPDATE` alone buys, apart from the insert that makes the row
+    (which also waits on a row another transaction is updating)."""
+    with Session(engine) as setup:
+        user = make_user(setup, "lock@example.test")
+        user_id = user.id
+        seed_country(setup, user, "NG")
+    a, b = Session(engine), Session(engine)
+    outcome: dict = {}
+
+    def change():
+        try:
+            profiles.change_country(b, b.get(User, user_id), "US", now=NOW)
+            b.commit()
+            outcome["result"] = "applied"
+        finally:
+            b.close()
+
+    try:
+        profiles._locked_profile(a, a.get(User, user_id))  # holds the row lock
+        worker = threading.Thread(target=change)
+        worker.start()
+        time.sleep(1.0)
+        assert worker.is_alive() and not outcome  # B is waiting on the row lock
+        a.commit()
+        worker.join(15)
+        assert not worker.is_alive()
+    finally:
+        a.close()
+
+    assert outcome == {"result": "applied"}

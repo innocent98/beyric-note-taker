@@ -4,18 +4,25 @@
 guessed from an address, a VPN, a browser language or a card: a missing or unknown country is an
 explicit error, and the caller decides what to tell the person.
 
-The table is data, the setting `BILLING_COUNTRY_ROUTES`: comma-separated `COUNTRY=CURRENCY:provider`
-entries, where `COUNTRY` is a two-letter ISO code or `*` for every other country.
+The table is data, the setting `BILLING_COUNTRY_ROUTES`: comma-separated entries, each either
+`COUNTRY=CURRENCY:provider` or `COUNTRY=off`, where `COUNTRY` is a two-letter ISO code or `*` for
+every country that has no entry of its own.
 
     NG=NGN:paystack,*=USD:flutterwave          (the default: Nigeria pays naira through Paystack;
                                                 any other country pays dollars through Flutterwave)
 
-To switch one provider off, remove its entry: a country with no route and no `*` entry is refused
-with `CountryUnsupported`, never sent to the other provider by default. A bad value stops the
-process at startup, naming the setting (`app/config.py`).
+**A country with an entry of its own never falls through to `*`.** To switch a provider off, write
+`off` for the countries it serves: `NG=off,*=USD:flutterwave` refuses Nigeria (Paystack off) and
+`NG=NGN:paystack,*=off` refuses everyone else (Flutterwave off). A refused country gets
+`CountryUnsupported`, never another provider's price list. **Merely deleting the `NG` entry does not
+switch Paystack off:** Nigeria then has no entry of its own and takes the `*` route, dollars through
+Flutterwave. Write `NG=off` instead.
+
+Only the known providers and the currency each takes are accepted (`PROVIDER_CURRENCIES`: Paystack
+naira, Flutterwave US dollars, spec 5.2), so a typo or a wrong pairing stops the process at startup
+naming the setting (`app/config.py`) instead of failing at checkout.
 """
 
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -25,7 +32,10 @@ from app.models import BILLING_CURRENCIES
 
 DEFAULT_ROUTES = "NG=NGN:paystack,*=USD:flutterwave"
 ANY_OTHER = "*"
-_PROVIDER = re.compile(r"[a-z][a-z0-9_]{1,15}")  # the `payments.provider` column holds 16
+OFF = "off"
+# The providers the table may name, and the one currency each is used for (spec 5.2: our Paystack
+# account is a Nigerian business account, so naira only; dollars go through Flutterwave).
+PROVIDER_CURRENCIES = {"paystack": "NGN", "flutterwave": "USD"}
 
 
 @dataclass(frozen=True)
@@ -76,27 +86,39 @@ def clean_country(raw: object) -> str:
 
 
 @lru_cache(maxsize=16)
-def parse_routes(text: str) -> dict[str, Route]:
-    """The route table in `text`, or `ValueError` naming the first bad entry."""
-    routes: dict[str, Route] = {}
+def parse_routes(text: str) -> dict[str, Route | None]:
+    """The route table in `text` (a country, or `*`, to a `Route`, or to None for `off`), or
+    `ValueError` naming the first bad entry."""
+    routes: dict[str, Route | None] = {}
     for entry in (part.strip() for part in text.split(",")):
         if not entry:
             continue
         country, equals, rest = entry.partition("=")
-        currency, colon, provider = rest.partition(":")
-        country, currency, provider = country.strip().upper(), currency.strip(), provider.strip()
-        if not (equals and colon):
-            raise ValueError(f"{entry!r} must look like COUNTRY=CURRENCY:provider")
+        country, rest = country.strip().upper(), rest.strip()
+        if not equals:
+            raise ValueError(f"{entry!r} must look like COUNTRY=CURRENCY:provider or COUNTRY=off")
         if country != ANY_OTHER and country not in ISO_COUNTRIES:
             raise ValueError(f"{country!r} is not a country code (or *)")
+        if country in routes:
+            raise ValueError(f"{country!r} is listed twice")
+        if rest.lower() == OFF:
+            routes[country] = None
+            continue
+        currency, colon, provider = rest.partition(":")
+        currency, provider = currency.strip(), provider.strip()
+        if not colon:
+            raise ValueError(f"{entry!r} must look like COUNTRY=CURRENCY:provider or COUNTRY=off")
         if currency not in BILLING_CURRENCIES:
             raise ValueError(
                 f"{currency!r} is not a currency we take: {', '.join(BILLING_CURRENCIES)}"
             )
-        if not _PROVIDER.fullmatch(provider):
-            raise ValueError(f"{provider!r} is not a provider name (lower-case letters)")
-        if country in routes:
-            raise ValueError(f"{country!r} is listed twice")
+        if provider not in PROVIDER_CURRENCIES:
+            known = ", ".join(PROVIDER_CURRENCIES)
+            raise ValueError(f"{provider!r} is not a provider we have (known: {known})")
+        if PROVIDER_CURRENCIES[provider] != currency:
+            raise ValueError(
+                f"{provider} takes {PROVIDER_CURRENCIES[provider]}, not {currency} ({entry!r})"
+            )
         routes[country] = Route(currency, provider)
     if not routes:
         raise ValueError("it lists no routes")
@@ -107,10 +129,11 @@ def provider_for(billing_country: object, routes_text: str = DEFAULT_ROUTES) -> 
     """The currency and provider for `billing_country`.
 
     Raises `CountryMissing` (nothing chosen), `CountryInvalid` (not a country code) or
-    `CountryUnsupported` (a country the table has no route for). Never guesses."""
+    `CountryUnsupported` (switched off, or no entry of its own and no `*`). Never guesses, and a
+    country with an entry of its own never takes the `*` route."""
     country = clean_country(billing_country)
     routes = parse_routes(routes_text)
-    route = routes.get(country) or routes.get(ANY_OTHER)
+    route = routes[country] if country in routes else routes.get(ANY_OTHER)
     if route is None:
         raise CountryUnsupported("We cannot take payments from that country yet.")
     return route
