@@ -6,7 +6,7 @@ import { MeetingView } from "@/components/app/meeting-view";
 import { RecurringHint } from "@/components/app/recurring-hint";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { ApiError } from "@/lib/api/client";
-import type { Meeting, Team } from "@/lib/api/types";
+import type { Meeting, Team, TeamSummary } from "@/lib/api/types";
 import { captured } from "./helpers";
 
 // The three pieces the designer did not draw and Adebayo approved lead-designing (2026-11-06):
@@ -35,7 +35,8 @@ vi.mock("@/lib/api/browser", () => ({
 }));
 
 const base = captured<Meeting>("47-meeting-detail-ready.json");
-const lone: Meeting = { ...base, series: null, suggest_recurring: false, open_questions: [], can_share: true };
+// The capture predates `can_make_recurring` (owner or admin of the meeting's team, or a private meeting): true here.
+const lone: Meeting = { ...base, series: null, suggest_recurring: false, open_questions: [], can_share: true, can_make_recurring: true };
 const team = { id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true } as Team;
 
 beforeEach(() => {
@@ -97,6 +98,41 @@ describe("Add to recurring meeting (lead-designed)", () => {
     expect(mocks.setSeries).toHaveBeenCalledWith(lone.id, 7);
   });
 
+  it("asks for the team the server names (recurring_team_id: the Personal one for a private meeting), to list the cards and to make a new one", async () => {
+    // A one-team person: their default team is the ordinary one, so no header would be the wrong team.
+    const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
+    const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
+    mocks.create.mockResolvedValue({ id: 7, title: "Design sync" });
+    mocks.setSeries.mockResolvedValue({ series: { id: 7, title: "Design sync" } });
+    render(<MeetingView initial={{ ...lone, team: null, recurring_team_id: 2 }} templates={[]} teams={[ordinary, personal]} />);
+    const dialog = await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(2);
+    await userEvent.selectOptions(within(dialog).getByLabelText("Recurring meeting"), "new");
+    await userEvent.type(within(dialog).getByLabelText("Name"), "Design sync");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync", 2));
+  });
+
+  it("asks for the server's team even when the teams list could not be read", async () => {
+    render(<MeetingView initial={{ ...lone, team: null, recurring_team_id: 2 }} templates={[]} teams={null} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(2);
+  });
+
+  it("names no team when the server names none (the old behaviour)", async () => {
+    render(<MeetingView initial={{ ...lone, recurring_team_id: null }} templates={[]} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(undefined);
+  });
+
+  it("asks for the meeting's own team for a shared meeting", async () => {
+    const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
+    const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
+    render(<MeetingView initial={{ ...lone, team: { id: 1, name: "Platform team" }, recurring_team_id: 1 }} templates={[]} teams={[ordinary, personal]} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(1);
+  });
+
   it("takes a meeting out of its series", async () => {
     mocks.setSeries.mockResolvedValue({ series: null });
     render(<MeetingView initial={{ ...lone, series: { id: 1, title: "Beyric Monday planning" } }} templates={[]} />);
@@ -114,6 +150,23 @@ describe("Add to recurring meeting (lead-designed)", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Add" }));
     expect(await within(dialog).findByText("boom")).toBeTruthy();
     expect(HTMLDialogElement.prototype.close).not.toHaveBeenCalled();
+  });
+});
+
+describe("a plain member of the meeting's team (the simpler recurring model)", () => {
+  const plain = { ...lone, suggest_recurring: false, can_make_recurring: false };
+
+  it("sees neither Add to recurring meeting nor Make this a recurring meeting?", async () => {
+    render(<MeetingView initial={{ ...plain, suggest_recurring: true }} templates={[]} />);
+    expect(screen.queryByRole("button", { name: "Add to recurring meeting" })).toBeNull();
+    expect(screen.queryByText("Make this a recurring meeting?")).toBeNull();
+  });
+
+  it("still sees the link to the team's recurring meeting the meeting is in, and no Change", () => {
+    const inOne = { ...plain, series: { id: 1, title: "Beyric Monday planning" } };
+    render(<MeetingView initial={inOne} templates={[]} />);
+    expect(screen.getByRole("link", { name: "Beyric Monday planning" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@
   "as": "Pat",
   "request": {
     "method": "DELETE",
-    "path": "/api/series/13",
+    "path": "/api/series/7",
     "headers": {
       "X-CSRF-Token": "<csrf-B>",
       "Cookie": "session=<cookie>"

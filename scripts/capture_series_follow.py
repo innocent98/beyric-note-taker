@@ -113,6 +113,7 @@ from app.models import (  # noqa: E402
 )
 from app.passwords import hash_password  # noqa: E402
 from scripts.backfill_series_follow import run as run_backfill  # noqa: E402
+from scripts.remove_empty_team_cards import run as run_cleanup  # noqa: E402
 
 
 class Recorder:
@@ -439,6 +440,24 @@ def run(base: str, seeded: dict, engine) -> None:
         f"/api/series/{ada_x_row}",
         note="FLAG OFF. The Standup page lists both A1 (shared) and A2 (private): the row mixes scopes.",
     )
+
+    # Since the simpler model the system (the backfill) makes no TEAM row: Pat's Design sync has a card in
+    # X and one in Y only if an owner or admin made them. They are inserted here as LEGACY rows (made
+    # by Pat before the change; the backfill used to make them).
+    # (Captures 10 to 13 and 46 to 47, made before that change, show the backfill making them.)
+    with Session(engine) as session:
+        pat_id = session.scalars(select(User.id).where(User.email == PAT)).one()
+        for team_id in (x, y):
+            session.add(
+                Series(
+                    team_id=team_id,
+                    owner_user_id=pat_id,
+                    title="Design sync",
+                    calendar_recurring_id="rid-sync",
+                    platform="google_meet",
+                )
+            )
+        session.commit()
 
     # ---- 2. the backfill, flag still OFF ----
     backfill("1-dry-run")
@@ -887,32 +906,33 @@ def remove_story(
     assert made == 0
     note_file(
         "remove-hourly-sync-makes-nothing",
-        "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: X's Standup, X's 1:1 and Pat's personal Design sync are remembered as removed. `rows` is every recurring row left.",
+        "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: every recurring event on Ada's and Pat's calendars already has its card, or its personal card was removed (Pat's Design sync). `rows` is every recurring row left.",
         {"rows_made": made, "rows": [dict(id=i, team_id=t, recurring=r) for i, t, r in rows_after]},
     )
 
-    # A later share of a meeting of that event to the removed scope does not regroup it.
+    # The owner's explicit share clears the removed scope's mark: the card is made properly.
     ada.call(
         "remove-share-a2-to-x",
         "POST",
         f"/api/meetings/{ids['a2']}/share",
         body={"team_id": x},
-        note="Ada shares A2 (her private Standup) to X, where Standup was removed. The share works.",
+        note="Ada (owner of X) shares A2, her private Standup, to X, where Standup was removed. An owner's or admin's explicit share makes the team's card again and clears the 'removed' mark for that scope.",
     )
     a2 = ada.call(
-        "remove-meeting-a2-not-regrouped",
+        "remove-meeting-a2-after-share",
         "GET",
         f"/api/meetings/{ids['a2']}",
-        note="A2 is shared to X and in NO recurring meeting: `series` is null. It was not put back into X's Standup (removed), and it left her personal Standup row.",
+        note="A2 is now in X's Standup again (a NEW row, a new id): the share by an owner made the card. It left her personal Standup row.",
     )
-    assert a2.json()["series"] is None
-    ada.call(
+    assert a2.json()["series"] is not None
+    after_share = ada.call(
         "remove-cards-ada-x-after-share",
         "GET",
         "/api/series",
         team=x,
-        note="X's list: still no Standup.",
+        note="X's list: Standup is back, with A2 only.",
     )
+    assert "Standup" in titles(after_share)
 
     # Her personal Standup now has no meeting left: remove the emptied card, with its waiting line.
     last = ada.call(
@@ -946,7 +966,7 @@ def remove_story(
         "remove-page-pat-own-x-row",
         "GET",
         f"/api/series/{pat_x}",
-        note="Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+        note="Pat is a plain member of X; X's Design sync is a LEGACY row inserted directly with him as its creator (the old sync made such rows): the page says `can_remove: false`. The person who made a team row gets no extra power.",
     )
     assert own.json()["can_remove"] is False
     own_403 = pat.call(
@@ -956,15 +976,23 @@ def remove_story(
         note="Pat tries to remove the calendar row he made: 403 `team_forbidden`. Nothing changed.",
     )
     assert own_403.status_code == 403
-    pats_hand = pat.call(
-        "remove-pat-hand-made-create",
-        "POST",
-        "/api/series",
-        body={"title": "Pat's own recurring"},
-        team=x,
-        note="Pat, a plain member, makes a recurring meeting by hand in X (any member may). It is completely empty.",
+    # Since the simpler model a plain member cannot make a team card by hand (captures 89 and up). A row
+    # like this one can only be a LEGACY row, made before that change: it is inserted directly.
+    with Session(engine) as session:
+        legacy_row = Series(
+            team_id=x,
+            owner_user_id=session.scalars(select(User.id).where(User.email == PAT)).one(),
+            title="Pat's own recurring",
+        )
+        session.add(legacy_row)
+        session.commit()
+        legacy_id = legacy_row.id
+    note_file(
+        "remove-legacy-empty-hand-made-row",
+        "NOT AN HTTP CALL. A completely empty hand-made recurring meeting in X, made by Pat (a plain member) BEFORE only owners and admins could make a team's card: inserted directly, as the rows made then are. Pat sees it (an empty card shows to its creator) and may remove it while it is empty.",
+        {"id": legacy_id, "team_id": x, "made_by": "a plain member, before the change"},
     )
-    hand_id = pats_hand.json()["id"]
+    hand_id = legacy_id
     empty_page = pat.call(
         "remove-page-pat-empty-hand-made",
         "GET",
@@ -1055,17 +1083,248 @@ def remove_story(
     assert made_now == 1
     note_file(
         "remove-calendar-recurring-still-makes-a-card",
-        "NOT AN HTTP CALL. A recurring event on Ada's connected calendar that the scheduler will join (a join is scheduled) and that was never removed: the real hourly `series.sync_from_joins` makes its row. It makes 1. The removal feature changes nothing here: it only skips an event that someone REMOVED for that scope (capture 70 shows 0 rows made for the removed ones).",
+        "NOT AN HTTP CALL. A recurring event on Ada's connected calendar that the scheduler will join (a join is scheduled) and that was never removed: the real hourly `series.sync_from_joins` makes its card, in Ada's PERSONAL space. It makes 1. The removal feature changes nothing here: it only skips an event that someone REMOVED for that scope (capture 70 shows 0 rows made for the removed ones).",
         {"rows_made": made_now, "recurring_event_id": "rid-connected"},
     )
     shown = ada.call(
         "remove-calendar-recurring-card-listed",
         "GET",
         "/api/series",
-        team=x,
-        note="Ada's X list now has the new empty card for the event: `Weekly planning`, with the next meeting. It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
+        team=home["ada"],
+        note="Ada's PERSONAL list now has the new empty card for the event: `Weekly planning`. A card from a person's own calendar is always in their Personal space (it is not in team X). It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
     )
     assert "Weekly planning" in [c["title"] for c in shown.json()["series"]]
+    in_x = ada.call(
+        "remove-calendar-recurring-card-not-in-team",
+        "GET",
+        "/api/series",
+        team=x,
+        note="Ada's team X list: no `Weekly planning`. The placeholder is not made in a team, even though X is Ada's default team.",
+    )
+    assert "Weekly planning" not in [c["title"] for c in in_x.json()["series"]]
+
+    model_story(base, engine, ada, pat, x, home)
+
+
+def model_story(base, engine, ada, pat, x, home) -> None:
+    """Part 6, the simpler model (Adebayo, 2026-11-15/16): only an owner or admin makes a team's
+    recurring card; a plain member's share makes none but joins one that exists; the cleanup of the
+    empty team cards the old sync made."""
+
+    def record(email, rid, title, days_ago, **fields) -> int:
+        """A recorded meeting of a recurring calendar event, linked by the real pipeline link."""
+        with Session(engine) as session:
+            user = session.scalars(select(User).where(User.email == email)).one()
+            connection = session.scalars(
+                select(CalendarConnection).where(CalendarConnection.user_id == user.id)
+            ).first()
+            template = session.scalars(
+                select(Template).where(
+                    Template.owner_user_id == user.id, Template.name == "General"
+                )
+            ).one()
+            starts = (datetime.now(UTC) - timedelta(days=days_ago)).replace(
+                minute=0, second=0, microsecond=0
+            )
+            event = CalendarEvent(
+                user_id=user.id,
+                connection_id=connection.id,
+                source_event_id=f"{rid}-{days_ago}",
+                recurring_event_id=rid,
+                title=title,
+                starts_at=starts,
+                ends_at=starts + timedelta(minutes=30),
+                platform="google_meet",
+                meeting_url=MEET,
+                native_id="abc-defg-hij",
+                status="confirmed",
+            )
+            session.add(event)
+            session.commit()
+            row = Meeting(
+                owner_user_id=user.id,
+                url=MEET,
+                platform="google_meet",
+                native_id="abc-defg-hij",
+                template_id=template.id,
+                status="ready",
+                step="done",
+                source="calendar",
+                notes=NOTES,
+                transcript=talk(user),
+                speaker_transcript=talk(user),
+                recorded_seconds=1500,
+                title=title,
+                created_at=starts,
+                **fields,
+            )
+            session.add(row)
+            session.commit()
+            session.add(
+                ScheduledJoin(
+                    user_id=user.id,
+                    calendar_event_id=event.id,
+                    platform="google_meet",
+                    native_id="abc-defg-hij",
+                    meeting_url=MEET,
+                    starts_at=starts,
+                    ends_at=event.ends_at,
+                    run_at=starts,
+                    deadline_at=event.ends_at,
+                    state="completed",
+                    meeting_id=row.id,
+                )
+            )
+            session.commit()
+            series.link_from_calendar(session, row)
+            session.commit()
+            return row.id
+
+    def titles_of(response) -> list[str]:
+        return [c["title"] for c in response.json()["series"]]
+
+    pats = record(PAT, "rid-review", "Design review", 9)
+    mine_before = pat.call(
+        "model-pat-personal-list",
+        "GET",
+        "/api/series",
+        team=home["pat"],
+        note="Pat recorded a private meeting of a recurring event ('Design review'). The real link put it in a card in his PERSONAL space.",
+    )
+    assert "Design review" in titles_of(mine_before)
+    pat.call(
+        "model-pat-shares-no-card",
+        "POST",
+        f"/api/meetings/{pats}/share",
+        body={"team_id": x},
+        note="Pat, a plain member of X, shares that meeting to X. The share works as always.",
+    )
+    shared = pat.call(
+        "model-pat-shared-meeting",
+        "GET",
+        f"/api/meetings/{pats}",
+        note="The meeting is shared to X and in NO recurring meeting: `series` is null. A plain member's share makes no team card (and the meeting left his personal card, which holds only private meetings).",
+    )
+    assert shared.json()["series"] is None and shared.json()["shared_with_team"] is True
+    no_card = pat.call(
+        "model-x-list-no-card",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list: no 'Design review' card was made by Pat's share.",
+    )
+    assert "Design review" not in titles_of(no_card)
+
+    owners = record(ADA, "rid-review", "Design review", 2)
+    ada.call(
+        "model-ada-shares-makes-card",
+        "POST",
+        f"/api/meetings/{owners}/share",
+        body={"team_id": x},
+        note="Ada (owner of X) records the same recurring event and shares her meeting to X. An owner's or admin's share makes the team's card for the event.",
+    )
+    card_list = ada.call(
+        "model-x-list-card-made",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list now has 'Design review', made by Ada's share.",
+    )
+    assert "Design review" in titles_of(card_list)
+    card_id = next(c["id"] for c in card_list.json()["series"] if c["title"] == "Design review")
+    page = ada.call(
+        "model-x-card-page",
+        "GET",
+        f"/api/series/{card_id}",
+        note="The new card's page lists BOTH meetings: Ada's, and Pat's earlier one, which was already shared to X and was waiting without a card. A new team card takes in the meetings of the same event that the team already has.",
+    )
+    assert len(page.json()["past_meetings"]) == 2
+    pat.call(
+        "model-pat-creates-team-card-403",
+        "POST",
+        "/api/series",
+        body={"title": "Pat's weekly"},
+        team=x,
+        note="Pat, a plain member, tries to make a recurring meeting by hand in X: 403 `team_forbidden`, the project's usual error.",
+    )
+    made_personal = pat.call(
+        "model-pat-creates-personal-card",
+        "POST",
+        "/api/series",
+        body={"title": "Pat's weekly"},
+        team=home["pat"],
+        note="In his own Personal space he may make one (it is his alone): 201.",
+    )
+    assert made_personal.status_code == 201
+    other = record(PAT, "rid-retro", "Retro", 3, shared_team_id=x)
+    pat.call(
+        "model-pat-attach-403",
+        "PUT",
+        f"/api/meetings/{other}/series",
+        body={"series_id": card_id},
+        note="Pat tries to add his shared meeting 'Retro' to X's recurring meeting by hand: 403 `team_forbidden`. Putting a meeting into a team's recurring meeting is an owner's or admin's to do.",
+    )
+    flags = pat.call(
+        "model-pat-meeting-page-flags",
+        "GET",
+        f"/api/meetings/{other}",
+        note="The meeting page for that shared meeting says `can_make_recurring: false` and `suggest_recurring: false`: draw neither 'Add to recurring meeting' nor 'Make this a recurring meeting?'.",
+    )
+    assert flags.json()["can_make_recurring"] is False
+    owner_flags = ada.call(
+        "model-ada-meeting-page-flags",
+        "GET",
+        f"/api/meetings/{owners}",
+        note="For Ada, the owner of X, the same kind of page says `can_make_recurring: true`.",
+    )
+    assert owner_flags.json()["can_make_recurring"] is True
+
+    # The cleanup of the empty cards the old sync made in a team.
+    with Session(engine) as session:
+        ada_id = session.scalars(select(User.id).where(User.email == ADA)).one()
+        for n in (1, 2):
+            session.add(
+                Series(
+                    team_id=x,
+                    owner_user_id=ada_id,
+                    title=f"Old placeholder {n}",
+                    calendar_recurring_id=f"rid-legacy-{n}",
+                )
+            )
+        session.commit()
+    before = ada.call(
+        "model-cleanup-x-list-before",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list before the cleanup: two empty placeholders the old sync made in the team (0 and 0), next to the cards that hold meetings.",
+    )
+    assert "Old placeholder 1" in titles_of(before)
+
+    def cleanup(label: str, *args: str) -> None:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = run_cleanup(list(args))
+        assert code == 0
+        note_file(
+            f"model-cleanup-{label}",
+            "The real `scripts/remove_empty_team_cards.py` "
+            + (f"with {' '.join(args)}" if args else "(a dry run)")
+            + ", exactly as it printed.",
+            {"args": list(args), "output": out.getvalue().splitlines()},
+        )
+
+    cleanup("1-dry-run")
+    cleanup("2-apply", "--apply")
+    cleanup("3-dry-run-again")
+    after = ada.call(
+        "model-cleanup-x-list-after",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list after: the two empty placeholders are gone; the cards that hold meetings stay. No 'removed' mark was written, so the next calendar sync makes each person's PERSONAL card.",
+    )
+    assert "Old placeholder 1" not in titles_of(after) and "Design review" in titles_of(after)
 
 
 def main() -> None:

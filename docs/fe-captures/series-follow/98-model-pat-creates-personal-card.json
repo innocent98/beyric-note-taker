@@ -1,27 +1,27 @@
 {
-  "note": "Pat, a plain member, makes a recurring meeting by hand in X (any member may). It is completely empty.",
+  "note": "In his own Personal space he may make one (it is his alone): 201.",
   "as": "Pat",
   "request": {
     "method": "POST",
     "path": "/api/series",
     "headers": {
       "X-CSRF-Token": "<csrf-B>",
-      "X-Team-Id": "4",
+      "X-Team-Id": "2",
       "Cookie": "session=<cookie>"
     },
     "body": {
-      "title": "Pat's own recurring"
+      "title": "Pat's weekly"
     }
   },
   "response": {
     "status": 201,
     "body": {
-      "id": 16,
-      "title": "Pat's own recurring",
+      "id": 20,
+      "title": "Pat's weekly",
       "team": {
-        "id": 4,
-        "name": "Platform team",
-        "is_personal": false
+        "id": 2,
+        "name": "My team",
+        "is_personal": true
       },
       "cadence": "Recurring",
       "platform": null,

@@ -1,9 +1,9 @@
 {
-  "note": "Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+  "note": "Pat is a plain member of X; X's Design sync is a LEGACY row inserted directly with him as its creator (the old sync made such rows): the page says `can_remove: false`. The person who made a team row gets no extra power.",
   "as": "Pat",
   "request": {
     "method": "GET",
-    "path": "/api/series/13",
+    "path": "/api/series/7",
     "headers": {
       "Cookie": "session=<cookie>"
     },
@@ -12,7 +12,7 @@
   "response": {
     "status": 200,
     "body": {
-      "id": 13,
+      "id": 7,
       "title": "Design sync",
       "team": {
         "id": 4,
@@ -20,11 +20,11 @@
         "is_personal": false
       },
       "scoped": true,
-      "cadence": "Weekly on Sundays, 20:00",
+      "cadence": "Weekly on Mondays, 09:00",
       "platform": "google_meet",
       "timezone": "UTC",
-      "next_starts_at": "2026-11-22T20:00:00Z",
-      "next_text": "Sun 22 Nov, 20:00",
+      "next_starts_at": "2026-11-23T09:00:00Z",
+      "next_text": "Mon 23 Nov, 09:00",
       "sprint_note": null,
       "can_rename": true,
       "can_remove": false,
@@ -42,15 +42,15 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-01",
+          "assigned_on": "2026-11-02",
           "done_at": null,
-          "created_at": "2026-11-15T22:11:54.894948Z",
+          "created_at": "2026-11-16T11:32:33.868131Z",
           "from_meeting": true,
           "meeting": {
             "id": 5,
             "title": "Design sync",
             "platform": "google_meet",
-            "created_at": "2026-11-01T20:00:00Z"
+            "created_at": "2026-11-02T09:00:00Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -70,7 +70,7 @@
           "can_decide": false
         }
       ],
-      "finished_since_text": "Sun 1 Nov",
+      "finished_since_text": "Mon 2 Nov",
       "finished": [],
       "questions": [
         {
@@ -80,7 +80,7 @@
             "id": 5,
             "title": "Design sync",
             "platform": "google_meet",
-            "created_at": "2026-11-01T20:00:00Z"
+            "created_at": "2026-11-02T09:00:00Z"
           },
           "can_update": true
         }
@@ -97,7 +97,7 @@
         {
           "id": 5,
           "title": "Design sync",
-          "created_at": "2026-11-01T20:00:00Z",
+          "created_at": "2026-11-02T09:00:00Z",
           "duration_seconds": 1500,
           "tasks_count": 1
         }

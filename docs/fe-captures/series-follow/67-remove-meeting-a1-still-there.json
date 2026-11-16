@@ -22,7 +22,7 @@
       "status_tone": "success",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-01T18:00:00Z",
+      "created_at": "2026-11-02T09:00:00Z",
       "tasks_count": 1,
       "failure_reason": null,
       "bot_invite_email": null,
@@ -75,15 +75,15 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-01",
+          "assigned_on": "2026-11-02",
           "done_at": null,
-          "created_at": "2026-11-15T20:40:26.981746Z",
+          "created_at": "2026-11-16T11:32:33.717882Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Standup",
             "platform": "google_meet",
-            "created_at": "2026-11-01T18:00:00Z"
+            "created_at": "2026-11-02T09:00:00Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -105,6 +105,8 @@
       ],
       "series": null,
       "suggest_recurring": true,
+      "can_make_recurring": true,
+      "recurring_team_id": 4,
       "open_questions": [
         {
           "id": 1,

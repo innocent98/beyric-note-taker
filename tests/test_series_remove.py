@@ -391,16 +391,20 @@ def test_the_hourly_sync_does_not_recreate_a_removed_calendar_row(app, session, 
     event = calendar_event(session, world.ada, "rid-sync", MONDAY)
     join_for(session, world.ada, event, state="scheduled")
     assert series_rules.sync_from_joins(session, MONDAY) == 1
-    card = row_of(session, world.x.id, "rid-sync")  # Ada's default team is X
-    assert card is not None
+    mine = personal_of(session, world.ada)  # the calendar card is Ada's own, in her personal space
+    card = row_of(session, mine, "rid-sync")
+    assert card is not None and row_of(session, world.x.id, "rid-sync") is None
     ada = sign_in(app, OWNER_EMAIL)
     card_id = card.id
     assert remove(ada, card_id).status_code == 200
-    assert ignored(session, world.x.id, "rid-sync")
+    assert ignored(session, mine, "rid-sync")
     assert series_rules.sync_from_joins(session, MONDAY) == 0
-    assert row_of(session, world.x.id, "rid-sync") is None
-    ids = [c["id"] for c in ada.get("/api/series").json()["series"]]
-    assert card_id not in ids
+    assert (
+        row_of(session, mine, "rid-sync") is None
+        and row_of(session, world.x.id, "rid-sync") is None
+    )
+    listed = ada.client.get("/api/series", headers={"X-Team-Id": str(mine)}).json()["series"]
+    assert card_id not in [c["id"] for c in listed]
 
 
 def test_removing_the_personal_row_of_a_one_team_person_leaves_no_card_in_their_team(
@@ -464,8 +468,9 @@ def test_a_card_waiting_to_move_is_not_taken_into_an_ignored_scope(app, session,
     yet is not made: see the test about the personal row of a one-team person)."""
     event = calendar_event(session, world.ada, "rid-card", MONDAY)
     scheduled = join_for(session, world.ada, event, state="scheduled")
-    series_rules.sync_from_joins(session, MONDAY)
-    card = row_of(session, world.x.id, "rid-card")
+    card = standup(
+        session, world.x.id, rid="rid-card", owner_id=world.ada.id
+    )  # a legacy empty card
     mine = personal_of(session, world.ada)
     session.add(SeriesIgnored(team_id=mine, calendar_recurring_id="rid-card"))
     session.commit()
@@ -545,14 +550,15 @@ def test_the_creator_may_remove_a_completely_empty_row_calendar_or_hand_made(app
     calendar_id, hand_id = calendar.id, hand.id
     for row_id in (calendar_id, hand_id):
         assert pat.get(f"/api/series/{row_id}").json()["can_remove"] is True
+    # a plain creator's removal of an empty row writes no team-wide mark (`remembered` false)
     assert remove(pat, calendar_id).json() == {
         "meetings_kept": 0,
         "agenda_lines_removed": 0,
-        "remembered": True,
+        "remembered": False,
     }
     assert remove(pat, hand_id).json()["remembered"] is False
     assert reload(session, calendar_id) is None and reload(session, hand_id) is None
-    assert ignored(session, world.x.id, "rid-empty")
+    assert not ignored(session, world.x.id, "rid-empty")
 
 
 def make_not_empty(session, world, row, how, template):

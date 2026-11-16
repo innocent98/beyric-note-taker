@@ -74,6 +74,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORBIDDEN = {403: {"model": ErrorResponse, "description": "`team_forbidden`"}}
+FORBIDDEN_OR_CSRF = {
+    403: {
+        "model": ErrorResponse,
+        "description": "`team_forbidden`, or a missing or wrong X-CSRF-Token",
+    }
+}
 NOT_FOUND = {404: {"model": ErrorResponse}}
 INVALID = {422: {"model": ErrorResponse}}
 PAST_LIMIT = 50
@@ -250,7 +256,9 @@ def list_series(
     return SeriesList(timezone=timezones.zone(zone_name).key, series=cards)
 
 
-@router.post("/series", status_code=201, tags=["series"], responses={**INVALID})
+@router.post(
+    "/series", status_code=201, tags=["series"], responses={**INVALID, **FORBIDDEN_OR_CSRF}
+)
 def create_series(
     body: SeriesCreate,
     team_id: int | None = Depends(team_admin.requested_team),
@@ -258,8 +266,10 @@ def create_series(
     user: User = Depends(auth.current_user),
 ) -> SeriesCard:
     """Make a recurring meeting by hand (a meeting is then attached with
-    `PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header
-    names it (404 for a team the caller is not in), else the default team. 409 `series_limit`."""
+    `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller
+    is not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes
+    a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409
+    `series_limit`."""
     if team_id is not None:
         team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
     try:
@@ -547,7 +557,11 @@ def put_series_project(
 # ---- a meeting's series ----
 
 
-@router.put("/meetings/{meeting_id:id}/series", tags=["series"], responses={**NOT_FOUND})
+@router.put(
+    "/meetings/{meeting_id:id}/series",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN_OR_CSRF},
+)
 def put_meeting_series(
     meeting_id: int,
     body: MeetingSeriesIn,
@@ -555,13 +569,18 @@ def put_meeting_series(
     user: User = Depends(auth.current_user),
 ) -> MeetingSeriesOut:
     """Put the caller's own meeting into one of their team's recurring meetings, or take it out
-    (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda
-    lines typed before the meeting began are taken by it."""
+    (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. With
+    `SERIES_FOLLOW_MEETINGS` on, putting it into a TEAM's recurring meeting is an owner's or admin's
+    to do (403 `team_forbidden`); its owner may always take it out, or put a private meeting into
+    their own personal one. Agenda lines typed before the meeting began are taken by it."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
     try:
         found = series.attach(session, user, meeting, body.series_id)
     except series.SeriesRefused as exc:
-        raise StarletteHTTPException(404, exc.message) from None
+        if exc.status == 404:
+            raise StarletteHTTPException(404, exc.message) from None
+        session.rollback()
+        raise _refuse(exc) from None  # 403 `team_forbidden`: only an owner or admin groups a team's
     session.commit()
     return MeetingSeriesOut(
         series=SeriesRef(id=found.id, title=_initial_title(found)) if found else None
@@ -574,6 +593,7 @@ def put_meeting_series(
     tags=["series"],
     responses={
         **NOT_FOUND,
+        **FORBIDDEN_OR_CSRF,
         409: {"model": ErrorResponse, "description": "`not_reused` or `series_limit`"},
     },
 )

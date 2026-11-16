@@ -8,6 +8,8 @@ switch-on) comes later. Branch `feature/series-follow-readers`; PR number is on 
 **No schema migration.** Dark: with `SERIES_FOLLOW_MEETINGS` unset every list, page, topic and mail
 is what it was (the old suites are the proof, see Verification), except one additive field (below).
 
+> **Superseded 2026-11-16** (`docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`): `_rekey_empty_card` is removed. A Personal calendar card is never re-keyed into a team; an owner's or admin's share makes a separate team card, and the old empty team cards are removed by `scripts/remove_empty_team_cards.py`. Every mention of the re-key below describes the behaviour before that date.
+
 ## What shipped
 
 Every reader of a series row's meetings now also asks for the row's **scope** when the flag is on:

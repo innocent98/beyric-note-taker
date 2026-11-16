@@ -1,0 +1,16 @@
+{
+  "note": "The real `scripts/remove_empty_team_cards.py` (a dry run), exactly as it printed.",
+  "content": {
+    "args": [],
+    "output": [
+      "DRY RUN: nothing was changed. Run again with --apply to do it.",
+      "Calendar-made recurring cards of teams looked at: 4",
+      "Empty ones removed: 0",
+      "Kept, because something is in them: 4",
+      "...a meeting is grouped under it: 4",
+      "...an agenda line is waiting: 0",
+      "...a project is linked: 0",
+      "...a mail about it is still to be sent: 0"
+    ]
+  }
+}

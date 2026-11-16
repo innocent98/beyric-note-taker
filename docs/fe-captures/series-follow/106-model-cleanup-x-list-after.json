@@ -1,0 +1,69 @@
+{
+  "note": "X's list after: the two empty placeholders are gone; the cards that hold meetings stay. No 'removed' mark was written, so the next calendar sync makes each person's PERSONAL card.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 7,
+          "title": "Design sync",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Mondays, 09:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        },
+        {
+          "id": 13,
+          "title": "Standup",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Mondays, 09:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
+          "unfinished_tasks": 2,
+          "open_questions": 2,
+          "project": null
+        },
+        {
+          "id": 19,
+          "title": "Design review",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Saturdays, 11:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 0,
+          "open_questions": 0,
+          "project": null
+        }
+      ]
+    }
+  }
+}
