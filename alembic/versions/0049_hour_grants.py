@@ -10,14 +10,15 @@ Two new tables nothing from before reads, so the code from before this migration
 
 Backfill: every account that is not an admin and not deleted gets one `pilot` grant of its cap
 minus what it has used, never below 0, no expiry. The cap is the account's own override
-(`users.hours_cap_seconds`), else `app_state.default_hours_cap_seconds`, else 18000, the same order
-as `usage.effective_cap` except that a NULL app default ("no cap" there) becomes 18000 here, as the
-spec words it. What it has used is the ledger (`usage_entries`) summed by user id or by
-the one-way email fingerprint, the same two keys as `usage.ledger_seconds`, so an account that was
-deleted and signed up again keeps the same leftover and nobody loses or gains an hour (bar a recording that commits mid-migration, see the SOP). The
-fingerprint is recomputed here in SQL as sha256 of the trimmed, lower-cased email, which is what
-`usage.email_hash` does. `starts_at` is the moment the backfill statement starts: the rule reading
-the grants counts any usage recorded after it that has no allocation yet (`app/entitlements.py`).
+(`users.hours_cap_seconds`), else `app_state.default_hours_cap_seconds`, else 18000, the same
+order as `usage.effective_cap` except that a NULL app default ("no cap" there) becomes 18000 here,
+as the spec words it. What it has used is the ledger (`usage_entries`) summed by user id or by the
+one-way email fingerprint, the same two keys as `usage.ledger_seconds`, so an account that was
+deleted and signed up again keeps the same leftover and nobody loses or gains an hour (bar a
+recording that commits mid-migration, see the SOP). The fingerprint is recomputed here in SQL as
+sha256 of the trimmed, lower-cased email, which is what `usage.email_hash` does. `starts_at` is
+the moment the backfill statement starts: the rule reading the grants counts any usage recorded
+after it that has no allocation yet (`app/entitlements.py`).
 
 Downgrade drops both tables. It refuses while a grant of any kind but `pilot` exists, because those
 come from a payment, a trial or an admin and cannot be rebuilt from the ledger.
