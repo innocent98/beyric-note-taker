@@ -25,6 +25,7 @@ from app import (
     alerts,
     audio,
     bot_names,
+    bot_presence,
     mail,
     mail_templates,
     placement,
@@ -81,6 +82,10 @@ REASON_DOWNLOAD = "The recording could not be downloaded from the meeting bot."
 REASON_CANCELLED = "You cancelled this meeting before it was recorded."
 REASON_ENDED_NOTHING_RECORDED = (
     "You ended this meeting before anything was recorded, so there are no notes to write."
+)
+REASON_NOBODY_CAME = (
+    "Nobody else joined this meeting, so the bot left and there are no notes to write. Nothing "
+    "was counted against your hours."
 )
 REASON_NOT_LET_IN = (
     "The bot was not let into the meeting. The host may have declined it, or the waiting room "
@@ -153,6 +158,12 @@ BOT_LIVE_STATES = (
 # bot is leaving. Not a live state, so a poll never replaces it; Vexa's own completion reason
 # replaces it once the bot has gone.
 BOT_END_REQUESTED = "end_requested"
+# Stored in `completion_reason` when the worker told the bot to leave because no person came to the
+# call (`bot_presence.NOBODY_CAME`). Like the end request it is a marker the live state never
+# replaces. Once the bot is gone the meeting ends as `REASON_NOBODY_CAME`, and nothing is recorded
+# or counted. (A call that had people and then only bots reuses `BOT_END_REQUESTED`: the notes are
+# written from what was recorded, as after the owner's "End now".)
+BOT_NOBODY_CAME = bot_presence.NOBODY_CAME
 # A bot was sent and Vexa gave no clear answer: it may be joining, or not at all. The meeting is
 # kept as a placeholder (`bot_sent`, no Vexa id) with this in `completion_reason`, read as
 # "Starting the bot", until `_settle_unconfirmed` adopts a bot that shows up for the code or gives
@@ -321,7 +332,10 @@ def _remember(meeting: Meeting, info: BotMeeting) -> None:
         meeting.vexa_recording_id = info.recording_id
     # The owner's End press stays on the row until the meeting is done: it is what tells "you
     # ended this" from a stop Vexa reports for any other reason, in every poll that follows.
-    if info.completion_reason is not None and meeting.completion_reason != BOT_END_REQUESTED:
+    if info.completion_reason is not None and meeting.completion_reason not in (
+        BOT_END_REQUESTED,
+        BOT_NOBODY_CAME,
+    ):
         meeting.completion_reason = info.completion_reason
 
 
@@ -613,6 +627,68 @@ def _stop_bot(meeting: Meeting, vexa) -> bool:
         return tries >= STOP_TRIES
 
 
+def _leave_if_alone(session: Session, meeting: Meeting, vexa, info: BotMeeting, now) -> None:
+    """Tell the bot to leave when `bot_presence.decide` says only bots are left, or that no person
+    came. Never raises and never fails the meeting: a bot that cannot be stopped now is tried again
+    on the next poll, and a poll that cannot read who is in the call changes nothing (the bot
+    stays, as before this rule). Logs counts and the rule, never a name."""
+    settings = get_settings()
+    if (
+        not settings.bot_leave_when_only_bots
+        or info.status != "active"
+        or meeting.completion_reason in (BOT_END_REQUESTED, BOT_NOBODY_CAME)
+    ):
+        return
+    try:
+        # Every name our bot may show: the one the host sees (a signed-in Meet bot keeps the Google
+        # account's own name), the name it was sent with, and the account's name.
+        shown = bot_names.shown_name(
+            settings,
+            provider=meeting.bot_provider,
+            platform=meeting.platform,
+            stored=meeting.bot_name,
+        )
+        own = tuple(
+            dict.fromkeys(
+                name.strip()
+                for name in (shown, meeting.bot_name, settings.skribby_account_name)
+                if name and name.strip()
+            )
+        )
+        verdict = bot_presence.decide(
+            info.participants,
+            info.in_since,
+            now,
+            only_bots_after=settings.bot_only_bots_leave_seconds,
+            nobody_after=settings.bot_nobody_came_seconds,
+            own_names=own,
+        )
+        if verdict is None or not _stop_bot(meeting, vexa):
+            return
+        meeting.completion_reason = (
+            BOT_NOBODY_CAME if verdict == bot_presence.NOBODY_CAME else BOT_END_REQUESTED
+        )
+        meeting.bot_state_seen_at = now
+        session.commit()
+        logger.info(
+            "meeting %s: the bot was told to leave (%s; %d in the call)",
+            meeting.id,
+            verdict,
+            len(info.participants or []),
+        )
+    except Exception as exc:
+        session.rollback()
+        logger.warning("meeting %s: the leave check failed (%s)", meeting.id, type(exc).__name__)
+
+
+def _end_nobody_came(session: Session, meeting: Meeting, vexa) -> None:
+    """The bot has left a call no person came to: end the meeting with nothing recorded. The
+    provider's copy (the recording of an empty call, the names of the bots that were in it) goes
+    too, best effort, as for any ended bot's record."""
+    _delete_replaced_record(meeting, vexa)
+    _fail(session, meeting, REASON_NOBODY_CAME)
+
+
 def _old_bot_gone(meeting: Meeting, vexa) -> bool:
     """Before the second bot is sent: has the refused one left? Not gone means stop it again and
     look again on the next poll, for `STOP_TRIES` checks; after that the send goes ahead and
@@ -738,9 +814,13 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
         _record_live_state(meeting, _live_state(info), now)
         if info.status == "completed" and meeting.terminal_seen_at is None:
             meeting.terminal_seen_at = now
+        _leave_if_alone(session, meeting, vexa, info, now)
 
     if info is None:
         pass
+    elif meeting.completion_reason == BOT_NOBODY_CAME and info.status in ("completed", "failed"):
+        _end_nobody_came(session, meeting, vexa)
+        return False
     elif (mark := _join_problem(meeting, info, now)) is not None:
         if _on_join_problem(session, meeting, vexa, mark, now):
             return False

@@ -41,6 +41,7 @@ from typing import Any, Protocol
 import httpx
 
 from app import chat_notice
+from app.bot_presence import read_participants
 from app.bot_provider import (
     SEND_DEADLINE_SECONDS,
     BotDuplicate,
@@ -242,6 +243,15 @@ def _events(body: dict) -> list[tuple[str, datetime | None]]:
         if isinstance(new, str):
             found.append((new, _parse_time(item.get("created_at"))))
     return found
+
+
+def _in_since(events: list[tuple[str, datetime | None]]) -> datetime | None:
+    """When the bot got into the call: the first time it was `waiting_to_record` or `recording`.
+    None when the events do not say (the "nobody came" rule then waits)."""
+    for name, when in events:
+        if name in ("waiting_to_record", "recording") and when is not None:
+            return when
+    return None
 
 
 def _joining_seconds(events: list[tuple[str, datetime | None]], status: str, now: datetime):
@@ -694,7 +704,13 @@ def map_bot(
         )
     if raw in _LIVE:
         status = _LIVE[raw]
-        return BotMeeting(status=status, reached_lobby=knocked or status == "awaiting_admission")
+        inside = status == "active"  # in the call: who is there is read only then
+        return BotMeeting(
+            status=status,
+            reached_lobby=knocked or status == "awaiting_admission",
+            participants=read_participants(body.get("participants")) if inside else None,
+            in_since=_in_since(events) if inside else None,
+        )
     if raw not in _known_odd:  # a status Skribby added: keep the bot live and say so once
         _known_odd.add(raw)
         logger.warning("Skribby reported a status this build does not know (%s)", raw[:40])
@@ -836,6 +852,7 @@ class SkribbyClient:
         account_name: str = "",
         transcription_model: str = "groq/whisper-large-v3-turbo",
         left_alone_seconds: int = 0,
+        nobody_came_seconds: int = 0,
         max_poll_hours: int = 6,
         timeout: float = 30.0,
         send_deadline: float = SEND_DEADLINE_SECONDS,
@@ -859,6 +876,7 @@ class SkribbyClient:
         self._account_name = account_name
         self._model = transcription_model.strip() or "none"
         self._left_alone_seconds = left_alone_seconds
+        self._nobody_came_seconds = nobody_came_seconds
         self._max_poll_hours = max_poll_hours
         self._timeout = timeout
         self.send_deadline = send_deadline
@@ -942,6 +960,13 @@ class SkribbyClient:
         }
         if self._left_alone_seconds > 0:
             stop_options["last_person_detection"] = max(1, math.ceil(self._left_alone_seconds / 60))
+        if self._nobody_came_seconds > 0:
+            # How long to wait in a call nobody else has come to (Skribby's default is 10 minutes,
+            # and it counts a call with only the bot in it). The same window as our own "nobody
+            # came" rule for a call with only other bots in it (`app/bot_presence.py`).
+            stop_options["empty_meeting_timeout"] = max(
+                1, math.ceil(self._nobody_came_seconds / 60)
+            )
         body: dict[str, Any] = {
             "transcription_model": self._model,
             "service": SERVICES[platform],
@@ -1274,6 +1299,9 @@ class SkribbyProvider:
             account_name=settings.skribby_account_name,
             transcription_model=settings.skribby_transcription_model,
             left_alone_seconds=settings.bot_left_alone_seconds,
+            nobody_came_seconds=(
+                settings.bot_nobody_came_seconds if settings.bot_leave_when_only_bots else 0
+            ),
             max_poll_hours=settings.max_poll_hours,
             download_hosts=tuple(
                 host.strip() for host in settings.skribby_download_hosts.split(",") if host.strip()

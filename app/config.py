@@ -305,6 +305,18 @@ class Settings(BaseSettings):
     # short window can cut a quiet meeting short. Vexa's own default is 10 minutes. 0 = send
     # nothing and keep Vexa's default.
     bot_left_alone_seconds: int = 300
+    # Leave a call when only other bots are left (`app/bot_presence.py`). Skribby's own
+    # last-person rule counts a second note taker as a person, so it never ends such a call. On by
+    # default; `BOT_LEAVE_WHEN_ONLY_BOTS=false` turns the whole rule off (and the bot is then sent
+    # without the "nobody came" window below, as before).
+    bot_leave_when_only_bots: bool = True
+    # How long only bots may have been in the call, after a person was last seen in it, before the
+    # bot leaves. A person who comes back starts the wait again.
+    bot_only_bots_leave_seconds: int = Field(default=300, ge=60)
+    # How long the bot waits, once it is in the call, for the first person to arrive. Also sent to
+    # Skribby as `empty_meeting_timeout` (its own rule for a call with nobody in it; its default is
+    # 10 minutes), so the two agree.
+    bot_nobody_came_seconds: int = Field(default=900, ge=60)
     max_poll_hours: int = 6
     # How many bots may be on meetings at once on the one local Vexa host, across all users
     # (`app/placement.py`). The box fits about one until measured (spec section 9); raise it only

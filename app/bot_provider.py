@@ -50,8 +50,11 @@ import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+from app.bot_presence import Who
 
 # The provider's id for a bot: whatever `send_bot` returned, stored as text on the meeting.
 BotId = int | str
@@ -147,6 +150,11 @@ class BotMeeting:
     # few days for diagnosis (Skribby only; `app/skribby.py::_evidence`). Words people said: never
     # logged, never shown. Not read by anything that labels speakers.
     evidence: dict[str, Any] | None = None
+    # Who is in the call right now and when the bot got in, while it is in (Skribby only; read by
+    # `app/bot_presence.py`, which decides whether the bot should leave). None = not known: the bot
+    # then stays. Names inside: never logged.
+    participants: list[Who] | None = None
+    in_since: datetime | None = None
 
 
 def run_within(seconds: float, call):

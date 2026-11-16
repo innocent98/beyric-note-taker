@@ -761,6 +761,18 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
 - Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings; a moved meeting now survives its recorder's deletion in the code) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on
 
+## The bot leaves when only bots are left (2026-11-16, branch `feature/bot-leave-when-only-bots`, PR open, **not merged**; SOP `docs/sop/2026-11-16-bot-leaves-when-only-bots.md`; no migration)
+
+Found live: meeting 38 ran 33 minutes with a Fireflies bot after every person had left; Skribby's last-person rule counts bots, and the late end cost the transcript its coverage (our own transcription ran, +0.70 USD/h). Adebayo decided 2026-11-16: yes, the bot leaves; the kill switch is on by default.
+
+- [x] Pure decision `app/bot_presence.py::decide` (people seen or not, bots only, a person returns, bot first, unknown names = person, time edges): 77 tests
+- [x] Bot-or-person name list, one-sided (unsure = person), tested on "MyWay's Assistant", "Fireflies.ai Notetaker Adebayo Tosin" against ordinary names, "Abbott", "Assistant Professor"
+- [x] Wiring: `map_bot` reads the live `participants`; the worker's `_leave_if_alone` stops the bot (rule A: the owner's "End now" path; rule B: "Nobody joined", neutral, nothing recorded or counted); `empty_meeting_timeout` sent as the same window
+- [x] Settings `BOT_LEAVE_WHEN_ONLY_BOTS` (kill switch, default true), `BOT_ONLY_BOTS_LEAVE_SECONDS` (300), `BOT_NOBODY_CAME_SECONDS` (900); `.env.example` and `deploy/README.md`
+- [ ] **Prove it live:** Skribby's docs do not say `participants` is filled while the bot records. The first real call that logs "the bot was told to leave" proves it; if none does while a note taker lingers, see the SOP follow-ups (`docs/spike/bot-leave-only-bots-2026-11-16/README.md`)
+- [ ] Decision pending with Adebayo (not in this PR): `time_limit` / `MAX_POLL_HOURS`
+- [ ] A proper "ended, nobody came" meeting status (needs a migration); today it is `failed` with the label "Nobody joined" and the neutral tone
+
 ## Deferred follow-ups from the 2026-11-06 merge queue
 
 - [ ] **Series agenda recipient count** (automated review, Medium, W8 `app/api_series.py`): `series.recipients()` counts attendees of the last three meetings including ones the caller cannot read; names are already filtered, the count is not. Decide: count only visible attendees (then the count can differ from who gets the mail) or keep as is

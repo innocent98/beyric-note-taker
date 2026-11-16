@@ -64,11 +64,13 @@ from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
     BOT_END_REQUESTED,
     BOT_ENDABLE_STATES,
+    BOT_NOBODY_CAME,
     BOT_RECORDING,
     JOIN_FAILURE_MARKS,
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
+    REASON_NOBODY_CAME,
     SEND_UNCONFIRMED,
     audio_path,
     is_join_failure,
@@ -116,7 +118,13 @@ BOT_STATE_TEXT = {
         "screen. Check the meeting for a prompt."
     ),
     "stopping": "The bot is leaving the meeting",
+    # The bot was told to leave because no one else came (`pipeline._leave_if_alone`).
+    BOT_NOBODY_CAME: "The bot is leaving: nobody else joined the meeting",
 }
+# A meeting the bot left because no person came (`REASON_NOBODY_CAME`): it is stored as `failed`
+# (there is no other ended-with-nothing status), so the words and the tone are what keep it from
+# reading as a failure.
+NOBODY_CAME_TEXT = "Nobody joined"
 # After "End now and write the notes": the bot has been told to leave and has not been seen gone.
 BOT_ENDING_TEXT = "The bot is leaving the meeting. The notes start once it has gone"
 # Vexa reported the call over but the recording is not ready to download yet.
@@ -318,10 +326,14 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
         return STEP_TEXT.get(meeting.step, "Working on it")
     if meeting.status == "ready":
         return "Ready"
+    if meeting.failure_reason == REASON_NOBODY_CAME:
+        return NOBODY_CAME_TEXT  # an ended meeting, not a failure
     return "Failed"
 
 
 def status_tone(meeting: Meeting) -> str:
+    if meeting.status == "failed" and meeting.failure_reason == REASON_NOBODY_CAME:
+        return "neutral"
     return STATUS_TONES.get(meeting.status, "neutral")
 
 
@@ -880,6 +892,7 @@ def can_cancel(meeting: Meeting) -> bool:
     and quietly throw the recording away)."""
     return meeting.status == "bot_sent" and meeting.completion_reason not in (
         BOT_END_REQUESTED,
+        BOT_NOBODY_CAME,
         SEND_UNCONFIRMED,  # a stop now would find nothing and the late bot would be orphaned
     )
 
