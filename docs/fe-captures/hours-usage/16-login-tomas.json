@@ -1,0 +1,56 @@
+{
+  "note": "Log in.",
+  "client": "tomas trial",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "tomas@example.test",
+      "password": "<password placeholder>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": [
+        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax",
+        "device=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
+      ]
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-J>",
+      "user": {
+        "email": "tomas@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 10800,
+        "state": "trial",
+        "seconds_left": 10800,
+        "warning": null,
+        "can_record": true,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": "2026-11-30T15:32:06.356015+01:00"
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

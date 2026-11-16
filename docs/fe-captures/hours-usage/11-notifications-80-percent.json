@@ -1,0 +1,35 @@
+{
+  "note": "The 80% notice, written by the same count: kind `usage.hours_low`, one per person and period.",
+  "client": "ada pilot",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notifications": [
+        {
+          "id": 1,
+          "kind": "usage.hours_low",
+          "severity": "info",
+          "title": "Most of your recorded hours are used",
+          "body": "You have used 4 of the 5 recorded hours you have now. When they run out the note taker will not join new meetings.",
+          "meeting_id": null,
+          "created_at": "2026-11-16T14:32:06.692948Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

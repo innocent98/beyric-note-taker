@@ -141,9 +141,10 @@ TEAMS_OFF_TEXT = "Microsoft Teams meetings cannot be joined yet"
 class Refused(Exception):
     """An action the owner asked for that cannot go ahead. `message` is safe to show as is."""
 
-    def __init__(self, status: int, code: str, message: str) -> None:
+    def __init__(self, status: int, code: str, message: str, reason: str | None = None) -> None:
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
+        self.reason = reason  # a machine-readable second word, for the one refusal that has one
 
 
 # ---- dependencies the tests replace ----
@@ -537,11 +538,25 @@ def _own_template(session: Session, user_id: int, template_id: int | None) -> Te
     ).first()
 
 
-def hours_cap_message(cap_seconds: int) -> str:
-    hours = f"{cap_seconds / 3600:.1f}".removesuffix(".0")
+def hours_cap_message(cap_seconds: int, reason: str | None = None) -> str:
+    """What a person reads when their recorded hours stop a new recording. `reason` is the grants
+    rule's (`no_plan`: none held, `no_hours`: all used); without it (the old cap rule) the words
+    name the cap. No contact address and no word about a pilot."""
+    stays = "Your notes, transcripts and exports stay as they are."
+    if reason == "no_plan":
+        return (
+            "You do not have any recorded hours at the moment, so the note taker will not join "
+            f"new meetings. {stays}"
+        )
+    if reason is None:
+        hours = f"{cap_seconds / 3600:.1f}".removesuffix(".0")
+        return (
+            f"You have used your {hours} recorded hours, so the note taker will not join new "
+            f"meetings. {stays}"
+        )
     return (
-        f"You have used your {hours} recorded hours for the pilot, so the note taker will not "
-        "join new meetings. Write to us at hello@beyrictech.com if you need more."
+        "You have used all of your recorded hours, so the note taker will not join new meetings. "
+        f"{stays}"
     )
 
 
@@ -550,7 +565,12 @@ def placement_refusal(exc: PlacementRefused) -> Refused:
     (their hours, their own bots); a full note taker is only "busy" and says nothing about whose
     meeting holds it, so one user's activity is never visible to another."""
     if exc.code == "hours_cap_reached":
-        return Refused(403, "hours_cap_reached", hours_cap_message(exc.cap_seconds or 0))
+        return Refused(
+            403,
+            "hours_cap_reached",
+            hours_cap_message(exc.cap_seconds or 0, exc.reason),
+            reason=exc.reason,
+        )
     if exc.code == "already_in_meeting":
         return Refused(
             409,

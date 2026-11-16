@@ -1,0 +1,48 @@
+{
+  "note": "A plan period of 20 hours (a `plan_period` grant inserted by SQL: nothing sells one yet) plus 2 pilot hours left: `state` is `active`, not `pilot`; `period_ends_at` is the plan period's end; 22 hours held.",
+  "client": "paula plan",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-H>",
+      "user": {
+        "email": "paula@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 79200,
+        "state": "active",
+        "seconds_left": 79200,
+        "warning": null,
+        "can_record": true,
+        "unlimited": false,
+        "period_ends_at": "2026-12-13T15:32:06.356015+01:00",
+        "trial_ends_at": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

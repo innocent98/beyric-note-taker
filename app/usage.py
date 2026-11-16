@@ -12,12 +12,16 @@ capped at `max_poll_seconds` per meeting.
 """
 
 import hashlib
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Notification, UsageEntry, User
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CAP_SECONDS = 5 * 3600  # used when there is no app_state row (it has one in production)
 LOW_HOURS_FRACTION = 0.8  # the "most of your hours are used" notice
@@ -73,11 +77,24 @@ def hours_used(
 
 
 def record_usage(
-    session: Session, meeting: Meeting, seconds: int, now: datetime | None = None
+    session: Session,
+    meeting: Meeting,
+    seconds: int,
+    now: datetime | None = None,
+    settings: Settings | None = None,
 ) -> UsageEntry | None:
     """Count a prepared recording against its owner. Idempotent per meeting; does not commit.
 
     Returns the new ledger entry, or None when this meeting was counted before.
+
+    What else happens depends on `HOURS_MODE` (`app/hours.py`). `off` and `shadow`: nothing but the
+    old 80% notice (shadow only logs at placement; it writes nothing here). `enforce`: the recording
+    is split across the person's grants and the notices of spec 3.3 are raised instead of the old
+    one. That bookkeeping is **best effort**: it runs in its own savepoints, a failure is logged
+    (exception class and ids only) and the transcript carries on, so a paying person's meeting is
+    never failed by it. A recording left without allocations is still counted in the ledger; for
+    a person holding a pilot grant `entitlements.unallocated_seconds` still takes it off their
+    hours, and `scripts/hours_reconcile_backlog.py` settles it.
     """
     if session.scalar(select(UsageEntry.id).where(UsageEntry.meeting_id == meeting.id)):
         return None
@@ -88,8 +105,19 @@ def record_usage(
     )
     session.add(row)
     session.flush()
-    _warn_when_low(session, owner, now or datetime.now(UTC))
+    now = now or datetime.now(UTC)
+    settings = settings or get_settings()
+    if settings.hours_mode == "enforce":
+        _hours_module().after_counted(session, owner, row, now, settings.max_poll_hours * 3600)
+        return row
+    _warn_when_low(session, owner, now)
     return row
+
+
+def _hours_module():
+    from app import hours  # hours imports alerts and entitlements, which import this module
+
+    return hours
 
 
 def _hours(seconds: float) -> str:

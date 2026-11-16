@@ -1,0 +1,30 @@
+{
+  "note": "A pasted link with nothing left: 403 `hours_cap_reached` with `reason` `no_hours`. The same refusal comes from Send now and the shared link.",
+  "client": "ada pilot",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-hij",
+      "template_id": 5
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "hours_cap_reached",
+        "message": "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.",
+        "reason": "no_hours"
+      }
+    }
+  }
+}

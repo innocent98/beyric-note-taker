@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app import audio, pipeline, usage
 from app.config import get_settings
 from app.models import AiRun, AppState, Meeting, Notification, UsageEntry
+from tests.helpers import NO_NEW_USAGE_FIELDS
 from tests.test_accounts import visitor
 from tests.test_api import anon, api, error_of  # noqa: F401  (fixtures used by name)
 from tests.test_pipeline import DONE, NOW, RECORDED_SECONDS, FakeVexa, env, meeting, run  # noqa: F401  # noqa: F401  (fixtures used by name)
@@ -157,7 +158,9 @@ def test_a_meeting_is_refused_once_the_hours_are_used(api, session, owner, templ
         403,
         "hours_cap_reached",
     )
-    assert "5 recorded hours" in error["message"] and "hello@beyrictech.com" in error["message"]
+    assert "5 recorded hours" in error["message"]
+    assert "pilot" not in error["message"] and "hello@" not in error["message"]
+    assert "reason" not in error  # the grants rule (HOURS_MODE=enforce) is what adds one
     assert fake_vexa.sent == []
     assert session.scalars(select(Meeting)).all() == []
 
@@ -225,14 +228,18 @@ def test_the_cap_is_checked_before_the_bot_busy_rule(api, session, owner, templa
 
 def test_the_session_reports_used_and_cap(api, session, owner):
     entry(session, owner, 8100)
-    assert api.get("/api/session").json()["usage"] == {"used_seconds": 8100, "cap_seconds": 18000}
+    assert api.get("/api/session").json()["usage"] == {
+        **NO_NEW_USAGE_FIELDS,
+        "used_seconds": 8100,
+        "cap_seconds": 18000,
+    }
 
 
 def test_the_session_reports_no_cap_for_an_admin(app, session):
     make_user(session, "admin@example.test", admin=True)
     client = visitor(app)
     body = client.log_in(email="admin@example.test").json()
-    assert body["usage"] == {"used_seconds": 0, "cap_seconds": None}
+    assert body["usage"] == {**NO_NEW_USAGE_FIELDS, "used_seconds": 0, "cap_seconds": None}
     assert body["user"]["is_admin"] is True
 
 

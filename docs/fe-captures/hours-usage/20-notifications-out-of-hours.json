@@ -1,0 +1,45 @@
+{
+  "note": "The 100% notice, raised by the count: kind `usage.hours_out`, **one** per person and period. The 80% one from before is still there.",
+  "client": "ada pilot",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notifications": [
+        {
+          "id": 2,
+          "kind": "usage.hours_out",
+          "severity": "warning",
+          "title": "You are out of recorded hours",
+          "body": "You have used all of your recorded hours, so the note taker will not join new meetings. A meeting that is recording now will finish. Your notes, transcripts and exports stay as they are.",
+          "meeting_id": null,
+          "created_at": "2026-11-16T14:32:06.929004Z",
+          "read_at": null
+        },
+        {
+          "id": 1,
+          "kind": "usage.hours_low",
+          "severity": "info",
+          "title": "Most of your recorded hours are used",
+          "body": "You have used 4 of the 5 recorded hours you have now. When they run out the note taker will not join new meetings.",
+          "meeting_id": null,
+          "created_at": "2026-11-16T14:32:06.692948Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

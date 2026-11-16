@@ -7,7 +7,9 @@ the lock is the host id, always 1 until then).
 
 Pre-flight, in this order, each refusing with a `PlacementRefused` code:
 
-1. `hours_cap_reached`: the user has used their recorded hours (`app/usage.py`'s gate).
+1. `hours_cap_reached`: the user has used their recorded hours (`app/usage.py`'s gate; under
+   `HOURS_MODE=enforce` the grants-based rule of `app/entitlements.py`, with `reason` `no_hours`
+   or `no_plan`).
 2. `user_limit`: the user already has `user_bot_limit` bots on meetings.
 3. `already_in_meeting`: the user already has a bot in this meeting (same platform and code).
 4. `meeting_has_note_taker`: another user's bot is in this meeting. Vexa (one API key) keeps one
@@ -121,9 +123,13 @@ class PlacementRefused(Exception):
         cap_seconds: int | None = None,
         limit: int | None = None,
         slot_locked: bool = False,
+        reason: str | None = None,
     ) -> None:
         super().__init__(code)
         self.code = code
+        # `hours_cap_reached` under enforce only: `no_hours` (hours are held, all used) or `no_plan`
+        # (none held). None under off and shadow, where the old cap rule decides.
+        self.reason = reason
         self.slot_locked = slot_locked  # `bot_busy` because a send was in flight, not because full
         self.cap_seconds = cap_seconds  # `hours_cap_reached`: the user's cap
         self.limit = limit  # `user_limit`: how many bots a user may have
@@ -198,15 +204,22 @@ def reserve_slot(
     if status != "active":
         raise PlacementRefused("account_suspended")
 
-    cap = usage.effective_cap(session, user)
-    over_cap = (
-        cap is not None
-        and usage.hours_used(session, user, now, settings.max_poll_hours * 3600) >= cap
-    )
-    if settings.hours_mode == "shadow":
-        _shadow_hours(session, user, now, settings, old_refuses=over_cap)
-    if over_cap:
-        raise PlacementRefused("hours_cap_reached", cap_seconds=cap)
+    if settings.hours_mode == "enforce":
+        # The person's own grants decide (an admin is unlimited and is checked first). A running
+        # meeting is never stopped by this: it only decides whether a NEW recording starts.
+        decision = entitlements.check_join(session, user, now, settings.max_poll_hours * 3600)
+        if not decision.allowed:
+            raise PlacementRefused("hours_cap_reached", reason=decision.reason)
+    else:
+        cap = usage.effective_cap(session, user)
+        over_cap = (
+            cap is not None
+            and usage.hours_used(session, user, now, settings.max_poll_hours * 3600) >= cap
+        )
+        if settings.hours_mode == "shadow":
+            _shadow_hours(session, user, now, settings, old_refuses=over_cap)
+        if over_cap:
+            raise PlacementRefused("hours_cap_reached", cap_seconds=cap)
 
     own = session.scalar(
         select(func.count(Meeting.id)).where(

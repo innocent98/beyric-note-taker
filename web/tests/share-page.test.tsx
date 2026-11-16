@@ -96,8 +96,8 @@ describe("share page, signed in", () => {
     ],
     [
       "the hours cap",
-      new ApiError(403, "hours_cap_reached", "You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more."),
-      /You have used your 5 recorded hours/,
+      new ApiError(403, "hours_cap_reached", "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are."),
+      /You have used all of your recorded hours/,
     ],
     [
       "a bot that could not be sent",
@@ -118,7 +118,7 @@ describe("share page, signed in", () => {
 
   it("stops offering the send after the hours cap refusal", async () => {
     arriveAt(FRAGMENT);
-    mocks.create.mockRejectedValue(new ApiError(403, "hours_cap_reached", "You have used your 5 recorded hours."));
+    mocks.create.mockRejectedValue(new ApiError(403, "hours_cap_reached", "You have used all of your recorded hours."));
     render(<ShareFlow signedIn templates={templates} />);
     await screen.findByText("Google Meet abc-defg-hij");
     await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
@@ -136,9 +136,9 @@ describe("share page, signed in", () => {
 
   it("is locked up front when the recorded hours are used", async () => {
     arriveAt(FRAGMENT);
-    render(<ShareFlow signedIn templates={templates} capMessage="You have used your 5 recorded hours for the pilot." />);
+    render(<ShareFlow signedIn templates={templates} capMessage="You have used all of your recorded hours." />);
     await screen.findByText("Google Meet abc-defg-hij");
-    expect(screen.getByRole("alert").textContent).toMatch(/used your 5 recorded hours/);
+    expect(screen.getByRole("alert").textContent).toMatch(/used all of your recorded hours/);
     expect((screen.getByRole("button", { name: "Send note taker" }) as HTMLButtonElement).disabled).toBe(true);
   });
 

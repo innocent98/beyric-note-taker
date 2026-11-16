@@ -108,7 +108,7 @@ def patch_user(
     if not sent:
         raise Refused(422, "validation_error", "Send `status` or `hours_cap_seconds`.")
     user = admin.user_or_404(session, user_id)
-    admin.update_user(session, user, sent)
+    admin.update_user(session, user, sent, request.app.state.settings)
     return _user_out(session, request, user)
 
 

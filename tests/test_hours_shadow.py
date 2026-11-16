@@ -50,17 +50,16 @@ def shadow_lines(caplog):
     return [r.getMessage() for r in caplog.records if r.getMessage().startswith("hours_shadow")]
 
 
-@pytest.mark.parametrize("mode", ["off", "enforce"])
 def test_with_the_flag_off_nothing_is_asked_or_logged_even_when_the_rules_differ(
-    session, ada, caplog, monkeypatch, mode
+    session, ada, caplog, monkeypatch
 ):
-    """No grant at all: the new rule would refuse and the old one allows. Off, and `enforce`
-    (accepted, does nothing yet), never even call it."""
+    """No grant at all: the new rule would refuse and the old one allows. Off never even calls it
+    (`enforce` is S2: `tests/test_hours_enforce.py`)."""
     monkeypatch.setattr(
         entitlements, "check_join", lambda *a, **k: pytest.fail("the new rule was asked")
     )
     with caplog.at_level(logging.INFO, logger=LOGGER):
-        reserve(session, ada, mode)  # allowed: the old rule alone decides
+        reserve(session, ada, "off")  # allowed: the old rule alone decides
     assert shadow_lines(caplog) == []
 
 

@@ -17,9 +17,14 @@ export default async function SharePage() {
   const [list, templates] = await load(Promise.all([api.meetings.list(), api.templates.list()]));
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   const usage = session.usage;
-  const capped = usage?.cap_seconds != null && usage.used_seconds >= usage.cap_seconds;
+  // The same plain words the server gives when it refuses (`hours_cap_message`, app/services.py):
+  // no hours held at all, or all of them used. `can_record` is set only when the hours rule is on.
+  const capped =
+    usage?.can_record === false || (usage?.cap_seconds != null && usage.used_seconds >= usage.cap_seconds);
   const capMessage = capped
-    ? `You have used your ${(usage.cap_seconds ?? 0) / 3600} recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more.`
+    ? usage?.cap_seconds === 0
+      ? "You do not have any recorded hours at the moment, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are."
+      : "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are."
     : null;
   return (
     <AppShell current="meetings">

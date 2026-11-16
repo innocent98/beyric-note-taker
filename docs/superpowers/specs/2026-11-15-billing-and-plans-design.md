@@ -131,7 +131,7 @@ All of them are checked against the **caller**: the person pressing the button, 
 
 | Gate | Check goes here (file:line today) | Refusal | Notes |
 |---|---|---|---|
-| **Join: pasted link, Send now, shared link** | `app/placement.py:175-180` in `reserve_slot`: the block that reads `usage.effective_cap` and `usage.hours_used` becomes `entitlements.check_join(session, user, now)` | keep 403 `hours_cap_reached` (the frontend already knows it); add a `reason` field (`no_hours`, `no_plan`) | Runs under the placement lock, so two starts cannot both read the last free hour. `services.placement_refusal` (`services.py:548`) maps it. |
+| **Join: pasted link, Send now, shared link** | `app/placement.py:175-180` in `reserve_slot`: the block that reads `usage.effective_cap` and `usage.hours_used` becomes `entitlements.check_join(session, user, now)` | keep 403 `hours_cap_reached` (the frontend already knows it); add a `reason` field (`no_hours`, `no_plan`) | Runs under the placement lock, which puts two starts in order; it does **not** by itself stop one person starting two meetings on their last minute, because a meeting just placed counts as about 0 s until it has run for a while (S2 review; the options are in `docs/sop/2026-11-16-hours-enforce.md`, "Before switching on" point 2, and the owner decides). `services.placement_refusal` (`services.py:548`) maps it. |
 | **Calendar auto-join** | the same block, reached through `join_runner.place_bot` (`app/join_runner.py:642`); skip reasons in `_SKIP_REASONS` (`join_runner.py:810`) | `hours_cap` stays; add `no_plan` | Connecting a calendar, the rule picker and the per-event switch are never gated. |
 | **Ask Beyric** | `app/api_ask.py:82` route `POST /ask`, calling `ask.answer` (`app/ask.py:841`; the per-person daily limit `ask_daily_limit` is read at line 857) | 403 `plan_inactive` | The existing daily limit stays as a cost brake. Ask answers from what the asker may read, so a teammate's shared meetings are readable by Ask only if the asker has a plan. |
 | **Translation (new requests)** | `app/api_translation.py:73` `request_translation` | 403 `plan_inactive` | Reading an existing translation is never gated. French and Spanish notes only today. |
@@ -178,7 +178,9 @@ For a recording of S seconds charged to a person, the seconds are taken in this 
 
 1. the person's trial or pilot grant, if any is left and not ended (it ends first by design),
 2. their plan hours, oldest period first (a period's hours expire at its end, except that during the 3 days of grace after a failed renewal the old period's leftover stays usable, section 3.3),
-3. their packs, oldest expiry first.
+3. then admin gifts and packs together, by earliest `expires_at` first, a grant with no expiry last (**decided 2026-11-16 for S2**: whatever ends soonest is used first; this also places an admin gift, which the first version of this order left out).
+
+A person who holds a plan period in force is `active` even while a pilot grant still has hours (they pay; the state does not follow the spending order). A recording longer than all the hours left is counted in full and the excess is written off (section 3.3): it is stored as an over-draw on the last grant spent from, which reads as zero left and never as less.
 
 Each split is recorded in `usage_allocations` (section 7), so a grant's remaining hours are always a sum, never a number someone edited: auditable, and an expiry or a refund can be explained line by line. That matters here more than before, because the reason for the per-person model was that a team owner could not explain where hours went; now each person's ledger explains theirs.
 
