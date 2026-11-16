@@ -1078,7 +1078,9 @@ export interface paths {
          * @description Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the
          *     translation when one is already cached for the current text; otherwise 202 with
          *     `status: "translating"` and the work is queued. A failed or stale translation asked for again
-         *     is queued again. Asking again while it is being made changes nothing.
+         *     is queued again. Asking again while it is being made changes nothing. A NEW translation, and
+         *     a failed or stale one asked for again, is 403 `plan_inactive` for a caller with no live plan
+         *     or trial when the server runs `FEATURE_GATES_MODE=enforce`; a cached or running one never is.
          */
         post: operations["request_translation"];
         delete?: never;

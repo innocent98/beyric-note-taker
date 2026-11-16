@@ -11468,7 +11468,7 @@
     },
     "/api/meetings/{meeting_id}/translations": {
       "post": {
-        "description": "Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the\ntranslation when one is already cached for the current text; otherwise 202 with\n`status: \"translating\"` and the work is queued. A failed or stale translation asked for again\nis queued again. Asking again while it is being made changes nothing.",
+        "description": "Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the\ntranslation when one is already cached for the current text; otherwise 202 with\n`status: \"translating\"` and the work is queued. A failed or stale translation asked for again\nis queued again. Asking again while it is being made changes nothing. A NEW translation, and\na failed or stale one asked for again, is 403 `plan_inactive` for a caller with no live plan\nor trial when the server runs `FEATURE_GATES_MODE=enforce`; a cached or running one never is.",
         "operationId": "request_translation",
         "parameters": [
           {
