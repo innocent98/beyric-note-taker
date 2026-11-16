@@ -1,0 +1,9 @@
+{
+  "note": "The lines the gate logged during the two calls above (logger `app.feature_gates`, level INFO), captured from the real logger. User id 3 is this scratch database's id. One line per refused-if-enforced call; ids and state only, never a name or an email.",
+  "content": {
+    "lines": [
+      "feature_gates_shadow would have refused feature=ask user=3 state=none",
+      "feature_gates_shadow would have refused feature=translate user=3 state=none"
+    ]
+  }
+}

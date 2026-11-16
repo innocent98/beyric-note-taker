@@ -46,7 +46,12 @@ def _out(share, recipients) -> ShareOut:
 
 SHARE_RESPONSES = {
     202: {"description": "Queued: the mails go within a minute, or after the translation."},
-    403: {"model": ErrorResponse, "description": "`email_not_verified`"},
+    403: {
+        "model": ErrorResponse,
+        "description": "Missing or wrong X-CSRF-Token; `email_not_verified`; `plan_inactive`: a "
+        "language other than English needs a NEW translation, which needs a live plan or trial "
+        "(only under `FEATURE_GATES_MODE=enforce`)",
+    },
     404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
     409: {"model": ErrorResponse, "description": "`not_ready`: the notes are not written yet"},
     422: {

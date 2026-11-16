@@ -1,4 +1,4 @@
-# FE integration guide: hours, warnings and the refusal (billing stage S2)
+# FE integration guide: hours, warnings, the refusal and the feature gates (billing stages S2 and S3)
 
 Every body below is pasted from `docs/fe-captures/hours-usage/` (made by `scripts/capture_hours_usage.py`:
 real migrations, the real app under uvicorn with `HOURS_MODE=enforce`, real HTTP). Anything that could
@@ -377,6 +377,69 @@ No new endpoint and nothing to poll on a timer. Re-read `GET /api/session` when 
 when a meeting becomes ready (its recording was counted then), and when they open the sidebar; the bell count
 (`unread_notifications`) already arrives with it.
 
+## Feature gates: Ask Beyric, new translations and rewriting notes (billing stage S3)
+
+Captures: `docs/fe-captures/feature-gates/` (made by `scripts/capture_feature_gates.py`: real migrations, the
+real app under uvicorn, real HTTP; run once in each of the three modes below). **Today nothing changes for
+anyone**: the gates ship dark (`FEATURE_GATES_MODE` is `off`) and are switched on only at go-live, because the
+pilot accounts have these three features now. Build the screens so they are ready, and do not expect a refusal
+until the owner says the gates are on.
+
+### What it is, in the person's terms
+
+Three buttons cost money on every press (each calls the model): **Ask Beyric**, **translate** (a French or
+Spanish copy of the notes, which includes sending notes by email in French or Spanish) and **rewrite the notes
+with another template**. When the gates are on, a person needs a live plan or trial to use them. A person
+with no plan (a teammate who only reads shared notes, an expired trial, a used-up trial) keeps everything
+else: reading, search, export, tasks, decisions, an existing translation, the Review spelling step,
+settings, billing, delete. The check is on the **person pressing the button**, not on who recorded the meeting.
+
+A paid plan with its hours used up still passes: these three use no recorded hours.
+
+### The one new error: 403 `plan_inactive` (captures 03 to 07)
+
+The same body from every gated call, with the feature named in the sentence. Show `error.message` as it is.
+
+```json
+{"error": {"code": "plan_inactive", "message": "Asking Beyric needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."}}
+```
+
+| Call | When refused | `error.message` starts |
+|---|---|---|
+| `POST /api/ask` (capture 03) | caller has no live plan or trial. **The free "my tasks" answer is refused too** (capture 04): Ask is one switch | `Asking Beyric needs an active plan or trial.` |
+| `POST /api/meetings/{id}/translations` (capture 05) | a NEW translation only | `Translating notes needs an active plan or trial.` |
+| `POST /api/meetings/{id}/regenerate` (capture 06) | the notes are kept and the model is not called | `Rewriting notes needs an active plan or trial.` |
+| `POST /api/meetings/{id}/shares` with `language` `fr` or `es` (capture 07) | the share needs a NEW translation | `Translating notes needs an active plan or trial.` (no share is made) |
+
+All four messages end with the same sentence: `You can still read, search and export your notes, and use your tasks and decisions.` There is no `reason` field on this error (unlike `hours_cap_reached`). The message says nothing about a pilot and gives no address.
+
+**Not refused, even for a person with no plan** (captures 08 to 11): `GET /api/meetings`, `GET /api/meetings/{id}`, `GET /api/ask/scope`, `GET /api/review`, export, search, tasks, decisions. A **cached** translation (`POST .../translations` answers 200) and one **already being made** (202) are never refused, and `GET /api/meetings/{id}/translations/{language}` is never gated: only asking for a new one is. Sending notes by email in English is not gated.
+
+### Order of errors
+
+The gate is checked after the request is known to be valid and before the model is called, so a person with no plan who sends an empty question still gets 422 `question_invalid`, and a rewrite on a meeting that is not ready still gets 409 `not_ready`. Translation: 422 `language_unsupported` and 409 `not_ready` come first; 429 `translation_limit` comes after the gate.
+
+### What a person who passes sees (captures 14 to 18)
+
+Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture 14: `kind` `none` for a question that finds nothing; capture 15: `kind` `tasks`), 202 from a new translation (capture 16) and 200 with the usual meeting detail from a rewrite (capture 18).
+
+```json
+{"kind": "tasks", "lead": "You have no open tasks assigned to you.", "points": []}
+```
+
+### Shadow mode (captures 19 to 21) and off (captures 22 and 23)
+
+`shadow` is for the server operator and changes nothing in any body: the person with no plan is answered as in capture 19 (200) and 20 (202), and the server logs one line per call the gate would have refused (capture 21). `off` (capture 22) is identical and logs nothing (capture 23). **The frontend cannot tell the three modes apart except by receiving the 403 in `enforce`.**
+
+### What the frontend must do (the screens are not part of this stage)
+
+* **Handle 403 `plan_inactive` on all four calls** and show `error.message`. It is not a transient error: do not retry. Leave the person where they are and, where there is a billing screen, link to it.
+* **There is no signal yet that says which of the three is open for this person** (no `features` field in `GET /api/session`; `usage.state` exists only while `HOURS_MODE=enforce`, and it does not follow `FEATURE_GATES_MODE`). Until a follow-up adds one, the buttons can only learn it by being refused. Do not build a screen that hides them from `usage.state`: the two switches are independent and `usage.state` is `null` when the hours rule is off.
+* **A teammate with no plan** (reader only) can open every shared meeting and read it; Ask, translate and rewrite are refused for them. Show those three as unavailable with the server's sentence rather than as an error.
+* **A running or cached translation can be shown to a person with no plan.** Only the "Translate" button that starts a new one is refused.
+* **Sending notes in French or Spanish is a translation.** The share dialog can get this 403 for a person with no plan; English sharing still works for them.
+* **Rewriting is also a button on the old page**: `POST /meetings/{id}/regenerate` (a form post, not JSON) is gated the same way and shows the same sentence on the page with status 403.
+
 ## Verification
 
 | Behaviour | Verified |
@@ -392,3 +455,12 @@ when a meeting becomes ready (its recording was counted then), and when they ope
 | Send now and shared-link refusal carry `reason` | not verified live (same function) |
 | Calendar skip reasons `hours_cap` and `no_plan`, one notice for many skipped meetings, the Not recorded sentences | tests only (real join runner, no HTTP capture) |
 | `trial` and `plan_period` states | live shape only: the grants were inserted by SQL because nothing creates them yet |
+| 403 `plan_inactive` body for Ask, the free "my tasks" answer, a new translation, a rewrite and a share in French | live (captures 03 to 07, `FEATURE_GATES_MODE=enforce`) |
+| Reading, the Ask scope line, Review and the meeting list stay open for a person with no plan | live (captures 08 to 11) |
+| A person on a trial passes all gates (Ask 200, translation 202, rewrite 200) | live (captures 14 to 18; the trial grant was inserted by SQL; the notes model was a fake client and Ask was shown on a question that finds nothing, so no OpenAI call was made) |
+| Shadow lets the call through and logs one line with ids only; off logs nothing | live (captures 19 to 23, the log lines come from the real logger) |
+| A cached or running translation is not refused after a plan ends; the worker finishes a queued translation; the legacy page route `POST /meetings/{id}/regenerate` is refused with 403 and the same sentence | tests only (`tests/test_feature_gates.py`) |
+| The reader-only teammate: reads shared notes, Ask refused, Ask works once they hold a plan | tests only |
+| `past_due` and `lapsed` states against the gates | tests only (the states arrive with subscriptions in stage S8) |
+| Export, decisions and the Review spelling step stay open | export and decisions: tests only (`tests/test_feature_gates.py`); Review list: live (capture 11); the spelling step: tests only. Search: not exercised in this stage (its code is untouched) |
+| A `features` signal in the session payload | not built (see "What the frontend must do") |

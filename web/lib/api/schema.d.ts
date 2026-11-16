@@ -5568,7 +5568,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7752,7 +7752,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8166,7 +8166,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `email_not_verified` */
+            /** @description Missing or wrong X-CSRF-Token; `email_not_verified`; `plan_inactive`: a language other than English needs a NEW translation, which needs a live plan or trial (only under `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8387,7 +8387,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: a NEW translation needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`; a cached one is never refused) */
             403: {
                 headers: {
                     [name: string]: unknown;

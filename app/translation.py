@@ -39,7 +39,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import ai_runs, visibility
+from app import ai_runs, entitlements, feature_gates, visibility
 from app.ai_versions import TRANSLATE_PROMPT_VERSION
 from app.config import get_settings
 from app.models import AiRun, Meeting, MeetingTranslation, User, VocabularyTerm
@@ -552,7 +552,8 @@ def request_translation(
     """Queue a translation, or find the cached one. Returns `(row, cached)`: `cached` is True
     for a finished translation of the current text (the API answers 200, nothing is queued); a
     queued one, one already running, a failed one asked for again and a stale one asked for again
-    answer 202. Commits."""
+    answer 202. The feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) applies only to a NEW
+    translation, after those two answers. Commits."""
     now = now or datetime.now(UTC)
     if language not in TARGETS:
         raise Refused(422, "language_unsupported", unsupported_message())
@@ -571,6 +572,11 @@ def request_translation(
     if row is not None and row.status == "ready" and row.source_hash == current:
         session.commit()
         return row, True
+    try:  # only a NEW translation is gated: the cached and the running answers above are free
+        feature_gates.require(session, user, entitlements.TRANSLATE, now=now)
+    except Refused:
+        session.rollback()  # release the account lock
+        raise
     if daily_count(session, user.id, now) >= DAILY_LIMIT:
         session.rollback()
         raise Refused(

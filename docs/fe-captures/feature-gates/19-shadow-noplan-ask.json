@@ -1,0 +1,27 @@
+{
+  "note": "Shadow: the person with no plan is NOT refused (200, `none`: nothing found, no model call).",
+  "client": "nora no plan",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "question": "zzz qqq xyzzy"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "none",
+      "lead": "I could not find that in your meetings.",
+      "points": []
+    }
+  }
+}

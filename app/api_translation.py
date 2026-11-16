@@ -63,6 +63,12 @@ def _existing(session: Session, meeting: Meeting, language: str) -> MeetingTrans
 TRANSLATE_RESPONSES = {
     200: {"description": "A finished translation of the current text, from the cache."},
     202: {"description": "Queued, or already being made: ask again every 2 seconds."},
+    403: {
+        "model": ErrorResponse,
+        "description": "Missing or wrong X-CSRF-Token; or `plan_inactive`: a NEW translation "
+        "needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`; a "
+        "cached one is never refused)",
+    },
     404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
     409: {"model": ErrorResponse, "description": "`not_ready`: the notes are not written yet"},
     422: {"model": ErrorResponse, "description": "`language_unsupported`: only French or Spanish"},

@@ -31,6 +31,8 @@ from app import (
     bot_names,
     deletion,
     edge,
+    entitlements,
+    feature_gates,
     passwords,
     placement,
     timezones,
@@ -681,13 +683,17 @@ def _create_meeting(
 
 
 def regenerate_notes(
-    session: Session, meeting: Meeting, template_id: int | None, openai_client
+    session: Session, user: User, meeting: Meeting, template_id: int | None, openai_client
 ) -> Meeting:
+    """Rewrite a ready meeting's notes with a template (one model call). `user` is the caller, the
+    person pressing the button: the feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) is
+    checked against them, here, so the JSON route and the page route cannot differ."""
     if meeting.status != "ready":
         raise Refused(409, "not_ready", "Notes can only be rewritten once a meeting is ready.")
     template = _own_template(session, meeting.owner_user_id, template_id)
     if template is None:
         raise Refused(400, "template_required", "Choose a template.")
+    feature_gates.require(session, user, entitlements.REWRITE)
     source = meeting.speaker_transcript or meeting.transcript or ""
     terms = list(
         session.scalars(

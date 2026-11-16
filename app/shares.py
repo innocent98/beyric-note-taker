@@ -146,8 +146,10 @@ def create_share(
     now: datetime | None = None,
 ) -> MeetingShare:
     """Make a share and queue its mails (or its translation). Commits. Raises `Refused`:
-    403 `email_not_verified`, 409 `not_ready`, 422 `language_unsupported` / `invalid_recipient` /
-    `no_recipients` / `too_many_recipients`, 429 `share_limit` and `translation_limit`."""
+    403 `email_not_verified` or `plan_inactive` (a NEW translation needs a plan or trial: the
+    feature gate, checked against the sender), 409 `not_ready`, 422 `language_unsupported` /
+    `invalid_recipient` / `no_recipients` / `too_many_recipients`, 429 `share_limit` and
+    `translation_limit`."""
     now = now or datetime.now(UTC)
     if sender.email_verified_at is None:
         raise Refused(403, "email_not_verified", "Confirm your email address before sharing notes.")
