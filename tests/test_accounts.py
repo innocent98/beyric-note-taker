@@ -22,6 +22,7 @@ from app.models import (
     ReviewItem,
     ScheduledJoin,
     Series,
+    SeriesIgnored,
     Sprint,
     Task,
     TeamInvite,
@@ -600,6 +601,14 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         team_id=teams.ensure_team(session, owner).id, owner_user_id=owner.id, title="Weekly"
     )
     question = OpenQuestion(meeting_id=mine.id, text="q", position=0, fingerprint="q")
+    removal_mark = (
+        SeriesIgnored(  # the owner's team forgot a recurring event: not the stranger's to clear
+            team_id=teams.ensure_team(session, owner).id, calendar_recurring_id="rid-removed"
+        )
+    )
+    personal_mark = SeriesIgnored(
+        team_id=teams.ensure_personal_team(session, owner).id, calendar_recurring_id="rid-personal"
+    )
     project = Project(
         team_id=teams.ensure_team(session, owner).id, name="P", color="#0E6B5E", keywords=[]
     )
@@ -622,6 +631,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             pending_invite,
             recurring,
             question,
+            removal_mark,
+            personal_mark,
             project,
             milestone,
             sprint,
@@ -685,6 +696,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "task_id": task.id,
         "invite_id": pending_invite.id,
         "series_id": recurring.id,
+        "mark_id": removal_mark.id,
         "question_id": question.id,
         "project_id": project.id,
         "milestone_id": milestone.id,
@@ -734,6 +746,11 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     assert session.get(ScheduledJoin, stuck.id).state == "failed"
     assert session.scalar(select(func.count(Meeting.id)).where(Meeting.source == "calendar")) == 0
     assert session.get(Series, recurring.id).project_id is None  # nor did the stranger's link
+    # bring-back: the stranger got 404 for the owner's team mark above and gets 404 for the owner's
+    # Personal mark here; neither was cleared
+    error_of(anon.post(f"/api/series/removed/{personal_mark.id}/bring-back"), 404, "not_found")
+    assert session.get(SeriesIgnored, removal_mark.id) is not None
+    assert session.get(SeriesIgnored, personal_mark.id) is not None
     # the stranger's DELETE of the owner's template was refused, not carried out
     assert session.get(Template, template.id).deleted_at is None
     anon.log_in(email=OWNER_EMAIL)
