@@ -29,6 +29,7 @@ from app.models import (
     UserSettings,
     VocabularyTerm,
 )
+from tests.helpers import NO_NEW_USAGE_FIELDS
 from tests.test_api import Api, anon, api, error_of, ready  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
     MEET,
@@ -189,7 +190,7 @@ def test_login_names_the_user_and_the_usage(anon, owner):
     body = anon.log_in().json()
     assert body["authenticated"] is True
     assert body["user"]["email"] == OWNER_EMAIL
-    assert body["usage"] == {"used_seconds": 0, "cap_seconds": 18000}
+    assert body["usage"] == {**NO_NEW_USAGE_FIELDS, "used_seconds": 0, "cap_seconds": 18000}
 
 
 def test_the_email_is_not_case_or_space_sensitive(anon, owner):

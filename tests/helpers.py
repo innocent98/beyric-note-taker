@@ -15,3 +15,18 @@ class FakeClock:
     def advance(self, seconds: float) -> datetime:
         self._now += timedelta(seconds=seconds)
         return self._now
+
+
+# The fields billing stage S2 adds to `usage` in the session: all null unless HOURS_MODE=enforce
+# (`tests/test_hours_enforce.py` covers the filled ones).
+NO_NEW_USAGE_FIELDS = dict.fromkeys(
+    (
+        "state",
+        "seconds_left",
+        "warning",
+        "can_record",
+        "unlimited",
+        "period_ends_at",
+        "trial_ends_at",
+    )
+)

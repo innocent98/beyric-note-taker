@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app import audio, pipeline, usage
 from app.config import get_settings
 from app.models import AiRun, AppState, Meeting, Notification, UsageEntry
+from tests.helpers import NO_NEW_USAGE_FIELDS
 from tests.test_accounts import visitor
 from tests.test_api import anon, api, error_of  # noqa: F401  (fixtures used by name)
 from tests.test_pipeline import DONE, NOW, RECORDED_SECONDS, FakeVexa, env, meeting, run  # noqa: F401  # noqa: F401  (fixtures used by name)
@@ -28,18 +29,6 @@ from tests.test_web import (  # noqa: F401
 )
 
 HOUR = 3600
-# The fields S2 adds to `usage` are null unless HOURS_MODE=enforce (tests/test_hours_enforce.py).
-NO_NEW_FIELDS = dict.fromkeys(
-    (
-        "state",
-        "seconds_left",
-        "warning",
-        "can_record",
-        "unlimited",
-        "period_ends_at",
-        "trial_ends_at",
-    )
-)
 DAY_AGO = datetime.now(UTC) - timedelta(days=1)
 
 
@@ -240,7 +229,7 @@ def test_the_cap_is_checked_before_the_bot_busy_rule(api, session, owner, templa
 def test_the_session_reports_used_and_cap(api, session, owner):
     entry(session, owner, 8100)
     assert api.get("/api/session").json()["usage"] == {
-        **NO_NEW_FIELDS,
+        **NO_NEW_USAGE_FIELDS,
         "used_seconds": 8100,
         "cap_seconds": 18000,
     }
@@ -250,7 +239,7 @@ def test_the_session_reports_no_cap_for_an_admin(app, session):
     make_user(session, "admin@example.test", admin=True)
     client = visitor(app)
     body = client.log_in(email="admin@example.test").json()
-    assert body["usage"] == {**NO_NEW_FIELDS, "used_seconds": 0, "cap_seconds": None}
+    assert body["usage"] == {**NO_NEW_USAGE_FIELDS, "used_seconds": 0, "cap_seconds": None}
     assert body["user"]["is_admin"] is True
 
 
