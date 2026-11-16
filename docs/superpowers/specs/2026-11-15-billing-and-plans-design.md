@@ -178,7 +178,9 @@ For a recording of S seconds charged to a person, the seconds are taken in this 
 
 1. the person's trial or pilot grant, if any is left and not ended (it ends first by design),
 2. their plan hours, oldest period first (a period's hours expire at its end, except that during the 3 days of grace after a failed renewal the old period's leftover stays usable, section 3.3),
-3. their packs, oldest expiry first.
+3. then admin gifts and packs together, by earliest `expires_at` first, a grant with no expiry last (**decided 2026-11-16 for S2**: whatever ends soonest is used first; this also places an admin gift, which the first version of this order left out).
+
+A person who holds a plan period in force is `active` even while a pilot grant still has hours (they pay; the state does not follow the spending order). A recording longer than all the hours left is counted in full and the excess is written off (section 3.3): it is stored as an over-draw on the last grant spent from, which reads as zero left and never as less.
 
 Each split is recorded in `usage_allocations` (section 7), so a grant's remaining hours are always a sum, never a number someone edited: auditable, and an expiry or a refund can be explained line by line. That matters here more than before, because the reason for the per-person model was that a team owner could not explain where hours went; now each person's ledger explains theirs.
 

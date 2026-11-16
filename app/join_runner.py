@@ -50,7 +50,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, calendar_providers, calendar_states, titles
+from app import alerts, calendar_providers, calendar_states, hours, titles
 from app.bot_provider import BotProvider, BotProviderError, build_provider, describe_failure
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
@@ -99,9 +99,9 @@ DUE_STATES = ("scheduled", "dispatching", "no_capacity", "skipped")
 # an EARLIER meeting in the same room (back-to-back sessions on one Zoom personal room or one Meet
 # link). That one is retried until the deadline, because the earlier session ends and this one
 # starts, and it ends "not recorded" if the earlier bot never leaves.
-RETRYABLE_SKIPS = ("hours_cap", "user_limit", "code_in_use")
-# Of those, these still end "not recorded" at the deadline; `hours_cap` ends `skipped` (the person
-# was told why).
+RETRYABLE_SKIPS = ("hours_cap", "no_plan", "user_limit", "code_in_use")
+# Of those, these still end "not recorded" at the deadline; `hours_cap` and `no_plan` end `skipped`
+# (the person was told why).
 NOT_RECORDED_SKIPS = ("user_limit", "code_in_use")
 # A meeting the owner PASTED (or started from instant-Meet: any meeting no join row points at) on
 # the same code counts as made for this event when it was created from this long before the start
@@ -757,6 +757,8 @@ def _refused(
     join.attempts += 1
     _touch(join, now)
     reason = _SKIP_REASONS.get(code, "refused")
+    if code == "hours_cap_reached" and refused.reason == "no_plan":
+        reason = "no_plan"  # HOURS_MODE=enforce: the person holds no hours at all
     if crowded:
         # Two of the owner's rows on one code inside their windows (back-to-back slots in one
         # room): `no_capacity` is a live state and the code may be live only once per user.
@@ -789,6 +791,12 @@ def _refused(
             dedupe_key=alerts.bucket_key("admin.no_capacity", now),
         )
         result, reason = "no_capacity", None
+    elif code == "hours_cap_reached" and refused.reason is not None:
+        # HOURS_MODE=enforce: ONE notice per person and period, not one per skipped meeting. Each
+        # skipped meeting still shows as "Not recorded" (and offers Send now).
+        if user is not None:
+            hours.notify_out_of_hours(session, user, now)
+        result = "skipped"
     else:
         notice = _NOTICES.get(reason)
         if notice is not None:

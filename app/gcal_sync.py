@@ -81,7 +81,7 @@ MOVABLE = ("scheduled", "no_capacity")
 # A skipped row the runner is still retrying (the reason can clear) follows its event too: moved
 # later, it goes back to waiting for the new time instead of ending "not recorded" at the old
 # deadline. (The reasons are the join runner's `RETRYABLE_SKIPS`.)
-MOVABLE_SKIPS = ("hours_cap", "user_limit", "code_in_use")
+MOVABLE_SKIPS = ("hours_cap", "no_plan", "user_limit", "code_in_use")
 # No bot has been sent from these, so the calendar may cancel them. (`dispatching` is cancelled
 # too: the runner re-reads the state before it sends, spec 7.7 and plan C12.)
 CANCELLABLE = ("scheduled", "dispatching", "no_capacity", "skipped")

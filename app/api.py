@@ -37,6 +37,7 @@ from app import (
     auth,
     calendar_api,
     calendar_recurring,
+    entitlements,
     export,
     meeting_teams,
     notifications,
@@ -122,11 +123,18 @@ def is_api_path(request: Request) -> bool:
 
 
 def error_response(
-    status: int, code: str, message: str, fields: list[dict] | None = None, headers=None
+    status: int,
+    code: str,
+    message: str,
+    fields: list[dict] | None = None,
+    headers=None,
+    reason: str | None = None,
 ) -> JSONResponse:
     error: dict = {"code": code, "message": message}
     if fields is not None:
         error["fields"] = fields
+    if reason is not None:  # only `hours_cap_reached` under HOURS_MODE=enforce has one
+        error["reason"] = reason
     return JSONResponse({"error": error}, status_code=status, headers=headers)
 
 
@@ -147,7 +155,7 @@ def install_errors(app: FastAPI) -> None:
 
     @app.exception_handler(Refused)
     async def _refused(request: Request, exc: Refused):
-        return error_response(exc.status, exc.code, exc.message)
+        return error_response(exc.status, exc.code, exc.message, reason=exc.reason)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException):
@@ -174,6 +182,38 @@ def install_errors(app: FastAPI) -> None:
 # ---- session ----
 
 
+def _usage_out(db: Session, user, settings) -> UsageOut:
+    """The `usage` of the session. Off and shadow: the old cap and what is used, as always (the new
+    fields are null). Enforce: the same two numbers read from the person's grants, plus the new
+    fields (`app/entitlements.py`)."""
+    now, poll = datetime.now(UTC), settings.max_poll_hours * 3600
+    if settings.hours_mode != "enforce":
+        return UsageOut(
+            used_seconds=usage.hours_used(db, user, now, poll),
+            cap_seconds=usage.effective_cap(db, user),
+        )
+    held = entitlements.status(db, user, now, poll)
+    if held.unlimited:  # the platform admin: no limit, whatever they have recorded
+        return UsageOut(
+            used_seconds=usage.hours_used(db, user, now, poll),
+            cap_seconds=None,
+            state=held.state,
+            can_record=True,
+            unlimited=True,
+        )
+    return UsageOut(
+        used_seconds=held.holdings_seconds - held.seconds_left,
+        cap_seconds=held.holdings_seconds,
+        state=held.state,
+        seconds_left=held.seconds_left,
+        warning=held.warning,
+        can_record=held.seconds_left > 0,
+        unlimited=False,
+        period_ends_at=held.period_ends_at,
+        trial_ends_at=held.trial_ends_at,
+    )
+
+
 def _session_state(request: Request, db: Session, team_id: int | None = None) -> SessionState:
     current, user = request.state.session, request.state.user
     if user is None:
@@ -188,7 +228,6 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
         )
     settings = request.app.state.settings
     active = team_admin.active_team_or_default(db, user, team_id)
-    used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
     return SessionState(
         authenticated=True,
         csrf_token=current["csrf"],
@@ -202,7 +241,7 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
                 select(UserSettings.time_zone).where(UserSettings.user_id == user.id)
             ),
         ),
-        usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
+        usage=_usage_out(db, user, settings),
         unread_notifications=notifications.unread_count(db, user),
         badges=BadgesOut(
             review_open=workspace.open_review_count(db, user, active),

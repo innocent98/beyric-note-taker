@@ -17,6 +17,7 @@ from app.config import Settings
 from app.models import (
     AppState,
     AuthToken,
+    HourGrant,
     MailOutbox,
     Notification,
     ScheduledJoin,
@@ -123,9 +124,30 @@ def update_user(session: Session, user: User, changes: dict) -> User:
     if changes.get("status") is not None:
         user.status = changes["status"]
     if "hours_cap_seconds" in changes:
+        before = usage.effective_cap(session, user)
         user.hours_cap_seconds = changes["hours_cap_seconds"]
+        _gift_a_raised_cap(session, user, before, usage.effective_cap(session, user))
     session.commit()
     return user
+
+
+def _gift_a_raised_cap(session: Session, user: User, before: int | None, after: int | None) -> None:
+    """The grants rule (`HOURS_MODE=enforce`) never reads `users.hours_cap_seconds`, so an admin who
+    raises a person's cap gives them the difference as an `admin_gift` grant, with no expiry and a
+    written reason (spec 1.3). Written in every mode, so the grants are right whenever the rule is
+    switched on; the old rule goes on reading the cap. Lowering or clearing a cap takes nothing away
+    from the grants: hours already held are not taken back by a cap edit."""
+    if before is None or after is None or after <= before:
+        return
+    session.add(
+        HourGrant(
+            user_id=user.id,
+            email_hash=usage.email_hash(user.email),
+            kind="admin_gift",
+            seconds=after - before,
+            reason=f"An admin raised the recorded-hours cap from {before} to {after} seconds.",
+        )
+    )
 
 
 def schedule_deletion(session: Session, user: User) -> None:

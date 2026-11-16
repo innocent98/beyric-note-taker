@@ -186,8 +186,9 @@ def test_the_waterfall_takes_the_unallocated_spending_in_that_order(session, ada
     assert (s.state, s.seconds_left) == ("active", 3 * HOUR)  # plan hours show next
     used(session, ada, 2 * HOUR)
     s = entitlements.status(session, ada, clock.now())
-    # the pack alone is not a plan: hours remain for a recording, but the state is none
-    assert (s.state, s.seconds_left) == ("none", HOUR)
+    # the plan period is in force, so the person is still `active` (they pay): the pack hour is
+    # all that is left to record with
+    assert (s.state, s.seconds_left) == ("active", HOUR)
     assert entitlements.check_join(session, ada, clock.now()).allowed
 
 
@@ -196,7 +197,7 @@ def test_the_soonest_expiring_pack_is_spent_first(session, ada, clock):
     soon = grant(session, ada, HOUR, kind="pack", expires=T0 + timedelta(days=1))
     later = grant(session, ada, HOUR, kind="pack", expires=T0 + timedelta(days=30))
     used(session, ada, 2 * HOUR)  # the pilot hour, then the soonest pack
-    held = entitlements._grants_in_force(session, ada, clock.now())
+    held = entitlements.grants_in_force(session, ada, clock.now())
     assert [g.kind for g, _ in held] == ["pilot", "pack", "pack"]
     assert [g.id for g, _ in held[1:]] == [soon.id, later.id]
     assert entitlements.status(session, ada, clock.now()).seconds_left == HOUR  # the later pack

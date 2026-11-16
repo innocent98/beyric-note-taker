@@ -1,0 +1,48 @@
+{
+  "note": "The platform admin: no limit. `cap_seconds` and `seconds_left` are null, `unlimited` is true, `can_record` is true. `state` is `none` and means nothing here: read `unlimited` first.",
+  "client": "platform admin",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "admin@example.test",
+        "name": null,
+        "is_admin": true,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": null,
+        "state": "none",
+        "seconds_left": null,
+        "warning": null,
+        "can_record": true,
+        "unlimited": true,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

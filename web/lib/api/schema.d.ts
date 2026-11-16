@@ -4797,10 +4797,24 @@ export interface components {
         };
         /** UsageOut */
         UsageOut: {
+            /** Can Record */
+            can_record?: boolean | null;
             /** Cap Seconds */
             cap_seconds: number | null;
+            /** Period Ends At */
+            period_ends_at?: string | null;
+            /** Seconds Left */
+            seconds_left?: number | null;
+            /** State */
+            state?: string | null;
+            /** Trial Ends At */
+            trial_ends_at?: string | null;
+            /** Unlimited */
+            unlimited?: boolean | null;
             /** Used Seconds */
             used_seconds: number;
+            /** Warning */
+            warning?: string | null;
         };
         /** UserOut */
         UserOut: {

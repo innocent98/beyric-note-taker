@@ -66,9 +66,25 @@ class UserOut(BaseModel):
 
 class UsageOut(BaseModel):
     # Seconds of recorded audio counted against the account, including meetings still running.
+    # Under HOURS_MODE=enforce: the hours the person holds now minus what is left of them.
     used_seconds: int
-    # The most the account may record in total; null when there is no cap (an admin).
+    # The most the account may record in total; null when there is no cap (an admin). Under
+    # HOURS_MODE=enforce: the hours the person holds now (every grant in force, spent or not).
     cap_seconds: int | None
+    # The fields below are filled only under HOURS_MODE=enforce; otherwise they are all null.
+    # trial, pilot, active or none (a person with no hours, or an admin: see `unlimited`).
+    state: str | None = None
+    # Seconds the person may still record, counting meetings still running; null for an admin.
+    seconds_left: int | None = None
+    # `low` once 80% of the hours held are used, `out` when none is left, else null.
+    warning: str | None = None
+    # Whether a new recording would start now.
+    can_record: bool | None = None
+    # True for the platform admin: no limit, and `state` is not about plans.
+    unlimited: bool | None = None
+    # When the newest plan period in force ends, and when the trial in force ends (null if none).
+    period_ends_at: datetime | None = None
+    trial_ends_at: datetime | None = None
 
 
 class BadgesOut(BaseModel):

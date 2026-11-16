@@ -1,0 +1,48 @@
+{
+  "note": "A meeting that was already running finished after the hours were gone (a 2-hour recording counted): it is counted in full, `seconds_left` stays 0 and never goes negative, and no second notice is raised (next file).",
+  "client": "ada pilot",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-D>",
+      "user": {
+        "email": "ada@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 18000,
+        "cap_seconds": 18000,
+        "state": "none",
+        "seconds_left": 0,
+        "warning": "out",
+        "can_record": false,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 2,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

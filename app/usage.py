@@ -12,12 +12,16 @@ capped at `max_poll_seconds` per meeting.
 """
 
 import hashlib
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Notification, UsageEntry, User
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CAP_SECONDS = 5 * 3600  # used when there is no app_state row (it has one in production)
 LOW_HOURS_FRACTION = 0.8  # the "most of your hours are used" notice
@@ -73,11 +77,21 @@ def hours_used(
 
 
 def record_usage(
-    session: Session, meeting: Meeting, seconds: int, now: datetime | None = None
+    session: Session,
+    meeting: Meeting,
+    seconds: int,
+    now: datetime | None = None,
+    settings: Settings | None = None,
 ) -> UsageEntry | None:
     """Count a prepared recording against its owner. Idempotent per meeting; does not commit.
 
     Returns the new ledger entry, or None when this meeting was counted before.
+
+    What else happens depends on `HOURS_MODE` (`app/hours.py`). `off`: nothing but the old 80%
+    notice. `shadow`: the recording is also split across the person's grants (so the grants stay
+    right for the day the rule is switched on), still with the old notice, and a failure there is
+    logged and goes no further. `enforce`: the same split, with the notices of spec 3.3 instead of
+    the old one, and a failure stops the counting (it is retried, and counted once).
     """
     if session.scalar(select(UsageEntry.id).where(UsageEntry.meeting_id == meeting.id)):
         return None
@@ -88,8 +102,31 @@ def record_usage(
     )
     session.add(row)
     session.flush()
-    _warn_when_low(session, owner, now or datetime.now(UTC))
+    now = now or datetime.now(UTC)
+    settings = settings or get_settings()
+    if settings.hours_mode == "enforce":
+        _hours_module().after_counted(
+            session, owner, row, now, settings.max_poll_hours * 3600, notices=True
+        )
+        return row
+    if settings.hours_mode == "shadow":
+        try:
+            with session.begin_nested():
+                _hours_module().after_counted(
+                    session, owner, row, now, settings.max_poll_hours * 3600, notices=False
+                )
+        except Exception as exc:  # the old rule decides in shadow: never stop a count for this
+            logger.error(
+                "hours_shadow allocation failed user=%s error=%s", owner.id, type(exc).__name__
+            )
+    _warn_when_low(session, owner, now)
     return row
+
+
+def _hours_module():
+    from app import hours  # hours imports alerts and entitlements, which import this module
+
+    return hours
 
 
 def _hours(seconds: float) -> str:
