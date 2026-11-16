@@ -47,6 +47,19 @@ def _is_secret(key: str) -> bool:
     return "token" in name or name in _SECRET_KEYS
 
 
+def _usable(event: ProviderEvent) -> bool:
+    """The text fields are text, the id fits its column, the kind is one we know. (The event's
+    amount is a claim that is never read; only the provider's own report decides.)"""
+    ids = (event.event_id, event.reference, event.provider_tx_id)
+    return (
+        event.kind in EVENT_KINDS
+        and all(isinstance(value, str) and value for value in ids)
+        and len(event.event_id) <= MAX_DEDUPE_KEY
+        and len(event.reference) <= 64
+        and len(event.provider_tx_id) <= 128
+    )
+
+
 def receive(
     db: Session,
     provider: PaymentProvider,
@@ -58,8 +71,8 @@ def receive(
     earlier delivery made) and the parsed event. Raises `WebhookRejected` or `BadEvent`."""
     provider.verify_webhook(headers, raw_body)
     event = provider.parse_event(raw_body)
-    if event.kind not in EVENT_KINDS or not event.event_id or len(event.event_id) > MAX_DEDUPE_KEY:
-        raise BadEvent("the event has no usable kind or id")
+    if not _usable(event):
+        raise BadEvent("the event has no usable kind, id or reference")
     try:
         payload = json.loads(raw_body)
     except ValueError as exc:

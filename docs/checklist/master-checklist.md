@@ -923,7 +923,7 @@ Goal: a **person** subscribes; the hours are theirs; teams are only a place to s
 - [ ] **S4: provider layer and webhook inbox** (M, first half of migration 0050, `BILLING_ENABLED=false`): `app/billing/` protocol, `FakeProvider`, neutral types; webhook route (raw body, dedupe table, 200 at once, worker processes, re-fetch before any grant); replay, wrong amount, wrong currency, wrong reference, bad signature on the fake  **Built and tested locally 2026-11-16 (SOP `docs/sop/2026-11-16-billing-provider-layer.md`); stays open until the PR is merged with CI green**
   - [x] `app/billing/`: `PaymentProvider` protocol, `FakeProvider`, neutral types, `new_payment`, inbox, settlement rules, webhook route (404 while `BILLING_ENABLED=false`)
   - [x] Migration 0050 (`payments`, `payment_methods`, `billing_events`); round trip on a scratch database
-  - [x] Tests: replay grants once; wrong amount, currency, reference refused; bad signature refused; raw bytes reach the verifier; flag off writes nothing (36 tests, 8-mutation check)
+  - [x] Tests: replay grants once; wrong amount, currency, reference refused; bad signature refused; raw bytes reach the verifier; flag off writes nothing (62 tests incl. concurrency, malformed answers and the migration round trip; mutation checks)
   - [ ] Not verified against any real vendor or through nginx and the Next.js proxy (S6, S7 test-mode run)
   - [ ] Decision: 0050 ships with S4, so S5's tables need their own revision; the later migration numbers move up (SOP follow-ups)
   - [ ] Hour-grant handler registered in `settle.GRANT_HANDLERS`, sweep for waiting events, token saved on first payment (S8)

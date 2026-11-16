@@ -7,6 +7,8 @@ the webhook claims; a bad signature is refused and stores nothing; the verifier 
 exact bytes; with billing off the route is a 404 that writes nothing."""
 
 import json
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.billing import settle
-from app.billing.api import MAX_BODY_BYTES
+from app.billing.api import MAX_BODY_BYTES, _handle
 from app.billing.fake import FakeProvider
 from app.billing.payments import new_payment
 from app.billing.provider import PROVIDER_FACTORIES
@@ -475,3 +477,111 @@ def test_the_login_and_csrf_exemption_covers_only_the_webhook_route(engine):
 
     assert under_prefix == [("POST", "/api/billing/webhooks/{provider}")]
     assert auth.WEBHOOK_PREFIX == "/api/billing/webhooks/"  # with the slash: no wider match
+
+
+# ---- a malformed answer is a recorded refusal, never an exception ----
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"amount_minor": "180000"},
+        {"amount_minor": 1800.0},
+        {"amount_minor": True},
+        {"currency": "XXX"},
+        {"status": "weird"},
+        {"reference": None},
+        {"provider_tx_id": ""},
+        {"provider_tx_id": "t" * 200},
+    ],
+)
+def test_a_malformed_provider_report_is_refused_and_recorded_not_retried(
+    client, fake, grants, session, payment, bad
+):
+    fake.transactions["tx-1"] = tx_for(payment, **bad)
+
+    response = send(client, fake, event_for(payment))
+
+    assert response.status_code == 200  # decided: the vendor is not asked to resend it
+    assert reload_payment(session, payment).status == "pending" and grants == []
+    [row] = events(session)
+    assert row.processed_at is not None and "malformed provider report" in row.error
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        {"id": 123},
+        {"id": ""},
+        {"reference": None},
+        {"tx_id": 7},
+        {"kind": "nonsense"},
+        {"id": "x" * 201},
+    ],
+)
+def test_an_event_with_unusable_fields_is_a_400_and_stores_nothing(
+    client, fake, session, payment, claim
+):
+    body = json.dumps({**json.loads(fake.event_body(event_for(payment))), **claim}).encode()
+
+    response = client.post(URL, content=body, headers=fake.signed_headers(body))
+
+    assert response.status_code == 400 and events(session) == []
+
+
+@pytest.mark.parametrize(
+    ("reported", "stored"),
+    [("NIGERIA NG", None), ("ng", "NG"), ("NG", "NG"), ("", None), ("NGA", None), (None, None)],
+)
+def test_the_card_country_is_two_letters_or_nothing_and_never_blocks_the_payment(
+    client, fake, grants, session, payment, reported, stored
+):
+    fake.add_transaction(tx_for(payment, card_country=reported))
+
+    response = send(client, fake, event_for(payment))
+
+    assert response.status_code == 200 and grants == [payment.id]
+    paid = reload_payment(session, payment)
+    assert paid.status == "succeeded" and paid.card_country == stored
+
+
+# ---- two deliveries at the same moment ----
+
+
+@pytest.mark.parametrize("second_id", ["evt-1", "evt-2"], ids=["same-event", "two-events"])
+def test_two_deliveries_at_the_same_moment_grant_once(
+    engine, fake, grants, session, payment, second_id
+):
+    """Two threads, two sessions, released together; the provider's answer is slow so the second
+    arrives while the first holds the payment row. Either the same event twice or two events for
+    one payment: one grant."""
+    fake.add_transaction(tx_for(payment))
+    real_fetch = fake.fetch_transaction
+
+    def slow_fetch(tx_id):
+        time.sleep(0.3)
+        return real_fetch(tx_id)
+
+    fake.fetch_transaction = slow_fetch
+    barrier, errors = threading.Barrier(2), []
+
+    def deliver(event_id):
+        try:
+            body = fake.event_body(event_for(payment, event_id=event_id))
+            with Session(engine, expire_on_commit=False) as db:
+                barrier.wait(timeout=10)
+                _handle(db, fake, fake.signed_headers(body), body)
+        except BaseException as exc:  # noqa: BLE001 - re-raised below, in the test's thread
+            errors.append(exc)
+
+    threads = [threading.Thread(target=deliver, args=(i,)) for i in ("evt-1", second_id)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert errors == []
+    assert grants == [payment.id]
+    assert reload_payment(session, payment).status == "succeeded"
+    assert len(events(session)) == len({"evt-1", second_id})
+    assert all(row.processed_at is not None for row in events(session))

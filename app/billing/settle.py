@@ -11,6 +11,11 @@ provider reported and never on what the webhook said (billing spec section 5.4):
 4. its currency is the currency we asked for;
 5. its amount is at least the amount we asked for.
 
+The provider's report is checked for shape first (`_malformed`): an amount that is not a whole
+number, an unknown currency or status, a reference or id that is not text. A malformed report is
+refused and recorded like any other refusal, so the provider is not asked to resend it for ever.
+The card's country is a note, not a rule: anything but two letters is stored as nothing.
+
 Anything else is refused: the payment stays as it was, and the event is marked decided with the
 reason in `billing_events.error`. A refusal never changes a payment.
 
@@ -27,6 +32,7 @@ failed; a `failed` payment can still succeed later (a payer retries the same che
 """
 
 import logging
+import re
 from collections.abc import Callable
 
 from sqlalchemy import select
@@ -34,8 +40,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.billing.provider import PaymentProvider
-from app.billing.types import ProviderEvent, ProviderTransaction, RetryLater
-from app.models import BillingEvent, Payment
+from app.billing.types import (
+    TRANSACTION_STATUSES,
+    ProviderEvent,
+    ProviderTransaction,
+    RetryLater,
+)
+from app.models import BILLING_CURRENCIES, BillingEvent, Payment
 
 logger = logging.getLogger(__name__)
 
@@ -84,18 +95,23 @@ def _apply(
     refusal = _refuse_payment(payment, provider)
     if refusal is None and payment.status in OPEN_STATUSES:
         tx = provider.fetch_transaction(event.provider_tx_id)
-        if event.kind == "charge_succeeded":
-            refusal = _refuse_transaction(payment, tx)
-            if refusal is None:
-                refusal = _mark_paid(db, payment, tx, now)
-        elif tx.reference == payment.reference and tx.status == "failed":
-            if payment.status == "pending":
-                payment.status = "failed"
-        else:
-            refusal = "the provider does not report this payment as failed"
+        refusal = _malformed(tx) or _decide(db, payment, event, tx, now)
     row.processed_at = now
     row.error = refusal
     return refusal
+
+
+def _decide(
+    db: Session, payment: Payment, event: ProviderEvent, tx: ProviderTransaction, now
+) -> str | None:
+    """Act on the provider's report for an open payment. Returns a refusal reason, or None."""
+    if event.kind == "charge_succeeded":
+        return _refuse_transaction(payment, tx) or _mark_paid(db, payment, tx, now)
+    if tx.reference == payment.reference and tx.status == "failed":
+        if payment.status == "pending":
+            payment.status = "failed"
+        return None
+    return "the provider does not report this payment as failed"
 
 
 def _refuse_payment(payment: Payment | None, provider: PaymentProvider) -> str | None:
@@ -103,6 +119,25 @@ def _refuse_payment(payment: Payment | None, provider: PaymentProvider) -> str |
         return "unknown reference: we made no such payment"
     if payment.provider != provider.name:
         return f"wrong provider: the payment is with {payment.provider}"
+    return None
+
+
+def _malformed(tx: object) -> str | None:
+    """Why the provider's answer is not a usable report, or None. Checked before any comparison, so
+    a text amount or a missing field is a recorded refusal, never an exception that makes the
+    provider resend the same event for ever."""
+    if not isinstance(tx, ProviderTransaction):
+        return "malformed provider report: not a transaction"
+    if not isinstance(tx.provider_tx_id, str) or not 0 < len(tx.provider_tx_id) <= 128:
+        return "malformed provider report: no usable transaction id"
+    if not isinstance(tx.reference, str):
+        return "malformed provider report: reference is not text"
+    if type(tx.amount_minor) is not int:
+        return "malformed provider report: amount is not a whole number of minor units"
+    if tx.currency not in BILLING_CURRENCIES:
+        return "malformed provider report: unknown currency"
+    if tx.status not in TRANSACTION_STATUSES:
+        return "malformed provider report: unknown status"
     return None
 
 
@@ -124,12 +159,21 @@ def _refuse_transaction(payment: Payment, tx: ProviderTransaction) -> str | None
     return None
 
 
+def _iso2(value: object) -> str | None:
+    """Two ASCII letters, upper-cased, or None. The card's country is a note for a human look
+    (spec 5.2), so a value the column cannot hold (a vendor's "NIGERIA NG") is dropped rather than
+    allowed to fail the write and stop a paid customer's hours."""
+    if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{2}", value):
+        return value.upper()
+    return None
+
+
 def _mark_paid(db: Session, payment: Payment, tx: ProviderTransaction, now) -> str | None:
     """The one place a payment becomes `succeeded`; runs the grant handlers once."""
     payment.status = "succeeded"
     payment.provider_tx_id = tx.provider_tx_id
     payment.paid_at = now
-    payment.card_country = tx.card_country
+    payment.card_country = _iso2(tx.card_country)
     try:
         with db.begin_nested():
             db.flush()
