@@ -77,7 +77,7 @@ def test_the_stub_says_nobody_has_a_live_subscription_until_stage_s8(session, pe
 def test_the_stub_is_a_tripwire_for_stage_s8(session, person, monkeypatch):
     """Subscriptions arrive with S8. If the table exists while this function is still the stub,
     every crossing change would quietly apply at once: it raises instead."""
-    assert "subscriptions" not in Base.metadata.tables  # S5: no such table yet
+    assert not profiles.has_subscription_table(Base.metadata.tables)  # S5: no such table yet
     assert profiles.live_subscription.is_stub  # S8 replaces the function and removes the marker
     monkeypatch.setattr(profiles, "_subscriptions_table_exists", lambda: True)
 
@@ -88,10 +88,39 @@ def test_the_stub_is_a_tripwire_for_stage_s8(session, person, monkeypatch):
         set_country(session, person, "NG")  # and so no change can go through while it is
 
 
+@pytest.mark.parametrize(
+    ("names", "found"),
+    [
+        (["subscriptions"], True),
+        (["billing_subscriptions"], True),  # S8 may name it anything with the word in it
+        (["plan_subscriptions", "payments"], True),
+        (["payments", "billing_profiles", "billing_country_changes", "users"], False),
+        ([], False),
+    ],
+)
+def test_the_tripwire_notices_a_subscription_table_by_any_name(names, found):
+    assert profiles.has_subscription_table(names) is found
+
+
+def test_a_waiting_change_that_matches_the_country_still_clears(session, person):
+    """A row whose pending country equals its country (it cannot be made today) must not stay
+    stuck refusing every change: applying clears it."""
+    seed_country(session, person, "NG")
+    row = profiles.get_profile(session, person)
+    row.pending_billing_country = "NG"
+    row.pending_effective_at = NOW - timedelta(days=1)
+    session.commit()
+
+    assert profiles.apply_due_pending(row, NOW)
+
+    assert (row.billing_country, row.pending_billing_country) == ("NG", None)
+    assert row.pending_effective_at is None
+
+
 def test_s8_cannot_add_the_subscriptions_table_and_keep_the_stub():
     """The same tripwire, as a plain test: it fails the day both are true."""
     stub = getattr(profiles.live_subscription, "is_stub", False)
-    assert not (stub and "subscriptions" in Base.metadata.tables), (
+    assert not (stub and profiles.has_subscription_table(Base.metadata.tables)), (
         "stage S8 added `subscriptions` but profile.live_subscription is still the S5 stub: "
         "replace it (return the live subscription's period end, currency and provider)"
     )

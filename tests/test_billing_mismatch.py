@@ -38,9 +38,9 @@ def seed_country(session, user, country):
         ("NG", "NG"),
         ("ng", "NG"),
         (" US ", "US"),
-        ("NIGERIA NG", "NG"),
+        ("NIGERIA NG", "NG"),  # Flutterwave's verify answer
         ("UNITED KINGDOM UK", None),  # UK is not a code (GB is): a stray word is not a country
-        ("CARD OF", None),  # Flutterwave's verify answer
+        ("CARD OF", None),  # OF is not a code
         ("UNITED STATES US", "US"),
         ("", None),
         ("NGA", None),

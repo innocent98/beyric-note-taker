@@ -86,8 +86,14 @@ class CountryChange:
     profile: BillingProfile
 
 
+def has_subscription_table(table_names) -> bool:
+    """True if any table is about subscriptions, whatever S8 calls it (`subscriptions`,
+    `billing_subscriptions`, `plan_subscriptions`): the tripwire must not depend on one spelling."""
+    return any("subscription" in name for name in table_names)
+
+
 def _subscriptions_table_exists() -> bool:
-    return "subscriptions" in Base.metadata.tables
+    return has_subscription_table(Base.metadata.tables)
 
 
 def live_subscription(db: Session, user_id: int, now: datetime) -> LiveSubscription | None:
@@ -139,10 +145,10 @@ def _locked_profile(db: Session, user: User) -> BillingProfile:
 def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:
     """Make a scheduled country change take effect once its time has come, in the row. True if it
     did. Call it with the row locked (`_locked_profile`); a read only uses `country_view`."""
-    view = country_view(profile, now)
-    if view.billing_country == profile.billing_country:
+    pending, due = profile.pending_billing_country, profile.pending_effective_at
+    if pending is None or due is None or due > now:
         return False
-    profile.billing_country = view.billing_country
+    profile.billing_country = pending
     profile.pending_billing_country = None
     profile.pending_effective_at = None
     profile.updated_at = now
