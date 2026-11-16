@@ -16,17 +16,17 @@
       "timezone": "UTC",
       "series": [
         {
-          "id": 13,
+          "id": 7,
           "title": "Design sync",
           "team": {
             "id": 4,
             "name": "Platform team",
             "is_personal": false
           },
-          "cadence": "Weekly on Mondays, 08:00",
+          "cadence": "Weekly on Mondays, 09:00",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-23T08:00:00Z",
-          "next_text": "Mon 23 Nov, 08:00",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
           "unfinished_tasks": 1,
           "open_questions": 1,
           "project": null
@@ -39,10 +39,10 @@
             "name": "Platform team",
             "is_personal": false
           },
-          "cadence": "Weekly on Mondays, 08:00",
+          "cadence": "Weekly on Mondays, 09:00",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-23T08:00:00Z",
-          "next_text": "Mon 23 Nov, 08:00",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
           "unfinished_tasks": 1,
           "open_questions": 1,
           "project": null

@@ -328,6 +328,159 @@ def test_the_owners_auto_shared_recording_making_the_card_adopts_the_shared_ones
     assert mine.series_id == card.id and earlier.series_id == card.id
 
 
+# ---- the Personal calendar card is never re-keyed into a team ----
+
+
+def personal_cards(session, user) -> list[Series]:
+    return list(session.scalars(select(Series).where(Series.team_id == personal_of(session, user))))
+
+
+def team_cards(session, team_id) -> list[Series]:
+    return list(session.scalars(select(Series).where(Series.team_id == team_id)))
+
+
+def test_a_one_team_owner_keeps_her_personal_card_and_gets_a_separate_team_card(
+    session, world, template
+):
+    """Ada owns X, her only team (X is her default team). The sync makes her Personal card; her
+    recording is auto-shared to X. The Personal card stays (with the lines typed into it), and X
+    gets
+    its own card: exactly two cards, no stranded duplicate and no re-key."""
+    scheduled(session, world.ada, "rid-ada")
+    series_rules.sync_from_joins(session, MONDAY)
+    [mine] = personal_cards(session, world.ada)
+    session.add(SeriesAgendaItem(series_id=mine.id, text="Typed in Personal", position=1))
+    session.commit()
+    event = calendar_event(session, world.ada, "rid-ada", TUESDAY)
+    meeting = calendar_meeting(session, template, world.ada, event, shared_team_id=world.x.id)
+    series_rules.link_from_calendar(session, meeting)
+    session.commit()
+    [still_mine] = personal_cards(session, world.ada)
+    [team_card] = team_cards(session, world.x.id)
+    assert still_mine.id == mine.id and meeting.series_id == team_card.id != mine.id
+    assert [i.text for i in series_rules.agenda_items(session, still_mine)] == ["Typed in Personal"]
+    assert series_rules.agenda_items(session, team_card) == []
+
+
+def test_a_two_team_owner_keeps_her_personal_card_the_same_way(session, world, template):
+    """Quinn owns Y and is an admin of X: two teams, so his default team is his Personal one."""
+    session.add(TeamMember(team_id=world.x.id, user_id=world.quinn.id, role="admin"))
+    session.commit()
+    scheduled(session, world.quinn, "rid-q")
+    series_rules.sync_from_joins(session, MONDAY)
+    [mine] = personal_cards(session, world.quinn)
+    event = calendar_event(session, world.quinn, "rid-q", TUESDAY)
+    meeting = calendar_meeting(session, template, world.quinn, event, shared_team_id=world.x.id)
+    series_rules.link_from_calendar(session, meeting)
+    session.commit()
+    assert [c.id for c in personal_cards(session, world.quinn)] == [mine.id]
+    [team_card] = team_cards(session, world.x.id)
+    assert meeting.series_id == team_card.id
+
+
+def test_a_plain_members_auto_shared_recording_makes_no_team_card_and_keeps_his_personal_one(
+    session, world, template
+):
+    """Pat is a plain member of X and Y (his default team is his Personal one). After the sync made
+    his Personal card, his recording is auto-shared to X: no team card is made (a plain member makes
+    none, and nothing is re-keyed into the team), and his Personal card stays."""
+    scheduled(session, world.pat, "rid-pat")
+    series_rules.sync_from_joins(session, MONDAY)
+    [mine] = personal_cards(session, world.pat)
+    event = calendar_event(session, world.pat, "rid-pat", TUESDAY)
+    meeting = calendar_meeting(session, template, world.pat, event, shared_team_id=world.x.id)
+    assert series_rules.link_from_calendar(session, meeting) is None
+    session.commit()
+    assert team_cards(session, world.x.id) == [] and meeting.series_id is None
+    assert [c.id for c in personal_cards(session, world.pat)] == [mine.id]
+
+
+def test_a_one_team_plain_members_card_stays_in_personal_too(session, world, template):
+    """Mo is a plain member of X and of nothing else: X is his default team."""
+    mo = make_user(session, "mo@example.test")
+    session.add(TeamMember(team_id=world.x.id, user_id=mo.id, role="member"))
+    session.commit()
+    scheduled(session, mo, "rid-mo")
+    series_rules.sync_from_joins(session, MONDAY)
+    [mine] = personal_cards(session, mo)
+    meeting = calendar_meeting(
+        session,
+        template,
+        mo,
+        calendar_event(session, mo, "rid-mo", TUESDAY),
+        shared_team_id=world.x.id,
+    )
+    assert series_rules.link_from_calendar(session, meeting) is None
+    assert team_cards(session, world.x.id) == [] and personal_cards(session, mo)[0].id == mine.id
+
+
+# ---- the system makes no team card; strays; the adoption lock ----
+
+
+def test_leaving_the_actor_out_is_an_error_not_the_power_to_make_a_team_card(
+    session, world, template
+):
+    meeting = linked(session, template, world.pat, calendar_event(session, world.pat, RID, MONDAY))
+    meeting.shared_team_id = world.x.id
+    with pytest.raises(TypeError):
+        series_rules.place_meeting(session, meeting)  # no actor named
+
+
+def test_the_system_attaches_to_a_team_card_that_exists_but_makes_none(session, world, template):
+    meeting = linked(session, template, world.pat, calendar_event(session, world.pat, RID, MONDAY))
+    meeting.shared_team_id = world.x.id
+    placed = series_rules.place_meeting(session, meeting, actor=series_rules.SYSTEM)
+    assert placed.series is None and placed.no_card and row_of(session, world.x.id) is None
+    card = standup(session, world.x.id, owner_id=world.ada.id)
+    meeting.series_id = row_of(session, personal_of(session, world.pat)).id  # back in Personal
+    placed = series_rules.place_meeting(session, meeting, actor=series_rules.SYSTEM)
+    assert placed.series.id == card.id and not placed.made
+
+
+def test_removing_a_row_makes_no_card_for_its_strays_in_a_team_the_remover_does_not_manage(
+    app, session, world, template
+):
+    """A legacy X row still holds Pat's meeting shared to Y. Ada (owner of X, in no Y) removes it:
+    the stray goes to Y's card if there is one and otherwise is left ungrouped. No card is made."""
+    legacy = standup(session, world.x.id, rid="rid-legacy", owner_id=world.ada.id)
+    held = put(session, template, legacy, who=world.ada, team=world.x.id)
+    stray = put(session, template, legacy, who=world.pat, team=world.y.id, when=TUESDAY)
+    legacy_id = legacy.id
+    assert sign_in(app, OWNER_EMAIL).delete(f"/api/series/{legacy_id}").status_code == 200
+    session.expire_all()
+    assert session.get(Meeting, stray.id).series_id is None
+    assert session.get(Meeting, held.id).series_id is None
+    assert team_cards(session, world.y.id) == []
+
+
+def test_the_adoption_locks_the_meetings_it_takes_in(session, world, template):
+    """`_adopt_shared` writes other people's meetings: it selects them FOR UPDATE."""
+    from sqlalchemy import event as sa_event
+
+    linked(
+        session,
+        template,
+        world.pat,
+        calendar_event(session, world.pat, RID, MONDAY - timedelta(days=7)),
+        shared_team_id=world.x.id,
+    )
+    mine = linked(session, template, world.ada, calendar_event(session, world.ada, RID, MONDAY))
+    seen: list[str] = []
+    engine = session.get_bind()
+
+    def spy(conn, cursor, statement, *args):
+        seen.append(statement)
+
+    sa_event.listen(engine, "before_cursor_execute", spy)
+    try:
+        meeting_teams.share(session, world.ada, mine, world.x.id)
+        session.commit()
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", spy)
+    adoption = [q for q in seen if "FROM meetings" in q and "scheduled_joins" in q]
+    assert adoption and all("FOR UPDATE" in q for q in adoption)
+
+
 # ---- 3. an explicit owner/admin creation clears the mark; automatic paths respect it ----
 
 

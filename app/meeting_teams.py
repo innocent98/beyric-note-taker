@@ -43,14 +43,16 @@ def _lock(session: Session, meeting: Meeting) -> None:
     session.refresh(meeting, with_for_update=True)
 
 
-def _touched(session: Session, meeting: Meeting, actor: User | None = None) -> None:
+def _touched(session: Session, meeting: Meeting, actor: series_rules.Actor) -> None:
     """After a change of team. `actor` is who shared or moved it (an explicit act: only an owner or
     admin of the team makes its recurring card then, and clears a removed scope's mark); None for
-    unshare and move back, which go to the recorder's personal card."""
+    unshare and move back (`SYSTEM`), which go to the recorder's personal card."""
     teams.rehome_tasks(session, meeting)
     before = meeting.series_id
     # flag on: into the row of its new scope
-    series_rules.follow_meeting(session, meeting, actor=actor, explicit=actor is not None)
+    series_rules.follow_meeting(
+        session, meeting, actor=actor, explicit=actor is not series_rules.SYSTEM
+    )
     if before is not None:
         series_rules.mark_topics_stale(session, before)  # the repeat topics may change
 
@@ -101,7 +103,7 @@ def unshare(session: Session, meeting: Meeting) -> None:
     if meeting.owner_team_id is not None:
         raise _team_owned()
     meeting.shared_team_id = None
-    _touched(session, meeting)
+    _touched(session, meeting, series_rules.SYSTEM)
 
 
 def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:
@@ -155,4 +157,4 @@ def move_back(session: Session, user: User, meeting: Meeting) -> None:
         )
     meeting.owner_team_id = None
     meeting.shared_team_id = None
-    _touched(session, meeting)
+    _touched(session, meeting, series_rules.SYSTEM)

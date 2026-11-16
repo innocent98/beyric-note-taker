@@ -170,7 +170,7 @@ def _give_back_meetings_of_doomed_teams(
             )
             # Flag on: its series row goes with the team (the foreign key would null it), so it
             # follows to its recorder's personal row first.
-            series.follow_meeting(session, meeting)
+            series.follow_meeting(session, meeting, actor=series.SYSTEM)
     session.flush()
 
 

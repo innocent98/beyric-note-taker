@@ -503,25 +503,24 @@ def test_a_moved_calendar_meeting_goes_to_the_owning_teams_row(session, world, t
     assert series_rules.link_from_calendar(session, meeting).team_id == world.y.id
 
 
-def test_a_legacy_empty_team_card_moves_with_a_private_first_meeting(session, world, template):
-    """An empty card the old sync made in Ada's default team (X): her first recording is private,
-    so the card goes to her personal space instead of staying behind. (The sync no longer makes
-    cards in a team: see `tests/test_series_personal_model.py`.)"""
+def test_a_legacy_empty_team_card_is_left_alone_and_a_private_meeting_goes_to_personal(
+    session, world, template
+):
+    """An empty card the old sync made in Ada's default team (X) is never moved into another scope
+    (the calendar card is hers, in Personal): her first private recording goes to her Personal card,
+    and the legacy team card is left for the cleanup (`remove_empty_team_cards`)."""
     event = calendar_event(session, world.ada, RID, MONDAY)
     scheduled = join_for(session, world.ada, event, state="scheduled")
-    card = standup(session, world.x.id, owner_id=world.ada.id)  # Ada's default team, empty
+    legacy = standup(session, world.x.id, owner_id=world.ada.id)  # Ada's default team, empty
     meeting = ready(session, template, source="calendar", created_at=event.starts_at)  # private
     scheduled.meeting_id, scheduled.state = meeting.id, "completed"
     session.commit()
     series_rules.link_from_calendar(session, meeting)
     session.commit()
-    assert row_of(session, world.x.id) is None  # case 19: gone from X's list
     mine = row_of(session, personal_of(session, world.ada))
-    assert mine.id == card.id and meeting.series_id == card.id  # the card itself was re-keyed
-    assert (
-        series_rules.sync_from_joins(session, MONDAY) == 0
-    )  # and the hourly sync does not remake it
-    assert row_of(session, world.x.id) is None
+    assert mine is not None and mine.id != legacy.id and meeting.series_id == mine.id
+    assert row_of(session, world.x.id).id == legacy.id  # untouched, still empty
+    assert series_rules.sync_from_joins(session, MONDAY) == 0  # the sync does not remake anything
 
 
 def test_a_card_with_waiting_lines_or_a_project_or_a_teammates_hand_stays_where_it_was(
@@ -750,7 +749,8 @@ def test_a_dry_run_changes_nothing_and_reports_what_it_would_do(session, world, 
     assert snapshot(session) == before
     assert report.applied is False
     assert report.meetings_moved == 5 and report.rows_split == 3
-    assert report.rows_made == 4
+    # the system makes only PERSONAL rows: the three meetings whose team has no card stay ungrouped
+    assert report.rows_made == 2 and report.meetings_no_card == 3
 
 
 def test_the_backfill_puts_every_meeting_in_the_row_of_its_scope(session, world, template):
@@ -759,25 +759,28 @@ def test_the_backfill_puts_every_meeting_in_the_row_of_its_scope(session, world,
     pat_personal = personal_of(session, world.pat)
     report = split_mixed_series(session, apply=True)
     session.expire_all()
-    where = {n: (session.get(Series, m.series_id).team_id) for n, m in legacy.items()}
+    where = {
+        n: (None if m.series_id is None else session.get(Series, m.series_id).team_id)
+        for n, m in legacy.items()
+    }
     y_row = row_of(session, world.y.id)
     assert where == {
         "monday_x": world.x.id,
         "tuesday_private": ada_personal,
-        "wednesday_y": world.y.id,
+        "wednesday_y": None,  # Y has no card and the system makes none in a team
         "pat_moved": world.x.id,  # a moved meeting never leaves its team's row
-        "p_shared": world.x.id,
-        "p_moved": world.x.id,
+        "p_shared": None,  # X has no card for this event
+        "p_moved": None,
         "p_private": ada_personal,
         "hand_private": ada_personal,
         "hand_shared": world.x.id,
         "zed": world.z.id,
     }
-    assert y_row is not None and y_row.title == "Standup" and y_row.project_id is None
+    assert y_row is None  # no card was made for Y by the system
     assert row_of(session, pat_personal) is None  # Pat has no private meeting: no row made
     assert legacy["monday_x"].series_id == rows["mixed"].id  # the team's row kept its meetings
     assert report.applied is True and report.meetings_moved == 5
-    assert report.meetings_cut_loose == 0
+    assert report.meetings_cut_loose == 0 and report.meetings_no_card == 3
 
 
 def test_a_second_backfill_changes_nothing(session, world, template):
@@ -864,7 +867,7 @@ def test_a_meeting_shared_to_its_recorders_own_personal_team_is_private(session,
     meeting = put(session, template, mine, who=world.ada, team=ada_personal)
     assert [m.id for m in series_rules.meetings_of(session, mine, world.ada)] == [meeting.id]
     assert visibility.scope_team_of(session, meeting) is None
-    placed = series_rules.place_meeting(session, meeting)
+    placed = series_rules.place_meeting(session, meeting, actor=series_rules.SYSTEM)
     assert placed.series.id == mine.id and not placed.moved  # already where it belongs
     report = split_mixed_series(session, apply=False)
     assert report.meetings_moved == 0 and report.rows_split == 0
@@ -874,7 +877,9 @@ def test_a_meeting_shared_to_its_recorders_own_personal_team_is_private(session,
     assert series_rules.link_from_calendar(session, auto).team_id == ada_personal
     world.ada.status = "deleted"
     session.commit()
-    assert series_rules.place_meeting(session, meeting).skipped  # private: nobody to take it to
+    assert series_rules.place_meeting(
+        session, meeting, actor=series_rules.SYSTEM
+    ).skipped  # private: nobody to take it to
 
 
 def test_a_new_row_is_named_from_the_calendar_event_never_from_the_source_rows_rename(
@@ -904,7 +909,7 @@ def test_a_suspended_recorders_meeting_still_follows(session, world, template):
     meeting = put(session, template, legacy, who=world.pat)  # private, in X's row
     world.pat.status = "suspended"
     session.commit()
-    assert series_rules.place_meeting(session, meeting).moved
+    assert series_rules.place_meeting(session, meeting, actor=series_rules.SYSTEM).moved
 
 
 def test_the_link_does_not_overfill_a_team_and_leaves_an_existing_row_usable(

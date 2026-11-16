@@ -103,6 +103,9 @@ export function MeetingView({
   const [tab, setTab] = useState<string>(initialTab);
   // With several teams, the meeting's own team answers for its milestones and series (null: the default team).
   const meetingTeam = teams ? (meeting.team?.id ?? null) : undefined;
+  // The recurring-meeting picker: a PRIVATE meeting belongs to the person's PERSONAL space (its recurring card and any new one are
+  // made there), so the picker asks for that team, not the default one (which is an ordinary team for a one-team person).
+  const pickerTeam = teams ? (meeting.team?.id ?? teams.find((t) => t.is_personal)?.id ?? null) : undefined;
   const [milestones, setMilestones] = useMeetingMilestones(meeting.id, meeting.status === "ready", meeting.extraction_status, meetingTeam);
   const [extractionStalled, setExtractionStalled] = useState(false);
   const extractionPolls = useRef(0);
@@ -629,7 +632,7 @@ export function MeetingView({
       ) : null}
       <Toast message={toast} />
       <Dialog id="series-dialog" title="Add to recurring meeting">
-        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} team={meetingTeam} onDone={() => void refetch()} />
+        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} team={pickerTeam} onDone={() => void refetch()} />
       </Dialog>
 
       <Dialog id="end-dialog" title="End the meeting and write the notes?">

@@ -13,7 +13,7 @@ ordinary team; only recorded meetings followed the Personal rule. And any member
 
 | What | Rule |
 |---|---|
-| A recurring card from a person's **own calendar** | always in their **Personal space**, never in a team (`sync_from_joins` now uses the person's personal team when the flag is on). Nothing overrides it |
+| A recurring card from a person's **own calendar** | always in their **Personal space**, never in a team (`sync_from_joins` now uses the person's personal team when the flag is on). Nothing overrides it, and **it is never re-keyed into a team** (review S1: the old re-key of an empty card was removed, so a one-team owner no longer gets a stranded duplicate and a two-team owner no longer gets the card moved). When an owner or admin shares a meeting of the event to a team, that makes a SEPARATE team card; the Personal card stays, with any lines typed into it |
 | A **team's** card | made only by an **owner or admin** of that team (`series.may_make_row`): when they share or move a meeting of a recurring calendar event to the team; by the automatic link when their recording is auto-shared; or by hand |
 | A plain member **shares** a meeting | the share works as ever and makes **no card** (the meeting is left in no recurring meeting). If the team already has the card, the meeting **joins** it |
 | By hand: create (`POST /api/series`), add a meeting (`PUT /api/meetings/{id}/series`), "Make this a recurring meeting?" (`POST /api/meetings/{id}/recurring`) | owner or admin for a team's card (**403 `team_forbidden`**, the project's real envelope); anyone for their own Personal card. Taking a meeting **out** stays its owner's |
@@ -31,34 +31,35 @@ ordinary team; only recorded meetings followed the Personal rule. And any member
 | The #205 empty-row exception | **kept**, for **legacy** rows: an empty hand-made team card a plain member made before this change (only its creator sees an empty hand-made card, so nobody else could ever remove it), and an empty calendar card until the cleanup below has run. New team cards are made by owners and admins, so it does not widen. Its mark: none for a plain creator (the security review's point) | **real choice**: could be dropped once no legacy empty rows remain |
 | Empty hand-made team cards in the cleanup | **not removed by the script** (someone made them on purpose). Series 4 in his data is one: he is the owner, so he removes it with the "Remove this recurring meeting" button | yes |
 | What a plain member sees instead of "Add to recurring meeting" / "Make this a recurring meeting?" | **nothing** (no disabled button, no message). The Series row still shows the link to the team's recurring meeting when the meeting is in one, without "Change". New field `can_make_recurring` on the meeting page drives it; `suggest_recurring` is also false | plain words, see the guide |
+| Who acts on a placement (review S5) | `actor` is now a **required** argument: a person, or `series.SYSTEM`. Leaving it out is a `TypeError`. `SYSTEM` (the backfill, a person leaving a team, a deleted team, unshare, move back) makes a row **only in a Personal team**; in a team it attaches to a row that exists and otherwise leaves the meeting ungrouped. Removal's stray path passes the remover. So the backfill no longer makes team cards for strays (the report prints `Meetings left ungrouped (their team has no card for them): N` only when N is above 0) | my choice (the other option was to make `actor` mandatory and let the system create anywhere) |
 | `place_meeting` for a plain member's share with no team card | the meeting is **cut loose** (no series), not left pointing at a Personal card (a shared meeting is not Personal-scope and would be hidden by the readers) | internal |
 
 ## What's involved
 
 | File | Change |
 |---|---|
-| `app/series.py` | `may_make_row`, `non_empty_reason`, `can_group`; `sync_from_joins` (Personal, with the personal-mark check); `link_from_calendar` (no team card by a plain member, adopts); `_row_for_scope` (why-codes, `actor`, `explicit`, mark clearing), `_adopt_shared`, `place_meeting`/`follow_meeting` (`actor`, `explicit`), `create`, `attach`, `remove` (mark only for managers), `_rekey_empty_card` guard |
-| `app/meeting_teams.py` | `share` and `move` pass the user as the actor (an explicit act); unshare and move back go to Personal |
+| `app/series.py` | `may_make_row`, `non_empty_reason`, `can_group`; `sync_from_joins` (Personal, with the personal-mark check); `link_from_calendar` (no team card by a plain member, adopts); `_row_for_scope` (why-codes, `actor`, `explicit`, mark clearing), `_adopt_shared` (locks the meetings it takes in, ordered, `FOR UPDATE`), `SYSTEM`/`Actor`, `place_meeting`/`follow_meeting` (required `actor`, `explicit`), `create`, `attach`, `remove` (mark only for managers; its strays use the remover as the actor). `_rekey_empty_card` is **removed** |
+| `app/meeting_teams.py`, `app/deletion.py`, `app/series_backfill.py` | `share` and `move` pass the user as the actor (an explicit act); unshare, move back, a deleted team and the backfill pass `SYSTEM` |
 | `app/api.py`, `app/api_schemas.py`, `app/api_series.py` | `can_make_recurring` on the meeting page; `suggest_recurring` needs it; `PUT /api/meetings/{id}/series` answers 403 `team_forbidden` (was always 404) |
 | `app/series_backfill.py`, `scripts/remove_empty_team_cards.py` | the cleanup (`remove_empty_team_cards`, `EmptyCardsReport`) |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated |
-| `web/components/app/meeting-view.tsx`, `web/tests/series-lead-designed.test.tsx` | the two controls drawn only when `can_make_recurring` |
+| `web/components/app/meeting-view.tsx`, `web/tests/series-lead-designed.test.tsx` | the two controls drawn only when `can_make_recurring`; the picker asks for the person's **Personal** team for a private meeting (review M1: with no team named the server used the default team, an ordinary team for a one-team person, so a plain member got a 403 and an owner an orphan empty team card) |
 | `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/52` to `106` | live captures (parts 5 and 6); `--keep 51` rewrites 52 and up (they were re-made: ids and dates differ from the #205 captures) |
 | `docs/fe-integration-guide-series-teams.md` (section 11, section 10 patched, verification table) | the guide |
-| `tests/test_series_personal_model.py` (35), `tests/test_series_follow.py`, `tests/test_series_remove.py` | tests first; old tests that built team cards with a plain member now promote Pat or expect no card |
+| `tests/test_series_personal_model.py` (43), `tests/test_series_follow.py`, `tests/test_series_remove.py` | tests first; old tests that built team cards with a plain member now promote Pat or expect no card |
 
 ## Verification
 
-* **Tests first** (35 new, `tests/test_series_personal_model.py`): the sync makes the card in Personal for a one-team and a two-team person; flag off unchanged; a removed Personal mark stops the sync; a plain
+* **Tests first** (43 new, `tests/test_series_personal_model.py`): the sync makes the card in Personal for a one-team and a two-team person; flag off unchanged; a removed Personal mark stops the sync; a plain
   member's shared meeting makes no card and joins an existing one; an owner's and an admin's share, move and auto-link make it; unshare goes back to Personal; adoption (by share and by the auto-link) and what it does not
   take (Y's, private, another event); the mark cleared by an explicit share, kept by the automatic link and by a plain member's share; 403 and 201 on the hand routes; `can_make_recurring`; flag off; the plain-creator
   removal without a mark; reminders with a fake clock; the cleanup (counts, what stays, no marks, idempotent, counts only, the next sync makes the Personal card).
 * **Mutation checks** (revert one rule, a test fails): sync in the default team (4 fail), anyone makes a row (9), hand create ungated (2), attach ungated (1), mark never cleared (1), adoption by the auto-link
-  removed (1), adoption by share removed (1), plain creator writes the mark (1).
+  removed (1), adoption by share removed (1), plain creator writes the mark (1); after the review: the plain-member check in the link removed (6), the system allowed to make team cards (3), the adoption lock weakened (1); web: the picker asking for the meeting's team instead of Personal (1).
 * **Bounded runs, CI runs the rest:** `ruff check .`, `ruff format --check .`, `tests/test_series*.py`, `test_multi_team_moved.py`, `test_multi_team_derived.py`, the openapi test; web `typecheck`, `lint`, `vitest` of
   the series, meeting and recurring files.
 * **Live:** captures 52 to 106 against the running app; the guide's blocks were checked against their captures by script (29 blocks, 0 differences).
-* **Not verified:** the reminders end to end against a real calendar and the real mail (fake-clock tests only; "do not change what the mail says" was kept); the frontend in a real browser; flag off live.
+* **Not verified:** the adoption lock under real concurrency (the test checks the statement says `FOR UPDATE`); the reminders end to end against a real calendar and the real mail (fake-clock tests only; "do not change what the mail says" was kept); the frontend in a real browser; flag off live.
 
 ## Reminders: why he received none, and what the mail needs
 
@@ -67,7 +68,7 @@ Reading verified in the code: `series_mail.queue_due_reminders` looks only at te
 next occurrence and can never remind; his calendar cards (1, 2, 3) sat in team 1 with no meeting. After the change a calendar-linked Personal card with one recorded meeting **does** queue the 1-hour and 30-minute mails
 (fake-clock test, `test_a_calendar_linked_personal_card_with_one_recorded_meeting_queues_both_reminders`). **The mail needs:** a card made from a calendar event; one recorded meeting in it (or a waiting agenda line);
 the event on the person's own calendar inside the window (the 1-hour mail goes from 60 to 35 minutes before, the 30-minute one from 30 to 5); `reminders_on` on for the card's team (**it is off by default for every
-team, Personal included**; his is on); the person not having switched reminder mail off. **A hand-made card cannot remind**, with or without meetings. Nothing about what the mail says changed.
+team, Personal included**; his is on); the person not having switched reminder mail off. **A card in the Personal space reminds only when the Personal space's own `reminders_on` is on** (it is off by default for every team, Personal included; **the default stays off** because the mail uses calendar data for a purpose the privacy policy names only after Google verification). A person whose TEAM has reminders on does not get them for a calendar card that now lives in Personal until they switch it on there. **A hand-made card cannot remind**, with or without meetings. Nothing about what the mail says changed.
 
 ## Server steps for Adebayo (after this PR is merged and deployed; no meeting recording)
 
@@ -97,6 +98,19 @@ select
 SQL
 EOF
 ```
+
+**Reminders for the Personal cards (read-only check, then one switch in Settings).** The cards the sync makes in Personal remind only if the Personal space has reminders on. Run this and read the line:
+
+```bash
+ssh haven-respite 'bash -s' <<'EOF'
+cd /opt/beyric-note-taker
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F " " -v ON_ERROR_STOP=1' <<'SQL'
+select 'personal spaces with reminders on / all:', count(*) filter (where reminders_on), count(*) from teams where is_personal;
+SQL
+EOF
+```
+
+To see yours, replace the select with `select reminders_on, reminder_timing from teams t join users u on u.id = t.owner_user_id where t.is_personal and u.email = '<your email>';` (`t` = on). If it says `f`: in the site, switch to **Personal** (the team switcher at the top of the sidebar), open **Settings**, find **Remind attendees before recurring meetings** and switch it on (choose the timing next to it). A good result: the row shows the switch on and a timing select. Nothing else is needed.
 
 ### Step 1. Dry run (changes nothing)
 
@@ -142,3 +156,10 @@ There is nothing to switch back: the removed cards were empty, and a card is mad
 * Drop the empty-row exception once no legacy empty rows remain.
 * Meetings shared by a plain member **before** an owner makes the card whose event row is already gone are not adopted (nothing links them to the event any more).
 * A way for a plain member to ask an owner or admin to make the team's card (not designed).
+* **F1 An owner's share of an UNGROUPED calendar meeting makes no team card** (`place_meeting` returns at once when the meeting has no card). Happens when the owner removed her Personal card or her Personal space was full: her private recording is then in no card, and sharing it as owner makes no card and clears no mark. Fix when wanted: in `_touched`, when the meeting is still ungrouped and the actor manages the new scope, run the calendar link.
+* **F2 The cleanup also removes an EMPTY calendar team card an owner made on purpose** (made by a share, the meeting then unshared or moved). It is meant to be run **once, right after the deploy**; a later run would remove such a card (no mark stops anything). The script's docstring now says so.
+* **F3 Re-running `scripts/backfill_series_follow.py`** no longer makes team cards for strays (the system makes none): a stray whose team has no card is left ungrouped (counted in the new report line). It used to make the card.
+* **F4 A plain member cannot take their meeting OUT of a team card in the UI** (the "Change" button is hidden with `can_make_recurring` false). The API still allows it (`series_id` null).
+* **F5 `_adopt_shared` also takes in meetings that someone deliberately took out of a card, and meetings ungrouped by a removal** (a null `series_id` cannot tell "never grouped" from "taken out"). Product call.
+* **F6 An owner's or admin's explicit share deletes the "removed" mark even when the team is full** (the mark goes before the room check), so no card is made and the next automatic link makes it without asking. Move the room check above the delete.
+* Review nits fixed: the script's usage lines, the new 403 in `docs/openapi.json` for `POST /api/series`, `PUT /api/meetings/{id}/series` and `POST /api/meetings/{id}/recurring`, two formatter leftovers in `app/series.py`.

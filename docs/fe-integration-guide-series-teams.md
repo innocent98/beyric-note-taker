@@ -15,7 +15,7 @@ Related: `docs/fe-integration-guide-series.md` (the Series API this builds on),
 
 ## 1. What this is, in the person's terms
 
-> **Superseded in part (2026-11-16):** where sections 1 to 9 say a recurring card from a calendar is made in the person's default team, or that sharing a meeting makes the team's row, section 11 (the simpler model) replaces that: calendar cards live in the Personal space, and only an owner or admin makes a team's card. The captures 01 to 51 were made before that change.
+> **Superseded in part (2026-11-16):** where sections 1 to 9 say a recurring card from a calendar is made in the person's default team, or that sharing a meeting makes the team's row, section 11 (the simpler model) replaces that: calendar cards live in the Personal space, and only an owner or admin makes a team's card. The captures 01 to 51 were made before that change; in particular the backfill output in captures 10 to 13 and 46 to 47 shows the backfill making team rows, which it no longer does (the system makes only Personal rows: a meeting whose team has no card is left ungrouped, and the report then has one more line, `Meetings left ungrouped (their team has no card for them): N`).
 
 A **recurring meeting is no longer one thing per person**. Monday's Standup shared to the team "Tech" and
 Tuesday's Standup kept private are two rows: the team's recurring list shows Standup with Monday only; the
@@ -914,7 +914,7 @@ A personal row with a waiting line (the line she typed earlier on that page goes
 
 A recurring meeting made by hand has no calendar event to remember:
 
-`DELETE /api/series/16` as Ada (owner of team X) → **200** (`docs/fe-captures/series-follow/76-remove-hand-made-delete.json`)
+`DELETE /api/series/14` as Ada (owner of team X) → **200** (`docs/fe-captures/series-follow/76-remove-hand-made-delete.json`)
 
 ```json
 {
@@ -941,11 +941,11 @@ A plain member who is not the row's creator, or its creator while something is i
 
 The plain member removing the calendar row he made himself, which holds a meeting: the same 403 (captures 77 and 78):
 
-`GET /api/series/13` as Pat (a plain member of X, who made the row) → **200** (`docs/fe-captures/series-follow/77-remove-page-pat-own-x-row.json`)
+`GET /api/series/7` as Pat (a plain member of X, who made the row) → **200** (`docs/fe-captures/series-follow/77-remove-page-pat-own-x-row.json`)
 
 ```json
 {
-  "id": 13,
+  "id": 7,
   "title": "Design sync",
   "team": {
     "id": 4,
@@ -958,7 +958,7 @@ The plain member removing the calendar row he made himself, which holds a meetin
 }
 ```
 
-`DELETE /api/series/13` as Pat → **403** (`docs/fe-captures/series-follow/78-remove-pat-own-x-row-403.json`)
+`DELETE /api/series/7` as Pat → **403** (`docs/fe-captures/series-follow/78-remove-pat-own-x-row-403.json`)
 
 ```json
 {
@@ -1030,17 +1030,17 @@ A plain member can no longer make a team's recurring meeting (section 11), so th
 
 ```json
 {
-  "id": 17,
+  "id": 15,
   "team_id": 4,
   "made_by": "a plain member, before the change"
 }
 ```
 
-`GET /api/series/17` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/80-remove-page-pat-empty-hand-made.json`)
+`GET /api/series/15` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/80-remove-page-pat-empty-hand-made.json`)
 
 ```json
 {
-  "id": 17,
+  "id": 15,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1055,7 +1055,7 @@ A plain member can no longer make a team's recurring meeting (section 11), so th
 
 He adds one agenda line; the row is no longer empty:
 
-`POST /api/series/17/agenda` as Pat → **201** (`docs/fe-captures/series-follow/81-remove-pat-hand-made-add-line.json`)
+`POST /api/series/15/agenda` as Pat → **201** (`docs/fe-captures/series-follow/81-remove-pat-hand-made-add-line.json`)
 
 ```json
 {
@@ -1065,11 +1065,11 @@ He adds one agenda line; the row is no longer empty:
 }
 ```
 
-`GET /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/82-remove-page-pat-hand-made-with-line.json`)
+`GET /api/series/15` as Pat → **200** (`docs/fe-captures/series-follow/82-remove-page-pat-hand-made-with-line.json`)
 
 ```json
 {
-  "id": 17,
+  "id": 15,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1084,7 +1084,7 @@ He adds one agenda line; the row is no longer empty:
 
 **403**, nothing changed:
 
-`DELETE /api/series/17` as Pat → **403** (`docs/fe-captures/series-follow/83-remove-pat-hand-made-with-line-403.json`)
+`DELETE /api/series/15` as Pat → **403** (`docs/fe-captures/series-follow/83-remove-pat-hand-made-with-line-403.json`)
 
 ```json
 {
@@ -1097,15 +1097,15 @@ He adds one agenda line; the row is no longer empty:
 
 He removes his own line (its author may), the row is empty again, and the removal is allowed. `remembered` is **false**: a hand-made row has no calendar event to remember, and a plain creator's removal never writes the team-wide mark (only an owner's or admin's does):
 
-`DELETE /api/series/17/agenda/2` as Pat → **204** (`docs/fe-captures/series-follow/84-remove-pat-hand-made-remove-line.json`)
+`DELETE /api/series/15/agenda/2` as Pat → **204** (`docs/fe-captures/series-follow/84-remove-pat-hand-made-remove-line.json`)
 
 (no body)
 
-`GET /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/85-remove-page-pat-hand-made-empty-again.json`)
+`GET /api/series/15` as Pat → **200** (`docs/fe-captures/series-follow/85-remove-page-pat-hand-made-empty-again.json`)
 
 ```json
 {
-  "id": 17,
+  "id": 15,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1118,7 +1118,7 @@ He removes his own line (its author may), the row is empty again, and the remova
 }
 ```
 
-`DELETE /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/86-remove-pat-hand-made-delete.json`)
+`DELETE /api/series/15` as Pat → **200** (`docs/fe-captures/series-follow/86-remove-pat-hand-made-delete.json`)
 
 ```json
 {
@@ -1179,7 +1179,7 @@ Ada's **Personal** list holds the new card (capture 88, only the new card shown)
 
 ```json
 {
-  "id": 18,
+  "id": 16,
   "title": "Weekly planning",
   "team": {
     "id": 1,
@@ -1204,7 +1204,7 @@ Adebayo, 2026-11-15/16: "I just don't want us to complicate things". It applies 
 
 | What | Rule |
 |---|---|
-| A recurring card from a person's **own calendar** | always in their **Personal space**, never in a team, even when a team is their default (captures 88 and 89). Nothing overrides it |
+| A recurring card from a person's **own calendar** | always in their **Personal space**, never in a team, even when a team is their default (captures 88 and 89). Nothing overrides it and it is never moved into a team: an owner's or admin's share of a meeting of the event makes a **separate** team card, and the Personal card stays (tests only, one-team, two-team and plain member) |
 | A **team's** recurring card | made only by an **owner or admin** of the team: when they share or move a meeting of a recurring calendar event to it (or, when their recording is auto-shared, by the automatic link), or by hand (`POST /api/series`, `PUT /api/meetings/{id}/series`, `POST /api/meetings/{id}/recurring`) |
 | A plain member **shares** a meeting | the share works as ever (`shared_with_team` true) and makes **no card** (`series` null, captures 91 to 93). If the team already has the card, the meeting **joins it** |
 | A plain member makes or adds **by hand** to a team's card | **403** `team_forbidden` (captures 97 and 99). In their own Personal space they may (capture 98) |
@@ -1268,7 +1268,7 @@ X's list has no card for it (capture 93: `Design review` is not in it).
     "name": "Platform team"
   },
   "series": {
-    "id": 21,
+    "id": 19,
     "title": "Design review"
   },
   "...": "trimmed: the rest is the meeting object"
@@ -1277,11 +1277,11 @@ X's list has no card for it (capture 93: `Design review` is not in it).
 
 (capture 95 is X's list, now with `Design review`.) The new card's page lists **both** meetings, Ada's and Pat's earlier one that was waiting without a card:
 
-`GET /api/series/21` as Ada → **200** (`docs/fe-captures/series-follow/96-model-x-card-page.json`)
+`GET /api/series/19` as Ada → **200** (`docs/fe-captures/series-follow/96-model-x-card-page.json`)
 
 ```json
 {
-  "id": 21,
+  "id": 19,
   "title": "Design review",
   "team": {
     "id": 4,
@@ -1314,7 +1314,7 @@ A plain member cannot make a team's card; in their own Personal space they can:
 
 ```json
 {
-  "id": 22,
+  "id": 20,
   "title": "Pat's weekly",
   "team": {
     "id": 2,
@@ -1368,7 +1368,7 @@ Nor add a meeting to a team's card by hand (his shared meeting 'Retro', not in a
   "title": "Design review",
   "shared_with_team": true,
   "series": {
-    "id": 21,
+    "id": 19,
     "title": "Design review"
   },
   "suggest_recurring": false,
@@ -1426,7 +1426,7 @@ Capture 106 is X's list after: the placeholders are gone and the cards that hold
 
 ### 11.6 Reminders (not exercised live: tests only)
 
-The mail is unchanged. A calendar-linked **Personal** card with one recorded meeting queues the 1-hour and 30-minute reminders (`tests/test_series_personal_model.py`, fake clock) **when the Personal team's `reminders_on` is on** (it is off by default; Settings turns it on for the team shown). It needs: a card made from a calendar event (a hand-made card has no next occurrence and never reminds), at least one recorded meeting or a waiting agenda line in the card, the event on the person's own calendar inside the window (55 minutes before for the 1-hour mail, 20 minutes for the 30-minute one), and the person not having switched reminder mail off. A placeholder card with no recorded meeting sends nothing.
+The mail is unchanged. A calendar-linked **Personal** card with one recorded meeting queues the 1-hour and 30-minute reminders (`tests/test_series_personal_model.py`, fake clock) **when the Personal team's `reminders_on` is on** (it is off by default and **stays off by default**; a person whose team has reminders on gets none for a calendar card that now lives in Personal until they switch Personal on: switch to Personal, then Settings, **Remind attendees before recurring meetings**). It needs: a card made from a calendar event (a hand-made card has no next occurrence and never reminds), at least one recorded meeting or a waiting agenda line in the card, the event on the person's own calendar inside the window (55 minutes before for the 1-hour mail, 20 minutes for the 30-minute one), and the person not having switched reminder mail off. A placeholder card with no recorded meeting sends nothing.
 
 ### 11.7 UX consequences the frontend must surface
 

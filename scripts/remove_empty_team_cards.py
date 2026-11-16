@@ -1,14 +1,15 @@
 """Remove the EMPTY recurring cards the calendar sync made in a team, so each person's calendar
 cards live in their personal space (the simpler recurring model).
 
-docker compose exec -T web python scripts/remove_empty_team_cards.py # dry run docker compose exec
--T web python scripts/remove_empty_team_cards.py --apply # do it
+    docker compose exec -T web python scripts/remove_empty_team_cards.py            # dry run
+    docker compose exec -T web python scripts/remove_empty_team_cards.py --apply    # do it
 
-The default is a DRY RUN: it does the identical work, prints counts, and rolls everything back.
-With `--apply` it saves. Safe to run twice (the second run removes nothing). It never writes an
-"ignored" mark, so the next calendar sync makes the personal card. A card with a meeting, a
-waiting agenda line, a linked project or a mail still to go is kept; so is a card made by hand and
-every personal card. Counts only: no title, name or address is printed. See
+The default is a DRY RUN: it does the identical work, prints counts, and rolls everything back. With
+`--apply` it saves. Run it ONCE, right after the deploy that makes this model live (a second run is
+safe and removes nothing, but a later run would also remove an empty card an owner made on purpose).
+It never writes an "ignored" mark, so the next calendar sync makes the personal card. A card with a
+meeting, a waiting agenda line, a linked project or a mail still to go is kept; so is a card made by
+hand and every personal card. Counts only: no title, name or address is printed. See
 `docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`.
 """
 

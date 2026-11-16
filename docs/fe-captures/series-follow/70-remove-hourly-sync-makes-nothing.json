@@ -4,6 +4,16 @@
     "rows_made": 0,
     "rows": [
       {
+        "id": 7,
+        "team_id": 4,
+        "recurring": "rid-sync"
+      },
+      {
+        "id": 8,
+        "team_id": 5,
+        "recurring": "rid-sync"
+      },
+      {
         "id": 11,
         "team_id": 1,
         "recurring": "rid-standup"
@@ -12,16 +22,6 @@
         "id": 12,
         "team_id": 1,
         "recurring": "rid-1on1"
-      },
-      {
-        "id": 13,
-        "team_id": 4,
-        "recurring": "rid-sync"
-      },
-      {
-        "id": 14,
-        "team_id": 5,
-        "recurring": "rid-sync"
       }
     ]
   }

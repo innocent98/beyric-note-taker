@@ -250,7 +250,7 @@ def list_series(
     return SeriesList(timezone=timezones.zone(zone_name).key, series=cards)
 
 
-@router.post("/series", status_code=201, tags=["series"], responses={**INVALID})
+@router.post("/series", status_code=201, tags=["series"], responses={**INVALID, **FORBIDDEN})
 def create_series(
     body: SeriesCreate,
     team_id: int | None = Depends(team_admin.requested_team),
@@ -549,7 +549,9 @@ def put_series_project(
 # ---- a meeting's series ----
 
 
-@router.put("/meetings/{meeting_id:id}/series", tags=["series"], responses={**NOT_FOUND})
+@router.put(
+    "/meetings/{meeting_id:id}/series", tags=["series"], responses={**NOT_FOUND, **FORBIDDEN}
+)
 def put_meeting_series(
     meeting_id: int,
     body: MeetingSeriesIn,
@@ -581,6 +583,7 @@ def put_meeting_series(
     tags=["series"],
     responses={
         **NOT_FOUND,
+        **FORBIDDEN,
         409: {"model": ErrorResponse, "description": "`not_reused` or `series_limit`"},
     },
 )

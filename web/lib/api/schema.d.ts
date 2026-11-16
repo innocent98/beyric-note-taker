@@ -7562,7 +7562,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7798,7 +7798,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9872,7 +9872,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;

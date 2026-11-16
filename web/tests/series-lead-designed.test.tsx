@@ -6,7 +6,7 @@ import { MeetingView } from "@/components/app/meeting-view";
 import { RecurringHint } from "@/components/app/recurring-hint";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { ApiError } from "@/lib/api/client";
-import type { Meeting, Team } from "@/lib/api/types";
+import type { Meeting, Team, TeamSummary } from "@/lib/api/types";
 import { captured } from "./helpers";
 
 // The three pieces the designer did not draw and Adebayo approved lead-designing (2026-11-06):
@@ -96,6 +96,29 @@ describe("Add to recurring meeting (lead-designed)", () => {
     await userEvent.click(add);
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync", undefined));
     expect(mocks.setSeries).toHaveBeenCalledWith(lone.id, 7);
+  });
+
+  it("asks for the person's PERSONAL team for a private meeting, to list the cards and to make a new one", async () => {
+    // A one-team person: their default team is the ordinary one, so no header would be the wrong team.
+    const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
+    const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
+    mocks.create.mockResolvedValue({ id: 7, title: "Design sync" });
+    mocks.setSeries.mockResolvedValue({ series: { id: 7, title: "Design sync" } });
+    render(<MeetingView initial={{ ...lone, team: null }} templates={[]} teams={[ordinary, personal]} />);
+    const dialog = await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(2);
+    await userEvent.selectOptions(within(dialog).getByLabelText("Recurring meeting"), "new");
+    await userEvent.type(within(dialog).getByLabelText("Name"), "Design sync");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync", 2));
+  });
+
+  it("asks for the meeting's own team for a shared meeting", async () => {
+    const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
+    const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
+    render(<MeetingView initial={{ ...lone, team: { id: 1, name: "Platform team" } }} templates={[]} teams={[ordinary, personal]} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(1);
   });
 
   it("takes a meeting out of its series", async () => {

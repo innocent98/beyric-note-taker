@@ -441,6 +441,23 @@ def run(base: str, seeded: dict, engine) -> None:
         note="FLAG OFF. The Standup page lists both A1 (shared) and A2 (private): the row mixes scopes.",
     )
 
+    # Since the simpler model the system (the backfill) makes no TEAM row: Pat's Design sync has a card in
+    # X and one in Y only if an owner or admin made them. They are inserted here, as those cards are.
+    # (Captures 10 to 13 and 46 to 47, made before that change, show the backfill making them.)
+    with Session(engine) as session:
+        pat_id = session.scalars(select(User.id).where(User.email == PAT)).one()
+        for team_id in (x, y):
+            session.add(
+                Series(
+                    team_id=team_id,
+                    owner_user_id=pat_id,
+                    title="Design sync",
+                    calendar_recurring_id="rid-sync",
+                    platform="google_meet",
+                )
+            )
+        session.commit()
+
     # ---- 2. the backfill, flag still OFF ----
     backfill("1-dry-run")
     backfill("2-apply", "--apply")

@@ -9,7 +9,7 @@
       "Cookie": "session=<cookie>"
     },
     "body": {
-      "series_id": 21
+      "series_id": 19
     }
   },
   "response": {

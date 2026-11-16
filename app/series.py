@@ -163,13 +163,25 @@ def is_manager(session: Session, user: User, team_id: int) -> bool:
     return member is not None and member.role in MANAGER_ROLES
 
 
-def may_make_row(session: Session, actor: User | None, team_id: int) -> bool:
-    """Whether `actor` may make a recurring row in this team's scope (the simpler model): an
-    owner or
-    admin of an ordinary team; a person for their own personal team (they are its `owner` member).
-    `actor` None is the system (the backfill, a person leaving a team, a deleted team): it moves
-    meetings to the rows that fit and may make a row where a meeting has to go."""
-    return actor is None or is_manager(session, actor, team_id)
+class _System:
+    """The system acting, not a person (the backfill, a person leaving a team, a deleted team, an
+    unshare or a move back). Pass `SYSTEM` on purpose: a caller that forgets who acts gets a
+    TypeError, never the power to make a team's card."""
+
+
+SYSTEM = _System()
+Actor = User | _System
+
+
+def may_make_row(session: Session, actor: Actor, team_id: int) -> bool:
+    """Whether `actor` may make a recurring row in this team's scope (the simpler model): an owner
+    or admin of an ordinary team; a person for their own personal team (they are its `owner`
+    member). `SYSTEM` may make a row only in a PERSONAL team (where a meeting goes back to its
+    recorder); in a team it attaches to a row that exists and otherwise makes nothing."""
+    if actor is SYSTEM:
+        team = session.get(Team, team_id)
+        return team is not None and team.is_personal
+    return is_manager(session, actor, team_id)
 
 
 def in_row(session: Session, series: Series):
@@ -444,7 +456,7 @@ def remove(session: Session, user: User, series: Series) -> Removal:
         for stray in session.scalars(
             strays.order_by(Meeting.id).execution_options(populate_existing=True)
         ).all():
-            place_meeting(session, stray)
+            place_meeting(session, stray, actor=user)
     readable = session.scalar(
         select(func.count())
         .select_from(Meeting)
@@ -548,13 +560,11 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
     else:
         team_id = scope_team_id(session, owner, meeting, follow=True)
         if is_ignored(session, team_id, row.recurring_event_id):
-            return None  # removed from this scope: not regrouped, and no empty card moves in
-        _rekey_empty_card(session, owner, row.recurring_event_id, team_id)
+            return None  # removed from this scope: not regrouped
         has_row = _has_row(session, team_id, row.recurring_event_id)
         if not has_row and not may_make_row(session, owner, team_id):
-            return (
-                None  # a plain member's shared meeting makes no team card: it joins one that exists
-            )
+            # a plain member's shared meeting makes no team card: it joins one that exists
+            return None
         if _is_full(session, team_id) and not has_row:
             return None  # the scope's team has no room for another row
         made = not has_row
@@ -588,47 +598,6 @@ def _has_row(session: Session, team_id: int, recurring_id: str) -> bool:
         )
         is not None
     )
-
-
-def _rekey_empty_card(session: Session, recorder: User, recurring_id: str, scope_id: int) -> None:
-    """The recorder's first meeting of a recurring event lands in a scope other than the team their
-    pre-recording card (`sync_from_joins`) was made in: the card goes to that scope instead of
-    staying behind as an empty duplicate. Only the recorder's OWN empty card: no meeting, no agenda
-    line waiting or consumed and no agenda send (those are the team's history and its lines wait
-    there for its next meeting), no linked project (a project is the old team's), and not already a
-    row of the scope. Anything else stays; the caller
-    makes or finds the scope's row."""
-    default_id = team_id_of(session, recorder)
-    if default_id == scope_id or not may_make_row(session, recorder, scope_id):
-        return
-    card = session.scalars(
-        select(Series).where(
-            Series.team_id == default_id, Series.calendar_recurring_id == recurring_id
-        )
-    ).first()
-    if card is None or card.owner_user_id != recorder.id or card.project_id is not None:
-        return
-    held = session.scalar(
-        select(func.count()).select_from(Meeting).where(Meeting.series_id == card.id)
-    )
-    history = session.scalar(
-        select(func.count())
-        .select_from(SeriesAgendaItem)
-        .where(SeriesAgendaItem.series_id == card.id)
-    ) + session.scalar(
-        select(func.count())
-        .select_from(SeriesAgendaSend)
-        .where(SeriesAgendaSend.series_id == card.id)
-    )
-    taken = session.scalar(
-        select(Series.id).where(
-            Series.team_id == scope_id, Series.calendar_recurring_id == recurring_id
-        )
-    )
-    if held or history or taken is not None or _is_full(session, scope_id):
-        return  # a re-key is a row more in the scope's team: never past its limit
-    card.team_id = scope_id
-    session.flush()
 
 
 def join(session: Session, meeting: Meeting, series: Series, *, consume: bool = False) -> None:
@@ -900,7 +869,8 @@ def forget_meetings_of(session: Session, user_id: int, team_id: int) -> None:
         team_rows = set(session.scalars(in_team))
         stay = select(Meeting).where(*mine).order_by(Meeting.id)
         for meeting in session.scalars(stay.execution_options(populate_existing=True)):
-            if follow_meeting(session, meeting) is None or meeting.series_id in team_rows:
+            moved = follow_meeting(session, meeting, actor=SYSTEM)
+            if moved is None or meeting.series_id in team_rows:
                 meeting.series_id = None  # no row to follow to: out of the team's series, as before
         return
     session.execute(update(Meeting).where(*mine).values(series_id=None))
@@ -973,7 +943,7 @@ def _row_for_scope(
     recorder: User | None,
     meeting: Meeting,
     *,
-    actor: User | None = None,
+    actor: Actor,
     explicit: bool = False,
 ) -> tuple[Series | None, bool, str | None]:
     """The row of `current`'s recurring meeting in the team `scope_id`, made when the team has none:
@@ -1015,7 +985,7 @@ def _row_for_scope(
         return None, False, "no_card"
     rid = current.calendar_recurring_id
     if rid is not None and is_ignored(session, scope_id, rid):
-        if not (explicit and actor is not None):
+        if not (explicit and actor is not SYSTEM):
             return None, False, "ignored"
         session.execute(
             delete(SeriesIgnored).where(
@@ -1076,12 +1046,14 @@ def _adopt_shared(session: Session, row: Series) -> None:
             Meeting.status == "ready",
         )
         .order_by(Meeting.id)
+        .with_for_update(of=Meeting)  # another person's meeting: lock it, and re-read it under the
+        .execution_options(populate_existing=True)  # lock (a re-share since must not be undone)
     ).all():
         join(session, meeting, row)
 
 
 def place_meeting(
-    session: Session, meeting: Meeting, *, actor: User | None = None, explicit: bool = False
+    session: Session, meeting: Meeting, *, actor: Actor, explicit: bool = False
 ) -> Placement:
     """Put the meeting into the row of its scope, whatever the flag says (the backfill calls
     this directly; the hooks call `follow_meeting`, which checks the flag). A meeting in no
@@ -1115,9 +1087,7 @@ def place_meeting(
         mark_topics_stale(session, target.id)
     session.flush()
     if target is None:
-        if (
-            why == "ignored"
-        ):  # the scope removed this recurring meeting: not an error, not "no room"
+        if why == "ignored":  # the scope removed it: not an error, not "no room"
             return Placement(None, moved=True, ignored=True)
         if why == "no_card":  # a plain member's share: shared as ever, no card made for it
             return Placement(None, moved=True, no_card=True)
@@ -1129,7 +1099,7 @@ def place_meeting(
 
 
 def follow_meeting(
-    session: Session, meeting: Meeting, *, actor: User | None = None, explicit: bool = False
+    session: Session, meeting: Meeting, *, actor: Actor, explicit: bool = False
 ) -> Series | None:
     """The hook for every change of a meeting's team (share, unshare, move, move back, its
     recorder leaves, its team is deleted): with the flag on, put the meeting into the row of its

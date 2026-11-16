@@ -23,7 +23,7 @@
             "name": "My team",
             "is_personal": true
           },
-          "cadence": "Weekly on Mondays, 08:00",
+          "cadence": "Weekly on Mondays, 09:00",
           "platform": "google_meet",
           "next_starts_at": null,
           "next_text": null,
@@ -32,7 +32,7 @@
           "project": null
         },
         {
-          "id": 18,
+          "id": 16,
           "title": "Weekly planning",
           "team": {
             "id": 1,

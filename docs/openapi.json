@@ -10428,7 +10428,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`"
           },
           "404": {
             "content": {
@@ -10727,7 +10727,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`"
           },
           "404": {
             "content": {
@@ -13559,7 +13559,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`"
           },
           "422": {
             "content": {

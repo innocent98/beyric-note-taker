@@ -35,6 +35,7 @@ class Report:
     meetings_moved: int = 0  # includes the ones cut loose
     rows_made: int = 0
     meetings_cut_loose: int = 0  # taken out of their series: the team had no room for a row
+    meetings_no_card: int = 0  # left ungrouped: the team has no card and the system makes none
     meetings_skipped: int = 0  # a private meeting whose recorder's account is gone (every run)
     personal_teams_made: int = 0  # a person who had none (they are made when first needed)
     rows_left_empty: int = 0  # rows the split left with no meeting at all
@@ -46,7 +47,7 @@ class Report:
             if self.applied
             else "DRY RUN: nothing was changed. Run again with --apply to do it."
         )
-        return [
+        lines = [
             head,
             f"Recurring-meeting rows looked at: {self.rows_scanned}",
             f"Rows that held a meeting of another team or of the personal space: {self.rows_split}",
@@ -58,6 +59,12 @@ class Report:
             f"Rows left with no meeting after the split: {self.rows_left_empty}",
             f"...of which still hold waiting agenda lines: {self.rows_left_empty_with_lines}",
         ]
+        if self.meetings_no_card:  # only when there is one: the usual report keeps its lines
+            lines.append(
+                "Meetings left ungrouped (their team has no card for them): "
+                f"{self.meetings_no_card}"
+            )
+        return lines
 
 
 def split_mixed_series(session: Session, *, apply: bool) -> Report:
@@ -85,7 +92,7 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
         )
         split = False
         for meeting in strays:
-            placed = series_rules.place_meeting(session, meeting)
+            placed = series_rules.place_meeting(session, meeting, actor=series_rules.SYSTEM)
             report.meetings_skipped += placed.skipped
             if not placed.moved:
                 continue
@@ -93,6 +100,7 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
             report.meetings_moved += 1
             report.rows_made += placed.made
             report.meetings_cut_loose += placed.cut_loose
+            report.meetings_no_card += placed.no_card
         report.rows_split += split
         if split and not session.scalar(
             select(Meeting.id).where(Meeting.series_id == series_id).limit(1)
