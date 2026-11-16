@@ -45,8 +45,8 @@ def _lock(session: Session, meeting: Meeting) -> None:
 
 def _touched(session: Session, meeting: Meeting, actor: series_rules.Actor) -> None:
     """After a change of team. `actor` is who shared or moved it (an explicit act: only an owner or
-    admin of the team makes its recurring card then, and clears a removed scope's mark); None for
-    unshare and move back (`SYSTEM`), which go to the recorder's personal card."""
+    admin of the team makes its recurring card then, and clears a removed scope's mark); `SYSTEM`
+    for unshare and move back, which go to the recorder's personal card."""
     teams.rehome_tasks(session, meeting)
     before = meeting.series_id
     # flag on: into the row of its new scope

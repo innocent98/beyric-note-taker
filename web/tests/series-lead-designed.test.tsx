@@ -98,13 +98,13 @@ describe("Add to recurring meeting (lead-designed)", () => {
     expect(mocks.setSeries).toHaveBeenCalledWith(lone.id, 7);
   });
 
-  it("asks for the person's PERSONAL team for a private meeting, to list the cards and to make a new one", async () => {
+  it("asks for the team the server names (recurring_team_id: the Personal one for a private meeting), to list the cards and to make a new one", async () => {
     // A one-team person: their default team is the ordinary one, so no header would be the wrong team.
     const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
     const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
     mocks.create.mockResolvedValue({ id: 7, title: "Design sync" });
     mocks.setSeries.mockResolvedValue({ series: { id: 7, title: "Design sync" } });
-    render(<MeetingView initial={{ ...lone, team: null }} templates={[]} teams={[ordinary, personal]} />);
+    render(<MeetingView initial={{ ...lone, team: null, recurring_team_id: 2 }} templates={[]} teams={[ordinary, personal]} />);
     const dialog = await openDialog();
     expect(mocks.list).toHaveBeenCalledWith(2);
     await userEvent.selectOptions(within(dialog).getByLabelText("Recurring meeting"), "new");
@@ -113,10 +113,22 @@ describe("Add to recurring meeting (lead-designed)", () => {
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync", 2));
   });
 
+  it("asks for the server's team even when the teams list could not be read", async () => {
+    render(<MeetingView initial={{ ...lone, team: null, recurring_team_id: 2 }} templates={[]} teams={null} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(2);
+  });
+
+  it("names no team when the server names none (the old behaviour)", async () => {
+    render(<MeetingView initial={{ ...lone, recurring_team_id: null }} templates={[]} />);
+    await openDialog();
+    expect(mocks.list).toHaveBeenCalledWith(undefined);
+  });
+
   it("asks for the meeting's own team for a shared meeting", async () => {
     const ordinary = { id: 1, name: "Platform team", is_personal: false } as TeamSummary;
     const personal = { id: 2, name: "My team", is_personal: true } as TeamSummary;
-    render(<MeetingView initial={{ ...lone, team: { id: 1, name: "Platform team" } }} templates={[]} teams={[ordinary, personal]} />);
+    render(<MeetingView initial={{ ...lone, team: { id: 1, name: "Platform team" }, recurring_team_id: 1 }} templates={[]} teams={[ordinary, personal]} />);
     await openDialog();
     expect(mocks.list).toHaveBeenCalledWith(1);
   });

@@ -344,8 +344,7 @@ def test_a_one_team_owner_keeps_her_personal_card_and_gets_a_separate_team_card(
 ):
     """Ada owns X, her only team (X is her default team). The sync makes her Personal card; her
     recording is auto-shared to X. The Personal card stays (with the lines typed into it), and X
-    gets
-    its own card: exactly two cards, no stranded duplicate and no re-key."""
+    gets its own card: exactly two cards, no stranded duplicate and no re-key."""
     scheduled(session, world.ada, "rid-ada")
     series_rules.sync_from_joins(session, MONDAY)
     [mine] = personal_cards(session, world.ada)
@@ -450,6 +449,27 @@ def test_removing_a_row_makes_no_card_for_its_strays_in_a_team_the_remover_does_
     session.expire_all()
     assert session.get(Meeting, stray.id).series_id is None
     assert session.get(Meeting, held.id).series_id is None
+    assert team_cards(session, world.y.id) == []
+
+
+def test_removing_a_row_puts_a_private_stray_in_its_recorders_personal_card_and_makes_no_team_card(
+    app, session, world, template
+):
+    """A legacy X row holds Pat's PRIVATE meeting and one of his shared to Y. Ada (owner of X) also
+    manages Y. Removing X's row sends the private one to a new Personal card of Pat's (the system
+    makes a Personal row) and leaves the Y one ungrouped: no card is made in Y for her."""
+    session.add(TeamMember(team_id=world.y.id, user_id=world.ada.id, role="admin"))
+    session.commit()
+    legacy = standup(session, world.x.id, rid="rid-legacy", owner_id=world.ada.id)
+    put(session, template, legacy, who=world.ada, team=world.x.id)  # so that Ada sees the row
+    private = put(session, template, legacy, who=world.pat, when=TUESDAY)
+    in_y = put(session, template, legacy, who=world.pat, team=world.y.id, when=TUESDAY)
+    legacy_id = legacy.id
+    assert sign_in(app, OWNER_EMAIL).delete(f"/api/series/{legacy_id}").status_code == 200
+    session.expire_all()
+    [pats] = personal_cards(session, world.pat)
+    assert session.get(Meeting, private.id).series_id == pats.id
+    assert session.get(Meeting, in_y.id).series_id is None
     assert team_cards(session, world.y.id) == []
 
 
@@ -615,6 +635,46 @@ def test_the_meeting_page_says_who_may_group_it(app, session, world, template):
     assert (owner_page["can_make_recurring"], owner_page["suggest_recurring"]) == (True, True)
     # Ada reads Pat's shared meeting but it is not hers to group
     assert page(ada, pats)["can_make_recurring"] is False
+
+
+def test_the_meeting_page_names_the_team_the_picker_must_use(app, session, world, template):
+    """Flag on: a private meeting's team is the recorder's PERSONAL space (not the default team,
+    an ordinary one for a one-team person); a shared meeting's is its team. Only the recorder is
+    told."""
+    _, private = reused(session, template, owner_user_id=world.ada.id)
+    _, shared = reused(session, template, shared_team_id=world.x.id)
+    ada, pat = sign_in(app, OWNER_EMAIL), sign_in(app, PAT)
+    mine = personal_of(session, world.ada)
+    assert ada.get(f"/api/meetings/{private.id}").json()["recurring_team_id"] == mine
+    assert ada.get(f"/api/meetings/{shared.id}").json()["recurring_team_id"] == world.x.id
+    assert pat.get(f"/api/meetings/{shared.id}").json()["recurring_team_id"] is None  # not his
+
+
+def test_flag_off_the_meeting_page_names_the_default_team_for_a_private_meeting(
+    app, session, world, template, monkeypatch
+):
+    monkeypatch.setattr(series_rules, "follow_enabled", lambda: False)
+    _, private = reused(session, template, owner_user_id=world.ada.id)
+    body = sign_in(app, OWNER_EMAIL).get(f"/api/meetings/{private.id}").json()
+    assert body["recurring_team_id"] == world.x.id  # Ada's default team, as before
+
+
+@pytest.mark.parametrize("follow", [True, False])
+def test_making_a_recurring_meeting_for_a_private_meeting_with_the_named_team_attaches(
+    app, session, world, template, monkeypatch, follow
+):
+    """What the picker does: read `recurring_team_id`, create in that team, attach. Both flag states
+    work for a one-team person's private meeting (no orphan card, no 404 on the attach)."""
+    monkeypatch.setattr(series_rules, "follow_enabled", lambda: follow)
+    _, private = reused(session, template, owner_user_id=world.ada.id)
+    ada = sign_in(app, OWNER_EMAIL)
+    team = ada.get(f"/api/meetings/{private.id}").json()["recurring_team_id"]
+    made = post_series(ada, team, "Mine")
+    assert made.status_code == 201, made.text
+    attached = ada.put(f"/api/meetings/{private.id}/series", {"series_id": made.json()["id"]})
+    assert attached.status_code == 200, attached.text
+    expected = personal_of(session, world.ada) if follow else world.x.id
+    assert made.json()["team"]["id"] == expected == team
 
 
 def test_flag_off_a_plain_member_may_still_make_a_card_as_before(app, session, world, monkeypatch):

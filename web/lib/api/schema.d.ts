@@ -3315,6 +3315,8 @@ export interface components {
              * @enum {string}
              */
             platform: "google_meet" | "zoom" | "teams";
+            /** Recurring Team Id */
+            recurring_team_id?: number | null;
             /** Refresh After Seconds */
             refresh_after_seconds: number | null;
             /** Retry Block */
@@ -7562,7 +7564,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden` */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7798,7 +7800,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden` */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9872,7 +9874,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden` */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;

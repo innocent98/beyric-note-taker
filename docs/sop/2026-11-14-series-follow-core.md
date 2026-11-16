@@ -7,6 +7,8 @@ PR 1 of the three in section 10 of `docs/superpowers/specs/2026-11-14-series-fol
 checklist (added when opened). **No schema migration.** Everything is dark: with
 `SERIES_FOLLOW_MEETINGS` unset (off) nothing behaves differently from before.
 
+> **Superseded 2026-11-16** (`docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`): `_rekey_empty_card` is removed. A Personal calendar card is never re-keyed into a team; an owner's or admin's share makes a separate team card, and the old empty team cards are removed by `scripts/remove_empty_team_cards.py`. Every mention of the re-key below describes the behaviour before that date.
+
 ## What shipped
 
 A series row now belongs to a **team scope**, and a meeting **follows** its scope: the new flag

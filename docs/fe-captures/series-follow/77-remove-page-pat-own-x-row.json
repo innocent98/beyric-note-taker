@@ -1,5 +1,5 @@
 {
-  "note": "Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+  "note": "Pat is a plain member of X; X's Design sync is a LEGACY row inserted directly with him as its creator (the old sync made such rows): the page says `can_remove: false`. The person who made a team row gets no extra power.",
   "as": "Pat",
   "request": {
     "method": "GET",
@@ -44,7 +44,7 @@
           "source": "ai",
           "assigned_on": "2026-11-02",
           "done_at": null,
-          "created_at": "2026-11-16T11:02:57.387292Z",
+          "created_at": "2026-11-16T11:32:33.868131Z",
           "from_meeting": true,
           "meeting": {
             "id": 5,

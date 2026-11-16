@@ -456,7 +456,9 @@ def remove(session: Session, user: User, series: Series) -> Removal:
         for stray in session.scalars(
             strays.order_by(Meeting.id).execution_options(populate_existing=True)
         ).all():
-            place_meeting(session, stray, actor=user)
+            place_meeting(
+                session, stray, actor=SYSTEM
+            )  # attach only; a team card is never made here
     readable = session.scalar(
         select(func.count())
         .select_from(Meeting)
@@ -791,6 +793,25 @@ def meeting_team_id(session: Session, recorder: User, meeting: Meeting) -> int:
     return scope_team_id(session, recorder, meeting, follow=follow_enabled())
 
 
+def recurring_team_id(session: Session, user: User, meeting: Meeting) -> int | None:
+    """The team the caller's recurring-meeting picker must name for this meeting (`X-Team-Id`): the
+    one `meeting_team_id` gives, but READ-ONLY (it makes no personal team). With the flag on: the
+    team that owns the meeting, else the one it is shared to, else the recorder's PERSONAL team.
+    Off: the owner or shared team, else the recorder's default team, as before multi-team. None for
+    anyone but the recorder, or when there is no such team yet. Sent with the meeting page so the
+    picker never has to guess a team from `meeting.team` (null for a private meeting)."""
+    if not recorded_by(session, user, meeting):
+        return None
+    home = scope_team_of(session, meeting, personal_is_private=follow_enabled())
+    if home is not None:
+        return home
+    if follow_enabled():
+        personal = teams.personal_team(session, user.id)
+        return personal.id if personal is not None else None
+    member = teams.default_membership(session, user.id)
+    return member.team_id if member is not None else None
+
+
 def can_group(session: Session, user: User, meeting: Meeting) -> bool:
     """Whether `user` may put this meeting into a recurring meeting BY HAND (add it to one, or make
     one from it): its recorder, and with the flag on, for a meeting that is shared to or moved to a
@@ -958,8 +979,8 @@ def _row_for_scope(
     No row, and why: "ignored" (the scope removed this recurring meeting; an EXPLICIT act by
     an owner or admin of the scope, a share or a move, clears the mark and goes on), "full"
     (the team has as many as fit), "no_card" (the team has none and `actor` may not make one:
-    only an owner or admin makes a team's card; `actor` None is the system and may). A new
-    team card also takes in the meetings of the same recurring event that are already shared
+    only an owner or admin makes a team's card; `SYSTEM` makes a row only in a Personal team).
+    A new team card also takes in the meetings of the same recurring event that are already shared
     to the team (`_adopt_shared`)."""
     own_title = _clean(titles.meeting_name(meeting), MAX_TITLE_CHARS) or UNTITLED
     if current.calendar_recurring_id is not None:
@@ -1061,10 +1082,10 @@ def place_meeting(
     row for the same recurring meeting (found or made), and BOTH rows' repeat topics are
     marked stale. If the scope's team has no room for another row, the meeting is cut loose
     from its series instead of being left in a row of another scope. Never consumes agenda
-    lines: only the pipeline's link does. `actor` is who changed the meeting's team (None: the
-    system); only an owner or admin of the target team, or the system, makes a team's card,
-    and `explicit` (a share or a move) lets that owner or admin clear a removed scope's mark.
-    In the caller's transaction."""
+    lines: only the pipeline's link does. `actor` is who changed the meeting's team (a person,
+    or `SYSTEM`); only an owner or admin of the target team makes a team's card (`SYSTEM`
+    makes a row only in a Personal team), and `explicit` (a share or a move) lets that owner or
+    admin clear a removed scope's mark. In the caller's transaction."""
     if meeting.series_id is None:
         return Placement(None)
     current = session.get(Series, meeting.series_id)

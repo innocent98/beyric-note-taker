@@ -69,6 +69,7 @@
       },
       "suggest_recurring": false,
       "can_make_recurring": true,
+      "recurring_team_id": 4,
       "open_questions": []
     }
   }

@@ -442,7 +442,8 @@ def run(base: str, seeded: dict, engine) -> None:
     )
 
     # Since the simpler model the system (the backfill) makes no TEAM row: Pat's Design sync has a card in
-    # X and one in Y only if an owner or admin made them. They are inserted here, as those cards are.
+    # X and one in Y only if an owner or admin made them. They are inserted here as LEGACY rows (made
+    # by Pat before the change; the backfill used to make them).
     # (Captures 10 to 13 and 46 to 47, made before that change, show the backfill making them.)
     with Session(engine) as session:
         pat_id = session.scalars(select(User.id).where(User.email == PAT)).one()
@@ -965,7 +966,7 @@ def remove_story(
         "remove-page-pat-own-x-row",
         "GET",
         f"/api/series/{pat_x}",
-        note="Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+        note="Pat is a plain member of X; X's Design sync is a LEGACY row inserted directly with him as its creator (the old sync made such rows): the page says `can_remove: false`. The person who made a team row gets no extra power.",
     )
     assert own.json()["can_remove"] is False
     own_403 = pat.call(

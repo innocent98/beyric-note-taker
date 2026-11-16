@@ -1248,6 +1248,7 @@ The meeting page: shared, and in **no** recurring meeting:
   "series": null,
   "suggest_recurring": false,
   "can_make_recurring": false,
+  "recurring_team_id": 4,
   "...": "trimmed: the rest is the meeting object"
 }
 ```
@@ -1344,7 +1345,7 @@ Nor add a meeting to a team's card by hand (his shared meeting 'Retro', not in a
 }
 ```
 
-**The meeting page tells the frontend whether to draw the two controls** (new field `can_make_recurring` on the meeting, next to `suggest_recurring`). For a plain member's shared meeting both are `false`: draw neither "Add to recurring meeting" nor "Make this a recurring meeting?" (capture 100). A meeting already in a recurring meeting still shows its link, without "Change". For the owner of X (capture 101) `can_make_recurring` is `true`. A private meeting is always `true` for its recorder (it goes to their Personal card).
+**The meeting page tells the frontend whether to draw the two controls and which team to ask about** (new fields `can_make_recurring` and `recurring_team_id` on the meeting, next to `suggest_recurring`). `recurring_team_id` is the team to send as `X-Team-Id` to list and make recurring meetings for this meeting: its own or shared team, else the recorder's **Personal** space (a private meeting's `team` is null, so never guess it from `team`); null for anyone but the recorder. For a plain member's shared meeting both are `false`: draw neither "Add to recurring meeting" nor "Make this a recurring meeting?" (capture 100). A meeting already in a recurring meeting still shows its link, without "Change". For the owner of X (capture 101) `can_make_recurring` is `true`. A private meeting is always `true` for its recorder (it goes to their Personal card).
 
 `GET /api/meetings/9` as Pat → **200** (`docs/fe-captures/series-follow/100-model-pat-meeting-page-flags.json`)
 
@@ -1356,6 +1357,7 @@ Nor add a meeting to a team's card by hand (his shared meeting 'Retro', not in a
   "series": null,
   "suggest_recurring": false,
   "can_make_recurring": false,
+  "recurring_team_id": 4,
   "...": "trimmed: the rest is the meeting object"
 }
 ```
@@ -1373,6 +1375,7 @@ Nor add a meeting to a team's card by hand (his shared meeting 'Retro', not in a
   },
   "suggest_recurring": false,
   "can_make_recurring": true,
+  "recurring_team_id": 4,
   "...": "trimmed: the rest is the meeting object"
 }
 ```
@@ -1432,4 +1435,6 @@ The mail is unchanged. A calendar-linked **Personal** card with one recorded mee
 
 * A recurring meeting from the person's own calendar appears in **Personal**, not in the team's Meetings page. Do not tell a person it will appear in their team.
 * A plain member who shares a recurring meeting sees it shared but not grouped, until an owner or admin makes the team's card. Do not show an error.
-* Do not offer "Add to recurring meeting" or "Make this a recurring meeting?" when `can_make_recurring` is `false`.
+* Do not offer "Add to recurring meeting" or "Make this a recurring meeting?" when `can_make_recurring` is `false`. Send `recurring_team_id` as `X-Team-Id` for the picker's list and create.
+* The Personal card of an event stays the person's own: once a team card exists, their recordings go into the team's card and the lines typed into the Personal card are not carried into it or mailed. A hint on the Personal card would help (not built).
+* A plain member's shared recordings stay ungrouped while their Personal card is empty, until an owner or admin makes the team's card (then those meetings join it). The empty Personal card is not a fault.

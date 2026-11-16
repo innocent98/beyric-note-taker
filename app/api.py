@@ -400,6 +400,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         and series_rules.can_group(session, user, meeting)
         and series_rules.reused_code(session, meeting),
         can_make_recurring=owner and recorder and series_rules.can_group(session, user, meeting),
+        recurring_team_id=series_rules.recurring_team_id(session, user, meeting),
         open_questions=api_series.meeting_questions(session, user, meeting) if ready else [],
         translations=[
             api_translation.brief(row, meeting)

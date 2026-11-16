@@ -74,6 +74,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORBIDDEN = {403: {"model": ErrorResponse, "description": "`team_forbidden`"}}
+FORBIDDEN_OR_CSRF = {
+    403: {
+        "model": ErrorResponse,
+        "description": "`team_forbidden`, or a missing or wrong X-CSRF-Token",
+    }
+}
 NOT_FOUND = {404: {"model": ErrorResponse}}
 INVALID = {422: {"model": ErrorResponse}}
 PAST_LIMIT = 50
@@ -250,7 +256,9 @@ def list_series(
     return SeriesList(timezone=timezones.zone(zone_name).key, series=cards)
 
 
-@router.post("/series", status_code=201, tags=["series"], responses={**INVALID, **FORBIDDEN})
+@router.post(
+    "/series", status_code=201, tags=["series"], responses={**INVALID, **FORBIDDEN_OR_CSRF}
+)
 def create_series(
     body: SeriesCreate,
     team_id: int | None = Depends(team_admin.requested_team),
@@ -550,7 +558,9 @@ def put_series_project(
 
 
 @router.put(
-    "/meetings/{meeting_id:id}/series", tags=["series"], responses={**NOT_FOUND, **FORBIDDEN}
+    "/meetings/{meeting_id:id}/series",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN_OR_CSRF},
 )
 def put_meeting_series(
     meeting_id: int,
@@ -583,7 +593,7 @@ def put_meeting_series(
     tags=["series"],
     responses={
         **NOT_FOUND,
-        **FORBIDDEN,
+        **FORBIDDEN_OR_CSRF,
         409: {"model": ErrorResponse, "description": "`not_reused` or `series_limit`"},
     },
 )

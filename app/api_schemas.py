@@ -336,6 +336,12 @@ class MeetingDetail(MeetingSummary):
     # meeting: always). false: do not draw either control. A meeting already in a recurring
     # meeting still shows its link.
     can_make_recurring: bool = False
+    # The team to name in `X-Team-Id` when listing and making recurring meetings for THIS
+    # meeting (the "Add to recurring meeting" picker): its owning or shared team, else the
+    # recorder's Personal space (a private meeting's), as the server will check the attach.
+    # null for anyone but the recorder, or when there is none. Use it instead of guessing from
+    # `team`, which is null for a private meeting.
+    recurring_team_id: int | None = None
     # The meeting's open questions with their "On next agenda" state; empty unless ready.
     open_questions: list["QuestionOut"] = []
 
