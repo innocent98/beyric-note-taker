@@ -53,7 +53,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import bot_names, titles, transcript_source, usage
+from app import bot_names, entitlements, titles, transcript_source, usage
 from app.bot_provider import (
     BotDuplicate,
     BotId,
@@ -149,6 +149,30 @@ def _take_lock(session: Session, wait_seconds: float) -> None:
         time.sleep(LOCK_POLL_SECONDS)
 
 
+def _shadow_hours(
+    session: Session, user: User, now: datetime, settings: Settings, *, old_refuses: bool
+) -> None:
+    """`HOURS_MODE=shadow`: ask the grants-based rule and log one line if it would have decided
+    differently from the old cap rule. Logging only: it never changes the outcome and never raises
+    (a failure in the savepoint is logged and the old rule goes on alone). Logs ids, no emails."""
+    try:
+        with session.begin_nested():
+            new = entitlements.check_join(session, user, now, settings.max_poll_hours * 3600)
+    except Exception:
+        logger.exception("hours_shadow failed user=%s", user.id)
+        return
+    if new.allowed != old_refuses:
+        return
+    logger.info(
+        "hours_shadow disagree user=%s old=%s new=%s reason=%s seconds_left=%s",
+        user.id,
+        "refuse" if old_refuses else "allow",
+        "allow" if new.allowed else "refuse",
+        new.reason,
+        new.seconds_left,
+    )
+
+
 def reserve_slot(
     session: Session,
     user: User,
@@ -173,10 +197,13 @@ def reserve_slot(
         raise PlacementRefused("account_suspended")
 
     cap = usage.effective_cap(session, user)
-    if (
+    over_cap = (
         cap is not None
         and usage.hours_used(session, user, now, settings.max_poll_hours * 3600) >= cap
-    ):
+    )
+    if settings.hours_mode == "shadow":
+        _shadow_hours(session, user, now, settings, old_refuses=over_cap)
+    if over_cap:
         raise PlacementRefused("hours_cap_reached", cap_seconds=cap)
 
     own = session.scalar(

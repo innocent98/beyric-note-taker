@@ -61,6 +61,22 @@ class Settings(BaseSettings):
             raise ValueError(f"TRANSCRIPT_SOURCE is {value!r}; it must be own or skribby")
         return name
 
+    @field_validator("hours_mode", mode="before")
+    @classmethod
+    def _blank_hours_mode_is_off(cls, value):
+        """An empty `HOURS_MODE=` line means "not set": the old cap rule only."""
+        if isinstance(value, str) and not value.strip():
+            return "off"
+        return value
+
+    @field_validator("hours_mode")
+    @classmethod
+    def _known_hours_mode(cls, value: str) -> str:
+        name = value.strip().lower()
+        if name not in ("off", "shadow", "enforce"):
+            raise ValueError(f"HOURS_MODE is {value!r}; it must be off, shadow or enforce")
+        return name
+
     @field_validator("transcript_shadow_percent", mode="before")
     @classmethod
     def _blank_shadow_percent_is_zero(cls, value):
@@ -225,6 +241,11 @@ class Settings(BaseSettings):
     # Skribby bot ran, falling back to ours when it is missing or too short
     # (`app/transcript_source.py`). Anything else stops the process at startup.
     transcript_source: str = "own"
+    # The per-person hours rule (billing spec, stage S1). `off` (default): only the old cap rule
+    # runs. `shadow`: it still decides, and each recording start also asks `app/entitlements.py`
+    # and logs one line when the two disagree (`hours_shadow`). `enforce` is accepted and does
+    # nothing yet (stage S2 makes the new rule decide). Anything else stops the process at startup.
+    hours_mode: str = "off"
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved

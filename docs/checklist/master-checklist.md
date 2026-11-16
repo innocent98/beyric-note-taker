@@ -896,22 +896,23 @@ Legal and business
 - [x] Billing spec written and revised for his answers (PR #206, `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`; per-person model; every product question decided, open facts only in its section 11); the build is the module below, then real numbers on the pricing page
 - [ ] Later and separate: chat notice live, transcript turn times, per-team retention, translation languages, Jira or Asana, CRM (deferred; needs team rules first)
 
-## Billing, plans and feature gates (spec `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`, fourth version 2026-11-16; PER-PERSON model; every product decision made; NOTHING BUILT; migrations 0049 to 0052; PR #206)
+## Billing, plans and feature gates (spec `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`, fourth version 2026-11-16; PER-PERSON model; every product decision made; S1 built, PR open, not merged; the rest NOT BUILT; migrations 0049 to 0052; PR #206)
 
 Goal: a **person** subscribes; the hours are theirs; teams are only a place to share (a member reads shared meetings, transcripts, notes, decisions and tasks without paying). Ask Beyric, new translations, rewriting notes, new recordings and calendar auto-join need a live plan or trial. Money comes in through Paystack (naira) and Flutterwave (dollars) behind one provider layer, routed by the billing country the person chooses. Dark first, small PRs, each deployed one at a time, **no real money before S11**.
 
 **Decided 2026-11-15 and 2026-11-16 ("Yes, all five"):** per person; the recorder is charged; once per meeting, failed bots zero; 80% warning and at 100% running recordings finish and new ones stop; monthly, no rollover, price change at renewal; naira for a Nigerian billing country, dollars elsewhere; grace 3 days with no new hours; both providers with our own billing clock; trial about 3 hours once per person, ending at 3 hours or 14 days; **first plan 18 USD for 20 hours, not printed on `/pricing` until the flip has produced real cost data** (the flip went live 2026-11-16 12:20 WAT); second tier about 34 USD for 40 hours is a suggestion; **organizer's bot preferred, built last after the three-account test**; **packs 10 hours for about 10 USD per person, 12 months, only with a live plan**; **cancel with access to the end of the month, refunds only for a double charge, a first payment within 7 days unused, or an unused pack within 14 days (lawyer reads)**; **pilot leftover hours expire 60 days after paid plans open, one mail before (lawyer item)**. **No yes/no question is open.** Open facts: his test keys for both new accounts, tax and registration numbers, the naira list, the measured cost after the flip, plan names and the second tier's number, the lawyer's and accountant's lists, the three-account test.
 
 - [x] S0: the spec (fourth version) and this map (docs only)
-- [ ] **First stage to build: S1.** Everything below is ordered; S1, S2, S3 run one writer at a time; S4 can run beside S1 (new files only)
+- [ ] **First stage: S1** (built 2026-11-16, PR open and not merged, see below). Everything below is ordered; S1, S2, S3 run one writer at a time; S4 can run beside S1 (new files only)
 - [ ] His inputs (open facts): test keys in a local env file; tax and registration numbers and VAT status; the naira list and rate; plan names and the second tier's number
 - [ ] Measure the real cost per hour after the flip: a new `scripts/ai_cost_report.py` run on flipped meetings (suggested: at least 10 recorded hours from at least 3 people) and the monthly Skribby invoice; the price is printed only when the cost is at or below 0.66 USD an hour (0.71 if the invoice shows the model billed on bot time) (spec 4.2)
-- [ ] **S1: hours model in shadow** (M, migration 0049, `HOURS_MODE=shadow`, default off; detail in spec section 8)
-  - [ ] Models `HourGrant`, `UsageAllocation`; migration `0049_hour_grants.py` with the pilot backfill (cap minus ledger, never below 0)
-  - [ ] `app/entitlements.py`: `status`, `check_join` (pure reading)
-  - [ ] Logging-only shadow comparison in `reserve_slot` (`app/placement.py:175-180`) and a read-only `scripts/hours_shadow_report.py`
-  - [ ] `HOURS_MODE` in `app/config.py`, `.env.example`, `deploy/README.md`
-  - [ ] Tests: backfill cases (pilot, partly used, fully used, deleted-and-re-registered, admin), clock-injected status, migration round trip; nothing changes with the flag off
+- [ ] **S1: hours model in shadow** (M, migration 0049, `HOURS_MODE=shadow`, default off; detail in spec section 8). **Built and tested locally 2026-11-16 (SOP `docs/sop/2026-11-16-hours-model-shadow.md`); stays open until the PR is merged with CI green, then deployed and looked at once in `shadow`**
+  - [x] Models `HourGrant`, `UsageAllocation`; migration `0049_hour_grants.py` with the pilot backfill (cap minus ledger, never below 0)
+  - [x] `app/entitlements.py`: `status`, `check_join` (pure reading)
+  - [x] Logging-only shadow comparison in `reserve_slot` (`app/placement.py`) and a read-only `scripts/hours_shadow_report.py`
+  - [x] `HOURS_MODE` in `app/config.py`, `.env.example`, `deploy/README.md`
+  - [x] Tests: backfill cases (pilot, partly used, fully used, deleted-and-re-registered, admin), clock-injected status, migration round trip; nothing changes with the flag off
+  - [ ] Decision before S2: accounts created after 0049 have no grant until the trial (S10), so the shadow reports them as disagreements; settle how they get hours before enforcing (SOP follow-ups)
 - [ ] **S2: enforce the hours rule per person, with the new warnings** (S to M, `HOURS_MODE=enforce`)
   - [ ] Replace the block in `reserve_slot`; keep 403 `hours_cap_reached`, add `reason`; split each counted recording across grants
   - [ ] 80% and 100% notices with a mail to the person; one "out of hours" notice per person and period (not one per skipped meeting)

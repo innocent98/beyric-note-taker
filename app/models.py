@@ -37,6 +37,8 @@ WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
 SEVERITIES = ("info", "warning", "error")
 MAIL_STATUSES = ("pending", "sent", "failed", "skipped")
 SUPPRESSION_REASONS = ("bounce", "complaint", "unsubscribed")
+# Where a person's hours come from (billing spec section 7). S1 writes only `pilot`.
+HOUR_GRANT_KINDS = ("trial", "pilot", "plan_period", "pack", "admin_gift")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
 CONNECTION_PROVIDERS = ("google", "ics", "microsoft")
@@ -828,6 +830,65 @@ class UsageEntry(Base):
     )
     seconds: Mapped[int] = mapped_column(Integer)
     counted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HourGrant(Base):
+    """Hours a person holds, one row per source (billing spec section 7, stage S1).
+
+    `seconds` is the whole grant; what is left is `seconds` minus its `usage_allocations`, always a
+    sum and never a number someone edited. Keyed by `user_id` and by `email_hash` (the same
+    fingerprint as `usage_entries`), so deleting an account and signing up again does not make new
+    hours. `starts_at` / `expires_at` bound when it can be spent (null expiry = never). A pilot
+    grant is made by migration 0049 from the person's old cap minus what they had used; its
+    `starts_at` is the moment of that migration. `source_payment_id` and `subscription_id` have no
+    foreign key yet: the tables they point at arrive with stages S4 and S8."""
+
+    __tablename__ = "hour_grants"
+    __table_args__ = (
+        CheckConstraint(_in("kind", HOUR_GRANT_KINDS), name="ck_hour_grants_kind"),
+        CheckConstraint("seconds >= 0", name="ck_hour_grants_seconds"),
+        # A replayed payment can only ever grant once (null payments never collide).
+        UniqueConstraint("kind", "source_payment_id", name="uq_hour_grants_kind_payment"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    email_hash: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    seconds: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_payment_id: Mapped[int | None] = mapped_column(BigInteger)
+    subscription_id: Mapped[int | None] = mapped_column(BigInteger)
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UsageAllocation(Base):
+    """The part of one counted recording (`usage_entries`) taken from one grant. A recording that
+    spans two grants has two rows. S1 writes none (usage before the migration is already netted out
+    of the pilot grants); stage S2 writes them as each recording is counted."""
+
+    __tablename__ = "usage_allocations"
+    __table_args__ = (
+        UniqueConstraint("usage_entry_id", "grant_id", name="uq_usage_allocations_entry_grant"),
+        CheckConstraint("seconds > 0", name="ck_usage_allocations_seconds"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    usage_entry_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("usage_entries.id", ondelete="CASCADE"), index=True
+    )
+    # RESTRICT: a grant that has been spent from is not deleted out from under its audit trail.
+    grant_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hour_grants.id", ondelete="RESTRICT"), index=True
+    )
+    seconds: Mapped[int] = mapped_column(Integer)
 
 
 class Decision(Base):
