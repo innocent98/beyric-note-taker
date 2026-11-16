@@ -533,7 +533,11 @@ export function MeetingView({
           <span className={`state-tile state-${m.status_tone}`} aria-hidden="true" />
           {m.status === "failed" ? (
             <>
-              <h2 className="state-title">What went wrong</h2>
+              {/* `status_text` is "Failed" for a real failure and its own words for a meeting that only ended
+                  (the bot left because nobody came: "Nobody joined"), which must not read as a fault. */}
+              <h2 className="state-title">
+                {m.status_text === "Failed" ? "What went wrong" : m.status_text}
+              </h2>
               <p>{m.failure_reason ?? "Something went wrong while processing this meeting."}</p>
               {m.can_retry ? (
                 <Button type="button" disabled={busy !== null} onClick={() => void act("retry", () => api.meetings.retry(m.id))}>

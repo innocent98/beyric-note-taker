@@ -84,8 +84,8 @@ REASON_ENDED_NOTHING_RECORDED = (
     "You ended this meeting before anything was recorded, so there are no notes to write."
 )
 REASON_NOBODY_CAME = (
-    "Nobody else joined this meeting, so the bot left and there are no notes to write. Nothing "
-    "was counted against your hours."
+    "Nobody else joined this meeting, so the bot left and there was nothing to write notes from. "
+    "If someone was there, try again."
 )
 REASON_NOT_LET_IN = (
     "The bot was not let into the meeting. The host may have declined it, or the waiting room "
@@ -160,9 +160,10 @@ BOT_LIVE_STATES = (
 BOT_END_REQUESTED = "end_requested"
 # Stored in `completion_reason` when the worker told the bot to leave because no person came to the
 # call (`bot_presence.NOBODY_CAME`). Like the end request it is a marker the live state never
-# replaces. Once the bot is gone the meeting ends as `REASON_NOBODY_CAME`, and nothing is recorded
-# or counted. (A call that had people and then only bots reuses `BOT_END_REQUESTED`: the notes are
-# written from what was recorded, as after the owner's "End now".)
+# replaces. It only says why the bot left: the recording is kept and processed as for any call, so a
+# list that was wrong (a person was there after all) still gives notes. Only a recording with no
+# speech in it ends the meeting as `REASON_NOBODY_CAME`, and the owner can try again. (A call that
+# had people and then only bots reuses `BOT_END_REQUESTED`.)
 BOT_NOBODY_CAME = bot_presence.NOBODY_CAME
 # A bot was sent and Vexa gave no clear answer: it may be joining, or not at all. The meeting is
 # kept as a placeholder (`bot_sent`, no Vexa id) with this in `completion_reason`, read as
@@ -311,6 +312,7 @@ def _fail(
     _no_audio_polls.pop(meeting.id, None)
     _lookup_misses.pop(meeting.id, None)
     _speaker_misses.pop(meeting.id, None)
+    _presence_logged.pop(meeting.id, None)
     if not_admitted_at is not None:
         _tell_not_admitted(session, meeting, not_admitted_at)
     session.commit()
@@ -394,7 +396,15 @@ def _nothing_recorded_reason(meeting: Meeting) -> str:
     let in."""
     if meeting.completion_reason == BOT_END_REQUESTED:
         return REASON_ENDED_NOTHING_RECORDED
+    if meeting.completion_reason == BOT_NOBODY_CAME:
+        return REASON_NOBODY_CAME
     return REASON_NOT_ADMITTED
+
+
+def _no_speech_reason(meeting: Meeting) -> str:
+    """The words for a recording with no speech: a call the bot left because no person came says
+    so, anything else says no speech was found."""
+    return REASON_NOBODY_CAME if meeting.completion_reason == BOT_NOBODY_CAME else REASON_NO_SPEECH
 
 
 def bot_failure_reason(meeting: Meeting, info: BotMeeting) -> str:
@@ -627,11 +637,61 @@ def _stop_bot(meeting: Meeting, vexa) -> bool:
         return tries >= STOP_TRIES
 
 
+_presence_logged: dict[int, int] = {}  # meeting id -> how far the once-only log has gone
+
+
+def _log_presence(meeting: Meeting, info: BotMeeting, own: tuple[str, ...], rule: str | None):
+    """What the poll could read of who is in the call, as counts only (never a name), once for the
+    first poll that shows the bot in the call and once for the first that shows a participant list
+    with entries. It is how the first live calls tell whether Skribby fills `participants` while a
+    call runs, including when the rule does nothing."""
+    stage = 2 if info.participants else 1
+    if _presence_logged.get(meeting.id, 0) >= stage:
+        return
+    _presence_logged[meeting.id] = stage
+    count = bot_presence.summarize(info.participants, own)
+    logger.info(
+        "meeting %s: who is in the call, as read: list=%s entries=%d here=%d bot_named=%d "
+        "in_since=%s rule=%s",
+        meeting.id,
+        "missing" if info.participants is None else "present",
+        count.entries,
+        count.here,
+        count.bot_named,
+        "set" if info.in_since is not None else "unset",
+        rule or "none",
+    )
+
+
+def _stop_for_leave(meeting: Meeting, vexa) -> bool:
+    """Take the bot out for the leave rules. True only when the provider really stopped it: unlike
+    `_stop_bot` it never gives up after a few failures and never counts "nothing to stop" as done,
+    because the caller writes a marker that says the bot was told to leave. A failure is tried
+    again on the next poll."""
+    session = object_session(meeting)
+    if session is not None and not placement.may_stop_bot(session, meeting):
+        return False  # the bot at this code is a newer meeting's, not this one's
+    try:
+        vexa.stop_bot(meeting.platform, meeting.native_id)
+        return True
+    except ValueError:
+        return False
+    except BotProviderError as exc:
+        logger.warning(
+            "meeting %s: the bot could not be told to leave (%s); trying again next poll",
+            meeting.id,
+            type(exc).__name__,
+        )
+        return False
+
+
 def _leave_if_alone(session: Session, meeting: Meeting, vexa, info: BotMeeting, now) -> None:
     """Tell the bot to leave when `bot_presence.decide` says only bots are left, or that no person
-    came. Never raises and never fails the meeting: a bot that cannot be stopped now is tried again
+    came. Never raises and never fails the meeting: a bot that could not be stopped is tried again
     on the next poll, and a poll that cannot read who is in the call changes nothing (the bot
-    stays, as before this rule). Logs counts and the rule, never a name."""
+    stays, as before this rule). The marker is written only after a real stop and is committed by
+    the poll's own commit (a crash in between only repeats an idempotent stop). Logs counts and the
+    rule, never a name."""
     settings = get_settings()
     if (
         not settings.bot_leave_when_only_bots
@@ -663,30 +723,21 @@ def _leave_if_alone(session: Session, meeting: Meeting, vexa, info: BotMeeting, 
             nobody_after=settings.bot_nobody_came_seconds,
             own_names=own,
         )
-        if verdict is None or not _stop_bot(meeting, vexa):
+        _log_presence(meeting, info, own, verdict)
+        if verdict is None or not _stop_for_leave(meeting, vexa):
             return
         meeting.completion_reason = (
             BOT_NOBODY_CAME if verdict == bot_presence.NOBODY_CAME else BOT_END_REQUESTED
         )
         meeting.bot_state_seen_at = now
-        session.commit()
         logger.info(
             "meeting %s: the bot was told to leave (%s; %d in the call)",
             meeting.id,
             verdict,
             len(info.participants or []),
         )
-    except Exception as exc:
-        session.rollback()
+    except Exception as exc:  # the rule never costs a meeting its poll
         logger.warning("meeting %s: the leave check failed (%s)", meeting.id, type(exc).__name__)
-
-
-def _end_nobody_came(session: Session, meeting: Meeting, vexa) -> None:
-    """The bot has left a call no person came to: end the meeting with nothing recorded. The
-    provider's copy (the recording of an empty call, the names of the bots that were in it) goes
-    too, best effort, as for any ended bot's record."""
-    _delete_replaced_record(meeting, vexa)
-    _fail(session, meeting, REASON_NOBODY_CAME)
 
 
 def _old_bot_gone(meeting: Meeting, vexa) -> bool:
@@ -818,9 +869,6 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
 
     if info is None:
         pass
-    elif meeting.completion_reason == BOT_NOBODY_CAME and info.status in ("completed", "failed"):
-        _end_nobody_came(session, meeting, vexa)
-        return False
     elif (mark := _join_problem(meeting, info, now)) is not None:
         if _on_join_problem(session, meeting, vexa, mark, now):
             return False
@@ -1212,7 +1260,7 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
             )
         if len(text.split()) < MIN_WORDS:
             # The audio check only looks at peak volume, so noise can slip through.
-            _fail(session, meeting, REASON_NO_SPEECH)
+            _fail(session, meeting, _no_speech_reason(meeting))
             return False
         meeting.transcript = text
         meeting.transcript_source = transcript_source.OWN
@@ -1603,6 +1651,8 @@ def _fail_with(session: Session, meeting_id: int, exc: Exception) -> None:
         reason = REASON_UNEXPECTED
     meeting = session.get(Meeting, meeting_id)
     if meeting is not None:
+        if reason == REASON_NO_SPEECH:
+            reason = _no_speech_reason(meeting)
         if isinstance(exc, AudioError):
             # A zero-byte or corrupt download would fail the same way on every retry. Remove it
             # and go back to the download step, so "Try again" fetches the recording afresh.

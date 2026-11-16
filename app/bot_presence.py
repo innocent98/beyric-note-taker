@@ -26,6 +26,7 @@ Names are personal data: nothing here logs or returns one beyond the caller's ow
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -34,17 +35,17 @@ ONLY_BOTS = "only_bots"
 NOBODY_CAME = "nobody_came"
 
 # Words that, as a whole word, make a name a bot's: a role no person puts in their own name.
-# "bot" must be a whole word, so "Abbott" and "Robotham" stay people. Brand words are the ones that
-# are not also ordinary names (so no "otter", "grain", "gong", "fellow", "jamie").
+# Brand words are the ones that are not also ordinary names (so no "otter", "grain", "gong",
+# "fellow", "jamie"). "bot" and "assistant" are NOT here: both are also real surnames or job titles
+# ("Jan Bot", "Marketing Assistant", "Assistant Vice President"), so they count only in context
+# (`_bot_in_context`).
 _BOT_WORDS = frozenset(
     {
-        "bot",
         "bots",
         "notetaker",
         "notetakers",
         "recorder",
         "transcriber",
-        "assistant",
         "fireflies",
         "tldv",
         "avoma",
@@ -65,57 +66,58 @@ _BOT_PHRASES = (
     ("read", "ai"),
     ("tl", "dv"),
 )
-# "assistant" is the one generic word a real person can carry (a job title). Beside one of these it
-# reads as a job, so the name stays a person's.
-_JOB_BEFORE = frozenset(
+# Beside one of these, "bot" or "assistant" reads as a product, not a person: "AI Assistant",
+# "Meeting Bot", "Notes Assistant", "Zoom Bot". Job words (marketing, sales, vice, branch ...) are
+# deliberately not here, so those names stay people's.
+_CONTEXT = frozenset(
     {
-        "executive",
-        "administrative",
-        "admin",
-        "personal",
-        "teaching",
-        "research",
-        "legal",
-        "medical",
-        "dental",
-        "office",
-        "graduate",
-        "vice",
-        "associate",
-        "senior",
-        "junior",
-        "assistant",
-        "virtual",
-    }
-)
-_JOB_AFTER = frozenset(
-    {
-        "professor",
-        "manager",
-        "director",
-        "principal",
-        "teacher",
-        "coach",
-        "dean",
-        "editor",
-        "secretary",
-        "attorney",
-        "president",
-        "vp",
-        "to",
-        "chief",
-        "superintendent",
-        "pastor",
-        "pa",
-        "ea",
-        "sales",
+        "ai",
+        "meeting",
+        "meetings",
+        "note",
+        "notes",
+        "recording",
+        "transcript",
+        "transcription",
+        "scribe",
+        "summary",
+        "zoom",
+        "teams",
+        "meet",
+        "google",
     }
 )
 _WORD = re.compile(r"[a-z0-9]+")
+_POSSESSIVE = re.compile(r"[a-z0-9]['\u2019]s\s+(?:bot|assistant)\b")
+
+
+def _fold(name: str) -> str:
+    """Lower case, accents removed ("Ébot" is "ebot", never the word "bot"), curly apostrophes
+    straight."""
+    plain = unicodedata.normalize("NFKD", name.casefold())
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    return plain.replace("\u2019", "'")
 
 
 def _words(name: str) -> list[str]:
-    return _WORD.findall(name.casefold())
+    return _WORD.findall(_fold(name))
+
+
+def _bot_in_context(words: list[str], folded: str) -> bool:
+    """`bot` or `assistant` as a bot's word: the whole name, a possessive ("MyWay's Assistant"), or
+    beside a product word ("AI Assistant", "Meeting Bot"). Anywhere else it is a person's name or
+    a job."""
+    if words in (["bot"], ["assistant"]):
+        return True
+    if _POSSESSIVE.search(folded):
+        return True
+    for index, word in enumerate(words):
+        if word not in ("bot", "assistant"):
+            continue
+        near = words[max(0, index - 1) : index] + words[index + 1 : index + 2]
+        if any(other in _CONTEXT for other in near):
+            return True
+    return False
 
 
 def is_bot_name(name: Any, own_names: tuple[str, ...] = ()) -> bool:
@@ -129,20 +131,15 @@ def is_bot_name(name: Any, own_names: tuple[str, ...] = ()) -> bool:
         return False
     if any(words == _words(own) for own in own_names if own):
         return True
-    for index, word in enumerate(words):
-        if word == "assistant":
-            before = words[index - 1] if index else None
-            after = words[index + 1] if index + 1 < len(words) else None
-            if before in _JOB_BEFORE or after in _JOB_AFTER:
-                continue
-            return True
-        if word in _BOT_WORDS:
-            return True
-    return any(
+    if any(word in _BOT_WORDS for word in words):
+        return True
+    if any(
         tuple(words[i : i + len(phrase)]) == phrase
         for phrase in _BOT_PHRASES
         for i in range(len(words) - len(phrase) + 1)
-    )
+    ):
+        return True
+    return _bot_in_context(words, _fold(name))
 
 
 @dataclass(frozen=True)
@@ -181,18 +178,22 @@ def parse_time(value: Any) -> datetime | None:
 
 
 def _presence(person: dict) -> tuple[bool, datetime | None]:
-    """`(here, last_left)` for one participant record. The `presence_intervals` are the source:
-    the last interval being open (no `left_at`) means in the call. Without intervals the record's
-    own `left_at` says it. A time that is present but cannot be read means "here", never "gone"."""
+    """`(here, last_left)` for one participant record. The `presence_intervals` are the source: ANY
+    interval without a `left_at` means in the call (so the order Skribby lists them in does not
+    matter), and when all are closed the person left at the latest `left_at`. Without intervals the
+    record's own `left_at` says it. A time that is present but cannot be read means "here", never
+    "gone"."""
     intervals = person.get("presence_intervals")
     if isinstance(intervals, list) and intervals:
-        last = intervals[-1]
-        if not isinstance(last, dict):
-            return True, None
-        if not last.get("left_at"):
-            return True, None
-        left = parse_time(last.get("left_at"))
-        return (True, None) if left is None else (False, left)
+        lefts = []
+        for interval in intervals:
+            if not isinstance(interval, dict) or not interval.get("left_at"):
+                return True, None  # open (or not readable as an interval): in the call
+            left = parse_time(interval.get("left_at"))
+            if left is None:
+                return True, None
+            lefts.append(left)
+        return False, max(lefts)
     if not person.get("left_at"):
         return True, None
     left = parse_time(person.get("left_at"))
@@ -247,3 +248,22 @@ def decide(
     if in_since is not None and (now - in_since).total_seconds() >= nobody_after:
         return NOBODY_CAME
     return None
+
+
+@dataclass(frozen=True)
+class Count:
+    """How a participant list reads, as numbers only (for the log): entries in it, how many are in
+    the call, and how many carry a bot's name."""
+
+    entries: int
+    here: int
+    bot_named: int
+
+
+def summarize(people: list[Who] | None, own_names: tuple[str, ...] = ()) -> Count:
+    people = people or []
+    return Count(
+        entries=len(people),
+        here=sum(1 for who in people if who.here),
+        bot_named=sum(1 for who in people if is_bot_name(who.name, own_names)),
+    )

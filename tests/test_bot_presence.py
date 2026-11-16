@@ -20,6 +20,7 @@ from app.bot_presence import (
     is_bot_name,
     parse_time,
     read_participants,
+    summarize,
 )
 
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
@@ -62,6 +63,14 @@ def bot(name="Fireflies.ai Notetaker Ada Lovelace"):
         "note-taker",
         "Meeting Bot",
         "Zoom Bot",
+        "AI Assistant",
+        "Notes Assistant",
+        "Meeting Assistant",
+        "Bot",  # the whole name
+        "Assistant",  # the whole name
+        "Adebayo's Bot",
+        "Ébène's Assistant",  # accented, possessive
+        "FIREFLIES.AI NOTETAKER",
         "Avoma",
         "Krisp",
         "Supernormal Notes",
@@ -86,6 +95,18 @@ def test_names_that_say_bot_are_bots(name):
         "Bottomley",
         "Assistance Okafor",  # contains "assist"
         "Assistant Professor Jane Doe",  # a job title, not a bot
+        "Marketing Assistant",
+        "Sales Assistant",
+        "HR Assistant",
+        "Care Assistant",
+        "Assistant Vice President",
+        "Assistant Branch Manager",
+        "Virtual Assistant Sam",
+        "Jan Bot",  # a real surname
+        "Bot Smith",
+        "Ana Bot",
+        "Ébot Nkwe",  # "bot" inside an accented name
+        "Ébot",
         "Jane Doe, Executive Assistant",
         "Sam (Assistant Manager)",
         "Personal Assistant to the CEO",
@@ -304,3 +325,34 @@ def test_meeting_38_shape_would_have_ended_the_call_five_minutes_after_the_last_
     # Person One was the last to go (33 minutes before NOW): the five minutes end at NOW - 28 min.
     assert go(people, now=NOW - timedelta(minutes=28)) == ONLY_BOTS
     assert go(people, now=NOW - timedelta(minutes=28, seconds=1)) is None
+
+
+def test_any_open_interval_is_here_whatever_order_skribby_lists_them_in():
+    closed = {"joined_at": ms(ago(minutes=50)), "left_at": ms(ago(minutes=40))}
+    open_one = {"joined_at": ms(ago(minutes=5))}
+    for intervals in ([closed, open_one], [open_one, closed]):
+        (who,) = read_participants([{"name": "Ada", "presence_intervals": intervals}])
+        assert who.here
+
+
+def test_all_closed_intervals_leave_at_the_latest_left_at_in_any_order():
+    early = {"joined_at": ms(ago(minutes=50)), "left_at": ms(ago(minutes=40))}
+    late = {"joined_at": ms(ago(minutes=30)), "left_at": ms(ago(minutes=20))}
+    for intervals in ([early, late], [late, early]):
+        (who,) = read_participants([{"name": "Ada", "presence_intervals": intervals}])
+        assert not who.here
+        assert abs((who.last_left - ago(minutes=20)).total_seconds()) < 1
+
+
+def test_one_unreadable_closed_interval_makes_the_person_here():
+    early = {"joined_at": ms(ago(minutes=50)), "left_at": "garbled"}
+    late = {"joined_at": ms(ago(minutes=30)), "left_at": ms(ago(minutes=20))}
+    (who,) = read_participants([{"name": "Ada", "presence_intervals": [early, late]}])
+    assert who.here
+
+
+def test_the_counts_for_the_log_hold_numbers_only():
+    people = [Who("Ada", True), Who("MyWay's Assistant", True), Who("Bo", False, NOW)]
+    count = summarize(people, OWN)
+    assert (count.entries, count.here, count.bot_named) == (3, 2, 1)
+    assert summarize(None) == summarize([])

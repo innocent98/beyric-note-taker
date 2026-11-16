@@ -369,6 +369,13 @@ describe("end now and write the notes", () => {
 });
 
 describe("failed meeting", () => {
+  it("does not call a meeting nobody joined a failure", () => {
+    const base = meeting("49-meeting-detail-failed-retryable.json");
+    show({ ...base, status_text: "Nobody joined", status_tone: "neutral" });
+    expect(screen.getByText("Nobody joined")).toBeTruthy();
+    expect(screen.queryByText("What went wrong")).toBeNull();
+  });
+
   it("offers Try again when it can be retried, and shows the processing state after", async () => {
     mocks.retry.mockResolvedValue(meeting("43-meeting-detail-processing.json"));
     const m = meeting("49-meeting-detail-failed-retryable.json");

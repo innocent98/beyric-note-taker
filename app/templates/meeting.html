@@ -51,7 +51,7 @@
   {% endif %}
 
   {% if meeting.status == "failed" %}
-  {% call ui.card("What went wrong") %}
+  {% call ui.card("What went wrong" if status_text(meeting) == "Failed" else status_text(meeting)) %}
     <p>{{ meeting.failure_reason or "Something went wrong while processing this meeting." }}</p>
     {% if retry_block is none %}
     <form method="post" action="/meetings/{{ meeting.id }}/retry">

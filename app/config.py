@@ -99,6 +99,13 @@ class Settings(BaseSettings):
             raise ValueError(f"SKRIBBY_REGION is {value!r}; it must be eu or jp")
         return region
 
+    @field_validator("bot_only_bots_leave_seconds", "bot_nobody_came_seconds")
+    @classmethod
+    def _leave_windows_are_at_least_a_minute(cls, value: int) -> int:
+        """A shorter window (a 0 meaning "off", a typo) is raised to 60 seconds rather than failing
+        at start: `BOT_LEAVE_WHEN_ONLY_BOTS=false` is the off switch."""
+        return max(60, value)
+
     @field_validator("skribby_account_id")
     @classmethod
     def _skribby_account_id_is_a_uuid(cls, value: str) -> str:
@@ -312,11 +319,11 @@ class Settings(BaseSettings):
     bot_leave_when_only_bots: bool = True
     # How long only bots may have been in the call, after a person was last seen in it, before the
     # bot leaves. A person who comes back starts the wait again.
-    bot_only_bots_leave_seconds: int = Field(default=300, ge=60)
+    bot_only_bots_leave_seconds: int = 300
     # How long the bot waits, once it is in the call, for the first person to arrive. Also sent to
     # Skribby as `empty_meeting_timeout` (its own rule for a call with nobody in it; its default is
     # 10 minutes), so the two agree.
-    bot_nobody_came_seconds: int = Field(default=900, ge=60)
+    bot_nobody_came_seconds: int = 900
     max_poll_hours: int = 6
     # How many bots may be on meetings at once on the one local Vexa host, across all users
     # (`app/placement.py`). The box fits about one until measured (spec section 9); raise it only
