@@ -46,10 +46,10 @@ def ledger_seconds(session: Session, user: User) -> int:
     )
 
 
-def hours_used(
+def running_seconds(
     session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600
 ) -> int:
-    """Seconds used by `user`, as described in the module docstring."""
+    """Estimated seconds of `user`'s own meetings still running and not in the ledger yet."""
     counted = select(UsageEntry.meeting_id).where(UsageEntry.meeting_id.is_not(None))
     running = session.scalars(
         select(Meeting.started_polling_at).where(
@@ -62,7 +62,14 @@ def hours_used(
     live = sum(
         min(max((now - started).total_seconds(), 0), max_poll_seconds) for started in running
     )
-    return ledger_seconds(session, user) + int(live)
+    return int(live)
+
+
+def hours_used(
+    session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600
+) -> int:
+    """Seconds used by `user`, as described in the module docstring."""
+    return ledger_seconds(session, user) + running_seconds(session, user, now, max_poll_seconds)
 
 
 def record_usage(
