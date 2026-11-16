@@ -231,7 +231,8 @@ class Settings(BaseSettings):
     # evidence is collected; `skribby_segment_evidence`). OFF: a tag is named only by the
     # `speaker_name` its own segments carry, and any other tag stays "Unknown speaker". The
     # elimination may have named a tag after someone who is not in the call (meeting 29,
-    # 2026-11-10); the evidence will show whether it did.
+    # 2026-11-10); the evidence will show whether it did. The same switch covers the sole
+    # candidate rule (one name on every segment of the tag, nobody else has it; 2026-11-16).
     skribby_name_by_elimination: bool = True
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away

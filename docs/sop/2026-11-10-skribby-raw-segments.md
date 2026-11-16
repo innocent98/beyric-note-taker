@@ -15,7 +15,7 @@ Adebayo's real meetings 29 and 30 on 2026-11-10 were labelled badly. In 29 a thi
 | Saved | `pipeline._step_speakers` calls `_keep_evidence` right after the lookup, in the commit that saves the speaker names and before the provider's copy is deleted. It runs in a savepoint: a failure rolls back only that write, logs the exception class (never the text), and the meeting still finishes. A retry of the step replaces the row (one row per meeting). |
 | Deleted | After 7 days by `pipeline.delete_expired_audio` (the audio retention job; `EVIDENCE_RETENTION_DAYS = 7`, from the row's own `created_at`, whatever state the meeting is in); with the meeting (`services.delete_meeting` and the foreign key `ON DELETE CASCADE`); with the account (`deletion.purge_user`). |
 | Read | Only `scripts/skribby_segments_report.py <meeting_id>`: items grouped by tag, the derived name and why, read-only. Never in an API answer or a page. |
-| Elimination | `Settings.skribby_name_by_elimination`, default **true**: today's behaviour exactly, and each tag it names is recorded as `how: elimination` (with `by_elimination: true` on the row), so the report shows which names elimination produced. `false`: `_tag_names` names a tag only from the `speaker_name` its own segments carry; the elimination branch is still computed (the evidence shows what it would have said, `would_be`) but never applied. |
+| Elimination | `Settings.skribby_name_by_elimination`, default **true**: today's behaviour exactly, and each tag it names is recorded as `how: elimination` (or `how: sole_candidate` since 2026-11-16, `docs/sop/2026-11-16-skribby-name-sole-candidate.md`) (with `by_elimination: true` on the row), so the report shows which names elimination produced. `false`: `_tag_names` names a tag only from the `speaker_name` its own segments carry; the elimination branch is still computed (the evidence shows what it would have said, `would_be`) but never applied. |
 
 **Decision: a table, not a log line.** The text is what people said; a log would spread it into files with their own retention. A short-lived table with one delete job and a cascade is easy to prove gone. **Decision: the clock starts at the row's save time, not the meeting's start,** so a meeting that is slow to finish still keeps its evidence 7 days. **Rejected:** storing Skribby's whole body (it carries bot ids, links and per-word data we do not need); storing confidences (not needed for the diagnosis).
 
@@ -34,7 +34,7 @@ Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`;
 
 - **Server steps before merge:** migration 0040 runs on deploy. The only new env variable is the optional `SKRIBBY_NAME_BY_ELIMINATION`; leave it unset (= true, today's behaviour).
 - **Read a meeting:** `docker compose exec -T web python scripts/skribby_segments_report.py <meeting_id>` (within 7 days of the meeting). It prints what people said: treat it like the transcript.
-- **Turn elimination off:** `SKRIBBY_NAME_BY_ELIMINATION=false`, restart web, worker and scheduler.
+- **Turn elimination off:** `SKRIBBY_NAME_BY_ELIMINATION=false`, then `docker compose up -d --force-recreate web worker scheduler` (a restart does not re-read `.env`).
 - **Roll back:** revert the PR; `alembic downgrade 0039` drops the table (the evidence is disposable by design).
 
 ## Follow-ups

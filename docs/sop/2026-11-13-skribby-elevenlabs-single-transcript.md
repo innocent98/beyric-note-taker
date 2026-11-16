@@ -28,7 +28,7 @@ Run on the Mac, bounded: `ruff check .`, `ruff format --check .` (pinned 0.17.3)
 
 ## Operate / roll back
 
-No server steps before merge (no migration, no `.env` change). **To turn the single transcript on later** (lead and Adebayo, a window with no meeting running): server `.env` `TRANSCRIPT_SOURCE=skribby`, keep `SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2` and `BOT_PROVIDER=skribby`, and `TRANSCRIPT_SHADOW_PERCENT=25` to keep a sampled comparison with our transcription (0 to stop it; it costs $0.70 an hour of the sampled meetings); restart web, worker and scheduler. Flip back: `TRANSCRIPT_SOURCE=own`, restart the same three. Revert the code: revert the PR.
+No server steps before merge (no migration, no `.env` change). **To turn the single transcript on later** (lead and Adebayo, a window with no meeting running): server `.env` `TRANSCRIPT_SOURCE=skribby`, keep `SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2` and `BOT_PROVIDER=skribby`, and `TRANSCRIPT_SHADOW_PERCENT=25` to keep a sampled comparison with our transcription (0 to stop it; it costs $0.70 an hour of the sampled meetings); recreate web, worker and scheduler (`docker compose up -d --force-recreate`; a restart does not re-read `.env`; guarded steps in `docs/sop/2026-11-16-skribby-name-sole-candidate.md`). Flip back: `TRANSCRIPT_SOURCE=own`, recreate the same three. Revert the code: revert the PR.
 
 ## Follow-ups
 

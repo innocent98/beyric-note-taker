@@ -91,12 +91,12 @@ Checked (`grep` over `app/`): every reader of the transcript takes `meeting.spea
 
 **Server steps before merge:** the migration runs on deploy (`alembic upgrade head` to **0039**): it adds one nullable column to `meetings` and a new empty table; no table rewrite, no downtime. Check `alembic heads` shows one head and `/health` is 200 after. No `.env` change is needed: both settings default to today's behaviour.
 
-**To switch on** (when no meeting is running; a restart drops the worker's in-memory counters, which only gives live meetings a fresh grace):
+**To switch on** (when no meeting is running; the recreate drops the worker's in-memory counters, which only gives live meetings a fresh grace). **Updated 2026-11-16:** the exact guarded steps are in `docs/sop/2026-11-16-skribby-name-sole-candidate.md`; below, "restart" means `docker compose up -d --force-recreate` (a plain restart does not re-read `.env`).
 1. Server `.env`: `TRANSCRIPT_SOURCE=skribby` and, to collect the comparison, `TRANSCRIPT_SHADOW_PERCENT=25` (a share costs 0.70 USD an hour of the sampled meetings; 0 to stop it). Keep `BOT_PROVIDER=skribby` and a Skribby model with speaker diarization (`SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2`, Pay As You Go; Soniox v5 was removed from the allowlist on 2026-11-13, see `docs/sop/2026-11-13-skribby-elevenlabs-single-transcript.md`).
-2. Restart **web, worker and scheduler** (settings are read once per process; web and scheduler send the bots, so they carry the vocabulary; a bad value stops all three with a message naming the setting).
+2. Recreate (`docker compose up -d --force-recreate`, not `restart`) **web, worker and scheduler** (settings are read once per process; web and scheduler send the bots, so they carry the vocabulary; a bad value stops all three with a message naming the setting).
 3. After about a week run the report command above and decide.
 
-**Flip back:** set `TRANSCRIPT_SOURCE=own` (or remove the line) and restart the same three. Meetings already stored keep their text and `transcript_source`; new ones use ours. No data change is needed. **Revert the code:** revert the PR; `alembic downgrade 0038` drops the column and the table (the recorded sources and metrics are lost; the transcripts are not).
+**Flip back:** set `TRANSCRIPT_SOURCE=own` (or remove the line) and recreate the same three. Meetings already stored keep their text and `transcript_source`; new ones use ours. No data change is needed. **Revert the code:** revert the PR; `alembic downgrade 0038` drops the column and the table (the recorded sources and metrics are lost; the transcripts are not).
 
 ## Follow-ups
 
