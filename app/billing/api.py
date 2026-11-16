@@ -56,19 +56,19 @@ def _handle(db: Session, provider: PaymentProvider, headers, raw_body: bytes) ->
         settle.process(db, provider, row, event, now)
 
 
-@router.post("/api/billing/webhooks/{provider_name}")
+@router.post("/api/billing/webhooks/{provider}")
 async def webhook(
-    provider_name: str, request: Request, db: Session = Depends(get_session)
+    provider: str, request: Request, db: Session = Depends(get_session)
 ) -> JSONResponse:
     settings = request.app.state.settings
-    provider = provider_named(provider_name, settings) if settings.billing_enabled else None
-    if provider is None:
+    adapter = provider_named(provider, settings) if settings.billing_enabled else None
+    if adapter is None:
         raise HTTPException(404, "Not found.")
     raw_body = await _read_body(request)
     try:
-        await run_in_threadpool(_handle, db, provider, request.headers, raw_body)
+        await run_in_threadpool(_handle, db, adapter, request.headers, raw_body)
     except WebhookRejected:
-        logger.warning("billing webhook for %s refused: bad signature", provider_name)
+        logger.warning("billing webhook for %s refused: bad signature", provider)
         raise HTTPException(401, "The signature is not valid.") from None
     except BadEvent:
         raise HTTPException(400, "The event could not be read.") from None

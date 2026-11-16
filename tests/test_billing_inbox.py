@@ -461,3 +461,17 @@ def test_the_route_needs_no_login_and_no_csrf_token(client, fake, grants, sessio
 def test_only_the_webhook_path_is_open(client):
     assert client.post("/api/billing/other", json={}).status_code in (401, 404)
     assert client.get(URL).status_code == 405
+
+
+def test_the_login_and_csrf_exemption_covers_only_the_webhook_route(engine):
+    """`auth.guard` skips login and CSRF for the webhook prefix. Whatever else is ever mounted
+    under it would skip them too, so this fails if anything but the one route is."""
+    from app import auth
+    from tests.test_api import api_routes
+
+    app = create_app(make_settings())
+
+    under_prefix = [(m, p) for m, p in api_routes(app) if p.startswith(auth.WEBHOOK_PREFIX)]
+
+    assert under_prefix == [("POST", "/api/billing/webhooks/{provider}")]
+    assert auth.WEBHOOK_PREFIX == "/api/billing/webhooks/"  # with the slash: no wider match
