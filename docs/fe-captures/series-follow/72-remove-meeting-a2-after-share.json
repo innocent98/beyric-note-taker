@@ -1,5 +1,5 @@
 {
-  "note": "A2 is shared to X and in NO recurring meeting: `series` is null. It was not put back into X's Standup (removed), and it left her personal Standup row.",
+  "note": "A2 is now in X's Standup again (a NEW row, a new id): the share by an owner made the card. It left her personal Standup row.",
   "as": "Ada",
   "request": {
     "method": "GET",
@@ -22,7 +22,7 @@
       "status_tone": "success",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-08T18:00:00Z",
+      "created_at": "2026-11-09T08:00:00Z",
       "tasks_count": 1,
       "failure_reason": null,
       "bot_invite_email": null,
@@ -75,15 +75,15 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-08",
+          "assigned_on": "2026-11-09",
           "done_at": null,
-          "created_at": "2026-11-15T20:40:27.002526Z",
+          "created_at": "2026-11-16T10:29:51.220569Z",
           "from_meeting": true,
           "meeting": {
             "id": 2,
             "title": "Standup",
             "platform": "google_meet",
-            "created_at": "2026-11-08T18:00:00Z"
+            "created_at": "2026-11-09T08:00:00Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -103,13 +103,17 @@
           "can_decide": false
         }
       ],
-      "series": null,
-      "suggest_recurring": true,
+      "series": {
+        "id": 15,
+        "title": "Standup"
+      },
+      "suggest_recurring": false,
+      "can_make_recurring": true,
       "open_questions": [
         {
           "id": 2,
           "text": "Who owns A2 private?",
-          "carriable": false,
+          "carriable": true,
           "carry": true,
           "resolved": false,
           "can_update": true

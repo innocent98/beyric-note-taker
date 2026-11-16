@@ -721,6 +721,15 @@ Goal: one person has a permanent personal team and may belong to several teams; 
     - [x] Frontend: the red text button, the question with each consequence, the toast; no card menu (no pattern); tests first, mutation-checked, captured live
     - [ ] CI green on the pushed head, Opus review of the permission code, merge (the lead, on Adebayo's word)
     - [ ] Follow-ups: bring a removed one back (needs a design), hide "Make this a recurring meeting?" for a removed event, a browser parity pass
+  - [ ] **The simpler recurring model** (branch `feature/series-personal-calendar-owner-admin-teams`, stacked on #205, PR number added when opened; SOP `docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`; no migration; Adebayo 2026-11-15/16 "I just don't want us to complicate things")
+    - [x] A calendar card is always in the person's Personal space (the sync no longer makes placeholders in a team)
+    - [x] A team's card is made only by an owner or admin (share, move, auto-share link, by hand); a plain member's share makes none but joins one that exists; hand create/attach by a plain member 403
+    - [x] An owner's or admin's explicit share clears the "removed" mark; the automatic link respects it; a plain creator's removal of an empty legacy row writes no mark
+    - [x] The new team card takes in the meetings of the same event the team already has
+    - [x] `can_make_recurring` on the meeting page; the two controls hidden for a plain member
+    - [x] Cleanup script for the empty calendar cards of teams (`scripts/remove_empty_team_cards.py`), dry run then `--apply`, no marks; server steps in the SOP
+    - [x] Reminders reading verified; a calendar-linked Personal card with one recorded meeting queues both reminders (fake clock); a hand-made card cannot remind
+    - [ ] CI green, Opus review, merge after #205 (the lead); **Adebayo runs the cleanup server steps** (no meeting recording)
 - [x] **Stage 3: frontend, dark** (PR opened 2026-11-14, number added when known; no migration; SOP `docs/sop/2026-11-14-multi-team-stage-3.md`; FE guide sections 14 to 16; parity `docs/ui/parity-report.md` "Multi-team (stage 3)"; four pieces are lead-designed and marked so, for the designer)
   - [x] The frontend learns the switch from `multi_team` in `GET /api/session` (one read-only boolean, tested, captured live 02, 03, 71)
   - [x] One interceptor sends `X-Team-Id` on exactly the team-scoped routes, per browser tab (`?team=` plus `sessionStorage`), never a server-side team; a stale or removed team resets to the default with a plain notice

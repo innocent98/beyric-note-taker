@@ -23,10 +23,10 @@
             "name": "Platform team",
             "is_personal": false
           },
-          "cadence": "Weekly on Sundays, 18:00",
+          "cadence": "Weekly on Mondays, 08:00",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-22T18:00:00Z",
-          "next_text": "Sun 22 Nov, 18:00",
+          "next_starts_at": "2026-11-23T08:00:00Z",
+          "next_text": "Mon 23 Nov, 08:00",
           "unfinished_tasks": 1,
           "open_questions": 1,
           "project": null
@@ -39,10 +39,10 @@
             "name": "Platform team",
             "is_personal": false
           },
-          "cadence": "Weekly on Sundays, 18:00",
+          "cadence": "Weekly on Mondays, 08:00",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-22T18:00:00Z",
-          "next_text": "Sun 22 Nov, 18:00",
+          "next_starts_at": "2026-11-23T08:00:00Z",
+          "next_text": "Mon 23 Nov, 08:00",
           "unfinished_tasks": 1,
           "open_questions": 1,
           "project": null

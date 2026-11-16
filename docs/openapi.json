@@ -2023,6 +2023,11 @@
             "title": "Can End",
             "type": "boolean"
           },
+          "can_make_recurring": {
+            "default": false,
+            "title": "Can Make Recurring",
+            "type": "boolean"
+          },
           "can_move": {
             "default": false,
             "title": "Can Move",
@@ -10670,7 +10675,7 @@
     },
     "/api/meetings/{meeting_id}/series": {
       "put": {
-        "description": "Put the caller's own meeting into one of their team's recurring meetings, or take it out\n(`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda\nlines typed before the meeting began are taken by it.",
+        "description": "Put the caller's own meeting into one of their team's recurring meetings, or take it out\n(`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. With\n`SERIES_FOLLOW_MEETINGS` on, putting it into a TEAM's recurring meeting is an owner's or admin's\nto do (403 `team_forbidden`); its owner may always take it out, or put a private meeting into\ntheir own personal one. Agenda lines typed before the meeting began are taken by it.",
         "operationId": "put_meeting_series",
         "parameters": [
           {
@@ -13491,7 +13496,7 @@
         ]
       },
       "post": {
-        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header\nnames it (404 for a team the caller is not in), else the default team. 409 `series_limit`.",
+        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller\nis not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes\na team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409\n`series_limit`.",
         "operationId": "create_series",
         "parameters": [
           {

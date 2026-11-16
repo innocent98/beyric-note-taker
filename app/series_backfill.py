@@ -118,3 +118,81 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
     else:
         session.rollback()
     return report
+
+
+@dataclass
+class EmptyCardsReport:
+    """What `remove_empty_team_cards` found or did. Counts only."""
+
+    applied: bool
+    cards_looked_at: int = 0  # calendar-made cards of ordinary teams
+    cards_removed: int = 0
+    cards_kept: int = 0
+    kept_with_meeting: int = 0
+    kept_with_lines: int = 0
+    kept_with_project: int = 0
+    kept_with_mail: int = 0
+
+    def lines(self) -> list[str]:
+        head = (
+            "APPLIED: the database was changed."
+            if self.applied
+            else "DRY RUN: nothing was changed. Run again with --apply to do it."
+        )
+        return [
+            head,
+            f"Calendar-made recurring cards of teams looked at: {self.cards_looked_at}",
+            f"Empty ones removed: {self.cards_removed}",
+            f"Kept, because something is in them: {self.cards_kept}",
+            f"...a meeting is grouped under it: {self.kept_with_meeting}",
+            f"...an agenda line is waiting: {self.kept_with_lines}",
+            f"...a project is linked: {self.kept_with_project}",
+            f"...a mail about it is still to be sent: {self.kept_with_mail}",
+        ]
+
+
+def remove_empty_team_cards(session: Session, *, apply: bool) -> EmptyCardsReport:
+    """One-off, idempotent: remove the EMPTY recurring cards that the calendar sync made in an
+    ordinary team before a person's calendar cards moved to their personal space (the simpler
+    model). A card is empty when `series.non_empty_reason` finds nothing: no meeting grouped under
+    it, no waiting agenda line, no linked project, no mail still to be sent. Only cards made from a
+    calendar event (a hand-made empty card is somebody's own work and stays) and only in ordinary
+    teams (a personal card is the person's own). **No "ignored" mark is written**, so the next sync
+    makes the person's PERSONAL card for the event. The dry run does the identical work inside the
+    transaction and rolls it back. Counts only: no title, name or id."""
+    report = EmptyCardsReport(applied=apply)
+    ids = list(
+        session.scalars(
+            select(Series.id)
+            .join(Team, Team.id == Series.team_id)
+            .where(Team.is_personal.is_(False), Series.calendar_recurring_id.is_not(None))
+            .order_by(Series.id)
+        )
+    )
+    for series_id in ids:
+        row = session.scalars(
+            select(Series).where(Series.id == series_id).with_for_update()
+        ).first()
+        if row is None:
+            continue
+        report.cards_looked_at += 1
+        reason = series_rules.non_empty_reason(session, row)
+        if reason is None:
+            session.delete(row)
+            session.flush()
+            report.cards_removed += 1
+            continue
+        report.cards_kept += 1
+        if reason == "meeting":
+            report.kept_with_meeting += 1
+        elif reason == "lines":
+            report.kept_with_lines += 1
+        elif reason == "project":
+            report.kept_with_project += 1
+        else:
+            report.kept_with_mail += 1
+    if apply:
+        session.commit()
+    else:
+        session.rollback()
+    return report

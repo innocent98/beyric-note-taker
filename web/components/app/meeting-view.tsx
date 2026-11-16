@@ -326,7 +326,7 @@ export function MeetingView({
 
       {m.status === "ready" ? (
         <>
-        {m.suggest_recurring && !m.series ? <RecurringHint meetingId={m.id} onDone={() => void refetch()} /> : null}
+        {m.suggest_recurring && m.can_make_recurring && !m.series ? <RecurringHint meetingId={m.id} onDone={() => void refetch()} /> : null}
         <div className="detail-grid">
           <section className="card card-flush detail-main">
             <div className="panel-bar">
@@ -395,7 +395,7 @@ export function MeetingView({
                     <dd>{templateName}</dd>
                   </>
                 ) : null}
-                {m.series || (m.can_share && m.status === "ready") ? (
+                {m.series || (m.can_share && m.status === "ready" && m.can_make_recurring) ? (
                   <>
                     <dt>Series</dt>
                     <dd className="det-series">
@@ -405,7 +405,7 @@ export function MeetingView({
                         </AppLink>
                       ) : null}
                       {/* Lead-designed, not in the designer's file: "Add to recurring meeting" (spec 7). */}
-                      {m.can_share && m.status === "ready" ? (
+                      {m.can_share && m.status === "ready" && m.can_make_recurring ? (
                         <button type="button" className="det-link det-link-quiet" data-dialog-open="series-dialog">
                           {m.series ? "Change" : "Add to recurring meeting"}
                         </button>

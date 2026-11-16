@@ -13,12 +13,12 @@ ones that say "flag off".
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app import deletion, meeting_teams, teams, visibility
 from app import series as series_rules
 from app.config import Settings
-from app.models import Meeting, Series, SeriesAgendaItem, SeriesAgendaSend, User
+from app.models import Meeting, Series, SeriesAgendaItem, SeriesAgendaSend, TeamMember, User
 from app.series_backfill import split_mixed_series
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     anon,
@@ -66,6 +66,17 @@ def standup(session, team_id, *, rid=RID, owner_id=None, title="Standup", **fiel
     session.add(found)
     session.commit()
     return found
+
+
+def admin_of(session, team, user) -> None:
+    """Make `user` an admin of `team`: since the simpler model only an owner or admin makes a team's
+    recurring card, a test that expects a card to be made in Y by Pat's share promotes him first."""
+    session.execute(
+        update(TeamMember)
+        .where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
+        .values(role="admin")
+    )
+    session.commit()
 
 
 def row_of(session, team_id, rid=RID) -> Series | None:
@@ -231,6 +242,7 @@ def test_sharing_to_a_team_that_has_a_row_marks_that_row_and_the_old_one_stale(
 def test_one_standup_one_row_per_team_with_exactly_that_teams_meetings(session, world, template):
     pat = world.pat
     pat_personal = personal_of(session, pat)
+    admin_of(session, world.y, pat)  # only an owner or admin makes Y's card
     legacy = standup(session, world.x.id, owner_id=pat.id)
     monday = put(session, template, legacy, who=pat, team=world.x.id)
     tuesday = put(session, template, legacy, who=pat, when=MONDAY + timedelta(days=1))
@@ -459,6 +471,7 @@ def test_the_link_puts_a_calendar_meeting_into_the_row_of_its_scope(session, wor
     private = calendar_meeting(
         session, template, world.ada, calendar_event(session, world.ada, RID, LATER)
     )
+    admin_of(session, world.y, world.pat)  # only an owner or admin makes Y's card
     in_y = calendar_meeting(
         session,
         template,
@@ -479,6 +492,7 @@ def test_the_link_puts_a_calendar_meeting_into_the_row_of_its_scope(session, wor
 
 
 def test_a_moved_calendar_meeting_goes_to_the_owning_teams_row(session, world, template):
+    admin_of(session, world.y, world.pat)
     meeting = calendar_meeting(
         session,
         template,
@@ -489,14 +503,13 @@ def test_a_moved_calendar_meeting_goes_to_the_owning_teams_row(session, world, t
     assert series_rules.link_from_calendar(session, meeting).team_id == world.y.id
 
 
-def test_a_card_made_before_the_first_recording_moves_with_a_private_first_meeting(
-    session, world, template
-):
+def test_a_legacy_empty_team_card_moves_with_a_private_first_meeting(session, world, template):
+    """An empty card the old sync made in Ada's default team (X): her first recording is private,
+    so the card goes to her personal space instead of staying behind. (The sync no longer makes
+    cards in a team: see `tests/test_series_personal_model.py`.)"""
     event = calendar_event(session, world.ada, RID, MONDAY)
     scheduled = join_for(session, world.ada, event, state="scheduled")
-    assert series_rules.sync_from_joins(session, MONDAY) == 1
-    card = row_of(session, world.x.id)  # Ada's default team, empty
-    assert card is not None and card.owner_user_id == world.ada.id
+    card = standup(session, world.x.id, owner_id=world.ada.id)  # Ada's default team, empty
     meeting = ready(session, template, source="calendar", created_at=event.starts_at)  # private
     scheduled.meeting_id, scheduled.state = meeting.id, "completed"
     session.commit()
@@ -868,6 +881,7 @@ def test_a_new_row_is_named_from_the_calendar_event_never_from_the_source_rows_r
     session, world, template
 ):
     internal = "Standup: HR follow-up for Bob"
+    admin_of(session, world.y, world.pat)
     legacy = standup(session, world.x.id, owner_id=world.ada.id, title=internal)
     event = calendar_event(session, world.pat, RID, MONDAY, title="Team standup")
     meeting = calendar_meeting(session, template, world.pat, event, shared_team_id=world.x.id)
@@ -960,6 +974,7 @@ def test_a_rename_of_a_hand_made_row_in_x_never_reaches_a_new_sibling_row(sessio
     """A hand-made row has no calendar event to name a sibling from; the meeting names it. A new
     row in Y, or in a leaver's personal space, never carries the internal name X gave its row."""
     internal = "Sync: Bob performance plan"
+    admin_of(session, world.y, world.pat)
     legacy = Series(team_id=world.x.id, owner_user_id=world.ada.id, title=internal)
     session.add(legacy)
     session.commit()
@@ -1003,8 +1018,7 @@ def test_the_empty_card_rekey_never_pushes_a_team_past_its_limit(
     standup(session, ada_personal, rid="b", title="B", owner_id=world.ada.id)  # personal is full
     event = calendar_event(session, world.ada, RID, MONDAY)
     scheduled = join_for(session, world.ada, event, state="scheduled")
-    assert series_rules.sync_from_joins(session, MONDAY) == 1
-    card = row_of(session, world.x.id)  # Ada's default team, empty
+    card = standup(session, world.x.id, owner_id=world.ada.id)  # a legacy empty card in X
     meeting = ready(session, template, source="calendar", created_at=event.starts_at)  # private
     scheduled.meeting_id, scheduled.state = meeting.id, "completed"
     session.commit()

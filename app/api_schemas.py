@@ -330,6 +330,12 @@ class MeetingDetail(MeetingSummary):
     # True for the owner's meeting that is in no series when its link was used for another of their
     # meetings: draw "Make this a recurring meeting?" (`POST /api/meetings/{id}/recurring`).
     suggest_recurring: bool = False
+    # True when the caller may put this meeting into a recurring meeting by hand ("Add to
+    # recurring meeting", "Make this a recurring meeting?"): the recorder, and for a meeting
+    # shared to or moved to a team only if they are an owner or admin of it (a private
+    # meeting: always). false: do not draw either control. A meeting already in a recurring
+    # meeting still shows its link.
+    can_make_recurring: bool = False
     # The meeting's open questions with their "On next agenda" state; empty unless ready.
     open_questions: list["QuestionOut"] = []
 

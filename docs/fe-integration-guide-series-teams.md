@@ -3,7 +3,7 @@
 Everything in this file is a body, status or message **copied from a real response**: the capture script
 `scripts/capture_series_follow.py` runs the real app (real migrations, auth, CSRF, team roles, visibility,
 the backfill script) on a scratch Postgres and writes every exchange to `docs/fe-captures/series-follow/NN-name.json`. Run it again
-to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 88**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
+to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 89 and section 11 (the simpler model) 90 to 106**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
 Names, emails and ids are placeholders ("Ada Example", `owner@example.test`, ids from a scratch database:
 yours will differ).
 
@@ -14,6 +14,8 @@ Related: `docs/fe-integration-guide-series.md` (the Series API this builds on),
 `docs/sop/2026-11-15-remove-recurring-meeting.md` (section 10, removing a recurring meeting).
 
 ## 1. What this is, in the person's terms
+
+> **Superseded in part (2026-11-16):** where sections 1 to 9 say a recurring card from a calendar is made in the person's default team, or that sharing a meeting makes the team's row, section 11 (the simpler model) replaces that: calendar cards live in the Personal space, and only an owner or admin makes a team's card. The captures 01 to 51 were made before that change.
 
 A **recurring meeting is no longer one thing per person**. Monday's Standup shared to the team "Tech" and
 Tuesday's Standup kept private are two rows: the team's recurring list shows Standup with Monday only; the
@@ -779,12 +781,20 @@ Rows left with no meeting after the split: 0
 | Remove with `SERIES_FOLLOW_MEETINGS` off; a later calendar meeting not regrouped; a creator who left the team (404) | **not exercised live**: covered by `tests/test_series_remove.py` |
 | Remove without CSRF token or session | **not exercised live**: the project's usual write guard; covered by `tests/test_series_remove.py` |
 | The remove button, the question and the toast in a browser against a live server | **not exercised**: tested against these captures (`web/tests/series-remove.test.tsx`), no screenshots |
+| A calendar recurring card is made in the person's Personal space, not in a team (even a one-team person's) | **verified live** (87 to 89) |
+| A plain member's share makes no team card; an owner's share makes it and takes in the meetings the team already has | **verified live** (90 to 96) |
+| A plain member's hand-made team card and hand-attach are 403; their Personal card is 201 | **verified live** (97 to 99) |
+| `can_make_recurring` and `suggest_recurring` on the meeting page | **verified live** (100, 101); the controls drawn from them: **tests only** (vitest) |
+| The cleanup script: dry run, apply, dry run; the next sync makes the Personal card | **verified live** (102 to 106; the sync after it: `tests/test_series_personal_model.py`) |
+| Reminders for a calendar-linked Personal card; a hand-made card never reminds; `reminders_on` off by default | **not exercised live**: fake-clock tests only |
+| An owner's explicit share clears the "removed" mark and makes the card again | **verified live** (71 to 73) |
+| Flag off: every rule of section 11 as before | **not exercised live**: `tests/test_series_personal_model.py` |
 
 ## 10. Remove this recurring meeting
 
 **LEAD-DESIGNED** (Adebayo, 2026-11-15): the designer drew no such control. Added in PR `feature/remove-recurring-meeting`;
-SOP `docs/sop/2026-11-15-remove-recurring-meeting.md`. Captures 52 to 88, made by the same script
-(`python scripts/capture_series_follow.py <admin url> --keep 51` writes only 52 and up (77 and up were re-made with `--keep 76`); without `--keep` it rewrites all). Ids are
+SOP `docs/sop/2026-11-15-remove-recurring-meeting.md`. Captures 52 to 89, made by the same script
+(`python scripts/capture_series_follow.py <admin url> --keep 51` writes only 52 and up; without `--keep` it rewrites all). Ids are
 from a scratch database: yours will differ. It runs with the flag `SERIES_FOLLOW_MEETINGS` **on**, as production is; what it does with the flag off is
 in the verification table (not exercised live).
 
@@ -837,7 +847,7 @@ Every series page now carries `can_remove` (top level, next to `can_rename`). **
 
 A plain member can read the page and gets `can_remove: false` (capture 53, same page, only these fields shown). **So does the plain member who made the row, while something is in it** (capture 77, Pat's own calendar row, which holds a meeting):
 
-`GET /api/series/1` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/53-remove-pat-x-cannot.json`)
+`GET /api/series/1` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/53-remove-page-pat-x-cannot.json`)
 
 ```json
 {
@@ -904,7 +914,7 @@ A personal row with a waiting line (the line she typed earlier on that page goes
 
 A recurring meeting made by hand has no calendar event to remember:
 
-`DELETE /api/series/15` as Ada (owner of team X) → **200** (`docs/fe-captures/series-follow/76-remove-hand-made-delete.json`)
+`DELETE /api/series/16` as Ada (owner of team X) → **200** (`docs/fe-captures/series-follow/76-remove-hand-made-delete.json`)
 
 ```json
 {
@@ -1012,36 +1022,25 @@ Reading the removed row (**404**):
 Not exercised live, from the schema and tests only: a missing or wrong CSRF token or no session (the project's usual 403 and 401, as for every write), a non-numeric id (404 like any
 unknown id, tested in `tests/test_series_remove.py`).
 
-### 10.4b The creator and an empty row
+### 10.4b The creator and an empty row (legacy rows)
 
-A plain member makes a recurring meeting by hand (any member may). While it is completely empty its creator may remove it (captures 79 to 86). Same row, same person, only what is in it changes:
+A plain member can no longer make a team's recurring meeting (section 11), so this applies to **legacy rows**: an empty hand-made row that a plain member made before that change (an empty card shows to its creator only). While it is completely empty its creator may remove it. Capture 79 is the row inserted directly (not an HTTP call); the rest are real calls. Same row, same person, only what is in it changes:
 
-`POST /api/series`  `X-Team-Id: 4` as Pat (a plain member of X) → **201** (`docs/fe-captures/series-follow/79-remove-pat-hand-made-create.json`)
+`docs/fe-captures/series-follow/79-remove-legacy-empty-hand-made-row.json`
 
 ```json
 {
-  "id": 16,
-  "title": "Pat's own recurring",
-  "team": {
-    "id": 4,
-    "name": "Platform team",
-    "is_personal": false
-  },
-  "cadence": "Recurring",
-  "platform": null,
-  "next_starts_at": null,
-  "next_text": null,
-  "unfinished_tasks": 0,
-  "open_questions": 0,
-  "project": null
+  "id": 17,
+  "team_id": 4,
+  "made_by": "a plain member, before the change"
 }
 ```
 
-`GET /api/series/16` as Pat → **200** (`docs/fe-captures/series-follow/80-remove-page-pat-empty-hand-made.json`)
+`GET /api/series/17` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/80-remove-page-pat-empty-hand-made.json`)
 
 ```json
 {
-  "id": 16,
+  "id": 17,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1056,7 +1055,7 @@ A plain member makes a recurring meeting by hand (any member may). While it is c
 
 He adds one agenda line; the row is no longer empty:
 
-`POST /api/series/16/agenda` as Pat → **201** (`docs/fe-captures/series-follow/81-remove-pat-hand-made-add-line.json`)
+`POST /api/series/17/agenda` as Pat → **201** (`docs/fe-captures/series-follow/81-remove-pat-hand-made-add-line.json`)
 
 ```json
 {
@@ -1066,11 +1065,11 @@ He adds one agenda line; the row is no longer empty:
 }
 ```
 
-`GET /api/series/16` as Pat → **200** (`docs/fe-captures/series-follow/82-remove-page-pat-hand-made-with-line.json`)
+`GET /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/82-remove-page-pat-hand-made-with-line.json`)
 
 ```json
 {
-  "id": 16,
+  "id": 17,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1085,7 +1084,7 @@ He adds one agenda line; the row is no longer empty:
 
 **403**, nothing changed:
 
-`DELETE /api/series/16` as Pat → **403** (`docs/fe-captures/series-follow/83-remove-pat-hand-made-with-line-403.json`)
+`DELETE /api/series/17` as Pat → **403** (`docs/fe-captures/series-follow/83-remove-pat-hand-made-with-line-403.json`)
 
 ```json
 {
@@ -1096,17 +1095,17 @@ He adds one agenda line; the row is no longer empty:
 }
 ```
 
-He removes his own line (its author may), the row is empty again, and the removal is allowed (200, `remembered` false: a hand-made row has no calendar event):
+He removes his own line (its author may), the row is empty again, and the removal is allowed. `remembered` is **false**: a hand-made row has no calendar event to remember, and a plain creator's removal never writes the team-wide mark (only an owner's or admin's does):
 
-`DELETE /api/series/16/agenda/2` as Pat → **204** (`docs/fe-captures/series-follow/84-remove-pat-hand-made-remove-line.json`)
+`DELETE /api/series/17/agenda/2` as Pat → **204** (`docs/fe-captures/series-follow/84-remove-pat-hand-made-remove-line.json`)
 
 (no body)
 
-`GET /api/series/16` as Pat → **200** (`docs/fe-captures/series-follow/85-remove-page-pat-hand-made-empty-again.json`)
+`GET /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/85-remove-page-pat-hand-made-empty-again.json`)
 
 ```json
 {
-  "id": 16,
+  "id": 17,
   "title": "Pat's own recurring",
   "team": {
     "id": 4,
@@ -1119,7 +1118,7 @@ He removes his own line (its author may), the row is empty again, and the remova
 }
 ```
 
-`DELETE /api/series/16` as Pat → **200** (`docs/fe-captures/series-follow/86-remove-pat-hand-made-delete.json`)
+`DELETE /api/series/17` as Pat → **200** (`docs/fe-captures/series-follow/86-remove-pat-hand-made-delete.json`)
 
 ```json
 {
@@ -1135,15 +1134,16 @@ What counts as "something in it" is decided on the server, again at the moment o
 
 * **The meeting stays.** Capture 67 is meeting 1, which was in the removed Standup: **200**, `series` is `null`. Do not keep the old `series.id` of a
   meeting; refetch the meeting.
-* **Trap: `suggest_recurring` is `true` on those meetings** (captures 67 and 72: the call's link was used again). The existing "Make this a recurring meeting?" chip
+* **Trap: `suggest_recurring` is `true` on those meetings** (capture 67: the call's link was used again; it is `false` when the caller may not group the meeting, section 11). The existing "Make this a recurring meeting?" chip
   therefore still shows on a meeting that was just ungrouped. Pressing it makes a **new, hand-made** recurring meeting (`POST /api/meetings/{id}/recurring`), which is
   allowed: removal only stops the calendar from grouping it. The chip is not changed by this feature (a follow-up: hide it for a removed event).
 * **The list.** The removed card is gone from that team's list (capture 68); the sibling rows are still there: Ada's Personal Standup (capture 69), Pat's X and
   Y rows of Design sync after he removed his Personal one (captures 62, 63).
 * **The calendar does not bring it back.** The real hourly sync (`series.sync_from_joins`) makes 0 rows after the removals (capture 70, not an HTTP call, run
   in the capture process). A later calendar meeting of that event is not grouped in the removed scope.
-* **A later share does not regroup it.** Ada shared meeting 2 (her private Standup) to X, where Standup was removed: the share worked and the meeting is in
-  **no** recurring meeting (capture 72: `series` is `null`), and X's list has no Standup (capture 73).
+* **An owner's or admin's explicit share makes the card again.** Ada, the owner of X, shared meeting 2 (her private Standup) to X, where Standup had been removed
+  (capture 71): the meeting is now in a **new** Standup row of X with a new id (capture 72: `series` `{id: 15, title: "Standup"}`), X's list shows Standup again (capture 73),
+  and the "removed" mark for X is cleared. A plain member's share would make no card (section 11), and the automatic link after a recording still respects the mark.
 
 **What the frontend does** (`web/components/app/series-remove.tsx`, `recurring-cards.tsx`): a red text button "Remove this recurring meeting" at the foot of the
 Series page, only when `can_remove`. Pressing it opens the inline question (same box and buttons as "Delete meeting"): *Remove this recurring meeting? This removes it for everyone in {team}. The past meetings stay. They will not be grouped any more. No meeting is deleted. You can't undo this.* (on a Personal row: *Your past meetings stay. They will not be grouped any more. No meeting is deleted. You can't undo this.*) with one line each for the past meetings, the waiting agenda items (the number from
@@ -1162,9 +1162,9 @@ as success; any other error shows the server's message and stays.
   an empty card is shown only to the person who made it, who may now remove it. A plain member's row with a waiting line, a meeting, a linked project or a mail still to go in it is not empty: they get 403 there, and the
   page's `can_remove` says so.
 
-### 10.7 A connected calendar still makes its recurring rows
+### 10.7 A connected calendar still makes its recurring cards, in the person's Personal space
 
-Removal changes nothing about how recurring meetings from a calendar appear. The hourly sync (`series.sync_from_joins`) makes a card for each recurring event that the scheduler will join (a join is scheduled for it, so within the hour of the calendar sync, not the instant the calendar is connected), and a recording's notes link the meeting to its event's row. The only thing removal adds is a check that skips an event somebody **removed** for that team or Personal space. Real run, for an event that was never removed (capture 87 is the real sync run in the capture process, not an HTTP call; capture 88 is the list):
+Removal changes nothing about how a connected calendar produces recurring cards, except that they are now made in the person's **Personal space**, never in a team (section 11). The hourly sync (`series.sync_from_joins`) makes a card for each recurring event that the scheduler will join (a join is scheduled for it, so within the hour of the calendar sync, not the instant the calendar is connected), and a recording's notes link the meeting to its event's card. The only thing removal adds is a check that skips an event somebody **removed** for that scope. Real run, for an event that was never removed (capture 87 is the real sync run in the capture process, not an HTTP call; 88 and 89 are the lists):
 
 `docs/fe-captures/series-follow/87-remove-calendar-recurring-still-makes-a-card.json`
 
@@ -1175,23 +1175,261 @@ Removal changes nothing about how recurring meetings from a calendar appear. The
 }
 ```
 
-Ada's X list then holds the new card (capture 88, only the new card shown):
+Ada's **Personal** list holds the new card (capture 88, only the new card shown); her team X list does not (capture 89, `Weekly planning` is not there although X is her default team):
 
 ```json
 {
-  "id": 17,
+  "id": 18,
   "title": "Weekly planning",
   "team": {
-    "id": 4,
-    "name": "Platform team",
-    "is_personal": false
+    "id": 1,
+    "name": "My team",
+    "is_personal": true
   },
   "cadence": "Recurring",
   "platform": "google_meet",
-  "next_starts_at": "2026-11-17T22:00:00Z",
-  "next_text": "Tue 17 Nov, 22:00",
+  "next_starts_at": null,
+  "next_text": null,
   "unfinished_tasks": 0,
   "open_questions": 0,
   "project": null
 }
 ```
+
+## 11. The simpler model: where a recurring card lives and who makes a team card
+
+Adebayo, 2026-11-15/16: "I just don't want us to complicate things". It applies while `SERIES_FOLLOW_MEETINGS` is on (as in production). With it off every rule below is as before (not exercised live; `tests/test_series_personal_model.py`). Branch `feature/series-personal-calendar-owner-admin-teams`, SOP `docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`. Captures 90 to 106. **Sections 1 to 9 describe the model before this change; where they say a card is made in a person's default team, or that a share makes the team's row, this section replaces them.**
+
+### 11.1 The rules, in the person's terms
+
+| What | Rule |
+|---|---|
+| A recurring card from a person's **own calendar** | always in their **Personal space**, never in a team, even when a team is their default (captures 88 and 89). Nothing overrides it |
+| A **team's** recurring card | made only by an **owner or admin** of the team: when they share or move a meeting of a recurring calendar event to it (or, when their recording is auto-shared, by the automatic link), or by hand (`POST /api/series`, `PUT /api/meetings/{id}/series`, `POST /api/meetings/{id}/recurring`) |
+| A plain member **shares** a meeting | the share works as ever (`shared_with_team` true) and makes **no card** (`series` null, captures 91 to 93). If the team already has the card, the meeting **joins it** |
+| A plain member makes or adds **by hand** to a team's card | **403** `team_forbidden` (captures 97 and 99). In their own Personal space they may (capture 98) |
+| An owner or admin makes the team's card | the meetings of the same recurring event that the team **already has** (shared to it or moved to it) and that no card holds yet **join it** (capture 96: both meetings). Only meetings whose calendar event row still exists can be found (about two days after the event) |
+| An owner's or admin's **share or move** after the card was removed | makes the card again and **clears the "removed" mark** for that team (section 10.5). The automatic link after a recording respects the mark |
+| Taking a meeting **out** of a recurring meeting | unchanged: its owner may |
+
+### 11.2 A plain member shares: no card (captures 90 to 93)
+
+Pat, a plain member of X, recorded a private meeting of a recurring event; the link put it in a card in his Personal space (capture 90). He shares it to X:
+
+`POST /api/meetings/7/share` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/91-model-pat-shares-no-card.json`)
+
+```json
+{
+  "id": 7,
+  "title": "Design review",
+  "shared_with_team": true,
+  "team": {
+    "id": 4,
+    "name": "Platform team"
+  },
+  "series": null,
+  "...": "trimmed: the rest is the meeting object of docs/fe-integration-guide-share.md"
+}
+```
+
+The meeting page: shared, and in **no** recurring meeting:
+
+`GET /api/meetings/7` as Pat → **200** (`docs/fe-captures/series-follow/92-model-pat-shared-meeting.json`)
+
+```json
+{
+  "id": 7,
+  "title": "Design review",
+  "shared_with_team": true,
+  "team": {
+    "id": 4,
+    "name": "Platform team"
+  },
+  "series": null,
+  "suggest_recurring": false,
+  "can_make_recurring": false,
+  "...": "trimmed: the rest is the meeting object"
+}
+```
+
+X's list has no card for it (capture 93: `Design review` is not in it).
+
+### 11.3 An owner shares: the card is made, and takes in the meetings the team already has (captures 94 to 96)
+
+`POST /api/meetings/8/share` as Ada (owner of X) → **200** (`docs/fe-captures/series-follow/94-model-ada-shares-makes-card.json`)
+
+```json
+{
+  "id": 8,
+  "title": "Design review",
+  "shared_with_team": true,
+  "team": {
+    "id": 4,
+    "name": "Platform team"
+  },
+  "series": {
+    "id": 21,
+    "title": "Design review"
+  },
+  "...": "trimmed: the rest is the meeting object"
+}
+```
+
+(capture 95 is X's list, now with `Design review`.) The new card's page lists **both** meetings, Ada's and Pat's earlier one that was waiting without a card:
+
+`GET /api/series/21` as Ada → **200** (`docs/fe-captures/series-follow/96-model-x-card-page.json`)
+
+```json
+{
+  "id": 21,
+  "title": "Design review",
+  "team": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false
+  },
+  "can_remove": true,
+  "...": "trimmed: the rest of the page is section 5"
+}
+```
+
+`past_meetings` in capture 96 holds meetings 8 and 7 (Ada's and Pat's).
+
+### 11.4 By hand (captures 97 to 101)
+
+A plain member cannot make a team's card; in their own Personal space they can:
+
+`POST /api/series`  `X-Team-Id: 4` as Pat → **403** (`docs/fe-captures/series-follow/97-model-pat-creates-team-card-403.json`)
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+`POST /api/series`  `X-Team-Id: 2` as Pat → **201** (`docs/fe-captures/series-follow/98-model-pat-creates-personal-card.json`)
+
+```json
+{
+  "id": 22,
+  "title": "Pat's weekly",
+  "team": {
+    "id": 2,
+    "name": "My team",
+    "is_personal": true
+  },
+  "cadence": "Recurring",
+  "platform": null,
+  "next_starts_at": null,
+  "next_text": null,
+  "unfinished_tasks": 0,
+  "open_questions": 0,
+  "project": null
+}
+```
+
+Nor add a meeting to a team's card by hand (his shared meeting 'Retro', not in a card):
+
+`PUT /api/meetings/9/series` as Pat → **403** (`docs/fe-captures/series-follow/99-model-pat-attach-403.json`)
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+**The meeting page tells the frontend whether to draw the two controls** (new field `can_make_recurring` on the meeting, next to `suggest_recurring`). For a plain member's shared meeting both are `false`: draw neither "Add to recurring meeting" nor "Make this a recurring meeting?" (capture 100). A meeting already in a recurring meeting still shows its link, without "Change". For the owner of X (capture 101) `can_make_recurring` is `true`. A private meeting is always `true` for its recorder (it goes to their Personal card).
+
+`GET /api/meetings/9` as Pat → **200** (`docs/fe-captures/series-follow/100-model-pat-meeting-page-flags.json`)
+
+```json
+{
+  "id": 9,
+  "title": "Retro",
+  "shared_with_team": true,
+  "series": null,
+  "suggest_recurring": false,
+  "can_make_recurring": false,
+  "...": "trimmed: the rest is the meeting object"
+}
+```
+
+`GET /api/meetings/8` as Ada → **200** (`docs/fe-captures/series-follow/101-model-ada-meeting-page-flags.json`)
+
+```json
+{
+  "id": 8,
+  "title": "Design review",
+  "shared_with_team": true,
+  "series": {
+    "id": 21,
+    "title": "Design review"
+  },
+  "suggest_recurring": false,
+  "can_make_recurring": true,
+  "...": "trimmed: the rest is the meeting object"
+}
+```
+
+**What a plain member sees instead:** nothing. There is no disabled button and no message: the "Series" row shows only the link to the team's recurring meeting when the meeting is in one, and is absent otherwise. (Not exercised live in a browser; the controls' presence is tested against these bodies in `web/tests/series-lead-designed.test.tsx`.)
+
+### 11.5 The cleanup of the empty cards the old sync made in a team (captures 102 to 106)
+
+The old sync made an empty placeholder in the person's default team for each recurring event they would record. `scripts/remove_empty_team_cards.py` removes the **empty, calendar-made** cards of ordinary teams, **without writing any "removed" mark**, so the next sync makes the person's Personal card. A card with a meeting, a waiting agenda line, a linked project or a mail still to go stays; so do hand-made cards and every Personal card. Real output (capture 102 is the list before, two placeholders in it):
+
+`docs/fe-captures/series-follow/103-model-cleanup-1-dry-run.json`
+
+```text
+DRY RUN: nothing was changed. Run again with --apply to do it.
+Calendar-made recurring cards of teams looked at: 6
+Empty ones removed: 2
+Kept, because something is in them: 4
+...a meeting is grouped under it: 4
+...an agenda line is waiting: 0
+...a project is linked: 0
+...a mail about it is still to be sent: 0
+```
+
+`docs/fe-captures/series-follow/104-model-cleanup-2-apply.json`
+
+```text
+APPLIED: the database was changed.
+Calendar-made recurring cards of teams looked at: 6
+Empty ones removed: 2
+Kept, because something is in them: 4
+...a meeting is grouped under it: 4
+...an agenda line is waiting: 0
+...a project is linked: 0
+...a mail about it is still to be sent: 0
+```
+
+`docs/fe-captures/series-follow/105-model-cleanup-3-dry-run-again.json`
+
+```text
+DRY RUN: nothing was changed. Run again with --apply to do it.
+Calendar-made recurring cards of teams looked at: 4
+Empty ones removed: 0
+Kept, because something is in them: 4
+...a meeting is grouped under it: 4
+...an agenda line is waiting: 0
+...a project is linked: 0
+...a mail about it is still to be sent: 0
+```
+
+Capture 106 is X's list after: the placeholders are gone and the cards that hold meetings stay.
+
+### 11.6 Reminders (not exercised live: tests only)
+
+The mail is unchanged. A calendar-linked **Personal** card with one recorded meeting queues the 1-hour and 30-minute reminders (`tests/test_series_personal_model.py`, fake clock) **when the Personal team's `reminders_on` is on** (it is off by default; Settings turns it on for the team shown). It needs: a card made from a calendar event (a hand-made card has no next occurrence and never reminds), at least one recorded meeting or a waiting agenda line in the card, the event on the person's own calendar inside the window (55 minutes before for the 1-hour mail, 20 minutes for the 30-minute one), and the person not having switched reminder mail off. A placeholder card with no recorded meeting sends nothing.
+
+### 11.7 UX consequences the frontend must surface
+
+* A recurring meeting from the person's own calendar appears in **Personal**, not in the team's Meetings page. Do not tell a person it will appear in their team.
+* A plain member who shares a recurring meeting sees it shared but not grouped, until an owner or admin makes the team's card. Do not show an error.
+* Do not offer "Add to recurring meeting" or "Make this a recurring meeting?" when `can_make_recurring` is `false`.

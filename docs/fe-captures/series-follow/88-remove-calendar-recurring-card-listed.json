@@ -1,11 +1,11 @@
 {
-  "note": "Ada's X list now has the new empty card for the event: `Weekly planning`, with the next meeting. It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
+  "note": "Ada's PERSONAL list now has the new empty card for the event: `Weekly planning`. A card from a person's own calendar is always in their Personal space (it is not in team X). It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
   "as": "Ada",
   "request": {
     "method": "GET",
     "path": "/api/series",
     "headers": {
-      "X-Team-Id": "4",
+      "X-Team-Id": "1",
       "Cookie": "session=<cookie>"
     },
     "body": null
@@ -16,35 +16,35 @@
       "timezone": "UTC",
       "series": [
         {
-          "id": 17,
-          "title": "Weekly planning",
+          "id": 12,
+          "title": "1:1",
           "team": {
-            "id": 4,
-            "name": "Platform team",
-            "is_personal": false
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
           },
-          "cadence": "Recurring",
+          "cadence": "Weekly on Mondays, 08:00",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-17T22:00:00Z",
-          "next_text": "Tue 17 Nov, 22:00",
-          "unfinished_tasks": 0,
-          "open_questions": 0,
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
           "project": null
         },
         {
-          "id": 13,
-          "title": "Design sync",
+          "id": 18,
+          "title": "Weekly planning",
           "team": {
-            "id": 4,
-            "name": "Platform team",
-            "is_personal": false
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
           },
-          "cadence": "Weekly on Sundays, 20:00",
+          "cadence": "Recurring",
           "platform": "google_meet",
-          "next_starts_at": "2026-11-22T20:00:00Z",
-          "next_text": "Sun 22 Nov, 20:00",
-          "unfinished_tasks": 1,
-          "open_questions": 1,
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 0,
+          "open_questions": 0,
           "project": null
         }
       ]

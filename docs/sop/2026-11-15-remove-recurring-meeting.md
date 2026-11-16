@@ -7,6 +7,8 @@ no such control. It reuses the Meeting page's "Delete meeting" pieces (the red t
 button); the one new style is the list inside that box (`.sr-remove-list`, `web/styles/pages.css`). It also **answers the open "ghost empty card"
 decision**: an emptied row is not deleted by the server on its own; the person removes it with this action.
 
+> **Superseded in part (2026-11-16, `docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`):** calendar cards now live in the person's Personal space; only an owner or admin makes a team's card; a plain creator's removal of an empty legacy row writes no team-wide mark.
+
 ## Why
 
 Before this there was no way to delete a recurring meeting. A row that lost its last meeting stayed as an empty card, and a recurring

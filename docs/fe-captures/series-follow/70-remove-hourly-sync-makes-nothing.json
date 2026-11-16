@@ -1,5 +1,5 @@
 {
-  "note": "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: X's Standup, X's 1:1 and Pat's personal Design sync are remembered as removed. `rows` is every recurring row left.",
+  "note": "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: every recurring event on Ada's and Pat's calendars already has its card, or its personal card was removed (Pat's Design sync). `rows` is every recurring row left.",
   "content": {
     "rows_made": 0,
     "rows": [

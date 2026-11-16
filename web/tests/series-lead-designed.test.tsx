@@ -35,7 +35,8 @@ vi.mock("@/lib/api/browser", () => ({
 }));
 
 const base = captured<Meeting>("47-meeting-detail-ready.json");
-const lone: Meeting = { ...base, series: null, suggest_recurring: false, open_questions: [], can_share: true };
+// The capture predates `can_make_recurring` (owner or admin of the meeting's team, or a private meeting): true here.
+const lone: Meeting = { ...base, series: null, suggest_recurring: false, open_questions: [], can_share: true, can_make_recurring: true };
 const team = { id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true } as Team;
 
 beforeEach(() => {
@@ -114,6 +115,23 @@ describe("Add to recurring meeting (lead-designed)", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Add" }));
     expect(await within(dialog).findByText("boom")).toBeTruthy();
     expect(HTMLDialogElement.prototype.close).not.toHaveBeenCalled();
+  });
+});
+
+describe("a plain member of the meeting's team (the simpler recurring model)", () => {
+  const plain = { ...lone, suggest_recurring: false, can_make_recurring: false };
+
+  it("sees neither Add to recurring meeting nor Make this a recurring meeting?", async () => {
+    render(<MeetingView initial={{ ...plain, suggest_recurring: true }} templates={[]} />);
+    expect(screen.queryByRole("button", { name: "Add to recurring meeting" })).toBeNull();
+    expect(screen.queryByText("Make this a recurring meeting?")).toBeNull();
+  });
+
+  it("still sees the link to the team's recurring meeting the meeting is in, and no Change", () => {
+    const inOne = { ...plain, series: { id: 1, title: "Beyric Monday planning" } };
+    render(<MeetingView initial={inOne} templates={[]} />);
+    expect(screen.getByRole("link", { name: "Beyric Monday planning" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
   });
 });
 

@@ -1,0 +1,37 @@
+{
+  "note": "Pat recorded a private meeting of a recurring event ('Design review'). The real link put it in a card in his PERSONAL space.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 19,
+          "title": "Design review",
+          "team": {
+            "id": 2,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Recurring",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 0,
+          "open_questions": 0,
+          "project": null
+        }
+      ]
+    }
+  }
+}

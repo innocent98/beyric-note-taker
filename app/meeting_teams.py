@@ -43,10 +43,14 @@ def _lock(session: Session, meeting: Meeting) -> None:
     session.refresh(meeting, with_for_update=True)
 
 
-def _touched(session: Session, meeting: Meeting) -> None:
+def _touched(session: Session, meeting: Meeting, actor: User | None = None) -> None:
+    """After a change of team. `actor` is who shared or moved it (an explicit act: only an owner or
+    admin of the team makes its recurring card then, and clears a removed scope's mark); None for
+    unshare and move back, which go to the recorder's personal card."""
     teams.rehome_tasks(session, meeting)
     before = meeting.series_id
-    series_rules.follow_meeting(session, meeting)  # flag on: into the row of its new scope
+    # flag on: into the row of its new scope
+    series_rules.follow_meeting(session, meeting, actor=actor, explicit=actor is not None)
     if before is not None:
         series_rules.mark_topics_stale(session, before)  # the repeat topics may change
 
@@ -88,7 +92,7 @@ def share(session: Session, user: User, meeting: Meeting, team_id: int | None) -
     else:
         team = _member_team(session, user, team_id)
     meeting.shared_team_id = team.id
-    _touched(session, meeting)
+    _touched(session, meeting, user)
 
 
 def unshare(session: Session, meeting: Meeting) -> None:
@@ -128,7 +132,7 @@ def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:
             409, "meeting_not_ready", "Wait until the notes are ready, then move the meeting."
         )
     meeting.owner_team_id, meeting.shared_team_id = team.id, None
-    _touched(session, meeting)
+    _touched(session, meeting, user)
 
 
 def move_back(session: Session, user: User, meeting: Meeting) -> None:

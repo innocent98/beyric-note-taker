@@ -1,0 +1,8 @@
+{
+  "note": "NOT AN HTTP CALL. A completely empty hand-made recurring meeting in X, made by Pat (a plain member) BEFORE only owners and admins could make a team's card: inserted directly, as the rows made then are. Pat sees it (an empty card shows to its creator) and may remove it while it is empty.",
+  "content": {
+    "id": 17,
+    "team_id": 4,
+    "made_by": "a plain member, before the change"
+  }
+}

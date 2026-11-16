@@ -23,7 +23,7 @@
             "name": "My team",
             "is_personal": true
           },
-          "cadence": "Weekly on Sundays, 18:00",
+          "cadence": "Weekly on Mondays, 08:00",
           "platform": "google_meet",
           "next_starts_at": null,
           "next_text": null,
@@ -39,7 +39,7 @@
             "name": "My team",
             "is_personal": true
           },
-          "cadence": "Weekly on Sundays, 18:00",
+          "cadence": "Weekly on Mondays, 08:00",
           "platform": "google_meet",
           "next_starts_at": null,
           "next_text": null,

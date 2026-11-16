@@ -943,8 +943,10 @@ export interface paths {
         /**
          * Put Meeting Series
          * @description Put the caller's own meeting into one of their team's recurring meetings, or take it out
-         *     (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda
-         *     lines typed before the meeting began are taken by it.
+         *     (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. With
+         *     `SERIES_FOLLOW_MEETINGS` on, putting it into a TEAM's recurring meeting is an owner's or admin's
+         *     to do (403 `team_forbidden`); its owner may always take it out, or put a private meeting into
+         *     their own personal one. Agenda lines typed before the meeting began are taken by it.
          */
         put: operations["put_meeting_series"];
         post?: never;
@@ -1553,8 +1555,10 @@ export interface paths {
         /**
          * Create Series
          * @description Make a recurring meeting by hand (a meeting is then attached with
-         *     `PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header
-         *     names it (404 for a team the caller is not in), else the default team. 409 `series_limit`.
+         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller
+         *     is not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes
+         *     a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409
+         *     `series_limit`.
          */
         post: operations["create_series"];
         delete?: never;
@@ -3246,6 +3250,11 @@ export interface components {
             can_delete: boolean;
             /** Can End */
             can_end: boolean;
+            /**
+             * Can Make Recurring
+             * @default false
+             */
+            can_make_recurring: boolean;
             /**
              * Can Move
              * @default false
