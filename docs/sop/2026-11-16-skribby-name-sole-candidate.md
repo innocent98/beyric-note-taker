@@ -3,7 +3,7 @@
 **What shipped.** `app/skribby.py::_resolve_tags` now also names a diarization tag that has no `speaker_name`
 when every segment of the tag lists the same single name in `potential_speaker_names` and nothing else (a
 **sole candidate**). The tag is recorded as `how: sole_candidate`. PR: branch `fix/skribby-name-sole-candidate`
-(number on the checklist). **No migration.** Plus the plain-words server steps to flip to one transcript
+(#208). **No migration.** Plus the plain-words server steps to flip to one transcript
 (`TRANSCRIPT_SOURCE=skribby`) once this is deployed, with the stale restart wording in older SOPs fixed.
 
 ## Why
