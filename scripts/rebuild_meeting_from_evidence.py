@@ -55,7 +55,7 @@ from sqlalchemy import func, or_, select, text  # noqa: E402
 from sqlalchemy.exc import OperationalError  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import ai_runs, pipeline, skribby, transcript_source, workspace  # noqa: E402
+from app import ai_runs, bot_names, pipeline, skribby, transcript_source, workspace  # noqa: E402
 from app import tasks as task_rules  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
@@ -69,6 +69,7 @@ from app.models import (  # noqa: E402
     SkribbySegmentEvidence,
     Task,
     Template,
+    TrackerIssue,
 )
 from app.notes import UNKNOWN_SPEAKER, NotesFailed, generate_notes  # noqa: E402
 
@@ -188,7 +189,10 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     ):
         raise Refused(f"the saved evidence for meeting {meeting_id} is unreadable.")
     by_elimination = get_settings().skribby_name_by_elimination
-    own_names = (meeting.bot_name,) if meeting.bot_name else ()
+    # Every name the note taker goes by, as the live path excludes them: the meeting's stored name
+    # (null = the server default) and the signed-in account's own name. Not the name Skribby
+    # reports in its body: the evidence does not keep that one.
+    own_names = bot_names.own_names(get_settings(), meeting.bot_name)
     body = _body(items)
     segments = skribby._segments(body, own_names, by_elimination)
     found = transcript_source.candidate(segments, skribby._last_segment_end(body))
@@ -223,14 +227,25 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
 
 def touched(session: Session, meeting_id: int) -> dict[str, set[str]]:
     """The fingerprints of what a person has done something to, by kind: a decision hidden, edited
-    or given another status; an open question resolved or taken off the next agenda; a review item
-    checked; an AI task they edited, moved, ticked or deleted (`tasks.touched`)."""
+    or given another status, or one that another decision is "replaced by"; an open question
+    resolved or taken off the next agenda; a review item checked; an AI task they edited, moved,
+    ticked or deleted (`tasks.touched`), or that was already pushed to Linear (its `tracker_issues`
+    row goes with the task, and the replacement would never be pushed)."""
     found: dict[str, set[str]] = {kind: set() for kind in KINDS}
-    for row in session.scalars(select(Decision).where(Decision.meeting_id == meeting_id)):
+    decisions = list(session.scalars(select(Decision).where(Decision.meeting_id == meeting_id)))
+    pointed_at = set(
+        session.scalars(
+            select(Decision.replaced_by_id).where(
+                Decision.replaced_by_id.in_([row.id for row in decisions])
+            )
+        )
+    )  # decisions, of any meeting, that say "replaced by" one of this meeting's
+    for row in decisions:
         if (
             row.edited_at is not None
             or row.hidden_at is not None
             or row.status not in ("approved", "proposed")
+            or row.id in pointed_at
         ):
             found["decisions"].add(row.fingerprint)
     for row in session.scalars(select(OpenQuestion).where(OpenQuestion.meeting_id == meeting_id)):
@@ -242,24 +257,71 @@ def touched(session: Session, meeting_id: int) -> dict[str, set[str]]:
     for task in session.scalars(
         select(Task).where(Task.meeting_id == meeting_id, Task.source == "ai")
     ):
-        if task.ai_fingerprint and (task_rules.touched(task) or task.deleted_at is not None):
+        if task.ai_fingerprint and (
+            task_rules.touched(task)
+            or task.deleted_at is not None
+            or session.scalar(select(TrackerIssue.id).where(TrackerIssue.task_id == task.id))
+            is not None
+        ):
             found["tasks"].add(task.ai_fingerprint)
     return found
+
+
+def existing(session: Session, meeting_id: int) -> dict[str, set[str]]:
+    """The fingerprints of every list item the meeting has now (tasks: the AI ones not deleted)."""
+    return {
+        "decisions": set(
+            session.scalars(select(Decision.fingerprint).where(Decision.meeting_id == meeting_id))
+        ),
+        "open questions": set(
+            session.scalars(
+                select(OpenQuestion.fingerprint).where(OpenQuestion.meeting_id == meeting_id)
+            )
+        ),
+        "review items": set(
+            session.scalars(
+                select(ReviewItem.fingerprint).where(ReviewItem.meeting_id == meeting_id)
+            )
+        ),
+        "tasks": set(
+            session.scalars(
+                select(Task.ai_fingerprint).where(
+                    Task.meeting_id == meeting_id,
+                    Task.source == "ai",
+                    Task.deleted_at.is_(None),
+                    Task.ai_fingerprint.is_not(None),
+                )
+            )
+        ),
+    }
+
+
+def _wanted(parsed: ParsedNotes) -> dict[str, set[str]]:
+    bullets = {
+        "decisions": parsed.decisions,
+        "open questions": parsed.open_questions,
+        "review items": parsed.please_check,
+        "tasks": parsed.action_items,
+    }
+    return {kind: {fingerprint(bullet) for bullet in bullets[kind]} for kind in KINDS}
 
 
 def would_lose(found: dict[str, set[str]], parsed: ParsedNotes) -> dict[str, int]:
     """How many touched items of each kind the notes `parsed` would drop: their wording is not
     there, so the next read removes the row (or, for a task, makes a second one beside the kept
     one)."""
-    wanted = {
-        "decisions": parsed.decisions,
-        "open questions": parsed.open_questions,
-        "review items": parsed.please_check,
-        "tasks": parsed.action_items,
-    }
-    return {
-        kind: len(found[kind] - {fingerprint(bullet) for bullet in wanted[kind]}) for kind in KINDS
-    }
+    wanted = _wanted(parsed)
+    return {kind: len(found[kind] - wanted[kind]) for kind in KINDS}
+
+
+def would_replace(
+    have: dict[str, set[str]], found: dict[str, set[str]], parsed: ParsedNotes
+) -> dict[str, int]:
+    """How many UNTOUCHED items of each kind the notes `parsed` give a new row: their wording is
+    gone, so the worker deletes the row and makes another (a new id: links in earlier mails and
+    Slack posts to the old one stop working)."""
+    wanted = _wanted(parsed)
+    return {kind: len((have[kind] - found[kind]) - wanted[kind]) for kind in KINDS}
 
 
 def _count_line(counts: dict[str, int]) -> str:
@@ -283,6 +345,51 @@ def _rewrites(session: Session, meeting_id: int) -> int:
         )
         or 0
     )
+
+
+def _rewritten_since(session: Session, meeting_id: int, since: datetime) -> int:
+    """How many times the app wrote the notes of this meeting successfully after `since` (the
+    owner's rewrite with a template). A writing by this script does not count."""
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(AiRun)
+            .where(
+                AiRun.meeting_id == meeting_id,
+                AiRun.kind == "notes",
+                AiRun.status == "ok",
+                AiRun.created_at > since,
+                or_(AiRun.prompt_version.is_(None), ~AiRun.prompt_version.like(f"%{LEDGER_MARK}")),
+            )
+        )
+        or 0
+    )
+
+
+def _check_restorable(session: Session, meeting: Meeting, data: dict, force: bool) -> None:
+    """Stops a restore that would overwrite newer work: the transcript is not the rebuilt one any
+    more, or the owner rewrote the notes after the backup was taken (a rewrite leaves
+    `transcript_source` as it was, and puts a new template on the meeting)."""
+    if force:
+        return
+    if meeting.transcript_source != REBUILT:
+        raise Refused(
+            f"meeting {meeting.id} has changed since it was rebuilt (its transcript is not the "
+            "rebuilt one any more), so putting the old text back would overwrite newer work. "
+            "Run it again with --force if that is what is wanted."
+        )
+    try:
+        saved = datetime.fromisoformat(str(data.get("saved_at")))
+    except ValueError:
+        raise Refused("the backup file has no readable time, so it cannot be checked.") from None
+    if saved.tzinfo is None:
+        saved = saved.replace(tzinfo=UTC)
+    if _rewritten_since(session, meeting.id, saved):
+        raise Refused(
+            f"the owner rewrote the notes of meeting {meeting.id} after this backup was taken, so "
+            "putting the old notes back would overwrite that rewrite. Run it again with --force "
+            "if that is what is wanted."
+        )
 
 
 # ---- the dry run ----
@@ -327,11 +434,20 @@ def describe(session: Session, plan: Plan) -> list[str]:
         f"speakers incomplete: before {'yes' if meeting.speakers_incomplete else 'no'}, "
         f"after {'no' if found.complete else 'yes'}",
     ]
-    have = touched(session, meeting.id)
-    lines.append("touched by a person: " + _count_line({kind: len(have[kind]) for kind in KINDS}))
+    found_touched = touched(session, meeting.id)
+    lines.append(
+        "touched by a person: " + _count_line({kind: len(found_touched[kind]) for kind in KINDS})
+    )
     lines.append(
         "  If the rewritten notes drop the wording of any of these, --apply stops and says so "
         "(use --force to go on and give them up)."
+    )
+    have = existing(session, meeting.id)
+    untouched = sum(len(have[kind] - found_touched[kind]) for kind in KINDS)
+    lines.append(
+        f"untouched items now: {untouched}. A rewritten set of notes is worded differently, so "
+        "most of them get a NEW row (a new id): a link in an earlier mail or Slack post to one "
+        "stops working. --apply prints the exact number."
     )
     rewrites = _rewrites(session, meeting.id)
     if rewrites > 1:
@@ -356,12 +472,14 @@ def _lock(session: Session, meeting_id: int) -> Meeting:
     a plain refusal."""
     try:
         session.execute(text(f"set local lock_timeout = '{LOCK_WAIT}'"))
-        return session.scalars(
+        meeting = session.scalars(
             select(Meeting)
             .where(Meeting.id == meeting_id)
-            .with_for_update()
+            .with_for_update(key_share=True)  # FOR NO KEY UPDATE: a child insert still goes through
             .execution_options(populate_existing=True)
         ).one()
+        session.execute(text("set local lock_timeout = 0"))  # the wait limit was for this lock only
+        return meeting
     except OperationalError:
         session.rollback()
         raise Refused(
@@ -397,6 +515,11 @@ def save_backup(meeting: Meeting, folder: Path, now: datetime) -> Path:
             os.fsync(handle.fileno())
         if json.loads(path.read_text(encoding="utf-8")) != data:
             raise OSError("the file read back differently")
+        dir_fd = os.open(folder, os.O_RDONLY)  # the file's name must survive a crash too
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     except (OSError, ValueError) as exc:
         raise Refused(
             f"the backup could not be saved ({type(exc).__name__}), so nothing was changed."
@@ -461,7 +584,10 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
             "the notes could not be written, so nothing was changed. The old notes were kept.",
             kept,
         ) from None
-    losing = would_lose(touched(session, meeting_id), parse_notes(new_notes))
+    found_touched = touched(session, meeting_id)
+    parsed_new = parse_notes(new_notes)
+    losing = would_lose(found_touched, parsed_new)
+    replaced = would_replace(existing(session, meeting_id), found_touched, parsed_new)
     if sum(losing.values()) and not force:
         session.rollback()
         raise Refused(
@@ -491,6 +617,11 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
     out(f"APPLIED to meeting {meeting_id}: transcript, speaker transcript and notes rebuilt.")
     if sum(losing.values()):
         out(f"  --force gave up touched items the new notes do not contain: {_count_line(losing)}.")
+    out(
+        f"  Untouched items that get a NEW row because their wording changed: "
+        f"{_count_line(replaced)}. A link in an earlier mail or Slack post to one of them stops "
+        "working."
+    )
     out(f"  Backup of the old text (PRIVATE, holds what people said; never post it): {path}")
     out(
         "  To put the old text back: python scripts/rebuild_meeting_from_evidence.py "
@@ -525,12 +656,7 @@ def restore(path: Path, *, apply: bool, force: bool, out=print) -> int:
         if meeting is None:
             raise Refused(f"there is no meeting {meeting_id} any more.")
         _check_state(meeting)
-        if meeting.transcript_source != REBUILT and not force:
-            raise Refused(
-                f"meeting {meeting_id} has changed since it was rebuilt (its transcript is not "
-                "the rebuilt one any more), so putting the old text back would overwrite newer "
-                "work. Run it again with --force if that is what is wanted."
-            )
+        _check_restorable(session, meeting, data, force)
         losing = would_lose(touched(session, meeting_id), parse_notes(data["notes"] or ""))
         out(
             f"Restore meeting {meeting_id} from the backup saved {data.get('saved_at', '?')}: "
@@ -550,6 +676,7 @@ def restore(path: Path, *, apply: bool, force: bool, out=print) -> int:
             return 0
         meeting = _lock(session, meeting_id)
         _check_state(meeting)
+        _check_restorable(session, meeting, data, force)  # again, now that the row is held
         meeting.transcript = data["transcript"]
         meeting.speaker_transcript = data["speaker_transcript"]
         meeting.speakers_incomplete = bool(data.get("speakers_incomplete"))

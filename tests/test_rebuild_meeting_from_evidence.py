@@ -26,6 +26,7 @@ from app.models import (
     Task,
     Team,
     Template,
+    TrackerIssue,
     UsageEntry,
     VocabularyTerm,
 )
@@ -849,3 +850,166 @@ def test_the_notes_call_that_failed_in_the_ledger_does_not_count_as_a_rewrite(
     session.commit()
     code, _, _ = apply(session, meeting, backups, capsys)
     assert code == 0
+
+
+# ---- review of PR 209: the bot's own names, restore after a rewrite, what counts as touched ----
+
+
+@pytest.mark.parametrize(
+    "who", ["account", "default"], ids=["the signed-in account's name", "the default bot name"]
+)
+def test_a_tag_is_never_named_after_the_note_taker_itself(
+    session, owner, template, backups, capsys, settings, who
+):
+    # the meeting has no stored bot name of its own (null = the server default); the live path
+    # still never names a speaker after the default name or the signed-in account's name
+    settings.skribby_account_name = "Beyric Account"
+    name = "Beyric Account" if who == "account" else settings.skribby_bot_name
+    row = make_meeting(session, owner, template, bot_name=None)
+    items = three_voices()
+    for entry in items:
+        if entry["speaker"] == "2":
+            entry["potential_speaker_names"] = [name]
+    keep_evidence(session, row, items)
+    code, _, out = go([str(row.id), "--apply"], backups, capsys=capsys)
+    assert code == 0
+    assert "NOT named" in out.split("speakers named")[0]
+    labelled = stored(session, row).speaker_transcript
+    assert f"[{name}]" not in labelled and "[Unknown speaker]:" in labelled
+
+
+def test_a_stored_bot_name_is_still_excluded(session, owner, template, backups, capsys):
+    row = make_meeting(session, owner, template, bot_name="Taker Bot")
+    items = three_voices()
+    for entry in items:
+        if entry["speaker"] == "2":
+            entry["potential_speaker_names"] = ["Taker Bot"]
+    keep_evidence(session, row, items)
+    go([str(row.id), "--apply"], backups, capsys=capsys)
+    assert "[Taker Bot]" not in stored(session, row).speaker_transcript
+
+
+def test_restore_refuses_when_the_owner_rewrote_the_notes_after_the_rebuild(
+    session, meeting, backups, capsys
+):
+    apply(session, meeting, backups, capsys)
+    (path,) = backup_files(backups)
+    # the owner presses "Rewrite notes" next day: a successful notes call, and the meeting stays
+    # `skribby-rebuilt`
+    session.add(
+        AiRun(
+            meeting_id=meeting.id,
+            kind="notes",
+            model="m",
+            status="ok",
+            created_at=datetime.now(UTC) + timedelta(minutes=1),
+        )
+    )
+    row = stored(session, meeting)
+    row.notes = "the owner's own rewrite"
+    session.commit()
+    capsys.readouterr()
+    code = rebuild.run(["--restore", str(path), "--apply"])
+    assert code != 0 and "rewrote the notes" in capsys.readouterr().out
+    assert stored(session, meeting).notes == "the owner's own rewrite"
+    assert rebuild.run(["--restore", str(path), "--apply", "--force"]) == 0
+    assert stored(session, meeting).notes == OLD_NOTES
+
+
+def test_a_rewrite_made_before_the_backup_does_not_stop_a_restore(
+    session, meeting, backups, capsys
+):
+    session.add(
+        AiRun(
+            meeting_id=meeting.id,
+            kind="notes",
+            model="m",
+            status="ok",
+            created_at=NOW - timedelta(days=1),
+        )
+    )
+    session.commit()
+    apply(session, meeting, backups, capsys, extra=["--force"])  # two notes rows: needs --force
+    (path,) = backup_files(backups)
+    assert rebuild.run(["--restore", str(path), "--apply"]) == 0
+
+
+def test_a_decision_another_decision_was_replaced_by_counts_as_touched(
+    session, owner, template, meeting, backups, capsys
+):
+    from app.extraction import fingerprint
+
+    target = Decision(
+        meeting_id=meeting.id,
+        text="t",
+        position=0,
+        fingerprint=fingerprint("Old wording of the first decision."),
+    )
+    session.add(target)
+    session.flush()
+    elsewhere = make_meeting(session, owner, template, native_id="other")
+    session.add(
+        Decision(
+            meeting_id=elsewhere.id,
+            text="older decision",
+            position=0,
+            fingerprint=fingerprint("older decision"),
+            status="replaced",
+            replaced_by_id=target.id,
+            edited_at=NOW,
+        )
+    )
+    session.commit()
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code != 0 and "1 decisions" in out
+    assert session.scalars(select(Decision).where(Decision.id == target.id)).one()
+    assert stored(session, meeting).notes == OLD_NOTES
+
+
+def test_a_task_already_pushed_to_linear_counts_as_touched(
+    session, meeting, backups, capsys, owner
+):
+    from app.extraction import fingerprint
+
+    team = Team(name="T", owner_user_id=owner.id)
+    session.add(team)
+    session.flush()
+    task = Task(
+        team_id=team.id,
+        meeting_id=meeting.id,
+        source="ai",
+        ai_fingerprint=fingerprint("Old wording of the action."),
+        title="x",
+        status="todo",
+        position=0,
+    )
+    session.add(task)
+    session.flush()
+    session.add(TrackerIssue(task_id=task.id, team_id=team.id, kind="linear", external_id="L-1"))
+    session.commit()
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code != 0 and "1 tasks" in out
+    assert session.get(Task, task.id) is not None
+
+
+def test_the_dry_run_and_apply_say_untouched_items_get_new_rows(
+    session, meeting, owner, backups, capsys
+):
+    from app import workspace
+
+    workspace.run_extraction(session, stored(session, meeting), client=FakeChat([GOOD]), now=NOW)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)
+    assert "untouched items now: 4" in out  # a decision, a question, a review item, a task
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code == 0
+    assert "NEW row" in out
+    assert "1 decisions, 1 open questions, 1 review items, 1 tasks" in out
+
+
+def test_a_meeting_with_no_recorded_seconds_is_still_rebuilt(
+    session, owner, template, backups, capsys
+):
+    row = make_meeting(session, owner, template, recorded_seconds=None)
+    keep_evidence(session, row)
+    code, _, _ = go([str(row.id), "--apply"], backups, capsys=capsys)
+    assert code == 0 and stored(session, row).transcript_source == "skribby-rebuilt"

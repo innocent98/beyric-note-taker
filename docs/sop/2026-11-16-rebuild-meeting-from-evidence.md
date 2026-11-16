@@ -37,7 +37,7 @@ refuses ("expired" or "no saved evidence"): there is nothing to rebuild from and
 | Refusals | Stops with a plain sentence, changing nothing, when: the meeting does not exist; is not `ready` (being recorded, processing, failed); its lists are being read right now; was not run by `skribby`; has no saved evidence; the evidence is older than 7 days; the evidence is unreadable; or the text is too short for the recording (`transcript_source.fallback_reason`, the same four checks as the live path: words a minute, a loop, no times, stops before 70% of the recording; the recording length is the meeting's `recorded_seconds`) |
 | Vocabulary and notes | `pipeline._apply_vocabulary` (the owner's terms, only for a model Skribby cannot give the vocabulary to) then `notes.generate_notes` with the meeting's own template (`meeting.template_id`, not changed). One notes call, written to `ai_runs` as an ordinary `notes` call with `+rebuild` after the prompt version (so the cost report still counts it and a second rebuild does not mistake it for the owner's own rewrite). The `vocabulary` call, when there is one, is the live path's own |
 | What is written | `transcript`, `speaker_transcript` (both the same text, as the live path writes them), `speakers_incomplete`, `transcript_source` = **`skribby-rebuilt`**, `notes`, and the quiet re-read (`extraction_status=pending`, `extraction_quiet=true`). Nothing else on the meeting |
-| What is never touched | any other meeting; `recorded_seconds` and the hours ledger (`usage_entries`); sharing, team, series; `status`/`step`; `template_id`. No "notes ready" mail (that is queued only by the pipeline's first notes), no share mail, no Slack or Linear post, no call to Skribby, nothing deleted at Skribby, no shadow comparison |
+| What is never touched | any other meeting; `recorded_seconds` and the hours ledger (`usage_entries`); sharing, team and which series the meeting belongs to; `status`/`step`; `template_id`. (The quiet re-read does mark the series' "keeps coming up" topics to be worked out again, as every re-read does, and the meeting's saved translations show as out of date: ask for them again.) No "notes ready" mail (that is queued only by the pipeline's first notes), no share mail, no Slack or Linear post, no call to Skribby, nothing deleted at Skribby, no shadow comparison |
 | One transaction | The meeting row is locked first (a few seconds' wait at most, else a plain "try again"), the backup is saved, the model is asked (vocabulary, notes), the touched-items check runs, and only then are the rows written and committed once. A refusal or a failed notes call rolls back and leaves the meeting exactly as it was (the cost of the call that was made is not in the ledger then) |
 | Idempotent | A meeting already `skribby-rebuilt` says "already rebuilt" and does nothing (no model call, no second backup). A meeting already on the `skribby` path whose speaker labels equal what the evidence gives today says "already Skribby's own text with the same speakers" and does nothing. A `skribby` meeting made before the naming fix (an unnamed tag) is rebuilt like an `own` one. To redo a rebuilt meeting: restore it first |
 
@@ -72,13 +72,19 @@ deleted can come back under its new wording. Ordinary rewrites by the owner have
    "New", no assignee mail, no Slack or Linear post. (The mail outbox also has unique rows per meeting for "notes
    ready" and per assignee for "tasks assigned", so a repeat could not mail twice anyway.)
 2. **Before it writes anything** it asks what a person has touched, from the rows: a decision hidden, edited
-   (`edited_at`) or with a status a person set; an open question resolved or taken off the next agenda; a review item
-   checked; an AI task edited, moved, ticked (`tasks.touched`) or deleted. It then reads the **new** notes with the
+   (`edited_at`) or with a status a person set, or one that another decision is "replaced by" (in any meeting); an
+   open question resolved or taken off the next agenda; a review item checked; an AI task edited, moved, ticked
+   (`tasks.touched`), deleted, or already pushed to Linear (its link row goes with the task, and the quiet re-read
+   would never push the replacement). It then reads the **new** notes with the
    same parser the worker uses and counts the touched items whose wording is not in them. If there are any, it
    **stops, changes nothing and says how many of each kind**, unless `--force`. With `--force` they are given up
    exactly as a normal rewrite gives them up (the old notes are in the backup, but the rows are not: a restore
    re-reads the lists from the old notes and cannot bring back who hid or ticked what).
-3. The dry run prints the number of touched items per kind (before any model call), so the person knows whether the
+3. **What it cannot keep.** Every *untouched* item whose wording changes (almost all of them, after a model rewrite)
+   gets a **new row with a new id**: a link in an earlier "New tasks assigned" mail or Slack post to the old task or
+   decision stops working, and untouched tasks are filed again (project, sprint). The dry run says how many untouched
+   items there are now; `--apply` prints the exact number it replaced. Tell the people involved if that matters.
+4. The dry run prints the number of touched items per kind (before any model call), so the person knows whether the
    stop is likely.
 
 **Hand-edited notes.** The app has no way to edit notes by hand: the only writers of `meeting.notes` are the
@@ -100,7 +106,9 @@ says the owner rewrote the notes, unless `--force` (the old notes are saved in t
   (the audio retention job only removes the per-meeting audio folders), so Step 5 deletes it once the result is checked.
 * **Putting it back.** `--restore FILE --apply` writes those five fields back and queues the quiet re-read of the lists
   from the old notes. It refuses a meeting that has changed since the rebuild (its `transcript_source` is not
-  `skribby-rebuilt` any more) and one where the old notes would lose items a person touched since, unless `--force`;
+  `skribby-rebuilt` any more), one whose owner rewrote the notes **after** the backup was taken (a rewrite leaves
+  `transcript_source` as it was, so this is read from the `notes` rows of the ledger newer than the backup; it is
+  checked again once the row is held), and one where the old notes would lose items a person touched since, unless `--force`;
   without `--apply` it only says what it would do. The same thing by hand, if the script were ever unavailable:
   `update meetings set transcript = ..., speaker_transcript = ..., speakers_incomplete = ..., transcript_source = ...,
   notes = ..., extraction_status = 'pending', extraction_quiet = true where id = N;` with the values from the file's
@@ -111,7 +119,7 @@ says the owner rewrote the notes, unless `--force` (the old notes are saved in t
 | File | Change |
 |---|---|
 | `scripts/rebuild_meeting_from_evidence.py` | new: `load`, `describe`, `touched`, `would_lose`, `save_backup`, `rebuild`, `restore`, `run` |
-| `tests/test_rebuild_meeting_from_evidence.py` | 46 tests on made-up fixtures (invented names and words) |
+| `tests/test_rebuild_meeting_from_evidence.py` | 55 tests on made-up fixtures (invented names and words) |
 | `pyproject.toml` | `F811` ignore for the new test file (it imports fixtures, like the other evidence tests) |
 | `docs/sop/2026-11-16-rebuild-meeting-from-evidence.md`, `docs/checklist/master-checklist.md` | this SOP, one checklist line |
 
@@ -121,7 +129,7 @@ Reused, unchanged: `app/skribby.py::_segments/_resolve_tags/_last_segment_end`, 
 
 ## Verification
 
-* **Tests, bounded** (`tests/test_rebuild_meeting_from_evidence.py` 46 and `tests/test_dockerfile_scripts.py`, on a
+* **Tests, bounded** (`tests/test_rebuild_meeting_from_evidence.py` 55 and `tests/test_dockerfile_scripts.py`, on a
   scratch Postgres 17 that was stopped afterwards; CI runs everything else): refusals (unknown, not ready, extraction
   running, other provider, no evidence, expired, too short, stops early, unreadable) each leave the row unchanged and
   ask the model nothing; the dry run writes nothing, asks the model nothing, prints the counts and **none of the
@@ -140,6 +148,11 @@ Reused, unchanged: `app/skribby.py::_segments/_resolve_tags/_last_segment_end`, 
 * **Mutation check (run by hand, restored after):** quiet turned off, the touched-items stop removed, the
   rewrite stop removed, the "extraction running" refusal removed and the "ready" refusal removed each made tests
   fail (4, 3, 1, 1 and 3 failed), so the guards are tested, not decorative.
+* **Added after the review:** a meeting with no stored bot name whose unnamed tag lists the default bot name or the account's
+  name stays unnamed (live path), a stored name is still excluded; a restore stops after an owner rewrite and goes on with
+  `--force`, a rewrite older than the backup does not stop it; a decision another decision is replaced by, and a task
+  already in Linear, each stop the rebuild; the dry run and apply say untouched items get new rows (exact count on apply);
+  no `recorded_seconds` still rebuilds. Each fix was undone by hand and its test failed.
 * `ruff check .` and `ruff format --check .` with the pinned `ruff==0.17.3`, as the CI lint job runs them.
 * The runbook blocks pass `bash -n`; the SQL of steps 0, 2 and 3 was run on a scratch database built from the models
   (columns and joins exist).
@@ -164,7 +177,7 @@ quietly drops it.
 
 **Order.** Steps 0 and 1 change nothing: do them first, for the oldest deadline (34, if you want it, then 35, then
 37). Run step 2 for one meeting at a time. It takes a minute or two (one model call) and holds that meeting's row
-meanwhile, so do not press "rewrite notes" on it then. Every block is one command to paste; it runs on the server
+meanwhile, so do not press "rewrite notes" on it then, and ask the owner not to either (the owner's button takes no lock: a rewrite pressed during the run would write notes made from the OLD transcript afterwards). Do not tick, hide or resolve anything on that meeting until Step 3 says `done`: the lists are read again a minute or so after the commit, and an item changed in that gap is not checked. Every block is one command to paste; it runs on the server
 with `ssh`, and every `docker` call has `</dev/null` so it cannot swallow the rest of the script.
 
 ### Step 0. Look first (changes nothing)
@@ -314,6 +327,20 @@ docker compose exec -T worker ls -l /srv/data/audio/rebuild-backups </dev/null
 EOF
 ```
 
+## What the person sees, and the bot's own names
+
+* **Bot names.** The tags are named with every name the note taker goes by excluded, as the live path does
+  (`bot_names.own_names`: the meeting's stored bot name, or the server default when it has none, plus the signed-in
+  account's name). The name Skribby reports in its own answer is not saved in the evidence, so it cannot be excluded
+  here (the live path does; for a meeting with a custom bot name the stored name covers it).
+* **Translations.** A meeting's saved translations are made from the old text and show as out of date afterwards; the
+  owner asks for them again.
+* **Review of #209** (`review-pr209.md`, head `af82c02c`): the bot-names blocker, the restore-after-rewrite stop, the
+  replaced-by and Linear touched checks and these SOP lines were fixed in the second commit, with tests that fail
+  without each fix (checked by hand). Also done: the lock is `FOR NO KEY UPDATE` (other writes to the meeting wait, but
+  a translation or a share can still be inserted), the 5-second wait limit is reset after the lock, the backup's
+  folder is flushed too, and a restore re-checks its guards once the row is held.
+
 ## Follow-ups
 
 * The touched-items stop is all or nothing; if it fires on a real meeting a smarter carry-over (keep a touched item by
@@ -323,3 +350,15 @@ EOF
 * `scripts/transcript_shadow_report.py` will list `skribby-rebuilt` as its own source row; harmless, nothing branches on it.
 * After 2026-11-23 the evidence of 37 is gone for good; if the rebuild is wanted for later meetings, run it within 7 days
   or leave `TRANSCRIPT_SOURCE=skribby` on (then the live path already builds them this way).
+* **The owner's rewrite button takes no lock** (`services.regenerate_notes`): pressed during `--apply` it would later
+  write notes made from the old transcript and mark the lists loud again. Fix later in `regenerate_notes` (lock the row
+  as `_lock_meeting` does) or with a marker the button refuses on.
+* **`--force` losses cannot be undone** (the backup holds no list rows). If `--force` is ever really needed, save the
+  touched rows (hidden/checked/resolved/status/edited fields) into the backup first.
+* **The vocabulary pass is decided by today's `SKRIBBY_TRANSCRIPTION_MODEL`**, not by what the meeting was sent. Right
+  today (`elevenlabs/scribe-v2` takes no vocabulary); wrong if the model is ever changed to one that does before a
+  rebuild of an `own`-path meeting.
+* **The evidence drops blank candidate names** before counting, the live path counts the raw list against
+  `MAX_CANDIDATES`: a 21-entry list with one blank is "too many" live and 20 names here. Not seen in practice.
+* **Untested:** real lock contention (the "being worked on right now" refusal) and a restore whose guard changes between
+  the look and the lock.
