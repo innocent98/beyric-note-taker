@@ -158,8 +158,10 @@ def _shadow_hours(
     try:
         with session.begin_nested():
             new = entitlements.check_join(session, user, now, settings.max_poll_hours * 3600)
-    except Exception:
-        logger.exception("hours_shadow failed user=%s", user.id)
+    except Exception as exc:
+        # No traceback and no message: a database error's text carries the bound parameters, and
+        # one of them is the email fingerprint. The class and the user id are enough to look.
+        logger.error("hours_shadow failed user=%s error=%s", user.id, type(exc).__name__)
         return
     if new.allowed != old_refuses:
         return

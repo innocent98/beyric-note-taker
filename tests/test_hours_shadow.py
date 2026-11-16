@@ -116,6 +116,7 @@ def test_a_failure_in_the_shadow_never_breaks_a_join(session, ada, caplog, monke
     with caplog.at_level(logging.INFO, logger=LOGGER):
         reserve(session, ada, "shadow")  # no exception: the old rule alone decided
     assert any("hours_shadow failed" in r.getMessage() for r in caplog.records)
+    assert "the grants table is missing" not in caplog.text and "Traceback" not in caplog.text
 
 
 def test_the_log_line_carries_no_email(session, ada, caplog):
@@ -125,13 +126,20 @@ def test_the_log_line_carries_no_email(session, ada, caplog):
 
 
 def test_the_shadow_runs_in_a_savepoint_so_a_database_error_leaves_the_transaction_usable(
-    session, ada, monkeypatch
+    session, ada, monkeypatch, caplog
 ):
     from sqlalchemy import text
 
     def bad_sql(sess, *a, **k):
-        sess.execute(text("select * from table_that_does_not_exist"))
+        sess.execute(
+            text("select * from table_that_does_not_exist where h = :h"),
+            {"h": email_hash(ada.email)},  # the same parameter the real queries bind
+        )
 
     monkeypatch.setattr(entitlements, "check_join", bad_sql)
-    reserve(session, ada, "shadow")  # logged, not raised
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        reserve(session, ada, "shadow")  # logged, not raised
+    assert "hours_shadow failed" in caplog.text and "ProgrammingError" in caplog.text
+    assert "table_that_does_not_exist" not in caplog.text  # the database's own message stays out
+    assert email_hash(ada.email) not in caplog.text  # and so do its bound parameters
     assert session.execute(text("select 1")).scalar() == 1  # the transaction is not aborted
