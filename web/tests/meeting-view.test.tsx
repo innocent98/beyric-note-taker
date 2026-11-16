@@ -372,7 +372,8 @@ describe("failed meeting", () => {
   it("does not call a meeting nobody joined a failure", () => {
     const base = meeting("49-meeting-detail-failed-retryable.json");
     show({ ...base, status_text: "Nobody joined", status_tone: "neutral" });
-    expect(screen.getByText("Nobody joined")).toBeTruthy();
+    // The header badge says it too, so look at the card's own heading.
+    expect(screen.getByRole("heading", { name: "Nobody joined" })).toBeTruthy();
     expect(screen.queryByText("What went wrong")).toBeNull();
   });
 
