@@ -20,6 +20,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from app.billing.types import EVENT_KINDS as BILLING_EVENT_KINDS
+
 STATUSES = ("bot_sent", "processing", "ready", "failed")
 STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
 MEETING_SOURCES = ("manual", "calendar", "instant_meet")
@@ -39,6 +41,11 @@ MAIL_STATUSES = ("pending", "sent", "failed", "skipped")
 SUPPRESSION_REASONS = ("bounce", "complaint", "unsubscribed")
 # Where a person's hours come from (billing spec section 7). S1 writes only `pilot`.
 HOUR_GRANT_KINDS = ("trial", "pilot", "plan_period", "pack", "admin_gift")
+# Payments (billing spec section 7, stage S4): what a payment is for, where it stands, the two
+# currencies we bill in.
+PAYMENT_KINDS = ("plan", "renewal", "upgrade", "pack")
+PAYMENT_STATUSES = ("pending", "succeeded", "failed", "refunded", "partly_refunded")
+BILLING_CURRENCIES = ("NGN", "USD")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
 CONNECTION_PROVIDERS = ("google", "ics", "microsoft")
@@ -889,6 +896,93 @@ class UsageAllocation(Base):
         BigInteger, ForeignKey("hour_grants.id", ondelete="RESTRICT"), index=True
     )
     seconds: Mapped[int] = mapped_column(Integer)
+
+
+class Payment(Base):
+    """One attempt to take money, created by us BEFORE anyone is sent to a provider so every
+    webhook can be matched to what we expected (billing spec sections 5.4 and 7, stage S4).
+
+    `reference` is ours and unique (`bn-<id>-<random>`, `app/billing/payments.py`). `amount_minor`
+    and `currency` are what we asked for: a payment is only marked `succeeded` when the provider,
+    asked directly, reports this reference, this currency and at least this amount
+    (`app/billing/settle.py`). Money records outlive the person, so `payer_user_id` is set null on
+    account deletion. `subscription_id` has no foreign key yet: the table arrives with stage S8."""
+
+    __tablename__ = "payments"
+    __table_args__ = (
+        CheckConstraint(_in("kind", PAYMENT_KINDS), name="ck_payments_kind"),
+        CheckConstraint(_in("status", PAYMENT_STATUSES), name="ck_payments_status"),
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_payments_currency"),
+        CheckConstraint("amount_minor > 0", name="ck_payments_amount"),
+        UniqueConstraint("provider", "provider_tx_id", name="uq_payments_provider_tx"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    payer_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    subscription_id: Mapped[int | None] = mapped_column(BigInteger)
+    provider: Mapped[str] = mapped_column(String(16))
+    provider_tx_id: Mapped[str | None] = mapped_column(String(128))
+    reference: Mapped[str] = mapped_column(String(64), unique=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    currency: Mapped[str] = mapped_column(String(3))
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    card_country: Mapped[str | None] = mapped_column(String(2))
+    country_mismatch: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentMethod(Base):
+    """A saved card: the provider's reusable token, encrypted with `app/vault.py`, never a card
+    number (billing spec section 7). Stage S4 only creates the table; nothing writes it until the
+    renewal stage (S8). Deleted with the account."""
+
+    __tablename__ = "payment_methods"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(16))
+    token_enc: Mapped[bytes] = mapped_column(LargeBinary)  # nonce || ciphertext
+    key_version: Mapped[int] = mapped_column(Integer)
+    brand: Mapped[str | None] = mapped_column(String(24))
+    last4: Mapped[str | None] = mapped_column(String(4))
+    expiry: Mapped[str | None] = mapped_column(String(7))
+    email_at_provider: Mapped[str | None] = mapped_column(String(254))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BillingEvent(Base):
+    """The webhook inbox (billing spec section 5.4): one row per genuine webhook, written before
+    anything is decided. The unique (`provider`, `dedupe_key`) makes a replay find the row it made
+    the first time. `processed_at` is set once the event has been decided (applied, or refused with
+    the reason in `error`); a row with it null is still waiting, and a second delivery tries it
+    again. Only requests that passed the signature check are stored, so `signature_ok` is always
+    true today. `payload` is the body with tokens and secrets removed (`app/billing/inbox.py`)."""
+
+    __tablename__ = "billing_events"
+    __table_args__ = (
+        CheckConstraint(_in("type", BILLING_EVENT_KINDS), name="ck_billing_events_type"),
+        UniqueConstraint("provider", "dedupe_key", name="uq_billing_events_dedupe"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    dedupe_key: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str] = mapped_column(String(24))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    signature_ok: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 class Decision(Base):
