@@ -1,0 +1,22 @@
+{
+  "note": "Pat, a plain member of X, asks for X's list: 403 `team_forbidden`, the project's usual team error.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/removed",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

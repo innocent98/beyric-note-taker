@@ -1,0 +1,44 @@
+{
+  "note": "The team's own page: `team_card` is null. Only a Personal page carries it.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/26",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 26,
+      "title": "Weekly planning",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "team_card": null,
+      "scoped": true,
+      "cadence": "Recurring",
+      "platform": null,
+      "timezone": "UTC",
+      "next_starts_at": "2026-11-18T13:00:00Z",
+      "next_text": "Wed 18 Nov, 13:00",
+      "sprint_note": null,
+      "can_rename": true,
+      "can_remove": true,
+      "agenda_recipients": 0,
+      "unfinished": [],
+      "finished_since_text": null,
+      "finished": [],
+      "questions": [],
+      "agenda": [],
+      "topics": [],
+      "suggested_agenda": [],
+      "past_meetings": [],
+      "attendees": []
+    }
+  }
+}

@@ -628,6 +628,10 @@ seriesPages[3].sprint_note = null;
 // The row's team: the captures are older than the `team` field (docs/fe-captures/series-follow/ has the real shape).
 const seriesTeam = { id: 1, name: "Mock team", is_personal: false };
 Object.values(seriesPages).forEach((page) => Object.assign(page, { team: seriesTeam, scoped: true, can_remove: teamRole !== "member" }));
+const removed = [
+  { id: 5, title: "Weekly planning", team: seriesTeam, removed_at: "2026-11-16T13:42:53.483729Z", removed_by: "Ada Example" },
+  { id: 4, title: "Recurring meeting", team: seriesTeam, removed_at: "2026-11-15T09:10:00.000000Z", removed_by: null },
+];
 const projectLink = (id) => {
   const project = projects.find((p) => p.id === seriesProject[id]);
   return project ? { id: project.id, name: project.name } : null;
@@ -798,6 +802,18 @@ const server = http.createServer(async (req, res) => {
   }
   if (path === "/api/series" && method === "POST") {
     return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0, project: null, team: seriesTeam });
+  }
+  // Removed recurring meetings (the shapes of docs/fe-captures/series-follow/112 and 120).
+  if (path === "/api/series/removed" && method === "GET") {
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "You can't do that here. Ask an owner or admin of your team." } });
+    return json(res, 200, { removed });
+  }
+  const bringing = /^\/api\/series\/removed\/(\d+)\/bring-back$/.exec(path);
+  if (bringing && method === "POST") {
+    const at = removed.findIndex((r) => r.id === Number(bringing[1]));
+    if (at < 0) return json(res, 404, { error: { code: "not_found", message: "No such removed recurring meeting." } });
+    const [gone] = removed.splice(at, 1);
+    return json(res, 200, { team: gone.team });
   }
   // Series (W8): see the block above the server.
   if (path === "/api/series" && method === "GET") return json(res, 200, seriesCards());

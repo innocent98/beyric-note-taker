@@ -490,6 +490,105 @@ def remove(session: Session, user: User, series: Series) -> Removal:
     return Removal(meetings_kept=readable, agenda_lines_removed=lines, remembered=remembered)
 
 
+# ---- bringing a removed recurring meeting back ----
+
+
+@dataclass(frozen=True)
+class RemovedItem:
+    """One removed calendar recurring meeting of a scope, as its owners and admins see it."""
+
+    id: int
+    title: str
+    team_id: int
+    removed_at: datetime
+    removed_by: str | None
+
+
+def removed_for(session: Session, user: User, team_id: int) -> list[RemovedItem]:
+    """The recurring meetings removed from ONE scope (a team's, or the person's Personal space), for
+    the people who may bring them back: an owner or admin of the team, or the person for their own
+    Personal space (the removal rule, `is_manager`). The caller has checked they are in the
+    team (404); anyone else in it gets 403 `team_forbidden`. A mark holds only the event's id, so
+    the name shown is what the VIEWER'S OWN calendar calls the event (never a teammate's title: a
+    teammate's calendar event is theirs), else "Recurring meeting". A hand-made recurring meeting
+    leaves no mark and is never listed."""
+    if not is_manager(session, user, team_id):
+        raise _forbidden()
+    marks = session.scalars(
+        select(SeriesIgnored)
+        .where(SeriesIgnored.team_id == team_id)
+        .order_by(SeriesIgnored.created_at.desc(), SeriesIgnored.id.desc())
+        .limit(PAGE_LIST_LIMIT)
+    ).all()
+    if not marks:
+        return []
+    ids = {m.calendar_recurring_id for m in marks}
+    names: dict[str, str] = {}
+    for rid, title in session.execute(
+        select(CalendarEvent.recurring_event_id, CalendarEvent.title)
+        .where(CalendarEvent.user_id == user.id, CalendarEvent.recurring_event_id.in_(ids))
+        .order_by(CalendarEvent.starts_at.desc())
+    ):
+        clean = _clean(title, 200)
+        if clean and rid not in names:
+            names[rid] = clean
+    people = {m.user_id: m.display_name for m in tasks.members_of(session, team_id)}
+    return [
+        RemovedItem(
+            id=m.id,
+            title=names.get(m.calendar_recurring_id, UNTITLED),
+            team_id=m.team_id,
+            removed_at=m.created_at,
+            removed_by=people.get(m.created_by),
+        )
+        for m in marks
+    ]
+
+
+def bring_back(session: Session, user: User, mark_id: int) -> int:
+    """Clear ONE removal mark and return its team id. It makes no card and touches no meeting, task,
+    note, agenda line or row: it only lets the writers make the card again (the hourly sync for a
+    Personal space; an owner's or admin's auto-shared recording or explicit share for a team). Who
+    may is the removal rule: an owner or admin of the mark's team, or the person for their own
+    Personal space; anyone else in the team 403 `team_forbidden`; someone outside it, an unknown
+    mark and a second call 404. In the caller's transaction; the caller commits."""
+    mark = session.get(SeriesIgnored, mark_id)
+    if mark is None or membership(session, user, mark.team_id) is None:
+        raise SeriesRefused(404, "not_found", "No such removed recurring meeting.")
+    if not is_manager(session, user, mark.team_id):
+        raise _forbidden()
+    team_id = mark.team_id
+    gone = session.execute(
+        delete(SeriesIgnored).where(SeriesIgnored.id == mark_id).returning(SeriesIgnored.id)
+    ).first()
+    if gone is None:  # a second click, a moment later
+        raise SeriesRefused(404, "not_found", "No such removed recurring meeting.")
+    session.expire_all()
+    return team_id
+
+
+def team_card(session: Session, user: User, found: Series) -> Series | None:
+    """For a Personal card from the calendar: a card of the SAME recurring event in an ordinary
+    team of the viewer's that the viewer may see (`get`), if any. A meeting of the event that goes
+    to that team's card joins it there, so an agenda line typed here is not used by it; the page
+    says so.
+    None for any other page, for a hand-made card and with the flag off."""
+    if found.calendar_recurring_id is None or not is_personal_row(session, found):
+        return None
+    candidates = session.scalars(
+        select(Series)
+        .join(Team, Team.id == Series.team_id)
+        .where(
+            Series.calendar_recurring_id == found.calendar_recurring_id,
+            Series.id != found.id,
+            Team.is_personal.is_(False),
+            Series.team_id.in_(select(TeamMember.team_id).where(TeamMember.user_id == user.id)),
+        )
+        .order_by(Team.name, Series.id)
+    )
+    return next((c for c in candidates if get(session, user, c.id) is not None), None)
+
+
 # ---- making and linking ----
 
 

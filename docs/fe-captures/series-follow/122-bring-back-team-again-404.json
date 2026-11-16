@@ -1,0 +1,22 @@
+{
+  "note": "The same mark a second time: 404 (it is already gone).",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/6/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such removed recurring meeting."
+      }
+    }
+  }
+}

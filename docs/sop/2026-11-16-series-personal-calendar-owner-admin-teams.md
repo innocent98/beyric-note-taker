@@ -152,7 +152,7 @@ There is nothing to switch back: the removed cards were empty, and a card is mad
 
 ## Follow-ups
 
-* A "Removed recurring meetings" list with "Bring back" (still not built, see #205's SOP).
+* A "Removed recurring meetings" list with "Bring back": built, `docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md`.
 * Drop the empty-row exception once no legacy empty rows remain.
 * Meetings shared by a plain member **before** an owner makes the card whose event row is already gone are not adopted (nothing links them to the event any more).
 * A way for a plain member to ask an owner or admin to make the team's card (not designed).
@@ -163,5 +163,5 @@ There is nothing to switch back: the removed cards were empty, and a card is mad
 * **F5 `_adopt_shared` also takes in meetings that someone deliberately took out of a card, and meetings ungrouped by a removal** (a null `series_id` cannot tell "never grouped" from "taken out"). Product call.
 * **F6 An owner's or admin's explicit share deletes the "removed" mark even when the team is full** (the mark goes before the room check), so no card is made and the next automatic link makes it without asking. Move the room check above the delete.
 * Review nits fixed: the script's usage lines, the new 403 in `docs/openapi.json` for `POST /api/series`, `PUT /api/meetings/{id}/series` and `POST /api/meetings/{id}/recurring`, two formatter leftovers in `app/series.py`.
-* **Lines typed in a Personal card are stranded once a team card exists** (by Adebayo's rule: the calendar card "stays yours"). Her recordings are then auto-shared into the team card, so the Personal card's lines are never consumed, and when the team has reminders on the Personal card stays quiet (`_already_reminded`), so the lines are never mailed either. When the team's reminders are off and Personal's are on, the Personal card reminds weekly with the same lines. A hint on the Personal card ("your meetings of this event are in team X's card") would help; not built (guide 11.7).
+* **Lines typed in a Personal card are stranded once a team card exists** (by Adebayo's rule: the calendar card "stays yours"). Her recordings are then auto-shared into the team card, so the Personal card's lines are never consumed, and when the team has reminders on the Personal card stays quiet (`_already_reminded`), so the lines are never mailed either. When the team's reminders are off and Personal's are on, the Personal card reminds weekly with the same lines. The hint is built (`SeriesPage.team_card`, `docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md`, guide 12.5).
 * **Two rare deadlocks, nothing corrupted (one request gets a 500):** (a) two owners or admins move or share two meetings of the same event at once, both already shared and ungrouped, with no team card: the adoption's lock and the other's card insert wait on each other. (b) `remove` locks the row and then its strays; a share locks the meeting and then marks the row's topics stale: a legacy stray being shared while its row is removed. Fix later: lock the strays first, in id order.

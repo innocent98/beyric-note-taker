@@ -1,0 +1,22 @@
+{
+  "note": "Pat tries to bring back X's mark: 403 `team_forbidden`. Nothing changes.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/6/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "note": "Ada's list of removed recurring meetings for her PERSONAL space (`X-Team-Id` names it). The title is what Ada's own calendar calls the event. `id` is the removal mark's id, NOT a series id: it is what bring-back takes.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/removed",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "removed": [
+        {
+          "id": 5,
+          "title": "Weekly planning",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "removed_at": "2026-11-16T13:52:21.111884Z",
+          "removed_by": "Ada Example"
+        },
+        {
+          "id": 4,
+          "title": "Standup",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "removed_at": "2026-11-16T13:52:20.701333Z",
+          "removed_by": "Ada Example"
+        }
+      ]
+    }
+  }
+}

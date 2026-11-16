@@ -1,0 +1,19 @@
+{
+  "note": "Quinn owns Y, where nothing was removed: 200 with an empty list. The Settings section draws nothing for it.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/removed",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "removed": []
+    }
+  }
+}

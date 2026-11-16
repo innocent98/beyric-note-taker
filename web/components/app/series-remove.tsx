@@ -90,7 +90,7 @@ export function SeriesRemove({ page, multiTeam }: { page: SeriesPage; multiTeam:
             )}
             <li>
               <strong>Your calendar:</strong> if this came from a calendar event, it will not be made again, and later
-              meetings of that event will not be grouped here.
+              meetings of that event will not be grouped here, until you bring it back in Settings.
             </li>
             {multiTeam ? (
               <li>

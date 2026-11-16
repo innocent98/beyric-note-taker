@@ -1,0 +1,8 @@
+{
+  "note": "NOT AN HTTP CALL. The real hourly `series.sync_from_joins` after the bring-back: it makes the Personal card for 'Weekly planning' (its join is still scheduled): `planning_rows` is 1.",
+  "content": {
+    "rows_made": 1,
+    "planning_rows": 1,
+    "recurring_event_id": "rid-connected"
+  }
+}

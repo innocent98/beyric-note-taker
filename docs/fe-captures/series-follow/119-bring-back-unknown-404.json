@@ -1,0 +1,22 @@
+{
+  "note": "An id that is no mark: 404.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/987654/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such removed recurring meeting."
+      }
+    }
+  }
+}
