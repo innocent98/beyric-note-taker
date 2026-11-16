@@ -34,7 +34,7 @@ Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`;
 
 - **Server steps before merge:** migration 0040 runs on deploy. The only new env variable is the optional `SKRIBBY_NAME_BY_ELIMINATION`; leave it unset (= true, today's behaviour).
 - **Read a meeting:** `docker compose exec -T web python scripts/skribby_segments_report.py <meeting_id>` (within 7 days of the meeting). It prints what people said: treat it like the transcript.
-- **Turn elimination off:** `SKRIBBY_NAME_BY_ELIMINATION=false`, restart web, worker and scheduler.
+- **Turn elimination off:** `SKRIBBY_NAME_BY_ELIMINATION=false`, then `docker compose up -d --force-recreate web worker scheduler` (a restart does not re-read `.env`).
 - **Roll back:** revert the PR; `alembic downgrade 0039` drops the table (the evidence is disposable by design).
 
 ## Follow-ups

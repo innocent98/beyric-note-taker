@@ -485,7 +485,8 @@ def test_two_tags_with_no_names_are_both_left_unnamed_when_nobody_is_named():
 
 
 def test_a_lone_candidate_nothing_rules_anything_out_for_is_not_a_name():
-    # no other tag has a name, so nothing supports the choice: stays unnamed
+    # no other tag has a name, so nothing supports the choice: stays unnamed (also with many
+    # segments: `test_a_sole_candidate_needs_one_tag_Skribby_named_itself_in_the_meeting`)
     assert speakers(segment(None, tag="1", candidates=[("Ada Example", 1)])) == [""]
     assert speakers(
         segment("Ada Example", tag="1"),
@@ -533,6 +534,20 @@ def test_a_sole_candidate_does_nothing_with_elimination_off_but_records_would_be
         "note": "elimination_off",
         "would_be": "Cy Example",
     }
+
+
+def test_a_sole_candidate_needs_one_tag_Skribby_named_itself_in_the_meeting():
+    # Nothing in the meeting shows Skribby's naming works (a merged-voices meeting looks like
+    # this), so one name on every segment is not enough on its own.
+    only = read(*several(5, "1", candidates=[("Cy Example", 1)]))
+    assert [seg["speaker"] for seg in only.segments] == [""] * 5
+    assert only.evidence["tags"]["1"]["name"] == ""
+    two_unnamed = read(
+        *several(4, "1", candidates=[("Cy Example", 1)]),
+        *several(4, "2", candidates=[("Di Example", 1)]),
+    )
+    assert [seg["speaker"] for seg in two_unnamed.segments] == [""] * 8
+    assert two_unnamed.evidence["tags"]["1"]["how"] == "unknown"
 
 
 def test_a_sole_candidate_that_is_the_bot_is_not_a_name():

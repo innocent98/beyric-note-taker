@@ -257,7 +257,7 @@ def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
         would_be = info.get("would_be")
         why = f", {note}" if note else ""
         if would_be:
-            why += f" (elimination would have said: {would_be})"
+            why += f" (naming by elimination or sole candidate would have said: {would_be})"
         lines += ["", f"== tag {tag}: {name} [{how}{why}] - {len(by_tag[tag])} segments =="]
         for item in by_tag[tag]:
             given = item.get("speaker_name") or "-"

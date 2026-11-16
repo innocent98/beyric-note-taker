@@ -312,11 +312,10 @@ def _resolve_tags(
     """For every diarization tag Skribby used: `{"name", "how", "note"}`. `how` says why the tag
     has the name it has: `given` (its own segments carry exactly one `speaker_name`),
     `elimination` or `sole_candidate` (see `_tag_names`; only when `by_elimination`) or `unknown`
-    (`name` is empty and
-    `note` says why: `several_names`, `no_candidates`, `elimination_off`, `unresolved`,
-    `shared_claim`). With elimination off, `note` is `elimination_off` for a tag it would have
-    named, and `would_be` holds the name it would have taken, so a saved record shows what the
-    switch changed."""
+    (`name` is empty and `note` says why: `several_names`, `no_candidates`, `elimination_off`,
+    `unresolved`, `shared_claim`). With elimination off, `note` is `elimination_off` for a tag it
+    would have named, and `would_be` holds the name it would have taken, so a saved record shows
+    what the switch changed."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -359,8 +358,10 @@ def _resolve_tags(
         key, name = next(iter(left.items()))
         if ruled_out:
             how = "elimination"
-        elif len(candidates) == 1 and (
-            listing[tag][key] == segments[tag] >= MIN_SOLE_CANDIDATE_SEGMENTS
+        elif (
+            len(candidates) == 1
+            and any(given.values())  # Skribby named a tag itself in this meeting
+            and listing[tag][key] == segments[tag] >= MIN_SOLE_CANDIDATE_SEGMENTS
         ):
             how = "sole_candidate"  # one name on every segment, nobody else has it
         else:
@@ -407,9 +408,10 @@ def _tag_names(
     another tag's and exactly one is left. The one exception, `sole_candidate`: a tag whose
     segments list one and the same name and nothing else (every segment lists it, at least
     `MIN_SOLE_CANDIDATE_SEGMENTS` segments), a name no other tag has and the bot does not go by,
-    is named after it although nothing was ruled out (meeting 37: the tag Skribby split off
-    cleanly but never named). A name two tags would both take goes to neither. Whatever stays
-    unclear is left out: the label is "unknown", never a name made up."""
+    in a meeting where at least one tag carries a name of its own (proof that Skribby's naming
+    works there), is named after it although nothing was ruled out (meeting 37: the tag Skribby
+    split off cleanly but never named). A name two tags would both take goes to neither. Whatever
+    stays unclear is left out: the label is "unknown", never a name made up."""
     if by_elimination is None:
         by_elimination = get_settings().skribby_name_by_elimination
     resolved = _resolve_tags(value, own_names, by_elimination)
