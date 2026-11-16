@@ -1,0 +1,27 @@
+{
+  "note": "A person on a trial passes the gate. This question finds nothing, so it answers `none` with no model call (the capture makes no OpenAI call).",
+  "client": "ada trial",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "question": "zzz qqq xyzzy"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "none",
+      "lead": "I could not find that in your meetings.",
+      "points": []
+    }
+  }
+}

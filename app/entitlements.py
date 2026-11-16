@@ -26,6 +26,10 @@ Grants are found by user id or by the email fingerprint, the same two keys as
 
 Only grants exist in S1, so only the states they can show exist here: `trial`, `pilot`, `active`
 (a paid plan period) and `none`. `past_due` and `lapsed` need subscriptions (stage S8).
+
+The bottom of the module (`can`, `gate`) answers the feature gates of spec 2.3 (stage S3): which
+states may use Ask Beyric, new translations and rewriting notes. The mode switch and the refusal
+are `app/feature_gates.py`.
 """
 
 from dataclasses import dataclass
@@ -299,3 +303,57 @@ def check_join(
         if running and s.seconds_left - extra < need:
             return JoinDecision(False, RESERVE, s.seconds_left)
     return JoinDecision(True, None, s.seconds_left)
+
+
+# ---- feature gates (billing spec 2.2 and 2.3, stage S3) ----
+
+ASK = "ask"  # Ask Beyric
+TRANSLATE = "translate"  # a NEW translation (an existing one is only read)
+REWRITE = "rewrite"  # rewriting the notes with a template
+FEATURES = (ASK, TRANSLATE, REWRITE)
+# The states of spec 2.2 in which these features work. `trial`, `pilot` and `active` do
+# everything, and `past_due` (the 3 days after a failed renewal) keeps Ask, translate and rewrite
+# (they use no recorded hours). `lapsed` and `none` (no plan, an expired plan, a used-up or expired
+# trial, a person who only reads) cannot. Anything not listed is closed: a state added later has to
+# be opened here on purpose. `status` shows only trial, pilot, active and none until S8 adds the
+# subscription states.
+OPEN_STATES = frozenset({"trial", "pilot", "active", "past_due"})
+
+
+@dataclass(frozen=True)
+class GateDecision:
+    allowed: bool
+    state: str  # the person's state when asked (`unlimited` for the admin)
+
+
+def state_allows(state: str, unlimited: bool = False) -> bool:
+    """The whole rule of the three gates: the admin always, others by the state they are in."""
+    return unlimited or state in OPEN_STATES
+
+
+def gate(
+    session: Session,
+    user: User,
+    feature: str,
+    now: datetime,
+    max_poll_seconds: int = 6 * 3600,
+) -> GateDecision:
+    """Whether `user` (the person pressing the button, not the meeting's recorder) may use
+    `feature` now, with the state that decided it. Pure reading. All three features answer alike
+    today; `feature` is checked so a typo cannot silently open or close a gate, and so a feature
+    can get its own rule later."""
+    if feature not in FEATURES:
+        raise ValueError(f"unknown feature {feature!r}")
+    s = status(session, user, now, max_poll_seconds)
+    return GateDecision(state_allows(s.state, s.unlimited), "unlimited" if s.unlimited else s.state)
+
+
+def can(
+    session: Session,
+    user: User,
+    feature: str,
+    now: datetime,
+    max_poll_seconds: int = 6 * 3600,
+) -> bool:
+    """`gate(...).allowed`: the question every gated route asks (`app/feature_gates.py`)."""
+    return gate(session, user, feature, now, max_poll_seconds).allowed

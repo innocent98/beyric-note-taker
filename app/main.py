@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import api, auth, edge, limits, mail, ratelimit, skribby, web
+from app import api, auth, edge, limits, logging_setup, mail, ratelimit, skribby, web
 from app.billing import api as billing_api
 from app.billing import profile_api as billing_profile_api
 from app.config import Settings, get_settings
@@ -38,6 +38,7 @@ def _own_session(app: FastAPI) -> Iterator[Session]:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    logging_setup.configure()  # web's own INFO lines (the shadow lines) must reach its log
     settings = settings or get_settings()
     auth.check_start(settings)
     skribby.check_region_unchanged(settings)

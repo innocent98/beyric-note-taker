@@ -1,0 +1,27 @@
+{
+  "note": "The Ask scope line and chips are not gated (no model call).",
+  "client": "nora no plan",
+  "request": {
+    "method": "GET",
+    "path": "/api/ask/scope",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "meetings": 1,
+      "decisions": 0,
+      "tasks": 0,
+      "suggestions": [
+        "What did Adebayo say?"
+      ]
+    }
+  }
+}

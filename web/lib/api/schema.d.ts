@@ -1078,7 +1078,9 @@ export interface paths {
          * @description Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the
          *     translation when one is already cached for the current text; otherwise 202 with
          *     `status: "translating"` and the work is queued. A failed or stale translation asked for again
-         *     is queued again. Asking again while it is being made changes nothing.
+         *     is queued again. Asking again while it is being made changes nothing. A NEW translation, and
+         *     a failed or stale one asked for again, is 403 `plan_inactive` for a caller with no live plan
+         *     or trial when the server runs `FEATURE_GATES_MODE=enforce`; a cached or running one never is.
          */
         post: operations["request_translation"];
         delete?: never;
@@ -5568,7 +5570,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7752,7 +7754,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8166,7 +8168,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `email_not_verified` */
+            /** @description Missing or wrong X-CSRF-Token; `email_not_verified`; `plan_inactive`: a language other than English needs a NEW translation, which needs a live plan or trial (only under `FEATURE_GATES_MODE=enforce`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8387,7 +8389,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: a NEW translation needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`; a cached one is never refused) */
             403: {
                 headers: {
                     [name: string]: unknown;

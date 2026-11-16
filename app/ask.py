@@ -33,7 +33,7 @@ from openai import OpenAI
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import ai_runs, timezones, titles
+from app import ai_runs, entitlements, feature_gates, timezones, titles
 from app import tasks as task_rules
 from app.ai_versions import ASK_PROMPT_VERSION
 from app.config import get_settings
@@ -838,13 +838,15 @@ def _zone_of(session: Session, user: User):
 def answer(
     session: Session, user: User, question: str, *, now: datetime | None = None, client=None
 ) -> Answer:
-    """Answer one question. Raises `Refused` 422 `question_invalid`, 429 `ask_limit` or 502
+    """Answer one question. Raises `Refused` 422 `question_invalid`, 403 `plan_inactive` (feature
+    gate; the free "my tasks" answer is gated too, so Ask is one switch), 429 `ask_limit` or 502
     `ask_failed`. Commits when a model call was made (its ledger row); nothing about the question
     is kept."""
     now = now or datetime.now(UTC)
     question = question.strip()
     if not question or len(question) > MAX_QUESTION_CHARS:
         raise Refused(422, "question_invalid", QUESTION_INVALID)
+    feature_gates.require(session, user, entitlements.ASK, now=now)
     zone = _zone_of(session, user)
     today = now.astimezone(zone).date()
     rng = date_hint(question, today)

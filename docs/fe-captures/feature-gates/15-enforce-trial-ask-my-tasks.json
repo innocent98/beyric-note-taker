@@ -1,0 +1,27 @@
+{
+  "note": "The 'my tasks' answer for the same person: 200, no model.",
+  "client": "ada trial",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "question": "What are my open tasks?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "tasks",
+      "lead": "You have no open tasks assigned to you.",
+      "points": []
+    }
+  }
+}

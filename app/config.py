@@ -100,6 +100,22 @@ class Settings(BaseSettings):
             raise ValueError(f"HOURS_MODE is {value!r}; it must be off, shadow or enforce")
         return name
 
+    @field_validator("feature_gates_mode", mode="before")
+    @classmethod
+    def _blank_feature_gates_mode_is_off(cls, value):
+        """An empty `FEATURE_GATES_MODE=` line means "not set": every feature stays open."""
+        if isinstance(value, str) and not value.strip():
+            return "off"
+        return value
+
+    @field_validator("feature_gates_mode")
+    @classmethod
+    def _known_feature_gates_mode(cls, value: str) -> str:
+        name = value.strip().lower()
+        if name not in ("off", "shadow", "enforce"):
+            raise ValueError(f"FEATURE_GATES_MODE is {value!r}; it must be off, shadow or enforce")
+        return name
+
     @field_validator("transcript_shadow_percent", mode="before")
     @classmethod
     def _blank_shadow_percent_is_zero(cls, value):
@@ -277,6 +293,12 @@ class Settings(BaseSettings):
     # and logs one line when the two disagree (`hours_shadow`). `enforce` is accepted and does
     # nothing yet (stage S2 makes the new rule decide). Anything else stops the process at startup.
     hours_mode: str = "off"
+    # The feature gates (billing spec 2.3, stage S3): Ask Beyric, new translations and rewriting
+    # notes with another template need a live plan or trial (`app/feature_gates.py`). `off`
+    # (default): every feature stays open and nothing extra is read. `shadow`: they stay open and
+    # one line is logged each time the gate would have refused. `enforce`: 403 `plan_inactive`.
+    # Meant to be switched on only at go-live (S11). Anything else stops the process at startup.
+    feature_gates_mode: str = "off"
     # Payments (billing spec section 5, stage S4). `false` (default): the webhook route
     # `POST /api/billing/webhooks/{provider}` answers 404 and nothing is stored. No payment provider
     # is built yet, so `true` still accepts nothing until Paystack (S6) or Flutterwave (S7) lands.

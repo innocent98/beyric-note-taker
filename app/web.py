@@ -183,7 +183,7 @@ def regenerate(
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
-        services.regenerate_notes(session, meeting, parse_id(template_id), openai_client)
+        services.regenerate_notes(session, user, meeting, parse_id(template_id), openai_client)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")
