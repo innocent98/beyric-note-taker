@@ -249,6 +249,11 @@ def concrete(path: str) -> str:
     return re.sub(r"\{provider\}", "google", re.sub(r"\{(?!provider)\w+\}", "1", path))
 
 
+# Public by the guard's path prefix (`auth.WEBHOOK_PREFIX`), not by an entry in `auth.PUBLIC_API`:
+# called by a payment provider, which has no login; its signature on the raw body is the
+# credential (`app/billing/api.py`). `google` stands in for `{provider}`; billing is off: 404.
+WEBHOOK_PUBLIC = {("POST", "/api/billing/webhooks/google")}
+
 PUBLIC = {
     ("GET", "/api/session"),
     ("POST", "/api/session"),
@@ -265,10 +270,7 @@ PUBLIC = {
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),
     ("GET", "/api/calendar/microsoft/callback"),
-    # Called by a payment provider, which has no login: its signature on the raw body is the
-    # credential (`app/billing/api.py`). 404 here because billing is off in this app.
-    ("POST", "/api/billing/webhooks/google"),
-}
+} | WEBHOOK_PUBLIC
 
 # Routes with no CSRF header by design: a provider cannot send ours. `auth.guard` skips the check
 # for exactly the webhook prefix; `test_billing_inbox.py` shows only this route lives under it.

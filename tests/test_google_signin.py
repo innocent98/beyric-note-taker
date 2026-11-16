@@ -808,6 +808,8 @@ def test_ten_parallel_google_sign_ups_at_nine_accounts_make_exactly_one(
 
 
 def test_the_public_routes_in_the_guard_match_the_ones_the_tests_know():
-    from tests.test_api import PUBLIC
+    from tests.test_api import PUBLIC, WEBHOOK_PUBLIC
 
-    assert auth.PUBLIC_API == PUBLIC
+    # The payment webhook is public by the guard's path prefix, so it is not in `PUBLIC_API`.
+    assert auth.PUBLIC_API == PUBLIC - WEBHOOK_PUBLIC
+    assert auth.WEBHOOK_PREFIX == "/api/billing/webhooks/"
