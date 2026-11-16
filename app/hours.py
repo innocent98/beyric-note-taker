@@ -25,7 +25,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app import alerts, entitlements, usage
-from app.models import AppState, HourGrant, UsageAllocation, UsageEntry, User
+from app.models import HourGrant, UsageAllocation, UsageEntry, User
 
 logger = logging.getLogger(__name__)
 
@@ -99,41 +99,35 @@ def allocate(
     return _spend(session, entry.id, entry.seconds, held)
 
 
-def reconcile_backlog(session: Session, user: User) -> int:
+def reconcile_backlog(session: Session, user: User, now: datetime) -> int:
     """Settle the usage counted since the person's pilot grant began that has no allocation: turn it
-    into allocations on the pilot grants, oldest recording first. Returns the seconds settled.
+    into allocations, oldest recording first, **across the person's grants in the decided spending
+    order** (trial or pilot, plan hours, gifts and packs), exactly as `entitlements.
+    unallocated_seconds` already takes it off them. Returns the seconds settled.
 
-    This is the one-off step before `HOURS_MODE=enforce`. Normally it changes nobody's hours left:
-    until it runs `entitlements.unallocated_seconds` takes the same seconds off the grants in the
-    same order, and the pilot grant is first. **It can change them** when the backlog is larger
-    than what the pilot grant had left and the person holds other grants: before, the excess came
-    off those grants; after, it is written off on the pilot grant (they did not pay for it). The
-    script prints both numbers and refuses to apply a change. It matters later when a pilot grant
-    expires, because the backlog would otherwise come off paid hours. Idempotent.
+    This is the step before `HOURS_MODE=enforce` (run it again right before switching; it is safe
+    to re-run). Because it spends the backlog the way the backlog term does, it changes nobody's
+    hours left: what is still unsettled stays taken off, what is settled is now a row. What it adds
+    is permanence: the backlog can no longer come off paid hours when a pilot grant expires later.
+    A recording longer than what every grant had left is settled in full, the excess written off
+    as an over-draw on the last grant spent from (as at a live count). Idempotent.
     """
-    pilots = list(
-        session.scalars(
-            select(HourGrant).where(
-                entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
-                HourGrant.kind == "pilot",
-            )
+    since, until, open_ended = session.execute(
+        select(
+            func.min(HourGrant.starts_at),
+            func.max(HourGrant.expires_at),
+            func.count().filter(HourGrant.expires_at.is_(None)),
+        ).where(
+            entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+            HourGrant.kind == "pilot",
         )
-    )
-    if not pilots:
+    ).one()
+    if since is None:
         return 0
+    if open_ended:  # one pilot grant never expires, so nothing is past its end
+        until = None
     _lock_person(session, user)
-    since = min(g.starts_at for g in pilots)
-    open_ended = any(g.expires_at is None for g in pilots)  # then nothing is past the end
-    until = None if open_ended else max(g.expires_at for g in pilots)
-    spent = dict(
-        session.execute(
-            select(UsageAllocation.grant_id, func.sum(UsageAllocation.seconds))
-            .where(UsageAllocation.grant_id.in_([g.id for g in pilots]))
-            .group_by(UsageAllocation.grant_id)
-        ).all()
-    )
-    pilots.sort(key=entitlements.spend_key)
-    held = [[g, max(g.seconds - int(spent.get(g.id, 0)), 0)] for g in pilots]
+    held = entitlements.grants_in_force(session, user, now)
     query = (
         select(UsageEntry)
         .where(
@@ -150,7 +144,7 @@ def reconcile_backlog(session: Session, user: User) -> int:
     settled = 0
     for entry in session.scalars(query).all():
         for row in _spend(session, entry.id, entry.seconds, held):
-            for pair in held:  # what each pilot grant has left for the next entry
+            for pair in held:  # what each grant has left for the next entry
                 if pair[0].id == row.grant_id:
                     pair[1] = max(pair[1] - row.seconds, 0)
         settled += entry.seconds
@@ -165,7 +159,9 @@ CAP_GIFT_REASON = "Recorded-hours cap raised by an admin"
 def _cap_baseline(session: Session, user: User) -> int:
     """The cap the person's hours were built from: their pilot grants plus what was already in the
     ledger when those grants were made (migration 0049 made each grant as cap minus ledger). With
-    no pilot grant (an account made after 0049) the baseline is the app-wide default cap."""
+    no pilot grant (an account made after 0049) it is the fixed default of 18000 s (5 h), the same
+    "else 18000" as the migration: never the app's current default, which an admin can change (a
+    lowered default would otherwise make the same cap gift again, and a NULL one would crash)."""
     pilots = list(
         session.scalars(
             select(HourGrant).where(
@@ -175,8 +171,7 @@ def _cap_baseline(session: Session, user: User) -> int:
         )
     )
     if not pilots:
-        state = session.get(AppState, 1)
-        return state.default_hours_cap_seconds if state else usage.DEFAULT_CAP_SECONDS
+        return usage.DEFAULT_CAP_SECONDS
     since = min(g.starts_at for g in pilots)
     before = session.scalar(
         select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
@@ -198,8 +193,8 @@ def sync_cap_gift(session: Session, user: User) -> int:
     Gifts of this rule are recognised by their reason; any other `admin_gift` is left alone.
     Does nothing for an admin (no cap) or a person with no cap."""
     cap = usage.effective_cap(session, user)
-    if cap is None or user.is_admin:
-        return 0
+    if cap is None or user.is_admin or user.status == "deleted" or user.purged_at is not None:
+        return 0  # no cap to honour, or an account that is going away: no hours for a ghost
     _lock_person(session, user)
     gifted = session.scalar(
         select(func.coalesce(func.sum(HourGrant.seconds), 0)).where(
@@ -229,7 +224,10 @@ def sync_cap_gift(session: Session, user: User) -> int:
 
 def notify_low(session: Session, user: User, status: entitlements.Status) -> None:
     """The 80% notice: a bell entry and one mail, once per person and period."""
-    used, held = status.holdings_seconds - status.seconds_left, status.holdings_seconds
+    # The original pilot total when a pilot grant is in force ("4 of your 5", not "0 of your 1").
+    offset = status.display_offset_seconds
+    used = status.holdings_seconds - status.seconds_left + offset
+    held = status.holdings_seconds + offset
     alerts.notify_user(
         session,
         user.id,
@@ -237,7 +235,7 @@ def notify_low(session: Session, user: User, status: entitlements.Status) -> Non
         severity="info",
         title=LOW_TITLE,
         body=(
-            f"You have used {_hours(used)} of the {_hours(held)} recorded hours you have now. "
+            f"You have used {_hours(used)} of your {_hours(held)} recorded hours. "
             "When they run out the note taker will not join new meetings."
         ),
         dedupe_key=f"{LOW_KIND}:{status.period_key}",
@@ -280,6 +278,33 @@ def notify_out_of_hours(
     notify_out(session, user, entitlements.status(session, user, now, max_poll_seconds))
 
 
+def _tell_admins_of_a_failed_allocation(
+    session: Session, user: User, entry: UsageEntry, now: datetime
+) -> None:
+    """A swallowed allocation failure must not stay a log line only: for a person who holds no
+    pilot grant the recording is then free hours for good. One admin alert per person and hour,
+    naming ids only (no email, no title). Best effort: it must not stop the transcript either."""
+    try:
+        with session.begin_nested():
+            alerts.notify_admins(
+                session,
+                kind="admin.hours_allocation_failed",
+                title="A recording was not allocated to a person's hours",
+                body=(
+                    f"The recording counted for user id {user.id} (usage entry {entry.id}) could "
+                    "not be split across their hours. It is counted in the ledger. For a person "
+                    "with a pilot grant, scripts/hours_reconcile_backlog.py (a dry run first) "
+                    "settles it once the cause is fixed; for anyone else it needs a manual look."
+                ),
+                # One alert per person and hour: a second person's failure is not hidden
+                dedupe_key=alerts.bucket_key(
+                    f"admin.hours_allocation_failed.{user.id}", now, minutes=60
+                ),
+            )
+    except Exception as exc:
+        logger.error("hours allocation alert failed error=%s", type(exc).__name__)
+
+
 def after_counted(
     session: Session, user: User, entry: UsageEntry, now: datetime, max_poll_seconds: int
 ) -> None:
@@ -299,6 +324,7 @@ def after_counted(
             entry.id,
             type(exc).__name__,
         )
+        _tell_admins_of_a_failed_allocation(session, user, entry, now)
         return
     if user.is_admin:
         return

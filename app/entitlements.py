@@ -35,10 +35,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import usage
-from app.models import HourGrant, UsageAllocation, UsageEntry, User
+from app.models import HourGrant, Meeting, ScheduledJoin, UsageAllocation, UsageEntry, User
 
 NO_HOURS = "no_hours"  # a grant is in force but spent
 NO_PLAN = "no_plan"  # no grant is in force at all
+# Hours are held (the first meeting would start) but every one of them is set aside for meetings
+# that are already running or just placed: a second meeting must not be started on them.
+RESERVE = "reserve"
 
 # Spec 3.2, as decided for S2: trial or pilot first, then plan hours (oldest period first), then
 # admin gifts and packs together, soonest expiry first (no expiry last). The rule behind it:
@@ -66,6 +69,12 @@ class Status:
     # Names the person's current period for the notices (once per person and period): the newest
     # plan period in force, else the first grant in spending order, else "none".
     period_key: str = "none"
+    # The usage counted before the person's pilot grant was made, while a pilot grant is in force
+    # (0 otherwise). A pilot grant holds only what was LEFT of the old allowance, so a person who
+    # had used 4 of 5 hours holds 1 hour; the screens and mails show the original total by adding
+    # this to both numbers ("4 of 5 h", not "0 of 1 h"). The ledger is the baseline: nothing else
+    # is stored.
+    display_offset_seconds: int = 0
 
 
 @dataclass(frozen=True)
@@ -137,6 +146,26 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
     return session.scalar(query)
 
 
+def pre_pilot_seconds(session: Session, user: User) -> int:
+    """Usage counted at or before the moment the person's pilot grants were made (migration 0049
+    made each as the old cap minus the ledger of that moment). 0 with no pilot grant."""
+    since = session.scalar(
+        select(func.min(HourGrant.starts_at)).where(
+            mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot"
+        )
+    )
+    if since is None:
+        return 0
+    return int(
+        session.scalar(
+            select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
+                mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+                UsageEntry.counted_at <= since,
+            )
+        )
+    )
+
+
 def held_after_backlog(
     session: Session, user: User, now: datetime, exclude_entry_id: int | None = None
 ) -> list[list]:
@@ -180,6 +209,7 @@ def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 
         warning = LOW
     else:
         warning = None
+    offset = pre_pilot_seconds(session, user) if any(g.kind == "pilot" for g, _ in held) else 0
     anchor = max(plans, key=lambda g: (g.starts_at, g.id)) if plans else None
     if anchor is None and held:
         anchor = held[0][0]
@@ -193,14 +223,79 @@ def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 
         period_ends_at=max((g.expires_at for g in plans if g.expires_at), default=None),
         trial_ends_at=max((g.expires_at for g in trials if g.expires_at), default=None),
         period_key=f"{anchor.kind}{anchor.id}" if anchor else "none",
+        display_offset_seconds=offset,
     )
 
 
+def _reserved_beyond_elapsed(
+    session: Session, user: User, now: datetime, default_seconds: int, max_poll_seconds: int
+) -> tuple[int, int]:
+    """For the person's own meetings whose bot is in the call (or was just sent) and that are not
+    counted yet (a `processing` meeting has left and reserves nothing):
+    `(how many, the seconds still set aside beyond what has elapsed)`. Each reserves
+    `default_seconds`, or the calendar event's length when a calendar join made the meeting, never
+    more than the poll cap; what has run already is counted by `status`, so only the rest is added.
+    """
+    counted = select(UsageEntry.meeting_id).where(UsageEntry.meeting_id.is_not(None))
+    rows = session.execute(
+        select(
+            Meeting.id, Meeting.started_polling_at, ScheduledJoin.starts_at, ScheduledJoin.ends_at
+        )
+        .outerjoin(ScheduledJoin, ScheduledJoin.meeting_id == Meeting.id)
+        .where(
+            Meeting.owner_user_id == user.id,
+            Meeting.status == usage.IN_THE_CALL,
+            Meeting.started_polling_at.is_not(None),
+            Meeting.id.not_in(counted),
+        )
+        .order_by(Meeting.id)
+    ).all()
+    # `scheduled_joins.meeting_id` is not unique: a meeting reserves once, whatever joins name it
+    meetings = {}
+    for meeting_id, started, event_start, event_end in rows:
+        meetings.setdefault(meeting_id, (started, event_start, event_end))
+    extra = 0
+    for started, event_start, event_end in meetings.values():
+        reserve = default_seconds
+        if event_start is not None and event_end is not None and event_end > event_start:
+            reserve = int((event_end - event_start).total_seconds())
+        reserve = min(reserve, max_poll_seconds)
+        elapsed = min(max((now - started).total_seconds(), 0), max_poll_seconds)
+        extra += max(int(reserve - elapsed), 0)
+    return len(meetings), extra
+
+
 def check_join(
-    session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600
+    session: Session,
+    user: User,
+    now: datetime,
+    max_poll_seconds: int = 6 * 3600,
+    *,
+    reserve_seconds: int = 0,
+    expected_seconds: int | None = None,
 ) -> JoinDecision:
-    """What the new rule would decide for a new recording: allowed while any hour is left."""
+    """What the new rule would decide for a new recording: allowed while any hour is left.
+
+    With `reserve_seconds` (`HOURS_RESERVE_MINUTES`, enforce only) a SECOND concurrent meeting is
+    held to more: a meeting just placed counts as about 0 s until it has run a while, so with 60 s
+    left a person could start two. Every meeting of theirs that is running or just placed reserves
+    `reserve_seconds` (its calendar event's length when known), and the new one reserves
+    `expected_seconds` (its event's length) or `reserve_seconds`; the second meeting starts only if
+    the hours left cover all of them (reason `reserve`). A first meeting is never held to it."""
     s = status(session, user, now, max_poll_seconds)
-    if s.unlimited or (s.seconds_left or 0) > 0:
+    if s.unlimited:
         return JoinDecision(True, None, s.seconds_left)
-    return JoinDecision(False, NO_HOURS if s.has_grant else NO_PLAN, 0)
+    if (s.seconds_left or 0) <= 0:
+        return JoinDecision(False, NO_HOURS if s.has_grant else NO_PLAN, 0)
+    if reserve_seconds > 0:
+        running, extra = _reserved_beyond_elapsed(
+            session, user, now, reserve_seconds, max_poll_seconds
+        )
+        # A calendar length of zero or less (an event that ends before it starts) is not a length.
+        need = min(
+            expected_seconds if expected_seconds and expected_seconds > 0 else reserve_seconds,
+            max_poll_seconds,
+        )
+        if running and s.seconds_left - extra < need:
+            return JoinDecision(False, RESERVE, s.seconds_left)
+    return JoinDecision(True, None, s.seconds_left)

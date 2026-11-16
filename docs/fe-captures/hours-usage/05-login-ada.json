@@ -35,10 +35,10 @@
         "recording_acknowledged": false
       },
       "usage": {
-        "used_seconds": 0,
+        "used_seconds": 14400,
         "cap_seconds": 18000,
         "state": "pilot",
-        "seconds_left": 18000,
+        "seconds_left": 3600,
         "warning": null,
         "can_record": true,
         "unlimited": false,

@@ -533,7 +533,7 @@ def test_the_80_percent_notice_goes_once_with_one_mail(session, ada):
     count(session, ada, 10, code="b-bbbb-bbb")  # exactly 80%
     [low] = notices(session, ada, "usage.hours_low")
     assert low.title == hours.LOW_TITLE
-    assert low.body.startswith("You have used 2.2 of the 2.8 recorded hours you have now")
+    assert low.body.startswith("You have used 2.2 of your 2.8 recorded hours")
     [mail] = mails_to(session, ada)
     assert (mail.template, mail.payload["title"]) == ("alert", hours.LOW_TITLE)
     count(session, ada, 500, code="c-cccc-ccc")  # still between 80% and 100%
@@ -786,7 +786,7 @@ def test_reconcile_changes_nobody_s_hours_left_and_is_idempotent(session, ada):
     s1_usage(session, ada, 1800, T0 - 4 * DAY)
     before = status(session, ada)
     assert before.seconds_left == 3 * HOUR + 20 * HOUR - HOUR - 1800
-    assert hours.reconcile_backlog(session, ada) == HOUR + 1800
+    assert hours.reconcile_backlog(session, ada, T0) == HOUR + 1800
     session.commit()
     after = status(session, ada)
     assert (after.seconds_left, after.holdings_seconds, after.state) == (
@@ -795,7 +795,7 @@ def test_reconcile_changes_nobody_s_hours_left_and_is_idempotent(session, ada):
         before.state,
     )
     assert sorted(s for _, s in _allocations_on(session, pilot)) == [1800, HOUR]
-    assert hours.reconcile_backlog(session, ada) == 0  # nothing more to settle
+    assert hours.reconcile_backlog(session, ada, T0) == 0  # nothing more to settle
     assert status(session, ada).seconds_left == before.seconds_left
 
 
@@ -817,7 +817,7 @@ def test_without_reconcile_s1_usage_would_come_off_paid_hours_once_the_pilot_end
     later = T0 + 2 * DAY  # the pilot grant has ended
     grant(session, ada, 20 * HOUR, kind="plan_period", starts=T0 + DAY)
     assert status(session, ada, later).seconds_left == 18 * HOUR  # the wrong answer, unreconciled
-    hours.reconcile_backlog(session, ada)
+    hours.reconcile_backlog(session, ada, T0)
     session.commit()
     assert status(session, ada, later).seconds_left == 20 * HOUR  # nobody loses an hour
 
@@ -825,7 +825,7 @@ def test_without_reconcile_s1_usage_would_come_off_paid_hours_once_the_pilot_end
 def test_reconcile_writes_off_what_the_pilot_grant_could_not_cover(session, ada):
     pilot = grant(session, ada, HOUR, kind="pilot", starts=T0 - 10 * DAY)
     entry = s1_usage(session, ada, 3 * HOUR, T0 - 5 * DAY)  # a running meeting that overshot
-    hours.reconcile_backlog(session, ada)
+    hours.reconcile_backlog(session, ada, T0)
     session.commit()
     assert _allocations_on(session, pilot) == [(entry.id, 3 * HOUR)]
     grant(session, ada, 20 * HOUR, kind="plan_period")
@@ -871,31 +871,53 @@ def test_the_reconcile_script_shows_a_dry_run_and_keeps_nothing_until_asked(sess
 
 
 def spill_case(session, ada):
-    """The review's case: pilot grant 1 h, 3 h counted during S1, plus 5 h of another grant."""
+    """The review's case, as migration 0049 would have left it: a 5 h cap with 4 h used before the
+    pilot grant (so the grant is 1 h), 3 h counted during S1, and a 5 h gift."""
     grant(session, ada, HOUR, kind="pilot", starts=T0 - 10 * DAY)
+    s1_usage(session, ada, 4 * HOUR, T0 - 11 * DAY)  # used before the pilot grant was made
     grant(session, ada, 5 * HOUR, kind="admin_gift", starts=T0 - DAY)
     s1_usage(session, ada, 3 * HOUR, T0 - 5 * DAY)
 
 
-def test_the_script_prints_the_true_before_and_after_and_flags_a_change(session, ada):
+def test_the_backlog_is_spent_across_all_grants_in_order_so_nothing_changes(session, ada):
+    """The review's spill case: pilot grant 1 h, 3 h counted during S1, a 5 h gift. Settled across
+    the grants in spending order (pilot 1 h, then the gift 2 h), the hours left are the same
+    before and after: 3 h."""
     script = load_script()
     spill_case(session, ada)
     [row] = script.reconcile(session, T0, 6 * HOUR)
-    assert (row.before, row.after, row.changes_hours) == (3 * HOUR, 5 * HOUR, True)
+    assert (row.before, row.after, row.changes_hours) == (3 * HOUR, 3 * HOUR, False)
     text = script.render([row], apply=False)
-    assert "left 3.00 h before settling, 5.00 h after  <-- HOURS CHANGE" in text
-    assert "1 person(s) would change hours left" in text
+    assert "left 3.00 h before settling, 3.00 h after" in text and "HOURS CHANGE" not in text
+    session.commit()
+    spent = {
+        g.kind: sum(
+            a.seconds for a in session.scalars(select(UsageAllocation)) if a.grant_id == g.id
+        )
+        for g in session.scalars(select(HourGrant))
+    }
+    assert spent == {"pilot": HOUR, "admin_gift": 2 * HOUR}
 
 
-def test_the_script_refuses_to_apply_while_any_hours_would_change(
+def test_the_script_refuses_to_apply_if_settling_ever_changes_hours(
     session, engine, ada, monkeypatch
 ):
+    """The safety net: a settle that moved someone's hours is never kept, whatever the cause."""
     from sqlalchemy.orm import sessionmaker
 
     import app.db
 
     script = load_script()
     spill_case(session, ada)
+    gift = session.scalars(select(HourGrant).where(HourGrant.kind == "admin_gift")).one()
+    entry = session.scalars(select(UsageEntry).where(UsageEntry.seconds == 3 * HOUR)).one()
+
+    def moves_hours(session_, user, now):
+        session_.add(UsageAllocation(usage_entry_id=entry.id, grant_id=gift.id, seconds=HOUR))
+        session_.flush()
+        return HOUR
+
+    monkeypatch.setattr(script.hours, "reconcile_backlog", moves_hours)
     monkeypatch.setattr(app.db, "SessionLocal", sessionmaker(bind=engine))
     assert script.main(["--apply"]) == 2
     session.expire_all()

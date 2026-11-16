@@ -14,6 +14,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # marks it deprecated and nothing used it). Add a model here only after reading a real answer
 # from it.
 TRANSCRIPT_SKRIBBY_MODELS = ("elevenlabs/scribe-v2",)
+# The default `BOT_MAX_LOCAL` under Skribby: below the 25 concurrent bots our Skribby plan allows.
+SKRIBBY_BOT_CEILING = 20
 # One address: no spaces, commas, angle brackets or quotes; a dotted domain. Deliberately plain (no
 # display names, no comments, no quoted local parts): this is a public address an operator types in.
 _LABEL = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
@@ -186,6 +188,14 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _capacity_follows_the_provider(self):
+        """Unset, `BOT_MAX_LOCAL` follows the provider: 1 for Vexa (our own host), 20 for Skribby
+        (Skribby's servers; a ceiling under our plan's 25). A value in `.env` always wins."""
+        if self.bot_provider == "skribby" and "bot_max_local" not in self.model_fields_set:
+            self.bot_max_local = SKRIBBY_BOT_CEILING
+        return self
+
+    @model_validator(mode="after")
     def _teams_follows_the_provider(self):
         if self.bot_provider != "skribby":
             self.teams_join_enabled = False
@@ -306,16 +316,25 @@ class Settings(BaseSettings):
     # nothing and keep Vexa's default.
     bot_left_alone_seconds: int = 300
     max_poll_hours: int = 6
-    # How many bots may be on meetings at once on the one local Vexa host, across all users
-    # (`app/placement.py`). The box fits about one until measured (spec section 9); raise it only
-    # after the load test. 0 sends no new bots (a drain). `MAX_ACTIVE_BOTS`, the name this setting
-    # had before placement existed, is still read, so an old .env keeps working.
+    # How many bots may be on meetings at once across all users (`app/placement.py`). Under Vexa the
+    # bots run on our own host, which fits about one until measured (spec section 9), so the
+    # default is 1. Under Skribby the bots run on Skribby's servers (our plan there allows 25 at
+    # once; Skribby's billing page has a "Request an increase"), so this is only a high safety
+    # ceiling there, default 20; `USER_BOT_LIMIT` is the real per-person control. Set it in `.env`
+    # to override either default. 0 sends no new bots (a drain). `MAX_ACTIVE_BOTS`, the name this
+    # setting had before placement existed, is still read, so an old .env keeps working.
     bot_max_local: int = Field(
         default=1, ge=0, validation_alias=AliasChoices("bot_max_local", "max_active_bots")
     )
-    # How many bots one user may have on meetings at once (spec section 9.4, step 7). It only bites
-    # once `bot_max_local` is above it. 0 stops every user.
+    # How many bots one user may have on meetings at once (spec section 9.4, step 7). It is the
+    # real per-person control under Skribby (the capacity ceiling above is high there); under Vexa
+    # it only bites once `bot_max_local` is above it. 0 stops every user.
     user_bot_limit: int = Field(default=2, ge=0)
+    # `HOURS_MODE=enforce`: while a person has a meeting running or just placed, a second one starts
+    # only if their hours cover a reserve for each of them: this many minutes per meeting (the
+    # calendar event's length instead, when known). A first meeting is not affected. 0 turns the
+    # reserve off. See `app/entitlements.py` (`check_join`).
+    hours_reserve_minutes: int = Field(default=30, ge=0, le=360)
     # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
     # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
     # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under

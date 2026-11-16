@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import HourGrant, Meeting, Template, User  # noqa: E402
+from app.models import HourGrant, Meeting, Template, UsageEntry, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
 from app.usage import email_hash  # noqa: E402
@@ -110,16 +110,30 @@ def run(engine, settings, server_base, off_base) -> None:
         "`unlimited` first.",
     )
 
-    # A person with a pilot grant (what migration 0049 made for the 10 pilot accounts): 5 hours.
+    # A pilot account as migration 0049 left it: a 5-hour allowance of which 4 hours were used
+    # before the grant was made, so the grant holds the 1 hour that was left.
     ada = "ada@example.test"
     ada_id = person(engine, ada)
-    pilot = give(engine, ada_id, ada, "pilot", 5 * HOUR)
+    pilot = give(engine, ada_id, ada, "pilot", HOUR, starts_at=now - timedelta(days=10))
+    with Session(engine) as session:
+        session.add(
+            UsageEntry(
+                user_id=ada_id,
+                email_hash=email_hash(ada),
+                seconds=4 * HOUR,
+                counted_at=now - timedelta(days=11),
+            )
+        )
+        session.commit()
     a = signed_in(server_base, "ada pilot", ada)
     a.call(
         "session-pilot",
         "GET",
         "/api/session",
-        note="A pilot grant of 5 hours, nothing recorded yet: `state` `pilot`, `warning` null.",
+        note="A pilot account that had used 4 of its 5 hours before the grant was made (so it "
+        "holds 1 hour): the numbers show the ORIGINAL total, `used_seconds` 14400 of "
+        "`cap_seconds` 18000, "
+        "while `seconds_left` is the 3600 that can still be recorded. `state` `pilot`.",
     )
     off = signed_in(off_base, "ada flag off", ada)
     off.call(
@@ -130,21 +144,23 @@ def run(engine, settings, server_base, off_base) -> None:
         "the two old fields as always, from the old cap rule, and every new field is null.",
     )
 
-    # A real count (see the note at the top): 4 of 5 hours is exactly 80%.
-    count(engine, settings, ada, 4 * HOUR, "aaa-aaaa-aaa")
+    # A real count (see the note at the top): 0.8 of the 1 hour held is exactly 80%.
+    count(engine, settings, ada, 2880, "aaa-aaaa-aaa")
     a.call(
         "session-80-percent",
         "GET",
         "/api/session",
-        note="After a 4-hour recording was counted (`usage.record_usage`, not a real meeting): 80% "
-        "of the 5 hours held, so `warning` is `low`. `used_seconds` 14400, `cap_seconds` 18000.",
+        note="After a 0.8-hour recording was counted (`usage.record_usage`, not a real meeting): "
+        "80% "
+        "of the 1 hour held, so `warning` is `low`. `used_seconds` 17280 of `cap_seconds` 18000: "
+        "still the original 5-hour total.",
     )
     a.call(
         "notifications-80-percent",
         "GET",
         "/api/notifications",
         note="The 80% notice, written by the same count: kind `usage.hours_low`, one per person "
-        "and period.",
+        'and period. It says "4.8 of your 5 recorded hours" (the original total).',
     )
 
     # A paying person: pilot hours left plus a plan period (inserted by SQL, see the note).
@@ -182,7 +198,7 @@ def run(engine, settings, server_base, off_base) -> None:
     )
 
     # Out of hours: Ada records the last hour.
-    count(engine, settings, ada, HOUR, "bbb-bbbb-bbb")
+    count(engine, settings, ada, 720, "bbb-bbbb-bbb")
     a.call(
         "session-out-of-hours",
         "GET",
@@ -242,6 +258,42 @@ def run(engine, settings, server_base, off_base) -> None:
         "/api/meetings",
         body={"url": MEET, "template_id": template_id},
         note="403 `hours_cap_reached` with `reason` `no_plan`: no hours are held at all.",
+    )
+    # A second meeting on the last minute: 40 minutes held, one meeting just placed.
+    rita = "rita@example.test"
+    rita_id = person(engine, rita)
+    give(engine, rita_id, rita, "plan_period", 40 * 60, starts_at=now - timedelta(days=1))
+    with Session(engine) as session:
+        template = session.query(Template).filter_by(owner_user_id=rita_id).one()
+        session.add(
+            Meeting(
+                owner_user_id=rita_id,
+                url="https://meet.google.com/rrr-rrrr-rrr",
+                platform="google_meet",
+                native_id="rrr-rrrr-rrr",
+                template_id=template.id,
+                status="bot_sent",
+                started_polling_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+        template_id = template.id
+    r = signed_in(server_base, "rita one running", rita)
+    r.call(
+        "session-meeting-running",
+        "GET",
+        "/api/session",
+        note="40 minutes held and one meeting just placed (inserted by SQL, as the placement "
+        "would make it): `seconds_left` is still about 2400, but `can_record` is false, because "
+        "a second meeting needs its 30 minutes plus the 30 set aside for the running one.",
+    )
+    r.call(
+        "start-meeting-reserve",
+        "POST",
+        "/api/meetings",
+        body={"url": "https://meet.google.com/new-aaaa-aaa", "template_id": template_id},
+        note="A second link while that meeting runs: 403 `hours_cap_reached` with `reason` "
+        "`reserve`. A first meeting is never refused for this.",
     )
     print("pilot grant id", pilot)
 
