@@ -148,7 +148,7 @@ inside each running service). Not built, listed so none is lost:**
   (`agenda_recipients` is already 0).
 - `docs/openapi.json` also gained two unrelated `maxLength: 2000` lines (`BotNameIn.bot_name`,
   `DisplayNameIn.name`): the committed file on main was stale; correct and harmless.
-- Ghost empty cards (PR 1 follow-up) remain a decision for Adebayo or the lead.
+- Ghost empty cards (PR 1 follow-up): decided 2026-11-15, the person removes one with "Remove this recurring meeting" (`docs/sop/2026-11-15-remove-recurring-meeting.md`).
 - A reminder from the personal row can still reach its owner when his ordinary team's row has
   nothing to say (by design: the one mail comes from the first row with something to say).
 - `_timing` (cadence) read the joined meetings of the whole row, not the scope: **fixed in PR 3**.

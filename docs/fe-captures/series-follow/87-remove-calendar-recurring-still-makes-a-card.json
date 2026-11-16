@@ -1,0 +1,7 @@
+{
+  "note": "NOT AN HTTP CALL. A recurring event on Ada's connected calendar that the scheduler will join (a join is scheduled) and that was never removed: the real hourly `series.sync_from_joins` makes its row. It makes 1. The removal feature changes nothing here: it only skips an event that someone REMOVED for that scope (capture 70 shows 0 rows made for the removed ones).",
+  "content": {
+    "rows_made": 1,
+    "recurring_event_id": "rid-connected"
+  }
+}

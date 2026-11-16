@@ -2,6 +2,11 @@
 frontend guide and the runbook.
 
     python scripts/capture_series_follow.py postgresql+psycopg://USER:PASS@HOST:PORT/postgres
+    python scripts/capture_series_follow.py postgresql+psycopg://... --keep 51   # write only 52 and up
+
+`--keep N` runs the whole story again (the later steps need its state) but leaves the first N captured
+files exactly as committed: the way part 5 below (remove a recurring meeting, captures 52 and up) was
+added without rewriting the 51 files the guide's sections 1 to 9 were checked against.
 
 Same method as `capture_team_scoped_lists.py`: a scratch database with the real migrations, the real
 app under uvicorn on a free local port, httpx for every call, every exchange saved to
@@ -19,6 +24,9 @@ The story, in the order the server steps run it:
    errors; a share and an unshare, with the rows following the meeting.
 4. A "straggler" (a meeting put back in a row of another scope by hand): the readers hide it, the
    flag-on backfill moves it, and the next dry run says 0.
+5. REMOVE A RECURRING MEETING (`DELETE /api/series/{id}`, lead-designed, 2026-11-15): who may and who
+   may not, one row only, the meetings stay, the calendar sync and a later share do not bring the row
+   back, an emptied "ghost" card, a hand-made row.
 
 What is real: the app, auth, CSRF, validation, team roles and visibility, the database, the
 migrations, serialisation, every error, the share and unshare routes with their follow hooks, the
@@ -47,6 +55,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
+KEEP = int(sys.argv[sys.argv.index("--keep") + 1]) if "--keep" in sys.argv else 0
 OUT = ROOT / "docs" / "fe-captures" / "series-follow"
 DB_NAME = "notetaker_capture_series_follow"
 ADA = "owner@example.test"  # the account migration 0006 creates (a placeholder)
@@ -141,7 +150,8 @@ class Recorder:
             "response": {"status": response.status_code, "body": shown},
         }
         file = OUT / f"{Recorder.count:02d}-{name}.json"
-        file.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n")
+        if Recorder.count > KEEP:
+            file.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n")
         print(f"{file.name:58} {self.who:6} {method:6} {path:44} -> {response.status_code}")
         return response
 
@@ -149,9 +159,10 @@ class Recorder:
 def note_file(name: str, note: str, content) -> None:
     Recorder.count += 1
     record = {"note": note, "content": content}
-    (OUT / f"{Recorder.count:02d}-{name}.json").write_text(
-        json.dumps(record, indent=2, ensure_ascii=False, default=str) + "\n"
-    )
+    if Recorder.count > KEEP:
+        (OUT / f"{Recorder.count:02d}-{name}.json").write_text(
+            json.dumps(record, indent=2, ensure_ascii=False, default=str) + "\n"
+        )
     print(f"{Recorder.count:02d}-{name}")
 
 
@@ -686,11 +697,381 @@ def run(base: str, seeded: dict, engine) -> None:
         note="Pat is in X but the empty card is Ada's alone (she made it): 404 for him, and it is not on his list (capture 17).",
     )
 
+    # ---- 5. remove a recurring meeting (LEAD-DESIGNED, 2026-11-15) ----
+    assert Recorder.count == 51, Recorder.count  # the story above is the guide's sections 1 to 9
+    remove_story(
+        base,
+        seeded,
+        engine,
+        ada,
+        pat,
+        quinn,
+        ids,
+        x,
+        y,
+        home,
+        ada_x,
+        ada_p,
+        empty_x,
+        pat_x,
+        pat_y,
+        pat_p,
+        row_of,
+    )
+
+
+def remove_story(
+    base,
+    seeded,
+    engine,
+    ada,
+    pat,
+    quinn,
+    ids,
+    x,
+    y,
+    home,
+    ada_x,
+    ada_p,
+    empty_x,
+    pat_x,
+    pat_y,
+    pat_p,
+    row_of,
+) -> None:
+    def titles(response) -> list[str]:
+        return [c["title"] for c in response.json()["series"]]
+
+    ada.call(
+        "remove-page-ada-x-before",
+        "GET",
+        f"/api/series/{ada_x}",
+        note="BEFORE ANY REMOVAL. Ada owns team X: her page says `can_remove: true` (new field on every series page).",
+    )
+    pat_view = pat.call(
+        "remove-page-pat-x-cannot",
+        "GET",
+        f"/api/series/{ada_x}",
+        note="Pat is a plain member of X and did not make this row (Ada did): he can read it, and the page says `can_remove: false`. Do not draw the button.",
+    )
+    assert pat_view.json()["can_remove"] is False
+    forbidden = pat.call(
+        "remove-pat-x-403",
+        "DELETE",
+        f"/api/series/{ada_x}",
+        note="A plain member who did not make the row: 403 `team_forbidden`, the project's usual team error. Nothing changed.",
+    )
+    assert forbidden.status_code == 403
+    outsider = quinn.call(
+        "remove-quinn-x-404",
+        "DELETE",
+        f"/api/series/{ada_x}",
+        note="Quinn is not in X: 404, the same answer as for a row that does not exist (and as a read of it, capture 30). Nothing changed.",
+    )
+    assert outsider.status_code == 404
+    not_owner = pat.call(
+        "remove-pat-ada-personal-404",
+        "DELETE",
+        f"/api/series/{ada_p}",
+        note="Ada's PERSONAL Standup, asked by Pat (who is in X): 404. A personal row belongs to its owner alone.",
+    )
+    assert not_owner.status_code == 404
+
+    # The emptied "ghost" card (Ada's 1:1: all private, so the team's row has no meeting left).
+    ghost = ada.call(
+        "remove-ada-ghost-1on1",
+        "DELETE",
+        f"/api/series/{empty_x}",
+        note="THE GHOST CARD: X's 1:1 row, empty since the backfill. Ada made it and owns X: 200. `meetings_kept` 0, nothing waiting. The calendar event is remembered as removed for X.",
+    )
+    assert ghost.status_code == 200 and ghost.json()["remembered"] is True
+    ada.call(
+        "remove-cards-ada-x-no-ghost",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list after: the 1:1 card is gone; Standup and Pat's Design sync are still there.",
+    )
+    ada.call(
+        "remove-cards-ada-personal-1on1-kept",
+        "GET",
+        "/api/series",
+        team=home["ada"],
+        note="Ada's PERSONAL list: her personal 1:1 row (the real private meeting) is untouched by removing X's empty 1:1. One removal acts on one row.",
+    )
+
+    # Pat removes his own personal Design sync; X's and Y's rows of the same event stay.
+    mine = pat.call(
+        "remove-pat-personal-design-sync",
+        "DELETE",
+        f"/api/series/{pat_p}",
+        note="Pat removes his PERSONAL Design sync (he is the owner). 200. Only the personal scope is remembered.",
+    )
+    assert mine.status_code == 200
+    pat.call(
+        "remove-cards-pat-personal-after",
+        "GET",
+        "/api/series",
+        team=home["pat"],
+        note="Pat's personal list: empty.",
+    )
+    pat.call(
+        "remove-cards-pat-x-still",
+        "GET",
+        "/api/series",
+        team=x,
+        note="Pat's X list: his X Design sync is still there (same recurring event, another row).",
+    )
+    pat.call(
+        "remove-cards-pat-y-still",
+        "GET",
+        "/api/series",
+        team=y,
+        note="Pat's Y list: his Y Design sync is still there.",
+    )
+    with Session(engine) as session:
+        private_meeting = session.get(Meeting, ids["p3"])
+        assert private_meeting.series_id is None
+
+    # Ada (owner of X) removes the Standup of X: the main case.
+    body = ada.call(
+        "remove-ada-x-standup",
+        "DELETE",
+        f"/api/series/{ada_x}",
+        note="THE MAIN CASE. Ada, owner of X, removes X's Standup. 200 with counts only: `meetings_kept` 1 (A1, which she may read), `agenda_lines_removed` 0, `remembered` true.",
+    )
+    assert body.status_code == 200
+    again = ada.call(
+        "remove-ada-x-standup-again",
+        "DELETE",
+        f"/api/series/{ada_x}",
+        note="The same call again: 404 (the row is gone). The frontend treats this 404 as 'already removed'.",
+    )
+    assert again.status_code == 404
+    ada.call(
+        "remove-page-ada-x-gone",
+        "GET",
+        f"/api/series/{ada_x}",
+        note="Reading the removed row: 404.",
+    )
+    a1 = ada.call(
+        "remove-meeting-a1-still-there",
+        "GET",
+        f"/api/meetings/{ids['a1']}",
+        note="A1, the meeting that was in the removed row, is still an ordinary meeting: 200, notes and tasks as before, `series` is null (not grouped any more).",
+    )
+    assert a1.status_code == 200 and a1.json()["series"] is None
+    after_x = ada.call(
+        "remove-cards-ada-x-after",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list: no Standup card now. Pat's Design sync (Pat's X row) is still listed.",
+    )
+    assert "Standup" not in titles(after_x)
+    ada.call(
+        "remove-cards-ada-personal-standup-kept",
+        "GET",
+        "/api/series",
+        team=home["ada"],
+        note="Ada's PERSONAL list: her personal Standup row (A2, private) is untouched by removing X's Standup.",
+    )
+
+    # The calendar sync does not bring it back (the real hourly sync, run in this process).
+    with Session(engine) as session:
+        made = series.sync_from_joins(session, datetime.now(UTC))
+        rows_after = [
+            (r.id, r.team_id, r.calendar_recurring_id)
+            for r in session.scalars(select(Series).order_by(Series.id))
+        ]
+    assert made == 0
+    note_file(
+        "remove-hourly-sync-makes-nothing",
+        "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: X's Standup, X's 1:1 and Pat's personal Design sync are remembered as removed. `rows` is every recurring row left.",
+        {"rows_made": made, "rows": [dict(id=i, team_id=t, recurring=r) for i, t, r in rows_after]},
+    )
+
+    # A later share of a meeting of that event to the removed scope does not regroup it.
+    ada.call(
+        "remove-share-a2-to-x",
+        "POST",
+        f"/api/meetings/{ids['a2']}/share",
+        body={"team_id": x},
+        note="Ada shares A2 (her private Standup) to X, where Standup was removed. The share works.",
+    )
+    a2 = ada.call(
+        "remove-meeting-a2-not-regrouped",
+        "GET",
+        f"/api/meetings/{ids['a2']}",
+        note="A2 is shared to X and in NO recurring meeting: `series` is null. It was not put back into X's Standup (removed), and it left her personal Standup row.",
+    )
+    assert a2.json()["series"] is None
+    ada.call(
+        "remove-cards-ada-x-after-share",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's list: still no Standup.",
+    )
+
+    # Her personal Standup now has no meeting left: remove the emptied card, with its waiting line.
+    last = ada.call(
+        "remove-ada-personal-standup-emptied",
+        "DELETE",
+        f"/api/series/{ada_p}",
+        note="Ada removes her now-empty personal Standup card. 200: `meetings_kept` 0, `agenda_lines_removed` 1 (the line she typed earlier waited there and goes with the row).",
+    )
+    assert last.status_code == 200 and last.json()["agenda_lines_removed"] == 1
+
+    # A hand-made recurring meeting: nothing to remember.
+    made_by_hand = ada.call(
+        "remove-hand-made-create",
+        "POST",
+        "/api/series",
+        body={"title": "Founders sync"},
+        team=x,
+        note="Ada makes a recurring meeting by hand in X (no calendar event behind it).",
+    )
+    hand = made_by_hand.json()["id"]
+    hand_removed = ada.call(
+        "remove-hand-made-delete",
+        "DELETE",
+        f"/api/series/{hand}",
+        note="Removing a hand-made one: 200, `remembered` false (there is no calendar event to forget).",
+    )
+    assert hand_removed.json()["remembered"] is False
+
+    # "Only owners and admins" (Adebayo, 2026-11-15): the person who made a team row has no extra power.
+    own = pat.call(
+        "remove-page-pat-own-x-row",
+        "GET",
+        f"/api/series/{pat_x}",
+        note="Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+    )
+    assert own.json()["can_remove"] is False
+    own_403 = pat.call(
+        "remove-pat-own-x-row-403",
+        "DELETE",
+        f"/api/series/{pat_x}",
+        note="Pat tries to remove the calendar row he made: 403 `team_forbidden`. Nothing changed.",
+    )
+    assert own_403.status_code == 403
+    pats_hand = pat.call(
+        "remove-pat-hand-made-create",
+        "POST",
+        "/api/series",
+        body={"title": "Pat's own recurring"},
+        team=x,
+        note="Pat, a plain member, makes a recurring meeting by hand in X (any member may). It is completely empty.",
+    )
+    hand_id = pats_hand.json()["id"]
+    empty_page = pat.call(
+        "remove-page-pat-empty-hand-made",
+        "GET",
+        f"/api/series/{hand_id}",
+        note='"Yes, empty rows only" (Adebayo, 2026-11-15): the person who made a row may remove it while it is COMPLETELY EMPTY (no meeting, no waiting agenda line, no project, no mail still to go). Pat made this one and nothing is in it: `can_remove` is true.',
+    )
+    assert empty_page.json()["can_remove"] is True
+    line = pat.call(
+        "remove-pat-hand-made-add-line",
+        "POST",
+        f"/api/series/{hand_id}/agenda",
+        body={"text": "Plan the offsite"},
+        note="Pat adds one agenda line to his hand-made row. The row is no longer empty.",
+    )
+    with_line = pat.call(
+        "remove-page-pat-hand-made-with-line",
+        "GET",
+        f"/api/series/{hand_id}",
+        note="With a waiting line in it the same page says `can_remove: false` for Pat. An owner or admin of X may still remove it.",
+    )
+    assert with_line.json()["can_remove"] is False
+    refused = pat.call(
+        "remove-pat-hand-made-with-line-403",
+        "DELETE",
+        f"/api/series/{hand_id}",
+        note="Pat tries to remove it now: 403 `team_forbidden`. Nothing changed.",
+    )
+    assert refused.status_code == 403
+    pat.call(
+        "remove-pat-hand-made-remove-line",
+        "DELETE",
+        f"/api/series/{hand_id}/agenda/{line.json()['id']}",
+        note="Pat removes his own line (its author may). The row is empty again.",
+    )
+    again_empty = pat.call(
+        "remove-page-pat-hand-made-empty-again",
+        "GET",
+        f"/api/series/{hand_id}",
+        note="`can_remove` is true again: the rule looks at what is in the row now.",
+    )
+    assert again_empty.json()["can_remove"] is True
+    gone = pat.call(
+        "remove-pat-hand-made-delete",
+        "DELETE",
+        f"/api/series/{hand_id}",
+        note="Pat removes his empty hand-made row: 200, nothing to remember (no calendar event).",
+    )
+    assert gone.status_code == 200 and gone.json()["remembered"] is False
+
+    # A connected calendar still makes its recurring rows: the removal feature changes nothing here.
+    with Session(engine) as session:
+        ada_user = session.scalars(select(User).where(User.email == ADA)).one()
+        connection = session.scalars(
+            select(CalendarConnection).where(CalendarConnection.user_id == ada_user.id)
+        ).first()
+        starts = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(days=2)
+        event = CalendarEvent(
+            user_id=ada_user.id,
+            connection_id=connection.id,
+            source_event_id="rid-connected-0",
+            recurring_event_id="rid-connected",
+            title="Weekly planning",
+            starts_at=starts,
+            ends_at=starts + timedelta(minutes=30),
+            platform="google_meet",
+            meeting_url=MEET,
+            native_id="abc-defg-hij",
+            status="confirmed",
+        )
+        session.add(event)
+        session.commit()
+        session.add(
+            ScheduledJoin(
+                user_id=ada_user.id,
+                calendar_event_id=event.id,
+                platform="google_meet",
+                native_id="abc-defg-hij",
+                meeting_url=MEET,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+                run_at=event.starts_at - timedelta(minutes=2),
+                deadline_at=event.ends_at,
+                state="scheduled",
+            )
+        )
+        session.commit()
+        made_now = series.sync_from_joins(session, datetime.now(UTC))
+    assert made_now == 1
+    note_file(
+        "remove-calendar-recurring-still-makes-a-card",
+        "NOT AN HTTP CALL. A recurring event on Ada's connected calendar that the scheduler will join (a join is scheduled) and that was never removed: the real hourly `series.sync_from_joins` makes its row. It makes 1. The removal feature changes nothing here: it only skips an event that someone REMOVED for that scope (capture 70 shows 0 rows made for the removed ones).",
+        {"rows_made": made_now, "recurring_event_id": "rid-connected"},
+    )
+    shown = ada.call(
+        "remove-calendar-recurring-card-listed",
+        "GET",
+        "/api/series",
+        team=x,
+        note="Ada's X list now has the new empty card for the event: `Weekly planning`, with the next meeting. It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
+    )
+    assert "Weekly planning" in [c["title"] for c in shown.json()["series"]]
+
 
 def main() -> None:
-    if OUT.exists():
+    if KEEP == 0 and OUT.exists():
         shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     prepare_database()
     settings = Settings()
     assert settings.multi_team_enabled and not settings.series_follow_meetings

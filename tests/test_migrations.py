@@ -2084,3 +2084,26 @@ def test_0047_adds_the_bot_name_columns_and_leaves_existing_rows_null(scratch_ur
         assert "bot_name" not in {c["name"] for c in inspect(engine).get_columns(table)}
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0048_adds_series_ignored_one_mark_per_scope_and_event_and_round_trips(scratch_url):
+    cfg = alembic_config(scratch_url)
+    before = ScriptDirectory.from_config(cfg).get_revision("0048").down_revision
+    command.upgrade(cfg, before)
+    engine = create_engine(scratch_url)
+    assert "series_ignored" not in inspect(engine).get_table_names()
+    command.upgrade(cfg, "head")
+    inspector = inspect(engine)
+    columns = {c["name"]: c for c in inspector.get_columns("series_ignored")}
+    assert set(columns) == {"id", "team_id", "calendar_recurring_id", "created_by", "created_at"}
+    assert columns["created_by"]["nullable"] and not columns["team_id"]["nullable"]
+    assert not columns["calendar_recurring_id"]["nullable"]
+    uniques = inspector.get_unique_constraints("series_ignored")
+    assert [(u["name"], u["column_names"]) for u in uniques] == [
+        ("uq_series_ignored", ["team_id", "calendar_recurring_id"])
+    ]
+    command.downgrade(cfg, before)
+    assert "series_ignored" not in inspect(engine).get_table_names()
+    command.upgrade(cfg, "head")
+    assert "series_ignored" in inspect(engine).get_table_names()
+    engine.dispose()

@@ -1,0 +1,21 @@
+{
+  "note": "THE MAIN CASE. Ada, owner of X, removes X's Standup. 200 with counts only: `meetings_kept` 1 (A1, which she may read), `agenda_lines_removed` 0, `remembered` true.",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings_kept": 1,
+      "agenda_lines_removed": 0,
+      "remembered": true
+    }
+  }
+}

@@ -39,7 +39,7 @@ run without guessing what a good result looks like.
 | Personal row | While `scoped`: no "Next meeting" box and no "Send agenda" button (it has no next date and nobody else on it: 409 `no_attendees`, captured). Not hidden when multi-team or the follow flag is off |
 | Task drawer team | `api.tasks.list({limit: 1}, row team)` while multi-team is on: the tab's team may differ from the row's (F1 of the PR 2 SOP) |
 | Runbook shape | Six blocks, each one `ssh haven-respite 'bash -s' <<'EOF'`, `</dev/null` on every `docker` call except the psql check that has its own heredoc. Step 3 (and the roll back) **refuse to recreate while a meeting is being recorded or processed or a join is live or due within ten minutes**; step 4 **refuses to run the backfill unless all three services print `true`**. Rejected: one giant block (he could not tell which step failed); a pre-recreate backup of `.env` (a second copy of the secrets on disk; the roll back is flipping one line) |
-| Empty card left as it is | The ghost empty card (a row that loses its last meeting) is **not** changed: it is still an open decision; the frontend renders it cleanly and the guide shows the real response |
+| Empty card left as it is | The ghost empty card (a row that loses its last meeting) was **not** changed here (decided later, 2026-11-15: the person removes it, `docs/sop/2026-11-15-remove-recurring-meeting.md`); the frontend renders it cleanly and the guide shows the real response |
 
 ### The 11 NITs of the PR 2 Opus review
 
@@ -357,7 +357,7 @@ EOF
 
 ## Follow-ups
 
-* **Decision (Adebayo or the lead): the ghost empty card.** A row that loses its last meeting stays as an empty
+* **Decided 2026-11-15 (see `docs/sop/2026-11-15-remove-recurring-meeting.md`): the person removes an empty card with "Remove this recurring meeting"; nothing auto-deletes it.** Was: Decision (Adebayo or the lead): the ghost empty card. A row that loses its last meeting stays as an empty
   card. Captured live (`40-cards-ada-personal-after-share.json`). Small to fix (re-key or delete an emptied row
   with no waiting lines and no project) if wanted.
 * Not changed from the PR 2 review: NITs 2, 4, 7, 8 (dispositions above); a merge-back script for the split,

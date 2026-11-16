@@ -1,0 +1,22 @@
+{
+  "note": "Quinn is not in X: 404, the same answer as for a row that does not exist (and as a read of it, capture 30). Nothing changed.",
+  "as": "Quinn",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

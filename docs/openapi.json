@@ -4058,6 +4058,10 @@
             "title": "Cadence",
             "type": "string"
           },
+          "can_remove": {
+            "title": "Can Remove",
+            "type": "boolean"
+          },
           "can_rename": {
             "title": "Can Rename",
             "type": "boolean"
@@ -4197,6 +4201,7 @@
           "next_text",
           "sprint_note",
           "can_rename",
+          "can_remove",
           "agenda_recipients",
           "unfinished",
           "finished_since_text",
@@ -4267,6 +4272,30 @@
           "title"
         ],
         "title": "SeriesRef",
+        "type": "object"
+      },
+      "SeriesRemoved": {
+        "description": "What `DELETE /api/series/{id}` did, for the toast. Counts only.",
+        "properties": {
+          "agenda_lines_removed": {
+            "title": "Agenda Lines Removed",
+            "type": "integer"
+          },
+          "meetings_kept": {
+            "title": "Meetings Kept",
+            "type": "integer"
+          },
+          "remembered": {
+            "title": "Remembered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meetings_kept",
+          "agenda_lines_removed",
+          "remembered"
+        ],
+        "title": "SeriesRemoved",
         "type": "object"
       },
       "SeriesTeam": {
@@ -13545,6 +13574,77 @@
       }
     },
     "/api/series/{series_id}": {
+      "delete": {
+        "description": "Remove ONE recurring meeting (LEAD-DESIGNED, approved 2026-11-15): an owner or admin of its\nteam, or for a personal row its owner, or the person who made the row while it is completely\nempty (403 `team_forbidden` for any other member, the creator of a row that has anything in it\nincluded; 404 for a recurring meeting the caller cannot see, which includes\neveryone outside the team, and for a second removal). Its meetings only stop being grouped:\nnothing in them is deleted or changed. The waiting agenda lines, the \"Keeps coming up\"\ntopics and the project link go with it (the project stays). A row from a calendar recurring\nevent is remembered as removed for this team (or personal space) alone: the calendar sync\ndoes not make it again and later meetings of the event are not grouped there. Another team's\nor person's row of the same event is untouched. Works with `SERIES_FOLLOW_MEETINGS` on or\noff.",
+        "operationId": "delete_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesRemoved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Series",
+        "tags": [
+          "series"
+        ]
+      },
       "get": {
         "description": "The Series page: next meeting, unfinished tasks from earlier meetings, what was finished\nsince the last meeting, the questions carried over, the agenda lines, past meetings and\nattendees. Everything inside is limited to what the caller may read: a teammate's private\nmeeting is not listed and its tasks and questions are not counted. 404 for another team's.",
         "operationId": "get_series",

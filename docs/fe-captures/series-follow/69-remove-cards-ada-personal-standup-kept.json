@@ -1,0 +1,53 @@
+{
+  "note": "Ada's PERSONAL list: her personal Standup row (A2, private) is untouched by removing X's Standup.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 12,
+          "title": "1:1",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Sundays, 18:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        },
+        {
+          "id": 11,
+          "title": "Standup",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Sundays, 18:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        }
+      ]
+    }
+  }
+}

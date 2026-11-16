@@ -117,6 +117,7 @@ export type SeriesCard = Schemas["SeriesCard"];
 export type SeriesList = Schemas["SeriesList"];
 export type SeriesPage = Schemas["SeriesPage"];
 export type SeriesRef = Schemas["SeriesRef"];
+export type SeriesRemoved = Schemas["SeriesRemoved"];
 export type OpenQuestion = Schemas["QuestionOut"];
 export type CarriedQuestion = Schemas["CarriedQuestion"];
 export type AgendaItem = Schemas["AgendaItemOut"];

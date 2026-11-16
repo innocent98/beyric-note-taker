@@ -1,0 +1,21 @@
+{
+  "note": "Pat removes his empty hand-made row: 200, nothing to remember (no calendar event).",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/16",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings_kept": 0,
+      "agenda_lines_removed": 0,
+      "remembered": false
+    }
+  }
+}

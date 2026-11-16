@@ -1,0 +1,21 @@
+{
+  "note": "Removing a hand-made one: 200, `remembered` false (there is no calendar event to forget).",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/15",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings_kept": 0,
+      "agenda_lines_removed": 0,
+      "remembered": false
+    }
+  }
+}

@@ -31,6 +31,13 @@ mail) also asks for the row's scope (`in_row`, `rows_in_scope`), so a meeting of
 a legacy row still points at is never shown, counted, mailed or fed to the model, whatever the
 writers did. A personal row has no repeat topics (never read, never shown).
 
+**Removing one (`remove`, LEAD-DESIGNED, Adebayo 2026-11-15).** Only the owner or an admin of the
+row's team, or a personal row's owner, may remove it; the row's creator may only when it is
+completely empty (`is_empty`). Its meetings only stop being grouped. A row that came from a calendar
+recurring event is also remembered as ignored for ITS scope (`SeriesIgnored`): `link_from_calendar`,
+`sync_from_joins` and `place_meeting` (through `_row_for_scope`) check `is_ignored` and make no row
+for it.
+
 This module imports neither the services nor the API (the pipeline imports it).
 """
 
@@ -49,6 +56,7 @@ from app import tasks, teams, titles
 from app.config import get_settings
 from app.models import (
     CalendarEvent,
+    MailOutbox,
     Meeting,
     OpenQuestion,
     Project,
@@ -56,6 +64,8 @@ from app.models import (
     Series,
     SeriesAgendaItem,
     SeriesAgendaSend,
+    SeriesIgnored,
+    SeriesReminder,
     SeriesTopic,
     Task,
     Team,
@@ -268,6 +278,172 @@ def of_meeting(session: Session, user: User, meeting: Meeting) -> Series | None:
     return found
 
 
+# ---- removing a recurring meeting (LEAD-DESIGNED, Adebayo 2026-11-15) ----
+
+
+def is_ignored(session: Session, team_id: int, recurring_id: str) -> bool:
+    """Whether the recurring event was removed from this team's scope (a team's, or a person's
+    personal space's): no row is made for it there."""
+    return (
+        session.scalar(
+            select(SeriesIgnored.id).where(
+                SeriesIgnored.team_id == team_id,
+                SeriesIgnored.calendar_recurring_id == recurring_id,
+            )
+        )
+        is not None
+    )
+
+
+def _mail_pending(session: Session, series_id: int) -> bool:
+    """Whether a mail about this row is still waiting to go: an agenda mail of one of its sends, or
+    a reminder mail of one of its reminder rows (`mail_outbox` rows keep the ids in their payload
+    until they are done)."""
+    sends = [
+        str(i)
+        for i in session.scalars(
+            select(SeriesAgendaSend.id).where(SeriesAgendaSend.series_id == series_id)
+        )
+    ]
+    reminders = [
+        str(i)
+        for i in session.scalars(
+            select(SeriesReminder.id).where(SeriesReminder.series_id == series_id)
+        )
+    ]
+    waiting = []
+    if sends:
+        waiting.append(
+            and_(
+                MailOutbox.template == "series_agenda",
+                MailOutbox.payload["send_id"].astext.in_(sends),
+            )
+        )
+    if reminders:
+        waiting.append(
+            and_(
+                MailOutbox.template == "series_reminder",
+                MailOutbox.payload["reminder_id"].astext.in_(reminders),
+            )
+        )
+    if not waiting:
+        return False
+    return (
+        session.scalar(
+            select(MailOutbox.id).where(MailOutbox.status == "pending", or_(*waiting)).limit(1)
+        )
+        is not None
+    )
+
+
+def is_empty(session: Session, series: Series) -> bool:
+    """A row with nothing in it: no meeting points at it (in its scope or not), no agenda line is
+    waiting, no project is linked and no agenda or reminder mail of it is still to be sent. Read
+    fresh on each call (the counts are queries, not the identity map)."""
+    if series.project_id is not None:
+        return False
+    held = select(Meeting.id).where(Meeting.series_id == series.id)
+    waiting = select(SeriesAgendaItem.id).where(
+        SeriesAgendaItem.series_id == series.id, SeriesAgendaItem.consumed_at.is_(None)
+    )
+    if session.scalar(select(held.exists())) or session.scalar(select(waiting.exists())):
+        return False
+    return not _mail_pending(session, series.id)
+
+
+def can_remove(session: Session, user: User, series: Series) -> bool:
+    """THE PERMISSION RULE for removing a recurring meeting (Adebayo, 2026-11-15: "Only owners and
+    admins", then "Yes, empty rows only"). An owner or admin of the row's team may. The row's
+    "creator" gets no power over a row that has anything in it (for a calendar row that is only
+    whoever synced or recorded first; removing a team's row ungroups everyone's meetings, deletes
+    lines others wrote and drops the project link), but a creator who is still a member may remove
+    a row that is completely empty (`is_empty`), which is how an empty card is cleared. A personal
+    team's only member is its owner, who is its `owner` member, so a person may remove their own
+    personal row. Any other member gets 403 `team_forbidden` at the route (rename keeps its
+    creator rule). The caller has already seen the row (`get`), which is the 404 for everyone
+    outside the team. `remove` asks again under the row's lock."""
+    if is_manager(session, user, series.team_id):
+        return True
+    return (
+        series.owner_user_id == user.id
+        and membership(session, user, series.team_id) is not None
+        and is_empty(session, series)
+    )
+
+
+@dataclass(frozen=True)
+class Removal:
+    """What `remove` did, as the caller may be told: how many of the row's meetings they may read
+    stopped being grouped (never a count of meetings they may not read), how many waiting agenda
+    lines went with the row, and whether the calendar event is now remembered as removed."""
+
+    meetings_kept: int
+    agenda_lines_removed: int
+    remembered: bool
+
+
+def remove(session: Session, user: User, series: Series) -> Removal:
+    """Remove ONE row: the meetings in it only stop being grouped (their notes, tasks, decisions,
+    open questions and sharing are not touched: `meetings.series_id` is set null by the foreign
+    key); its waiting and consumed agenda lines, repeat topics, reminders, agenda sends and project
+    link go with the row (the project stays, and so does where its tasks were filed). A row from a
+    calendar recurring event is remembered as ignored for ITS team (`SeriesIgnored`); a hand-made
+    row has no event to remember. Never touches another team's or person's row of the same event.
+    The row is locked first, so a meeting that is being linked to it waits for the removal and a
+    second removal finds nothing. With the flag on, a meeting of another scope that the row still
+    points at (a legacy stray) is put into the row of its own scope first, not ungrouped. In the
+    caller's transaction; the caller commits."""
+    if not can_remove(session, user, series):
+        raise _forbidden()
+    locked = session.scalars(
+        select(Series)
+        .where(Series.id == series.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+    if locked is None:
+        raise SeriesRefused(404, "not_found", "No such recurring meeting.")
+    if not can_remove(session, user, locked):  # again, under the lock: a meeting or a line may
+        raise _forbidden()  # have arrived since the first look, and then a creator may not
+    if follow_enabled():
+        # A meeting of ANOTHER scope that a legacy row still points at is not this removal's to
+        # ungroup: it goes to the row of its own scope first (the backfill finds strays only through
+        # their row, so after the bulk ungroup below nothing would ever put it back).
+        strays = select(Meeting).where(
+            Meeting.series_id == locked.id,
+            Meeting.id.not_in(select(Meeting.id).where(in_row(session, locked))),
+        )
+        for stray in session.scalars(
+            strays.order_by(Meeting.id).execution_options(populate_existing=True)
+        ).all():
+            place_meeting(session, stray)
+    readable = session.scalar(
+        select(func.count())
+        .select_from(Meeting)
+        .where(Meeting.series_id == locked.id, can_read_clause(user))
+    )
+    lines = session.scalar(
+        select(func.count())
+        .select_from(SeriesAgendaItem)
+        .where(SeriesAgendaItem.series_id == locked.id, SeriesAgendaItem.consumed_at.is_(None))
+    )
+    remembered = locked.calendar_recurring_id is not None
+    if remembered:
+        session.execute(
+            insert(SeriesIgnored)
+            .values(
+                team_id=locked.team_id,
+                calendar_recurring_id=locked.calendar_recurring_id,
+                created_by=user.id,
+            )
+            .on_conflict_do_nothing(index_elements=["team_id", "calendar_recurring_id"])
+        )
+    session.execute(update(Meeting).where(Meeting.series_id == locked.id).values(series_id=None))
+    session.delete(locked)
+    session.flush()
+    return Removal(meetings_kept=readable, agenda_lines_removed=lines, remembered=remembered)
+
+
 # ---- making and linking ----
 
 
@@ -334,8 +510,12 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
         return None
     if not follow_enabled():
         team_id = team_id_of(session, owner)  # exactly as before: the recorder's default team
+        if is_ignored(session, team_id, row.recurring_event_id):
+            return None  # removed from this team: not regrouped
     else:
         team_id = scope_team_id(session, owner, meeting, follow=True)
+        if is_ignored(session, team_id, row.recurring_event_id):
+            return None  # removed from this scope: not regrouped, and no empty card moves in
         _rekey_empty_card(session, owner, row.recurring_event_id, team_id)
         if _is_full(session, team_id) and not _has_row(session, team_id, row.recurring_event_id):
             return None  # the scope's team has no room for another row
@@ -482,6 +662,14 @@ def sync_from_joins(session: Session, now: datetime) -> int:
         if follow and _has_row_with_meetings(session, user_id, recurring_id):
             continue  # their meetings already have rows (maybe their personal one): no empty card
         team_id = team_id_of(session, user)
+        if is_ignored(session, team_id, recurring_id):
+            continue  # removed from this team (or personal space): its card is not made again
+        if follow:
+            # A person with one ordinary team has that team as their default, but their PERSONAL
+            # row may be the one they removed: no placeholder card then, in their team or anywhere.
+            personal = teams.personal_team(session, user_id)
+            if personal is not None and is_ignored(session, personal.id, recurring_id):
+                continue
         exists = session.scalar(
             select(Series.id).where(
                 Series.team_id == team_id, Series.calendar_recurring_id == recurring_id
@@ -696,13 +884,15 @@ def move_team_series(session: Session, old_team_id: int, new_team_id: int) -> No
 class Placement:
     """What `place_meeting` did: the row the meeting is in now (None: in no series), and whether it
     moved, whether a new row was made for it, whether it was cut loose because the target team is
-    full, whether it was skipped (a private meeting of an account that is gone)."""
+    full (or removed this recurring meeting: `ignored`), whether it was skipped (a private meeting
+    of an account that is gone)."""
 
     series: Series | None
     moved: bool = False
     made: bool = False
     cut_loose: bool = False
     skipped: bool = False
+    ignored: bool = False  # cut loose because the scope's team removed this recurring meeting
 
 
 def _event_title(session: Session, meeting: Meeting) -> str | None:
@@ -749,6 +939,10 @@ def _row_for_scope(
         ).first()
     if found is not None:
         return found, False
+    if current.calendar_recurring_id is not None and is_ignored(
+        session, scope_id, current.calendar_recurring_id
+    ):
+        return None, False  # removed from this scope: the meeting is not regrouped there
     if _is_full(session, scope_id):
         return None, False
     creator = recorder.id if recorder is not None and recorder.status != "deleted" else None
@@ -801,6 +995,11 @@ def place_meeting(session: Session, meeting: Meeting) -> Placement:
         mark_topics_stale(session, target.id)
     session.flush()
     if target is None:
+        removed = current.calendar_recurring_id is not None and is_ignored(
+            session, scope_id, current.calendar_recurring_id
+        )
+        if removed:  # the scope removed this recurring meeting: not an error, not "no room"
+            return Placement(None, moved=True, ignored=True)
         logger.warning(
             "meeting %s: left its series, the new team has no room for a row", meeting.id
         )

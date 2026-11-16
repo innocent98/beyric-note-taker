@@ -1,0 +1,22 @@
+{
+  "note": "The same call again: 404 (the row is gone). The frontend treats this 404 as 'already removed'.",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

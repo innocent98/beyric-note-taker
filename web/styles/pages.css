@@ -181,6 +181,7 @@
 .meeting-delete-row { display: flex; } /* lead-designed: red text button below the page, like Delete template */
 .meeting-delete-ask { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--danger-line); border-radius: 10px; background: var(--danger-tint); } /* the Decisions "Remove from log" ask */
 .meeting-delete-ask p { margin: 0; font-size: var(--text-sm); color: var(--ink-2); } /* a flex item of the foot row in the design */
+.meeting-delete-ask .sr-remove-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: var(--text-sm); color: var(--ink-2); } /* lead-designed: the lines of the "Remove this recurring meeting" ask */
 .tpl-foot-right { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
 .tpl-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
 

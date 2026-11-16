@@ -713,7 +713,14 @@ Goal: one person has a permanent personal team and may belong to several teams; 
     - [x] Server runbook in the form he runs: look first, dry run, backfill, switch on and recreate (stops if a meeting is running), the backfill again (stops unless all three services have the switch), what to look at, roll back
     - [ ] CI green on the pushed head, Opus review of the runbook and the code changes, merge (the lead, on Adebayo's word)
     - [ ] **Adebayo runs the server steps** (steps 0 to 5 of the SOP, one sitting, no meeting running); the flag is then ON
-  - [ ] Decision: ghost empty cards after a row loses its last meeting (see the S1 SOP, Follow-ups)
+  - [x] Decision: ghost empty cards after a row loses its last meeting **(decided 2026-11-15: not automatic; the person removes an empty card with "Remove this recurring meeting", below)**
+  - [ ] **Remove this recurring meeting** (lead-designed; branch `feature/remove-recurring-meeting`, PR number added when opened; SOP `docs/sop/2026-11-15-remove-recurring-meeting.md`; migration 0048 `series_ignored`; FE guide section 10, captures 52 to 88; Adebayo approved 2026-11-15)
+    - [x] `DELETE /api/series/{id}` and `can_remove` on the page: owner or admin of the row's team (Adebayo, 2026-11-15, "Only owners and admins"), the row's creator only while the row is completely empty ("Yes, empty rows only": no meeting, no waiting line, no project, no mail to go), a personal row's owner; 403 `team_forbidden` for any other member, 404 outside the team
+    - [x] Past meetings stay ungrouped, untouched; waiting lines, topics and the project link go with the row (project stays); one row only
+    - [x] A calendar row is remembered as ignored per scope: the hourly sync, the calendar link and a later share do not bring it back
+    - [x] Frontend: the red text button, the question with each consequence, the toast; no card menu (no pattern); tests first, mutation-checked, captured live
+    - [ ] CI green on the pushed head, Opus review of the permission code, merge (the lead, on Adebayo's word)
+    - [ ] Follow-ups: bring a removed one back (needs a design), hide "Make this a recurring meeting?" for a removed event, a browser parity pass
 - [x] **Stage 3: frontend, dark** (PR opened 2026-11-14, number added when known; no migration; SOP `docs/sop/2026-11-14-multi-team-stage-3.md`; FE guide sections 14 to 16; parity `docs/ui/parity-report.md` "Multi-team (stage 3)"; four pieces are lead-designed and marked so, for the designer)
   - [x] The frontend learns the switch from `multi_team` in `GET /api/session` (one read-only boolean, tested, captured live 02, 03, 71)
   - [x] One interceptor sends `X-Team-Id` on exactly the team-scoped routes, per browser tab (`?team=` plus `sessionStorage`), never a server-side team; a stale or removed team resets to the default with a plain notice
