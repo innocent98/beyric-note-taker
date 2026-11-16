@@ -1,0 +1,30 @@
+{
+  "note": "A second link while that meeting runs: 403 `hours_cap_reached` with `reason` `reserve`. A first meeting is never refused for this.",
+  "client": "rita one running",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-N>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/new-aaaa-aaa",
+      "template_id": 9
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "hours_cap_reached",
+        "message": "You do not have enough recorded hours left to record another meeting at the same time: hours are set aside for each meeting that is running, and the ones a meeting does not use come back when it ends. Try again once a meeting has finished.",
+        "reason": "reserve"
+      }
+    }
+  }
+}

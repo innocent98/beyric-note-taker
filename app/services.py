@@ -541,8 +541,15 @@ def _own_template(session: Session, user_id: int, template_id: int | None) -> Te
 def hours_cap_message(cap_seconds: int, reason: str | None = None) -> str:
     """What a person reads when their recorded hours stop a new recording. `reason` is the grants
     rule's (`no_plan`: none held, `no_hours`: all used); without it (the old cap rule) the words
-    name the cap. No contact address and no word about a pilot."""
+    name the cap. `reserve`: hours are held but set aside for meetings already running. No contact
+    address and no word about a pilot."""
     stays = "Your notes, transcripts and exports stay as they are."
+    if reason == "reserve":
+        return (
+            "You do not have enough recorded hours left to record another meeting at the same "
+            "time: hours are set aside for each meeting that is running, and the ones a meeting "
+            "does not use come back when it ends. Try again once a meeting has finished."
+        )
     if reason == "no_plan":
         return (
             "You do not have any recorded hours at the moment, so the note taker will not join "

@@ -201,13 +201,21 @@ def _usage_out(db: Session, user, settings) -> UsageOut:
             can_record=True,
             unlimited=True,
         )
+    # `check_join` with the reserve: a person with a meeting running and few hours left cannot
+    # start a second one, and the screen should not offer it.
+    can_record = entitlements.check_join(
+        db, user, now, poll, reserve_seconds=settings.hours_reserve_minutes * 60
+    ).allowed
+    # A pilot grant holds what was LEFT of the old allowance; add the usage counted before it was
+    # made to both numbers so the bar reads "4 of 5 h", not "0 of 1 h".
+    offset = held.display_offset_seconds
     return UsageOut(
-        used_seconds=held.holdings_seconds - held.seconds_left,
-        cap_seconds=held.holdings_seconds,
+        used_seconds=held.holdings_seconds - held.seconds_left + offset,
+        cap_seconds=held.holdings_seconds + offset,
         state=held.state,
         seconds_left=held.seconds_left,
         warning=held.warning,
-        can_record=held.seconds_left > 0,
+        can_record=can_record,
         unlimited=False,
         period_ends_at=held.period_ends_at,
         trial_ends_at=held.trial_ends_at,

@@ -15,13 +15,16 @@ It does two things for each person, in this order:
    step that adds hours, and it is shown as "gift".
 2. **The S1 backlog.** Stage S1 recorded no allocations, so every recording counted after a
    person's pilot grant was made has none. Until it does, `app/entitlements.py` takes those seconds
-   off the grants anyway (`unallocated_seconds`). This step turns them into allocations on the
-   pilot grants, so they can never come off paid hours when a pilot grant later expires (S10).
-   Normally the hours left do not change. They CAN, when the backlog is larger than what the pilot
-   grant had left and the person holds other grants: the excess was coming off those grants and is
-   now written off. The script prints hours left before and after this step for every person,
-   marks a change, and **refuses `--apply` while any person's hours would change**, so the lead
-   sees it first.
+   off the grants anyway (`unallocated_seconds`). This step turns them into allocations across the
+   person's grants **in the decided spending order** (pilot or trial, plan hours, gifts and packs),
+   exactly as that term spends them, so the hours left do not change; what it adds is that the
+   backlog can never come off paid hours when a pilot grant later expires (S10). The script prints
+   hours left before and after this step for every person, marks any change, and **refuses
+   `--apply` while any person's hours would change** (it should never happen: it is a safety net).
+
+Run it once before switching to enforce and **again right before the switch** (dry run, then
+`--apply`): recordings and cap edits made in `shadow` in between are settled by the second run. It
+is safe to re-run. Deleted accounts are skipped.
 
 It writes only `usage_allocations` and `hour_grants`. It never prints a name, an email or a title:
 people appear as "user 1", "user 2", ranked by seconds settled.
@@ -30,12 +33,12 @@ people appear as "user 1", "user 2", ranked by seconds settled.
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import entitlements, hours  # noqa: E402
@@ -65,11 +68,17 @@ def reconcile(session: Session, now: datetime, max_poll_seconds: int) -> list[Ro
     overridden = select(User.id).where(User.hours_cap_seconds.is_not(None))
     done = []
     for user in session.scalars(
-        select(User).where(User.id.in_(pilots.union(overridden))).order_by(User.id)
+        select(User)
+        .where(
+            User.id.in_(pilots.union(overridden)),
+            User.status != "deleted",
+            User.purged_at.is_(None),
+        )
+        .order_by(User.id)
     ):
         gifted = hours.sync_cap_gift(session, user)
         before = entitlements.status(session, user, now, max_poll_seconds).seconds_left
-        settled = hours.reconcile_backlog(session, user)
+        settled = hours.reconcile_backlog(session, user, now)
         after = entitlements.status(session, user, now, max_poll_seconds).seconds_left
         if gifted or settled:
             done.append(Row(user.id, gifted, settled, before, after))
@@ -108,8 +117,11 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import SessionLocal
 
     settings = get_settings()
-    now = datetime.now(UTC)
     with SessionLocal() as session:
+        # `now` comes from the database, inside the transaction: a gift made by this run is stamped
+        # with the transaction's `now()` a few milliseconds after any clock read before the session
+        # opened, so a Python clock would leave the gift out of "grants in force" for the whole run.
+        now = session.scalar(select(func.now()))
         rows = reconcile(session, now, settings.max_poll_hours * 3600)
         refused = args.apply and any(row.changes_hours for row in rows)
         if args.apply and not refused:

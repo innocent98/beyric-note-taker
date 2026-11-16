@@ -390,10 +390,9 @@ def test_nobody_named_is_unlabelled_and_marked_incomplete(session, skribby_meeti
         [seg("Ada", "just a few words here")],
         [seg("Ada", varied(609), 1800)],  # one word under 20 a minute for 1830 s
         [seg("Ada", "Thank you. " * 400, 1800)],  # a loop: enough words, a handful of different
-        [seg("Ada", varied(700), 1000)],  # ends at 55% of the recording: the rest is missing
         [seg("Ada", varied(700))],  # no segment times at all
     ],
-    ids=["none", "blank", "short", "just_under", "loop", "stops_early", "no_times"],
+    ids=["none", "blank", "short", "just_under", "loop", "no_times"],
 )
 def test_missing_or_too_short_falls_back_to_our_own_transcription(
     session, skribby_meeting, mode, segments
@@ -405,6 +404,17 @@ def test_missing_or_too_short_falls_back_to_our_own_transcription(
     assert openai.transcriptions == 1
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert len(ledger(session, skribby_meeting.id, "transcribe")) == 1  # the real call is logged
+
+
+def test_a_transcript_whose_speech_ends_at_60_percent_is_used_not_redone(
+    session, skribby_meeting, mode
+):
+    """Meeting 38 (2026-11-16): speech ended at 63% of the recording and ours ran for nothing."""
+    mode()
+    openai = run(session, skribby_meeting, FakeVexa(done([seg("Ada", varied(700), 1100)])))
+    assert skribby_meeting.transcript_source == "skribby"  # 1100 s of 1830 s is 60%
+    assert openai.transcriptions == 0
+    assert ledger(session, skribby_meeting.id, "transcribe") == []
 
 
 def test_a_transcript_at_the_limit_is_used(session, skribby_meeting, mode):
@@ -756,14 +766,31 @@ def test_a_looped_text_is_not_used():
     assert transcript_source.fallback_reason(real, 600, 5) is None
 
 
-def test_a_text_that_stops_early_is_not_used_and_the_edge_is_70_percent():
+def test_a_text_whose_speech_ends_early_is_still_used_there_is_no_coverage_rule():
+    """Meeting 38: 89:23 recorded, speech ended at 56:42 (63%) because the bot stayed in a call
+    where only another bot was left. Skribby's text was good, so it must be used."""
+    assert not hasattr(transcript_source, "MIN_COVERAGE")
+
     def reason(end):
         found = transcript_source.candidate([seg("Ada", varied(400), end)])
         return transcript_source.fallback_reason(found, 600, 5)
 
-    assert reason(420) is None  # exactly 70% of 600 s
-    assert reason(419.9) == "stops well before the end of the recording"
+    assert reason(380) is None  # about 63% of 600 s
+    assert reason(360) is None  # exactly 60%
+    assert reason(60) is None  # even a text that stops after the first tenth
     assert reason(600) is None
+
+
+def test_the_other_fallback_reasons_still_fire_when_speech_ends_early():
+    early = [seg("Ada", varied(400), 360)]  # speech ends at 60% of a ten-minute recording
+    assert transcript_source.fallback_reason(transcript_source.candidate(early), 600, 5) is None
+    assert transcript_source.fallback_reason(None, 600, 5) == "no transcript"
+    short = transcript_source.candidate([seg("Ada", "too few words", 360)])
+    assert transcript_source.fallback_reason(short, 600, 5) == "too short for the recording"
+    loop = transcript_source.candidate([seg("Ada", "Thank you. " * 400, 360)])
+    assert transcript_source.fallback_reason(loop, 600, 5) == "repeats the same few words"
+    untimed = transcript_source.candidate([seg("Ada", varied(400))])
+    assert transcript_source.fallback_reason(untimed, 600, 5) == "no segment times"
 
 
 def test_the_last_segment_time_is_the_latest_end_in_seconds_and_junk_is_ignored():

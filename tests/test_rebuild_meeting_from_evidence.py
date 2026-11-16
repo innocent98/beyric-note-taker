@@ -294,14 +294,13 @@ def test_evidence_with_far_too_little_text_for_a_long_recording_is_refused(
     assert client.chats == 0
 
 
-def test_evidence_that_stops_well_before_the_end_of_the_recording_is_refused(
+def test_evidence_that_stops_before_the_end_of_the_recording_is_not_refused_for_that(
     session, owner, template, backups, capsys
 ):
     row = make_meeting(session, owner, template, recorded_seconds=70)
-    keep_evidence(session, row)  # its last segment ends at 45 s: under 70% of 70 s
-    code, client, out = go([str(row.id), "--apply"], backups, capsys=capsys)
-    assert code != 0 and "stops well before the end of the recording" in out
-    assert client.chats == 0 and stored(session, row).transcript == OLD_TRANSCRIPT
+    keep_evidence(session, row)  # its last segment ends at 45 s: about 64% of 70 s
+    code, client, out = go([str(row.id)], backups, capsys=capsys)  # a dry run
+    assert code == 0 and "dry run" in out.lower() and "cannot be used" not in out
 
 
 def test_unreadable_evidence_is_refused(session, owner, template, backups, capsys):

@@ -1,0 +1,48 @@
+{
+  "note": "40 minutes held and one meeting just placed (inserted by SQL, as the placement would make it): `seconds_left` is still about 2400, but `can_record` is false, because a second meeting needs its 30 minutes plus the 30 set aside for the running one.",
+  "client": "rita one running",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-N>",
+      "user": {
+        "email": "rita@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 2400,
+        "state": "active",
+        "seconds_left": 2400,
+        "warning": null,
+        "can_record": false,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

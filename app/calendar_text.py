@@ -146,6 +146,7 @@ def error_text(recorded: str | None, provider: str | None = None) -> str | None:
 NOT_RECORDED_SKIP_REASONS = (
     "hours_cap",
     "no_plan",
+    "hours_reserved",
     "user_limit",
     "code_in_use",
     "meeting_has_note_taker",
@@ -166,6 +167,7 @@ NOT_RECORDED_REASON_TEXT = {
     "no_template": "Choose a notes template for calendar meetings, then send it again.",
     "hours_cap": "Your recording hours are used up.",
     "no_plan": "You have no recording hours at the moment.",
+    "hours_reserved": "Your hours were set aside for another meeting that was running.",
     "user_limit": "You already had the most note takers allowed at once.",
     "code_in_use": "Your note taker was still in an earlier meeting on the same link.",
     "meeting_has_note_taker": "A note taker was already in this meeting.",

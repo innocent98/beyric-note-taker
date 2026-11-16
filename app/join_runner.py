@@ -99,9 +99,9 @@ DUE_STATES = ("scheduled", "dispatching", "no_capacity", "skipped")
 # an EARLIER meeting in the same room (back-to-back sessions on one Zoom personal room or one Meet
 # link). That one is retried until the deadline, because the earlier session ends and this one
 # starts, and it ends "not recorded" if the earlier bot never leaves.
-RETRYABLE_SKIPS = ("hours_cap", "no_plan", "user_limit", "code_in_use")
-# Of those, these still end "not recorded" at the deadline; `hours_cap` and `no_plan` end `skipped`
-# (the person was told why).
+RETRYABLE_SKIPS = ("hours_cap", "no_plan", "hours_reserved", "user_limit", "code_in_use")
+# Of those, these still end "not recorded" at the deadline; `hours_cap`, `no_plan` and
+# `hours_reserved` end `skipped` (the person was told why).
 NOT_RECORDED_SKIPS = ("user_limit", "code_in_use")
 # A meeting the owner PASTED (or started from instant-Meet: any meeting no join row points at) on
 # the same code counts as made for this event when it was created from this long before the start
@@ -623,6 +623,7 @@ def _place(
         source="calendar",
         title=event.title if event else None,
         adopt_orphan=True,
+        expected_seconds=int((join.ends_at - join.starts_at).total_seconds()),
     )
     join_id, user_id = join.id, join.user_id
 
@@ -759,6 +760,9 @@ def _refused(
     reason = _SKIP_REASONS.get(code, "refused")
     if code == "hours_cap_reached" and refused.reason == "no_plan":
         reason = "no_plan"  # HOURS_MODE=enforce: the person holds no hours at all
+    elif code == "hours_cap_reached" and refused.reason == "reserve":
+        # HOURS_MODE=enforce: hours are held but set aside for the person's other running meetings
+        reason = "hours_reserved"
     if crowded:
         # Two of the owner's rows on one code inside their windows (back-to-back slots in one
         # room): `no_capacity` is a live state and the code may be live only once per user.
@@ -791,7 +795,7 @@ def _refused(
             dedupe_key=alerts.bucket_key("admin.no_capacity", now),
         )
         result, reason = "no_capacity", None
-    elif code == "hours_cap_reached" and refused.reason is not None:
+    elif code == "hours_cap_reached" and refused.reason in ("no_hours", "no_plan"):
         # HOURS_MODE=enforce: ONE notice per person and period, not one per skipped meeting. Each
         # skipped meeting still shows as "Not recorded" (and offers Send now).
         if user is not None:
@@ -807,7 +811,7 @@ def _refused(
                 kind=f"calendar.{reason}",
                 severity="warning",
                 title=title,
-                body=body.format(name=name),
+                body=body.format(name=name, deadline=f"{join.deadline_at:%H:%M}"),
                 dedupe_key=f"calendar.{reason}:{join.id}",
             )
         result = "skipped"
@@ -830,6 +834,12 @@ _NOTICES = {
     "hours_cap": (
         "Recording hours used up",
         'Your recording hours are used up, so the note taker did not join "{name}".',
+    ),
+    "hours_reserved": (
+        "Hours are set aside for another meeting",
+        "Your recorded hours are set aside for the meeting that is running, so the note taker "
+        'has not joined "{name}" yet. It will keep trying until {deadline} UTC; hours a meeting '
+        "does not use come back when it ends.",
     ),
     "user_limit": (
         "Too many note takers at once",

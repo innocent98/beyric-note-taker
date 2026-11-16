@@ -2,8 +2,9 @@
 
 A pasted link, a shared link, and (from C12) a calendar join all come through here, so the rules
 about how many bots may run, and for whom, exist once. This is the single-host form: one local Vexa
-host, `bot_max_local` bots at a time. Phase D generalises it to several hosts (the second int of
-the lock is the host id, always 1 until then).
+host, `bot_max_local` bots at a time (1 under Vexa, our own host; a high safety ceiling under
+Skribby, whose servers run the bots: `app/config.py`). Phase D generalises it to several hosts
+(the second int of the lock is the host id, always 1 until then).
 
 Pre-flight, in this order, each refusing with a `PlacementRefused` code:
 
@@ -108,6 +109,10 @@ class PlacementRequest:
     # owner someone else's note taker is there. The identity is only the meeting code under the one
     # shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
     adopt_orphan: bool = False
+    # The calendar event's length in seconds, when a calendar join (or Send now on one) places the
+    # meeting: under `HOURS_MODE=enforce` a second concurrent meeting reserves it instead of the
+    # default reserve. None for a pasted link.
+    expected_seconds: int | None = None
 
 
 class PlacementRefused(Exception):
@@ -190,6 +195,7 @@ def reserve_slot(
     now: datetime,
     settings: Settings | None = None,
     wait_seconds: float | None = None,
+    expected_seconds: int | None = None,
 ) -> None:
     """Take the placement lock and run the pre-flight checks. `wait_seconds` is how long to poll for
     the lock (default `LOCK_WAIT_SECONDS`; 0 for a caller holding a row lock, which a wait would
@@ -207,7 +213,14 @@ def reserve_slot(
     if settings.hours_mode == "enforce":
         # The person's own grants decide (an admin is unlimited and is checked first). A running
         # meeting is never stopped by this: it only decides whether a NEW recording starts.
-        decision = entitlements.check_join(session, user, now, settings.max_poll_hours * 3600)
+        decision = entitlements.check_join(
+            session,
+            user,
+            now,
+            settings.max_poll_hours * 3600,
+            reserve_seconds=settings.hours_reserve_minutes * 60,
+            expected_seconds=expected_seconds,
+        )
         if not decision.allowed:
             raise PlacementRefused("hours_cap_reached", reason=decision.reason)
     else:
@@ -316,6 +329,7 @@ def place_bot(
             now=now,
             settings=settings,
             wait_seconds=wait_seconds,
+            expected_seconds=req.expected_seconds,
         )
     except PlacementRefused:
         session.rollback()  # also releases the lock

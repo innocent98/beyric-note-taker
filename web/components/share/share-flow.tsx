@@ -72,7 +72,8 @@ export function ShareFlow({
       setPhase({ name: "sent", meeting });
     } catch (caught) {
       setError(errorMessage(caught));
-      if (caught instanceof ApiError && caught.code === "hours_cap_reached") setLocked(true);
+      // Hours held but set aside for a running meeting (`reserve`) are a wait: do not lock the page.
+      if (caught instanceof ApiError && caught.code === "hours_cap_reached" && caught.reason !== "reserve") setLocked(true);
       setPending(false);
     }
   }

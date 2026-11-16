@@ -1,3 +1,4 @@
+import { capMessageFor } from "@/lib/share-cap";
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { ShareFlow } from "@/components/share/share-flow";
@@ -17,15 +18,7 @@ export default async function SharePage() {
   const [list, templates] = await load(Promise.all([api.meetings.list(), api.templates.list()]));
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   const usage = session.usage;
-  // The same plain words the server gives when it refuses (`hours_cap_message`, app/services.py):
-  // no hours held at all, or all of them used. `can_record` is set only when the hours rule is on.
-  const capped =
-    usage?.can_record === false || (usage?.cap_seconds != null && usage.used_seconds >= usage.cap_seconds);
-  const capMessage = capped
-    ? usage?.cap_seconds === 0
-      ? "You do not have any recorded hours at the moment, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are."
-      : "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are."
-    : null;
+  const capMessage = capMessageFor(usage);
   return (
     <AppShell current="meetings">
       <div className="stack">

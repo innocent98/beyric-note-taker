@@ -92,13 +92,16 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly fields: FieldError[];
+  // A second word on a few refusals (`hours_cap_reached`: `no_hours`, `no_plan`, `reserve`).
+  readonly reason?: string;
 
-  constructor(status: number, code: string, message: string, fields: FieldError[] = []) {
+  constructor(status: number, code: string, message: string, fields: FieldError[] = [], reason?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.reason = reason;
   }
 
   // The `message` of these is written for the owner. The others (404, 405, 422) are developer text.
@@ -240,7 +243,7 @@ export function createApi(options: ApiOptions = {}) {
       throw new ApiError(res.status, "gateway_error", GATEWAY_MESSAGE);
     }
     const data = (await res.json().catch(() => null)) as {
-      error?: { code?: string; message?: string; fields?: FieldError[] | null };
+      error?: { code?: string; message?: string; fields?: FieldError[] | null; reason?: string };
     } | null;
     const error = data?.error;
     if (!error?.code) throw new ApiError(res.status, "gateway_error", GATEWAY_MESSAGE);
@@ -250,7 +253,7 @@ export function createApi(options: ApiOptions = {}) {
     if (res.status === 404 && error.code === "not_found" && error.message === TEAM_NOT_FOUND_MESSAGE && teamSent.get(res)?.explicit === false) {
       options.onTeamGone?.();
     }
-    throw new ApiError(res.status, error.code, error.message ?? FALLBACK_MESSAGE, error.fields ?? []);
+    throw new ApiError(res.status, error.code, error.message ?? FALLBACK_MESSAGE, error.fields ?? [], error.reason);
   }
 
   async function request<T>(method: string, path: string, call: Call = {}): Promise<T> {
