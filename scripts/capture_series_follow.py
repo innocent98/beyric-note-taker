@@ -28,6 +28,10 @@ The story, in the order the server steps run it:
    may not, one row only, the meetings stay, the calendar sync and a later share do not bring the row
    back, an emptied "ghost" card, a hand-made row.
 
+6. THE SIMPLER MODEL (captures 90 to 106): where a card lives, who makes a team's card, the cleanup.
+7. BRING BACK A REMOVED RECURRING MEETING and the hint on a Personal card (captures 107 to 129, `--keep 106`):
+   the removed list per scope, who may bring one back, the hourly sync making the Personal card again, `team_card`.
+
 What is real: the app, auth, CSRF, validation, team roles and visibility, the database, the
 migrations, serialisation, every error, the share and unshare routes with their follow hooks, the
 calendar link (`series.link_from_calendar`) and the backfill script. What is NOT real: no model is
@@ -90,7 +94,7 @@ import httpx  # noqa: E402
 import uvicorn  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import create_engine, select, text  # noqa: E402
+from sqlalchemy import create_engine, func, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import series, teams  # noqa: E402
@@ -1104,6 +1108,8 @@ def remove_story(
     assert "Weekly planning" not in [c["title"] for c in in_x.json()["series"]]
 
     model_story(base, engine, ada, pat, x, home)
+    assert Recorder.count == 106, Recorder.count  # part 6 ends at 106; part 7 below starts at 107
+    bring_back_story(base, engine, ada, pat, quinn, x, y, home)
 
 
 def model_story(base, engine, ada, pat, x, home) -> None:
@@ -1325,6 +1331,209 @@ def model_story(base, engine, ada, pat, x, home) -> None:
         note="X's list after: the two empty placeholders are gone; the cards that hold meetings stay. No 'removed' mark was written, so the next calendar sync makes each person's PERSONAL card.",
     )
     assert "Old placeholder 1" not in titles_of(after) and "Design review" in titles_of(after)
+
+
+def bring_back_story(base, engine, ada, pat, quinn, x, y, home) -> None:
+    """Part 7 (follow-up of #205 and #207): the list of removed recurring meetings, "Bring back" with
+    who may and who may not, the hourly sync making the Personal card again, a team's mark that waits
+    for an owner or admin, and the hint a Personal page carries once a team card of the same recurring
+    meeting exists."""
+    titles = lambda r: [c["title"] for c in r.json()["series"]]  # noqa: E731
+    mine = home["ada"]
+    # An empty calendar card of X (as a share by an owner once made it), which Ada then removes.
+    with Session(engine) as session:
+        ada_id = session.scalars(select(User.id).where(User.email == ADA)).one()
+        retro = Series(
+            team_id=x, owner_user_id=ada_id, title="Retro", calendar_recurring_id="rid-bb-retro"
+        )
+        session.add(retro)
+        session.commit()
+        retro_id = retro.id
+    personal_before = ada.call(
+        "bring-back-personal-list-before",
+        "GET",
+        "/api/series",
+        team=mine,
+        note="Ada's PERSONAL list before: the 'Weekly planning' card the hourly sync made from her calendar.",
+    )
+    planning = next(c for c in personal_before.json()["series"] if c["title"] == "Weekly planning")
+    page_before = ada.call(
+        "bring-back-personal-page-no-team-card",
+        "GET",
+        f"/api/series/{planning['id']}",
+        note="Its page: `team_card` is null, because no ordinary team of Ada's has a card for the same recurring meeting. No hint is drawn.",
+    )
+    assert page_before.json()["team_card"] is None
+    ada.call(
+        "bring-back-remove-personal",
+        "DELETE",
+        f"/api/series/{planning['id']}",
+        note="Ada removes her Personal 'Weekly planning': the event is remembered as removed for her Personal space.",
+    )
+    ada.call(
+        "bring-back-remove-team",
+        "DELETE",
+        f"/api/series/{retro_id}",
+        note="Ada, the owner, removes X's empty 'Retro' card: remembered as removed for X.",
+    )
+
+    def planning_rows() -> int:
+        with Session(engine) as session:
+            return session.scalar(
+                select(func.count())
+                .select_from(Series)
+                .where(Series.team_id == mine, Series.calendar_recurring_id == "rid-connected")
+            )
+
+    with Session(engine) as session:
+        made = series.sync_from_joins(session, datetime.now(UTC))
+    assert planning_rows() == 0
+    note_file(
+        "bring-back-sync-while-removed",
+        "NOT AN HTTP CALL. The real hourly `series.sync_from_joins` right after the removal. The event is removed for Ada's Personal space, so no card is made for it: `planning_rows` is 0. (`rows_made` counts any other recurring events on the calendars that still had no card; none of them is this one.)",
+        {"rows_made": made, "planning_rows": 0, "recurring_event_id": "rid-connected"},
+    )
+    listed = ada.call(
+        "bring-back-list-personal",
+        "GET",
+        "/api/series/removed",
+        team=mine,
+        note="Ada's list of removed recurring meetings for her PERSONAL space (`X-Team-Id` names it). The title is what Ada's own calendar calls the event. `id` is the removal mark's id, NOT a series id: it is what bring-back takes.",
+    )
+    personal_mark = next(i for i in listed.json()["removed"] if i["title"] == "Weekly planning")
+    assert personal_mark["team"]["is_personal"] is True
+    team_list = ada.call(
+        "bring-back-list-team-x",
+        "GET",
+        "/api/series/removed",
+        team=x,
+        note="Ada's list for team X (she is its owner). 'Retro' is not on Ada's calendar here, so the server does not know its name and says 'Recurring meeting': it never uses a teammate's calendar title.",
+    )
+    team_mark = next(i for i in team_list.json()["removed"] if i["title"] == "Recurring meeting")
+    assert team_mark["team"]["id"] == x
+    pat.call(
+        "bring-back-list-pat-x-403",
+        "GET",
+        "/api/series/removed",
+        team=x,
+        note="Pat, a plain member of X, asks for X's list: 403 `team_forbidden`, the project's usual team error.",
+    )
+    quinn.call(
+        "bring-back-list-quinn-x-404",
+        "GET",
+        "/api/series/removed",
+        team=x,
+        note="Quinn is not in X: 404, as for any team that is not his.",
+    )
+    pat.call(
+        "bring-back-pat-team-403",
+        "POST",
+        f"/api/series/removed/{team_mark['id']}/bring-back",
+        note="Pat tries to bring back X's mark: 403 `team_forbidden`. Nothing changes.",
+    )
+    pat.call(
+        "bring-back-pat-ada-personal-404",
+        "POST",
+        f"/api/series/removed/{personal_mark['id']}/bring-back",
+        note="Pat tries Ada's PERSONAL mark: 404, it is not his scope.",
+    )
+    quinn.call(
+        "bring-back-quinn-team-404",
+        "POST",
+        f"/api/series/removed/{team_mark['id']}/bring-back",
+        note="Quinn, outside X, tries X's mark: 404.",
+    )
+    ada.call(
+        "bring-back-unknown-404",
+        "POST",
+        "/api/series/removed/987654/bring-back",
+        note="An id that is no mark: 404.",
+    )
+    team_back = ada.call(
+        "bring-back-team",
+        "POST",
+        f"/api/series/removed/{team_mark['id']}/bring-back",
+        note="Ada brings back X's 'Retro': 200 with the scope. The call makes no card: a team's card is made the next time an owner or admin shares a meeting of the event, or their recording of it is shared automatically (the hourly sync only makes Personal cards).",
+    )
+    assert team_back.status_code == 200
+    after_team = ada.call(
+        "bring-back-team-list-after",
+        "GET",
+        "/api/series",
+        team=x,
+        note="X's cards after: no 'Retro'. Bringing back does not make the card.",
+    )
+    assert "Retro" not in titles(after_team)
+    ada.call(
+        "bring-back-team-again-404",
+        "POST",
+        f"/api/series/removed/{team_mark['id']}/bring-back",
+        note="The same mark a second time: 404 (it is already gone).",
+    )
+    ada.call(
+        "bring-back-personal",
+        "POST",
+        f"/api/series/removed/{personal_mark['id']}/bring-back",
+        note="Ada brings back her Personal 'Weekly planning': 200.",
+    )
+    with Session(engine) as session:
+        made = series.sync_from_joins(session, datetime.now(UTC))
+    assert planning_rows() == 1
+    note_file(
+        "bring-back-sync-after",
+        "NOT AN HTTP CALL. The real hourly `series.sync_from_joins` after the bring-back: it makes the Personal card for 'Weekly planning' (its join is still scheduled): `planning_rows` is 1.",
+        {"rows_made": made, "planning_rows": 1, "recurring_event_id": "rid-connected"},
+    )
+    again = ada.call(
+        "bring-back-personal-list-after",
+        "GET",
+        "/api/series",
+        team=mine,
+        note="Ada's Personal list: 'Weekly planning' is back, as a NEW empty card (a new id). The meetings it once held are not regrouped.",
+    )
+    assert "Weekly planning" in titles(again)
+    left = ada.call(
+        "bring-back-list-personal-after",
+        "GET",
+        "/api/series/removed",
+        team=mine,
+        note="Her removed list no longer has it.",
+    )
+    assert "Weekly planning" not in [i["title"] for i in left.json()["removed"]]
+    # The hint: a team card of the same recurring meeting now exists in X (an owner's share made it).
+    planning = next(c for c in again.json()["series"] if c["title"] == "Weekly planning")
+    with Session(engine) as session:
+        card = Series(
+            team_id=x,
+            owner_user_id=ada_id,
+            title="Weekly planning",
+            calendar_recurring_id="rid-connected",
+        )
+        session.add(card)
+        session.commit()
+        team_card_id = card.id
+    hint = ada.call(
+        "bring-back-personal-page-team-card",
+        "GET",
+        f"/api/series/{planning['id']}",
+        note="Once X has a card for the same recurring meeting, Ada's PERSONAL page carries `team_card` (the team's card id and team): draw the hint 'This recurring meeting also has a card in Platform team'.",
+    )
+    assert hint.json()["team_card"]["id"] == team_card_id
+    team_page = ada.call(
+        "bring-back-team-page-no-hint",
+        "GET",
+        f"/api/series/{team_card_id}",
+        note="The team's own page: `team_card` is null. Only a Personal page carries it.",
+    )
+    assert team_page.json()["team_card"] is None
+    empty = quinn.call(
+        "bring-back-list-quinn-y-empty",
+        "GET",
+        "/api/series/removed",
+        team=y,
+        note="Quinn owns Y, where nothing was removed: 200 with an empty list. The Settings section draws nothing for it.",
+    )
+    assert empty.json() == {"removed": []}
 
 
 def main() -> None:

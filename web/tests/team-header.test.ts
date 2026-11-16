@@ -38,6 +38,7 @@ describe("which calls carry the team", () => {
     "/api/integrations/slack",
     "/api/integrations/linear/teams",
     "/api/meetings/12/milestones",
+    "/api/series/removed",
     // The reads that show one team at a time (owner's request 2026-11-14).
     "/api/meetings",
     "/api/meetings?limit=10&from=2026-11-01",

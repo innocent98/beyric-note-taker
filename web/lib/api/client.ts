@@ -43,6 +43,8 @@ import type {
   SeriesList,
   SeriesPage,
   SeriesRemoved,
+  RemovedList,
+  BroughtBack,
   Pilot,
   Project,
   ProjectChanges,
@@ -159,6 +161,7 @@ export function isTeamScoped(path: string, method = "GET"): boolean {
     /^\/api\/team(\/|$)/.test(p) ||
     /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
     /^\/api\/(tasks|series)$/.test(p) ||
+    p === "/api/series/removed" ||
     /^\/api\/meetings\/\d+\/milestones$/.test(p)
   );
 }
@@ -554,6 +557,12 @@ export function createApi(options: ApiOptions = {}) {
       // "Remove this recurring meeting" (LEAD-DESIGNED, docs/fe-integration-guide-series-teams.md section 10):
       // the meetings stay, ungrouped. 403 `team_forbidden` (a member who may not), 404 (not theirs, or already gone).
       remove: (id: number) => request<SeriesRemoved>("DELETE", `/api/series/${id}`, { write: true }),
+      // The removed recurring meetings of the current team (or Personal space) and "Bring back" (LEAD-DESIGNED,
+      // docs/fe-integration-guide-series-teams.md section 12). The list is 403 `team_forbidden` for a member who may
+      // not bring one back; `id` is the removal mark's id, not a series id. A second bring-back is 404.
+      removed: () => request<RemovedList>("GET", "/api/series/removed"),
+      bringBack: (markId: number) =>
+        request<BroughtBack>("POST", `/api/series/removed/${markId}/bring-back`, { write: true }),
       // Link a recurring meeting to a project, or unlink it (`null`): the Projects screen's Recurring
       // meetings checklist (docs/fe-integration-guide-series-project-link.md). Owner or admin only.
       linkProject: (id: number, projectId: number | null) =>

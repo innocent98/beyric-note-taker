@@ -107,11 +107,23 @@ class AgendaSuggestion(BaseModel):
     text: str
 
 
+class SeriesTeamCard(BaseModel):
+    """A team's card of the same recurring meeting, named on a Personal page (`team_card`)."""
+
+    id: int
+    team: SeriesTeam
+
+
 class SeriesPage(BaseModel):
     id: int
     title: str
     # The team this row belongs to; see `SeriesCard.team`.
     team: SeriesTeam
+    # Only on a Personal card from the calendar, and only while `scoped`: a card of the SAME
+    # recurring meeting in an ordinary team of the caller's that the caller may see, else null. A
+    # meeting of the event that goes to that team's card is grouped there, so the agenda lines typed
+    # on THIS page are not used by it: draw the hint. LEAD-DESIGNED, not in the designer's files.
+    team_card: SeriesTeamCard | None
     # True while `SERIES_FOLLOW_MEETINGS` is on: the page lists only the meetings of its team scope,
     # and a personal row has no next meeting. False: the row is the old one (a personal team's row
     # can then hold shared meetings and has a next date), so draw the page as it was.
@@ -162,6 +174,34 @@ class SeriesRemoved(BaseModel):
     # for this team (or this personal space): it will not be made again, and later meetings of it
     # are not grouped there. false: a recurring meeting made by hand has no event to remember.
     remembered: bool
+
+
+class RemovedRecurring(BaseModel):
+    """One row of `GET /api/series/removed`: a calendar recurring meeting that was removed from a
+    scope and can be brought back. LEAD-DESIGNED, not in the designer's files."""
+
+    # The removal mark's id, which `POST /api/series/removed/{id}/bring-back` takes (not a series).
+    id: int
+    # What the CALLER'S OWN calendar calls the event, else "Recurring meeting". Never a teammate's.
+    title: str
+    # The scope it was removed from.
+    team: SeriesTeam
+    removed_at: UtcDatetime
+    # The name of the owner, admin or person who removed it; null once they have left the team.
+    removed_by: str | None
+
+
+class RemovedList(BaseModel):
+    removed: list[RemovedRecurring]
+
+
+class BroughtBack(BaseModel):
+    """What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No
+    card is made by the call itself (a Personal card is made by the next hourly calendar sync; a
+    team's by the next time an owner or admin shares a meeting of it, or their recording is shared
+    automatically)."""
+
+    team: SeriesTeam
 
 
 class SeriesCreate(Body):

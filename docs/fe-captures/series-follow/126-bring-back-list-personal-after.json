@@ -1,0 +1,31 @@
+{
+  "note": "Her removed list no longer has it.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/removed",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "removed": [
+        {
+          "id": 4,
+          "title": "Standup",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "removed_at": "2026-11-16T13:52:20.701333Z",
+          "removed_by": "Ada Example"
+        }
+      ]
+    }
+  }
+}

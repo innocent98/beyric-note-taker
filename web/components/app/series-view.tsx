@@ -376,6 +376,13 @@ export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage
             </div>
             <div>
               <h2 className="sr-h2 sr-h2-tight">Other agenda items</h2>
+              {page.team_card ? (
+                <Alert kind="info">
+                  This recurring meeting also has a card in {teamLabel(page.team_card.team)}. Meetings you share with{" "}
+                  {teamLabel(page.team_card.team)} go to that card, so items you add here are not used for them. Add them to{" "}
+                  <AppLink href={`/series/${page.team_card.id}`}>{teamLabel(page.team_card.team)}&apos;s card</AppLink> instead.
+                </Alert>
+              ) : null}
               <div className="sr-agenda">
                 {page.agenda.map((item) => (
                   <div className="sr-agenda-row" key={item.id}>

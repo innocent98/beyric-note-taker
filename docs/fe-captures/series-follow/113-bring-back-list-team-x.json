@@ -1,0 +1,42 @@
+{
+  "note": "Ada's list for team X (she is its owner). 'Retro' is not on Ada's calendar here, so the server does not know its name and says 'Recurring meeting': it never uses a teammate's calendar title.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/removed",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "removed": [
+        {
+          "id": 6,
+          "title": "Recurring meeting",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "removed_at": "2026-11-16T13:52:21.119545Z",
+          "removed_by": "Ada Example"
+        },
+        {
+          "id": 1,
+          "title": "1:1",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "removed_at": "2026-11-16T13:52:20.535019Z",
+          "removed_by": "Ada Example"
+        }
+      ]
+    }
+  }
+}

@@ -50,6 +50,7 @@ from app.series_schemas import (
     AgendaSent,
     AgendaSuggestion,
     AttendeeOut,
+    BroughtBack,
     CarriedQuestion,
     MeetingSeriesIn,
     MeetingSeriesOut,
@@ -58,6 +59,8 @@ from app.series_schemas import (
     QuestionPatch,
     ReminderPreferencesIn,
     ReminderPreferencesOut,
+    RemovedList,
+    RemovedRecurring,
     SeriesCard,
     SeriesCreate,
     SeriesList,
@@ -66,6 +69,7 @@ from app.series_schemas import (
     SeriesProjectIn,
     SeriesRemoved,
     SeriesTeam,
+    SeriesTeamCard,
     TopicOut,
 )
 from app.visibility import can_read_clause
@@ -104,13 +108,22 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _team_ref(session: Session, found: Series) -> SeriesTeam:
-    team = session.get(Team, found.team_id)
+def _team_ref_of(session: Session, team_id: int) -> SeriesTeam:
+    team = session.get(Team, team_id)
     return SeriesTeam(
-        id=found.team_id,
+        id=team_id,
         name=team.name if team is not None else "",
         is_personal=team is not None and team.is_personal,
     )
+
+
+def _team_ref(session: Session, found: Series) -> SeriesTeam:
+    return _team_ref_of(session, found.team_id)
+
+
+def _team_card(session: Session, user: User, found: Series) -> SeriesTeamCard | None:
+    card = series.team_card(session, user, found)
+    return None if card is None else SeriesTeamCard(id=card.id, team=_team_ref(session, card))
 
 
 def _team_member_ids(found: Series):
@@ -354,6 +367,7 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
         id=found.id,
         title=_initial_title(found),
         team=_team_ref(session, found),
+        team_card=_team_card(session, user, found),
         scoped=series.follow_enabled(),
         cadence=cadence,
         platform=_platform(found),
@@ -511,6 +525,63 @@ def delete_series(
         agenda_lines_removed=removal.agenda_lines_removed,
         remembered=removal.remembered,
     )
+
+
+@router.get(
+    "/series/removed",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN},
+)
+def list_removed_series(
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> RemovedList:
+    """The calendar recurring meetings removed from ONE scope, to bring back (LEAD-DESIGNED). The
+    `X-Team-Id` header names the team or the person's Personal space (404 for one the caller is not
+    in); without it, the default team's. Only an owner or admin of the team, or the person for
+    their own Personal space, sees the list: any other member gets 403 `team_forbidden`. A
+    recurring meeting made by hand leaves no mark and is never listed."""
+    member = team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
+    try:
+        items = series.removed_for(session, user, member.team_id)
+    except series.SeriesRefused as exc:
+        raise _refuse(exc) from None
+    team = _team_ref_of(session, member.team_id)
+    return RemovedList(
+        removed=[
+            RemovedRecurring(
+                id=i.id, title=i.title, team=team, removed_at=i.removed_at, removed_by=i.removed_by
+            )
+            for i in items
+        ]
+    )
+
+
+@router.post(
+    "/series/removed/{mark_id:id}/bring-back",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN_OR_CSRF},
+)
+def bring_back_series(
+    mark_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> BroughtBack:
+    """Bring back one removed recurring meeting (LEAD-DESIGNED): clear its removal mark, nothing
+    else. It makes no card by itself and never touches a meeting, task, note or agenda line. Who
+    may is who may remove: an owner or admin of the team, or the person for their own Personal
+    space (403 `team_forbidden` for any other member; 404 for someone outside the team, an unknown
+    id and a second call). A Personal card is made again by the next hourly calendar sync (once a
+    join of the event is scheduled); a team's by the next time an owner or admin shares a meeting
+    of it, or their recording of it is shared automatically."""
+    try:
+        team_id = series.bring_back(session, user, mark_id)
+    except series.SeriesRefused as exc:
+        session.rollback()
+        raise _refuse(exc) from None
+    session.commit()
+    return BroughtBack(team=_team_ref_of(session, team_id))
 
 
 @router.put(

@@ -9,6 +9,7 @@ import { SettingsBotName } from "@/components/app/settings-bot-name";
 import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
+import { SettingsRemovedRecurring } from "@/components/app/settings-removed-recurring";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireTeamOwner, getShellTeams } from "@/lib/api/server";
@@ -72,6 +73,7 @@ export default async function SettingsPage({
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(params)} templates={templates} />
         <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} integrations={!noIntegrations} team={team} reminderMail={reminderMail} sprints={sprints} />
+        {team?.can_manage ? <SettingsRemovedRecurring /> : null}
         {teams && autoShare ? <SettingsAutoShare initial={autoShare.team_id} teams={teams.teams} /> : null}
         <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsYourName initial={yourName} />
