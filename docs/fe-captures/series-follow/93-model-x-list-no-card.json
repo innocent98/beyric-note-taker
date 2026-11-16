@@ -1,0 +1,53 @@
+{
+  "note": "X's list: no 'Design review' card was made by Pat's share.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 7,
+          "title": "Design sync",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Mondays, 09:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        },
+        {
+          "id": 13,
+          "title": "Standup",
+          "team": {
+            "id": 4,
+            "name": "Platform team",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Mondays, 09:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-23T09:00:00Z",
+          "next_text": "Mon 23 Nov, 09:00",
+          "unfinished_tasks": 2,
+          "open_questions": 2,
+          "project": null
+        }
+      ]
+    }
+  }
+}

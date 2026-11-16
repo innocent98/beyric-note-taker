@@ -943,8 +943,10 @@ export interface paths {
         /**
          * Put Meeting Series
          * @description Put the caller's own meeting into one of their team's recurring meetings, or take it out
-         *     (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda
-         *     lines typed before the meeting began are taken by it.
+         *     (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. With
+         *     `SERIES_FOLLOW_MEETINGS` on, putting it into a TEAM's recurring meeting is an owner's or admin's
+         *     to do (403 `team_forbidden`); its owner may always take it out, or put a private meeting into
+         *     their own personal one. Agenda lines typed before the meeting began are taken by it.
          */
         put: operations["put_meeting_series"];
         post?: never;
@@ -1553,8 +1555,10 @@ export interface paths {
         /**
          * Create Series
          * @description Make a recurring meeting by hand (a meeting is then attached with
-         *     `PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header
-         *     names it (404 for a team the caller is not in), else the default team. 409 `series_limit`.
+         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller
+         *     is not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes
+         *     a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409
+         *     `series_limit`.
          */
         post: operations["create_series"];
         delete?: never;
@@ -1580,7 +1584,21 @@ export interface paths {
         get: operations["get_series"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Series
+         * @description Remove ONE recurring meeting (LEAD-DESIGNED, approved 2026-11-15): an owner or admin of its
+         *     team, or for a personal row its owner, or the person who made the row while it is completely
+         *     empty (403 `team_forbidden` for any other member, the creator of a row that has anything in it
+         *     included; 404 for a recurring meeting the caller cannot see, which includes
+         *     everyone outside the team, and for a second removal). Its meetings only stop being grouped:
+         *     nothing in them is deleted or changed. The waiting agenda lines, the "Keeps coming up"
+         *     topics and the project link go with it (the project stays). A row from a calendar recurring
+         *     event is remembered as removed for this team (or personal space) alone: the calendar sync
+         *     does not make it again and later meetings of the event are not grouped there. Another team's
+         *     or person's row of the same event is untouched. Works with `SERIES_FOLLOW_MEETINGS` on or
+         *     off.
+         */
+        delete: operations["delete_series"];
         options?: never;
         head?: never;
         /**
@@ -3233,6 +3251,11 @@ export interface components {
             /** Can End */
             can_end: boolean;
             /**
+             * Can Make Recurring
+             * @default false
+             */
+            can_make_recurring: boolean;
+            /**
              * Can Move
              * @default false
              */
@@ -3292,6 +3315,8 @@ export interface components {
              * @enum {string}
              */
             platform: "google_meet" | "zoom" | "teams";
+            /** Recurring Team Id */
+            recurring_team_id?: number | null;
             /** Refresh After Seconds */
             refresh_after_seconds: number | null;
             /** Retry Block */
@@ -3960,6 +3985,8 @@ export interface components {
             attendees: components["schemas"]["AttendeeOut"][];
             /** Cadence */
             cadence: string;
+            /** Can Remove */
+            can_remove: boolean;
             /** Can Rename */
             can_rename: boolean;
             /** Finished */
@@ -4013,6 +4040,18 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+        };
+        /**
+         * SeriesRemoved
+         * @description What `DELETE /api/series/{id}` did, for the toast. Counts only.
+         */
+        SeriesRemoved: {
+            /** Agenda Lines Removed */
+            agenda_lines_removed: number;
+            /** Meetings Kept */
+            meetings_kept: number;
+            /** Remembered */
+            remembered: boolean;
         };
         /**
          * SeriesTeam
@@ -7525,7 +7564,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7761,7 +7800,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9835,7 +9874,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9885,6 +9924,64 @@ export interface operations {
                 };
             };
             /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesRemoved"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;

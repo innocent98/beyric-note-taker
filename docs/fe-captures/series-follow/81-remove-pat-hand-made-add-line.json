@@ -1,0 +1,23 @@
+{
+  "note": "Pat adds one agenda line to his hand-made row. The row is no longer empty.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/15/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Plan the offsite"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 2,
+      "text": "Plan the offsite",
+      "can_remove": true
+    }
+  }
+}

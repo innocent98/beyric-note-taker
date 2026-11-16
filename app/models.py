@@ -1153,6 +1153,29 @@ class Series(Base):
     topics_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
+class SeriesIgnored(Base):
+    """A recurring calendar event whose row a person REMOVED from one scope (a team's, or one
+    person's personal space): `team_id` is that row's team. The writers that make a row from a
+    recurring-event id (`series.link_from_calendar`, `sync_from_joins`, `place_meeting`) check it
+    and make nothing, so the next calendar sync does not bring the row back and later meetings of
+    the event are not regrouped. One mark per scope: removing Tech's Standup says nothing about a
+    person's personal Standup or another team's. Holds the event's id only, no title or name. Goes
+    with its team; `created_by` is who removed it (null once their account is gone)."""
+
+    __tablename__ = "series_ignored"
+    __table_args__ = (
+        UniqueConstraint("team_id", "calendar_recurring_id", name="uq_series_ignored"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    calendar_recurring_id: Mapped[str] = mapped_column(String(1024))
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 TOPIC_REASONS = ("no_decision", "no_owner", "not_final")
 
 
@@ -1561,7 +1584,8 @@ class SkribbySegmentEvidence(Base):
     """What Skribby sent for one meeting, kept 7 days so a bad speaker labelling can be diagnosed
     (our own copy of Skribby's is deleted minutes after the meeting). `items` is each transcript
     item as it came (tag, `speaker_name`, the names in `potential_speaker_names`, start, end,
-    text); `tags` the name the app derived for each tag and why (given, elimination, unknown).
+    text); `tags` the name the app derived for each tag and why (given, elimination, sole_candidate,
+    unknown).
     It holds the words people said: never logged, never in an API answer or a page. Deleted by the
     retention job after 7 days, with the meeting (`ON DELETE CASCADE`) and with the account."""
 

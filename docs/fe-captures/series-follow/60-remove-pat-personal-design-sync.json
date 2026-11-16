@@ -1,0 +1,21 @@
+{
+  "note": "Pat removes his PERSONAL Design sync (he is the owner). 200. Only the personal scope is remembered.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings_kept": 1,
+      "agenda_lines_removed": 0,
+      "remembered": true
+    }
+  }
+}

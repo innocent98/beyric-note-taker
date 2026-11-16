@@ -1,0 +1,25 @@
+{
+  "note": "Pat, a plain member, tries to make a recurring meeting by hand in X: 403 `team_forbidden`, the project's usual error.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Pat's weekly"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

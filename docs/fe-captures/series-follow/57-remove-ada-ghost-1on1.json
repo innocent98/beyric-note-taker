@@ -1,0 +1,21 @@
+{
+  "note": "THE GHOST CARD: X's 1:1 row, empty since the backfill. Ada made it and owns X: 200. `meetings_kept` 0, nothing waiting. The calendar event is remembered as removed for X.",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings_kept": 0,
+      "agenda_lines_removed": 0,
+      "remembered": true
+    }
+  }
+}

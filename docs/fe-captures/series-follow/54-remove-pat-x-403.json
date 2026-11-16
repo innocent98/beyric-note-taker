@@ -1,0 +1,22 @@
+{
+  "note": "A plain member who did not make the row: 403 `team_forbidden`, the project's usual team error. Nothing changed.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

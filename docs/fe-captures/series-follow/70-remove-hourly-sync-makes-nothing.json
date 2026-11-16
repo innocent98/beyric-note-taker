@@ -1,0 +1,28 @@
+{
+  "note": "NOT AN HTTP CALL. The real `series.sync_from_joins` (the hourly sweep that makes a card for each recurring event the scheduler will join), run in this process after the removals. It makes 0 rows: every recurring event on Ada's and Pat's calendars already has its card, or its personal card was removed (Pat's Design sync). `rows` is every recurring row left.",
+  "content": {
+    "rows_made": 0,
+    "rows": [
+      {
+        "id": 7,
+        "team_id": 4,
+        "recurring": "rid-sync"
+      },
+      {
+        "id": 8,
+        "team_id": 5,
+        "recurring": "rid-sync"
+      },
+      {
+        "id": 11,
+        "team_id": 1,
+        "recurring": "rid-standup"
+      },
+      {
+        "id": 12,
+        "team_id": 1,
+        "recurring": "rid-1on1"
+      }
+    ]
+  }
+}

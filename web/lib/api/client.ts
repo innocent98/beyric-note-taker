@@ -42,6 +42,7 @@ import type {
   QuestionChanges,
   SeriesList,
   SeriesPage,
+  SeriesRemoved,
   Pilot,
   Project,
   ProjectChanges,
@@ -550,6 +551,9 @@ export function createApi(options: ApiOptions = {}) {
       create: (title: string, team?: number | null) =>
         request<SeriesCard>("POST", "/api/series", { body: { title }, write: true, team }),
       get: (id: number) => request<SeriesPage>("GET", `/api/series/${id}`),
+      // "Remove this recurring meeting" (LEAD-DESIGNED, docs/fe-integration-guide-series-teams.md section 10):
+      // the meetings stay, ungrouped. 403 `team_forbidden` (a member who may not), 404 (not theirs, or already gone).
+      remove: (id: number) => request<SeriesRemoved>("DELETE", `/api/series/${id}`, { write: true }),
       // Link a recurring meeting to a project, or unlink it (`null`): the Projects screen's Recurring
       // meetings checklist (docs/fe-integration-guide-series-project-link.md). Owner or admin only.
       linkProject: (id: number, projectId: number | null) =>

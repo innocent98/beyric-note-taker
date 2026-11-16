@@ -8,6 +8,8 @@ switch-on) comes later. Branch `feature/series-follow-readers`; PR number is on 
 **No schema migration.** Dark: with `SERIES_FOLLOW_MEETINGS` unset every list, page, topic and mail
 is what it was (the old suites are the proof, see Verification), except one additive field (below).
 
+> **Superseded 2026-11-16** (`docs/sop/2026-11-16-series-personal-calendar-owner-admin-teams.md`): `_rekey_empty_card` is removed. A Personal calendar card is never re-keyed into a team; an owner's or admin's share makes a separate team card, and the old empty team cards are removed by `scripts/remove_empty_team_cards.py`. Every mention of the re-key below describes the behaviour before that date.
+
 ## What shipped
 
 Every reader of a series row's meetings now also asks for the row's **scope** when the flag is on:
@@ -148,7 +150,7 @@ inside each running service). Not built, listed so none is lost:**
   (`agenda_recipients` is already 0).
 - `docs/openapi.json` also gained two unrelated `maxLength: 2000` lines (`BotNameIn.bot_name`,
   `DisplayNameIn.name`): the committed file on main was stale; correct and harmless.
-- Ghost empty cards (PR 1 follow-up) remain a decision for Adebayo or the lead.
+- Ghost empty cards (PR 1 follow-up): decided 2026-11-15, the person removes one with "Remove this recurring meeting" (`docs/sop/2026-11-15-remove-recurring-meeting.md`).
 - A reminder from the personal row can still reach its owner when his ordinary team's row has
   nothing to say (by design: the one mail comes from the first row with something to say).
 - `_timing` (cadence) read the joined meetings of the whole row, not the scope: **fixed in PR 3**.

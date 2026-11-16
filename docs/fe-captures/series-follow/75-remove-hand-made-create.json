@@ -1,0 +1,35 @@
+{
+  "note": "Ada makes a recurring meeting by hand in X (no calendar event behind it).",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Founders sync"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 14,
+      "title": "Founders sync",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "cadence": "Recurring",
+      "platform": null,
+      "next_starts_at": null,
+      "next_text": null,
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": null
+    }
+  }
+}

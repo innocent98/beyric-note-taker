@@ -1,0 +1,17 @@
+{
+  "note": "Pat removes his own line (its author may). The row is empty again.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/15/agenda/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "body": null
+  }
+}

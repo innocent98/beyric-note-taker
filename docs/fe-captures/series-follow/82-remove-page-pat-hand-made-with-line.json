@@ -1,0 +1,49 @@
+{
+  "note": "With a waiting line in it the same page says `can_remove: false` for Pat. An owner or admin of X may still remove it.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/15",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 15,
+      "title": "Pat's own recurring",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "scoped": true,
+      "cadence": "Recurring",
+      "platform": null,
+      "timezone": "UTC",
+      "next_starts_at": null,
+      "next_text": null,
+      "sprint_note": null,
+      "can_rename": true,
+      "can_remove": false,
+      "agenda_recipients": 0,
+      "unfinished": [],
+      "finished_since_text": null,
+      "finished": [],
+      "questions": [],
+      "agenda": [
+        {
+          "id": 2,
+          "text": "Plan the offsite",
+          "can_remove": true
+        }
+      ],
+      "topics": [],
+      "suggested_agenda": [],
+      "past_meetings": [],
+      "attendees": []
+    }
+  }
+}

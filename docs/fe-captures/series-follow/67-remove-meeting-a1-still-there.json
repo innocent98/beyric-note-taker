@@ -1,0 +1,122 @@
+{
+  "note": "A1, the meeting that was in the removed row, is still an ordinary meeting: 200, notes and tasks as before, `series` is null (not grouped any more).",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 1,
+      "title": "Standup",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 1,
+      "template_name": "General",
+      "created_at": "2026-11-02T09:00:00Z",
+      "tasks_count": 1,
+      "failure_reason": null,
+      "bot_invite_email": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "can_delete": true,
+      "shared_with_team": true,
+      "can_share": true,
+      "shared_by": null,
+      "team": {
+        "id": 4,
+        "name": "Platform team"
+      },
+      "owned_by_team": false,
+      "can_move": true,
+      "can_move_back": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": "## Summary\nWe agreed the plan.\n\n## Action items\n- Pat: send the deck\n",
+      "notes_html": "<h2>Summary</h2>\n<p>We agreed the plan.</p>\n<h2>Action items</h2>\n<ul>\n<li>Pat: send the deck</li>\n</ul>\n",
+      "transcript": "[Ada Example]: Let us start.\n[Guest Visitor]: Thanks for having me.\n",
+      "translations": [],
+      "duration_seconds": 1500,
+      "participants": [
+        "Ada Example",
+        "Guest Visitor"
+      ],
+      "decisions_count": 0,
+      "review_open_count": 0,
+      "tasks": [
+        {
+          "id": 1,
+          "title": "Follow up on A1 shared",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-02",
+          "done_at": null,
+          "created_at": "2026-11-16T11:32:33.717882Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Standup",
+            "platform": "google_meet",
+            "created_at": "2026-11-02T09:00:00Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": true,
+          "can_delete": true,
+          "can_decide": false
+        }
+      ],
+      "series": null,
+      "suggest_recurring": true,
+      "can_make_recurring": true,
+      "recurring_team_id": 4,
+      "open_questions": [
+        {
+          "id": 1,
+          "text": "Who owns A1 shared?",
+          "carriable": false,
+          "carry": true,
+          "resolved": false,
+          "can_update": true
+        }
+      ]
+    }
+  }
+}
