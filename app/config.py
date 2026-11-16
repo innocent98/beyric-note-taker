@@ -63,6 +63,27 @@ class Settings(BaseSettings):
             raise ValueError(f"TRANSCRIPT_SOURCE is {value!r}; it must be own or skribby")
         return name
 
+    @field_validator("billing_country_routes", mode="before")
+    @classmethod
+    def _blank_billing_routes_are_the_default(cls, value):
+        """An empty `BILLING_COUNTRY_ROUTES=` line means "not set": the default table."""
+        if isinstance(value, str) and not value.strip():
+            from app.billing.routing import DEFAULT_ROUTES
+
+            return DEFAULT_ROUTES
+        return value
+
+    @field_validator("billing_country_routes")
+    @classmethod
+    def _billing_routes_parse(cls, value: str) -> str:
+        from app.billing.routing import parse_routes
+
+        try:
+            parse_routes(value)
+        except ValueError as exc:
+            raise ValueError(f"BILLING_COUNTRY_ROUTES is {value!r}: {exc}") from None
+        return value
+
     @field_validator("hours_mode", mode="before")
     @classmethod
     def _blank_hours_mode_is_off(cls, value):
@@ -282,6 +303,18 @@ class Settings(BaseSettings):
     # `POST /api/billing/webhooks/{provider}` answers 404 and nothing is stored. No payment provider
     # is built yet, so `true` still accepts nothing until Paystack (S6) or Flutterwave (S7) lands.
     billing_enabled: bool = False
+    # Which currency and provider each billing country pays with (billing spec 5.2, stage S5):
+    # `COUNTRY=CURRENCY:provider` or `COUNTRY=off` entries, `*` for every country with no entry of
+    # its own. Default: Nigeria to naira through Paystack, any other country to dollars through
+    # Flutterwave. A country with an entry never falls through to `*`. To switch a provider off
+    # write `off` for its countries (`NG=off,*=USD:flutterwave`); deleting the `NG` entry would
+    # send Nigeria to the `*` route. Only paystack (NGN) and flutterwave (USD) are accepted.
+    billing_country_routes: str = "NG=NGN:paystack,*=USD:flutterwave"
+    # The accounts that may use the billing routes while `BILLING_ENABLED` is true (S5): a
+    # comma-separated list of emails. CLOSED by default: empty means no account may (spec section 8:
+    # "for allow-listed accounts only"); `*` in the list means every account. An account not allowed
+    # gets the same 404 as billing being off. The pilot of the pay screens is this list.
+    billing_allowed_emails: str = ""
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved

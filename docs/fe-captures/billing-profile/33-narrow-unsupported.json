@@ -1,0 +1,28 @@
+{
+  "note": "Server with `BILLING_COUNTRY_ROUTES=NG=NGN:paystack` (Flutterwave switched off): a country with no route is 422 `billing_country_unsupported`.",
+  "client": "ada narrow-table",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "US"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "billing_country_unsupported",
+        "message": "We cannot take payments from that country yet."
+      }
+    }
+  }
+}

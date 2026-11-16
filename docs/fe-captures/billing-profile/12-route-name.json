@@ -1,0 +1,25 @@
+{
+  "note": "A name, not a code: 422 `billing_country_invalid`. Nothing is guessed.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/route?country=Nigeria",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "billing_country_invalid",
+        "message": "That is not a country code we know. Pick one from the list."
+      }
+    }
+  }
+}

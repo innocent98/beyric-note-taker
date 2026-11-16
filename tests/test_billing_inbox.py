@@ -531,7 +531,7 @@ def test_an_event_with_unusable_fields_is_a_400_and_stores_nothing(
 
 @pytest.mark.parametrize(
     ("reported", "stored"),
-    [("NIGERIA NG", None), ("ng", "NG"), ("NG", "NG"), ("", None), ("NGA", None), (None, None)],
+    [("NIGERIA NG", "NG"), ("ng", "NG"), ("NG", "NG"), ("", None), ("NGA", None), (None, None)],
 )
 def test_the_card_country_is_two_letters_or_nothing_and_never_blocks_the_payment(
     client, fake, grants, session, payment, reported, stored

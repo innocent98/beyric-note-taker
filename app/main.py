@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import api, auth, edge, limits, logging_setup, mail, ratelimit, skribby, web
 from app.billing import api as billing_api
+from app.billing import profile_api as billing_profile_api
 from app.config import Settings, get_settings
 from app.db import get_rate_session, get_session
 
@@ -135,5 +136,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.install_errors(app)
     app.include_router(api.router)
     app.include_router(billing_api.router)
+    app.include_router(billing_profile_api.router)
     app.include_router(web.router)
     return app

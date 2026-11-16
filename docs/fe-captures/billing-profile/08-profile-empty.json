@@ -1,0 +1,30 @@
+{
+  "note": "A person who has saved nothing: every field null, `route` null. Reading creates no row.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": null,
+      "address": null,
+      "tax_id": null,
+      "billing_email": null,
+      "billing_country": null,
+      "pending_billing_country": null,
+      "pending_effective_at": null,
+      "route": null,
+      "country_change_allowed_at": null
+    }
+  }
+}
