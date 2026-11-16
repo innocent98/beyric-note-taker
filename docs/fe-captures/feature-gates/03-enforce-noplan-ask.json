@@ -1,0 +1,28 @@
+{
+  "note": "Ask Beyric, caller has no live plan or trial: 403 `plan_inactive`. No model call, nothing written.",
+  "client": "nora no plan",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "question": "What did we decide about pricing?"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "plan_inactive",
+        "message": "Asking Beyric needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."
+      }
+    }
+  }
+}

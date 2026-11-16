@@ -83,6 +83,11 @@ def ask_scope(
     "/ask",
     tags=["ask"],
     responses={
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no "
+            "live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`)",
+        },
         422: {"model": ErrorResponse, "description": "`question_invalid`: empty or too long"},
         429: {
             "model": ErrorResponse,

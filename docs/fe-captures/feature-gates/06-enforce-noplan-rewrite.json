@@ -1,0 +1,28 @@
+{
+  "note": "Rewrite the notes with another template: 403 `plan_inactive`. The old notes are kept and the notes model is not called.",
+  "client": "nora no plan",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/regenerate",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "template_id": 8
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "plan_inactive",
+        "message": "Rewriting notes needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."
+      }
+    }
+  }
+}

@@ -864,7 +864,14 @@ def retry_meeting(
 @router.post(
     "/meetings/{meeting_id:id}/regenerate",
     tags=["meetings"],
-    responses={code: {"model": ErrorResponse} for code in (400, 404, 409, 502)},
+    responses={
+        **{code: {"model": ErrorResponse} for code in (400, 404, 409, 502)},
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token; or `plan_inactive`: the caller has no "
+            "live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`)",
+        },
+    },
 )
 def regenerate_notes(
     meeting_id: int,
@@ -876,7 +883,7 @@ def regenerate_notes(
     """Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(
-        services.regenerate_notes(session, meeting, body.template_id, openai_client),
+        services.regenerate_notes(session, user, meeting, body.template_id, openai_client),
         session,
         user,
     )

@@ -1,0 +1,33 @@
+{
+  "note": "Sending the notes in French needs a NEW translation, so it is gated too: 403 `plan_inactive`, no share and no translation are made.",
+  "client": "nora no plan",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "client@example.test"
+        }
+      ],
+      "language": "fr"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "plan_inactive",
+        "message": "Translating notes needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."
+      }
+    }
+  }
+}
