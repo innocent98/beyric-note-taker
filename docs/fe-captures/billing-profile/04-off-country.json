@@ -1,0 +1,28 @@
+{
+  "note": "Same 404 for a write; nothing is stored.",
+  "client": "ada flag-off",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "NG"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

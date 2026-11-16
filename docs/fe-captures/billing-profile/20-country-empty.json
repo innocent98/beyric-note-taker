@@ -1,0 +1,28 @@
+{
+  "note": "422 `billing_country_missing`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": ""
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "billing_country_missing",
+        "message": "Choose the country you are billed from."
+      }
+    }
+  }
+}

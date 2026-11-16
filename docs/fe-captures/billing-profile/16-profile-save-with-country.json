@@ -1,0 +1,34 @@
+{
+  "note": "The country is not a field of this route: 422 `validation_error` (unknown field).",
+  "client": "ada billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "NG"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "billing_country",
+            "message": "Extra inputs are not permitted"
+          }
+        ]
+      }
+    }
+  }
+}

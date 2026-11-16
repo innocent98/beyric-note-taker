@@ -1,0 +1,33 @@
+{
+  "note": "**NOT LIVE.** The waiting state was written by SQL (no subscription exists to make one). `billing_country` and `route` are still the old ones.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": "Placeholder Company Ltd",
+      "address": "1 Placeholder Road\nLagos",
+      "tax_id": "TIN-PLACEHOLDER-0001",
+      "billing_email": "billing@example.test",
+      "billing_country": "GB",
+      "pending_billing_country": "NG",
+      "pending_effective_at": "2026-11-28T21:37:55.099611Z",
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "country_change_allowed_at": "2026-12-16T21:37:55.074579Z"
+    }
+  }
+}

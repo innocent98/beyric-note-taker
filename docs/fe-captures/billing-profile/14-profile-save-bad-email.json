@@ -1,0 +1,28 @@
+{
+  "note": "422 `billing_email_invalid`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_email": "not-an-address"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "billing_email_invalid",
+        "message": "That is not an email address we can send to."
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "note": "The `billing_country_changes` rows after those calls (read from the database).",
+  "content": {
+    "rows": [
+      {
+        "user": "ada@example.test",
+        "old_country": null,
+        "new_country": "NG",
+        "effective_at": "2026-11-16T21:37:55.039933+00:00",
+        "created_at": "2026-11-16T21:37:55.039933+00:00"
+      },
+      {
+        "user": "ada@example.test",
+        "old_country": "NG",
+        "new_country": "GB",
+        "effective_at": "2026-11-16T21:37:55.074579+00:00",
+        "created_at": "2026-11-16T21:37:55.074579+00:00"
+      }
+    ]
+  }
+}

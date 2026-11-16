@@ -985,6 +985,69 @@ class BillingEvent(Base):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class BillingProfile(Base):
+    """Who a person is billed as, and the country that decides how they pay (billing spec sections
+    5.2 and 7, stage S5). One row per person. `billing_country` is a two-letter ISO code the person
+    chose; it is never guessed from an address, and it is null until they choose. Only the person
+    changes their own, through `app/billing/profile.py`, which applies the change rules (immediate,
+    or scheduled in `pending_billing_country` until `pending_effective_at`) and writes
+    `BillingCountryChange`. The row goes with the account (the profile is personal data)."""
+
+    __tablename__ = "billing_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            "billing_country is null or billing_country ~ '^[A-Z]{2}$'",
+            name="ck_billing_profiles_country",
+        ),
+        CheckConstraint(
+            "pending_billing_country is null or pending_billing_country ~ '^[A-Z]{2}$'",
+            name="ck_billing_profiles_pending_country",
+        ),
+        CheckConstraint(
+            "(pending_billing_country is null) = (pending_effective_at is null)",
+            name="ck_billing_profiles_pending_pair",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
+    name_or_company: Mapped[str | None] = mapped_column(String(200))
+    address: Mapped[str | None] = mapped_column(String(500))
+    billing_country: Mapped[str | None] = mapped_column(String(2))
+    tax_id: Mapped[str | None] = mapped_column(String(64))
+    billing_email: Mapped[str | None] = mapped_column(String(254))
+    pending_billing_country: Mapped[str | None] = mapped_column(String(2))
+    pending_effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BillingCountryChange(Base):
+    """The history behind the change rules (billing spec section 5.2): one row each time a person
+    sets or changes their billing country. `old_country` is null for the first choice. `created_at`
+    is when the person asked (the 30-day rule counts from it); `effective_at` is when it applies:
+    the same moment for an immediate change, the end of the paid period for a scheduled one."""
+
+    __tablename__ = "billing_country_changes"
+    __table_args__ = (
+        CheckConstraint(
+            "old_country is null or old_country ~ '^[A-Z]{2}$'",
+            name="ck_billing_country_changes_old",
+        ),
+        CheckConstraint("new_country ~ '^[A-Z]{2}$'", name="ck_billing_country_changes_new"),
+        Index("ix_billing_country_changes_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    old_country: Mapped[str | None] = mapped_column(String(2))
+    new_country: Mapped[str] = mapped_column(String(2))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Decision(Base):
     """One bullet of a meeting's "Decisions" section. Read from the notes by code; the extraction
     adds what the model said about it and the code checked (`decided_by`, `quote`, `proposed`, the

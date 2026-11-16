@@ -1,0 +1,24 @@
+{
+  "note": "Any other country; lower case is read.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/route?country=gb",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "currency": "USD",
+      "provider": "flutterwave",
+      "billing_country": "GB"
+    }
+  }
+}

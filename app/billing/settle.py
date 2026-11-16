@@ -14,7 +14,9 @@ provider reported and never on what the webhook said (billing spec section 5.4):
 The provider's report is checked for shape first (`_malformed`): an amount that is not a whole
 number, an unknown currency or status, a reference or id that is not text. A malformed report is
 refused and recorded like any other refusal, so the provider is not asked to resend it for ever.
-The card's country is a note, not a rule: anything but two letters is stored as nothing.
+The card's country is a note, not a rule (`mismatch.py`): its two letters are kept (a vendor's
+`NIGERIA NG` gives `NG`), anything else is stored as nothing, and it is compared with the payer's
+billing country without ever refusing the payment.
 
 Anything else is refused: the payment stays as it was, and the event is marked decided with the
 reason in `billing_events.error`. A refusal never changes a payment.
@@ -32,13 +34,13 @@ failed; a `failed` payment can still succeed later (a payer retries the same che
 """
 
 import logging
-import re
 from collections.abc import Callable
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.billing.mismatch import flag_country_mismatch, normalize_card_country
 from app.billing.provider import PaymentProvider
 from app.billing.types import (
     TRANSACTION_STATUSES,
@@ -159,27 +161,20 @@ def _refuse_transaction(payment: Payment, tx: ProviderTransaction) -> str | None
     return None
 
 
-def _iso2(value: object) -> str | None:
-    """Two ASCII letters, upper-cased, or None. The card's country is a note for a human look
-    (spec 5.2), so a value the column cannot hold (a vendor's "NIGERIA NG") is dropped rather than
-    allowed to fail the write and stop a paid customer's hours."""
-    if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{2}", value):
-        return value.upper()
-    return None
-
-
 def _mark_paid(db: Session, payment: Payment, tx: ProviderTransaction, now) -> str | None:
     """The one place a payment becomes `succeeded`; runs the grant handlers once."""
     payment.status = "succeeded"
     payment.provider_tx_id = tx.provider_tx_id
     payment.paid_at = now
-    payment.card_country = _iso2(tx.card_country)
+    payment.card_country = normalize_card_country(tx.card_country)
     try:
         with db.begin_nested():
             db.flush()
     except IntegrityError:  # another payment already carries this provider transaction id
         db.refresh(payment)
         return "transaction already used by another payment"
+    # A note for a human look, never a rule: it cannot raise and cannot stop the grants below.
+    flag_country_mismatch(db, payment)
     for handler in GRANT_HANDLERS:
         handler(db, payment)
     return None
