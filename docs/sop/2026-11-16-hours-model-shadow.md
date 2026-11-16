@@ -45,7 +45,7 @@ Rejected: writing allocations from `record_usage` in S1 (that is S2's change to 
 ## Operate / roll back
 
 1. Deploy (the migration runs with the deploy). Behaviour is unchanged: `HOURS_MODE` unset means `off`.
-2. To look: set `HOURS_MODE=shadow` in `.env`, recreate web, worker and scheduler (`docker compose up -d --force-recreate web worker scheduler`; a restart does not re-read `.env`), then `docker compose exec -T web python scripts/hours_shadow_report.py </dev/null` and `docker compose logs web | grep hours_shadow`.
+2. To look: set `HOURS_MODE=shadow` in `.env`, recreate web, worker and scheduler (`docker compose up -d --force-recreate web worker scheduler`; a restart does not re-read `.env`), then `docker compose exec -T web python scripts/hours_shadow_report.py </dev/null` and `docker compose logs web worker scheduler | grep hours_shadow` (**correction, S3 review:** web printed no INFO lines until `app/logging_setup.py`, so before that fix this line showed only from the worker or scheduler; see `docs/sop/2026-11-17-feature-gates-shadow.md`).
 3. To stop: remove the line (or set `off`) and recreate. Nothing else holds state.
 4. Roll back the code: revert the PR. The tables are additive and nothing from before reads them, so the old code runs with them present. To also drop them, `alembic downgrade 0048` (it refuses once any non-pilot grant exists; the pilot grants can be rebuilt from the ledger).
 

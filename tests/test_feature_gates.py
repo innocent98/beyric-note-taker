@@ -10,14 +10,15 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, text
 
-from app import entitlements, feature_gates, services
+from app import entitlements, feature_gates, services, teams
 from app.models import (
     AiRun,
     HourGrant,
     MeetingShare,
     MeetingTranslation,
+    TeamMember,
     Template,
     UsageAllocation,
     UsageEntry,
@@ -54,6 +55,7 @@ from tests.test_team_visibility import (  # noqa: F401
     teammate,
 )
 from tests.test_team_visibility import share as share_with_team
+from tests.test_translation import FakeModel
 from tests.test_web import add_meeting, make_settings, token_from
 
 LOGGER = "app.feature_gates"
@@ -79,6 +81,7 @@ STATES = {
     "trial_ended": CLOSED,  # the 14 days passed
     "pilot_used_up": CLOSED,  # a pilot grant with no hours left is "none" (spec 2.2, last row)
     "pack_only": CLOSED,  # a pack is hours to record with, not a plan
+    "admin_gift_only": CLOSED,  # a gift is hours too, not a plan
     "lapsed": CLOSED,  # (S8) an expired plan
 }
 
@@ -136,6 +139,8 @@ def put_in_state(session, user, state, now=T0):
         spend_all(session, user, pilot, now)
     elif state == "pack_only":
         add_grant(session, user, "pack", 10 * HOUR, expires=now + 90 * DAY, now=now)
+    elif state == "admin_gift_only":
+        add_grant(session, user, "admin_gift", 10 * HOUR, now=now)
     elif state in ("none", "admin", "past_due", "lapsed"):
         pass
     else:
@@ -198,6 +203,7 @@ def test_the_table_covers_every_state_of_the_spec():
         "trial_ended",
         "pilot_used_up",
         "pack_only",
+        "admin_gift_only",
         "lapsed",
     }
     assert entitlements.OPEN_STATES == {"trial", "pilot", "active", "past_due"}
@@ -491,6 +497,11 @@ def test_sending_notes_in_french_is_gated_because_it_makes_a_translation(
 # ---- rewriting notes ----
 
 
+def rewritten_notes() -> str:
+    headings = ("Summary", "Key points", "Decisions", "Action items", "Open questions")
+    return "\n\n".join(f"## {h}\nRewritten" for h in (*headings, "Please check"))
+
+
 def other_template(session, template):
     other = Template(owner_user_id=template.owner_user_id, name="Short", instructions="Be brief.")
     session.add(other)
@@ -643,3 +654,95 @@ def test_reading_export_review_and_the_rest_stay_open_with_no_plan(
     # Review's "add the corrected spelling" calls no model, so it is never gated (spec 2.3)
     added = api.post(f"/api/review/{item['id']}/vocabulary", {"term": "Metrika"})
     assert added.status_code == 201
+
+
+# ---- a team admin rewrites or translates a moved meeting: their OWN plan decides (spec 2.3) ----
+
+
+@pytest.fixture
+def moved(session, owner, template, teammate):
+    """A meeting the owner recorded and moved to their team, with `teammate` its admin."""
+    team = teams.team_of(session, owner.id)
+    member = session.scalar(select(TeamMember).where(TeamMember.user_id == teammate.id))
+    member.role = "admin"
+    meeting = translatable(session, template)
+    meeting.owner_team_id = team.id
+    session.commit()
+    return meeting
+
+
+def test_an_admin_without_a_plan_is_refused_even_when_the_recorder_has_one(
+    app, session, owner, teammate, template, moved, fake_openai, mode
+):
+    mode("enforce")
+    add_grant(session, owner, "plan_period", 20 * HOUR, expires=datetime.now(UTC) + 20 * DAY)
+    admin = sign_in(app, TEAMMATE_EMAIL)
+    error_of(
+        admin.post(f"/api/meetings/{moved.id}/regenerate", {"template_id": template.id}),
+        403,
+        "plan_inactive",
+    )
+    error_of(ask_translation(admin, moved), 403, "plan_inactive")
+    assert fake_openai.chat_calls == [] and translation_rows(session) == 0
+
+
+def test_an_admin_with_a_plan_may_rewrite_when_the_recorder_has_none(
+    app, session, owner, teammate, template, moved, fake_openai, mode
+):
+    mode("enforce")
+    add_grant(session, teammate, "plan_period", 20 * HOUR, expires=datetime.now(UTC) + 20 * DAY)
+    fake_openai.notes = rewritten_notes()
+    admin = sign_in(app, TEAMMATE_EMAIL)
+    response = admin.post(f"/api/meetings/{moved.id}/regenerate", {"template_id": template.id})
+    assert response.status_code == 200 and "Rewritten" in response.json()["notes"]
+    assert ask_translation(admin, moved).status_code == 202
+
+
+# ---- a failed or a stale translation asked for again is a new model call: gated ----
+
+
+def test_try_again_on_a_failed_translation_and_re_translating_after_a_rewrite_are_gated(
+    api, session, template, owner, mode
+):
+    mode("enforce")
+    now = datetime.now(UTC)
+    trial = add_grant(session, owner, "trial", 3 * HOUR, expires=now + 13 * DAY, now=now)
+    failed, stale = translatable(session, template), translatable(session, template)
+    assert ask_translation(api, failed).status_code == 202
+    work(session, FakeModel(lambda texts, n: ["x"]))  # `failed` fails its check
+    assert ask_translation(api, stale).status_code == 202
+    work(session)  # `stale` is ready...
+    stale.notes = stale.notes.replace("14 March", "1 May")  # ...then its notes change
+    session.commit()
+    assert api.get(translation_url(failed)).json()["status"] == "failed"
+    assert api.get(translation_url(stale)).json()["stale"] is True
+    session.delete(trial)  # the plan ends
+    session.commit()
+    error_of(ask_translation(api, failed), 403, "plan_inactive")
+    error_of(ask_translation(api, stale), 403, "plan_inactive")
+    assert api.get(translation_url(failed)).json()["status"] == "failed"  # untouched, still read
+    assert api.get(translation_url(stale)).json()["status"] == "ready"
+
+
+# ---- shadow: a real database error inside the savepoint costs the request nothing ----
+
+
+def test_a_database_error_inside_the_shadow_check_leaves_the_request_intact(
+    api, session, template, mode, caplog, monkeypatch
+):
+    """`request_translation` holds the account lock and a row lock when the gate runs. A SQL error
+    in the check rolls back only the savepoint: the translation is still queued, and the line says
+    the class only."""
+    mode("shadow")
+
+    def broken(session_, user_, now_, *args, **kwargs):
+        session_.execute(text("select 1/0"))  # a real error from the database, not a stub
+
+    monkeypatch.setattr(entitlements, "status", broken)
+    meeting = translatable(session, template)
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        assert ask_translation(api, meeting).status_code == 202
+    [line] = gate_lines(caplog)
+    assert line.startswith("feature_gates_shadow failed feature=translate user=")
+    assert "error=" in line and "zero" not in line.lower() and "division" not in line.lower()
+    assert api.get(translation_url(meeting)).json()["status"] == "translating"

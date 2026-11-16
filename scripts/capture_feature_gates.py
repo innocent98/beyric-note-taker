@@ -12,8 +12,8 @@ Files go to `docs/fe-captures/feature-gates/NN-name.json`. Passwords in login ca
 placeholders.
 
 What is real: the app, the routes, the gate, the entitlement rule, the grants, the 403 refusal, the
-shadow log line (captured from the real logger), the database rows. What is NOT, said in each
-file's note where it matters:
+shadow log line (the real logger, read through a handler this script attaches), the database
+rows. What is NOT, said in each file's note where it matters:
 - The people, their meetings and their notes are placeholders. A person's grants were inserted by
   SQL in the shape the code makes: sign-up gives nobody a trial yet (stage S10) and no purchase
   exists yet (stage S8), so no route makes a `trial` grant.
@@ -247,7 +247,9 @@ def run(engine, server_base: str, set_mode, tap: LogTap) -> None:
     base.note_file(
         "shadow-log-lines",
         "The lines the gate logged during the two calls above (logger `app.feature_gates`, level "
-        f"INFO), captured from the real logger. User id {nora_id} is this scratch database's id. "
+        "INFO), read from the real logger through a handler this script attaches (that web's own "
+        "logging prints it is `tests/test_logging_setup.py`). "
+        f"User id {nora_id} is this scratch database's id. "
         "One line per refused-if-enforced call; ids and state only, never a name or an email.",
         {"lines": list(tap.lines)},
     )

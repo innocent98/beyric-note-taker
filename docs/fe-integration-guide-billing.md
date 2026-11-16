@@ -417,7 +417,7 @@ All four messages end with the same sentence: `You can still read, search and ex
 
 ### Order of errors
 
-The gate is checked after the request is known to be valid and before the model is called, so a person with no plan who sends an empty question still gets 422 `question_invalid`, and a rewrite on a meeting that is not ready still gets 409 `not_ready`. Translation: 422 `language_unsupported` and 409 `not_ready` come first; 429 `translation_limit` comes after the gate.
+The gate is checked after the request is known to be valid and before the model is called, so a person with no plan who sends an empty question still gets 422 `question_invalid`, and a rewrite on a meeting that is not ready still gets 409 `not_ready`. Translation: 422 `language_unsupported` and 409 `not_ready` come first; 429 `translation_limit` comes after the gate. Sharing notes by email: 403 `email_not_verified`, 409 `not_ready` and 429 `share_limit` (20 recipients a day) can come **before** `plan_inactive`, which is raised when the share needs a new translation.
 
 ### What a person who passes sees (captures 14 to 18)
 
@@ -437,6 +437,8 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 * **There is no signal yet that says which of the three is open for this person** (no `features` field in `GET /api/session`; `usage.state` exists only while `HOURS_MODE=enforce`, and it does not follow `FEATURE_GATES_MODE`). Until a follow-up adds one, the buttons can only learn it by being refused. Do not build a screen that hides them from `usage.state`: the two switches are independent and `usage.state` is `null` when the hours rule is off.
 * **A teammate with no plan** (reader only) can open every shared meeting and read it; Ask, translate and rewrite are refused for them. Show those three as unavailable with the server's sentence rather than as an error.
 * **A running or cached translation can be shown to a person with no plan.** Only the "Translate" button that starts a new one is refused.
+* **"Try again" on a failed translation, and translating again after the notes were rewritten (the translation is `stale`), start a new model call, so they are refused with 403 `plan_inactive` for a person with no plan.** The failed or stale translation stays as it is and can still be read (`GET .../translations/{language}`). Treat these two buttons like "Translate".
+* **A team admin who rewrites or translates a meeting moved to their team is checked on their own plan**, not on the recorder's: a person with no plan gets the 403 even when the recorder pays.
 * **Sending notes in French or Spanish is a translation.** The share dialog can get this 403 for a person with no plan; English sharing still works for them.
 * **Rewriting is also a button on the old page**: `POST /meetings/{id}/regenerate` (a form post, not JSON) is gated the same way and shows the same sentence on the page with status 403.
 
@@ -458,7 +460,8 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 | 403 `plan_inactive` body for Ask, the free "my tasks" answer, a new translation, a rewrite and a share in French | live (captures 03 to 07, `FEATURE_GATES_MODE=enforce`) |
 | Reading, the Ask scope line, Review and the meeting list stay open for a person with no plan | live (captures 08 to 11) |
 | A person on a trial passes all gates (Ask 200, translation 202, rewrite 200) | live (captures 14 to 18; the trial grant was inserted by SQL; the notes model was a fake client and Ask was shown on a question that finds nothing, so no OpenAI call was made) |
-| Shadow lets the call through and logs one line with ids only; off logs nothing | live (captures 19 to 23, the log lines come from the real logger) |
+| Shadow lets the call through and logs one line with ids only; off logs nothing | live (captures 19 to 23: the lines come from the real logger, with a handler the capture script attached itself; that web's own logging prints them is proved by `tests/test_logging_setup.py`, a fresh interpreter, not by the capture) |
+| A failed or stale translation asked for again is refused (and left readable); a team admin is checked on their own plan | tests only (`tests/test_feature_gates.py`) |
 | A cached or running translation is not refused after a plan ends; the worker finishes a queued translation; the legacy page route `POST /meetings/{id}/regenerate` is refused with 403 and the same sentence | tests only (`tests/test_feature_gates.py`) |
 | The reader-only teammate: reads shared notes, Ask refused, Ask works once they hold a plan | tests only |
 | `past_due` and `lapsed` states against the gates | tests only (the states arrive with subscriptions in stage S8) |

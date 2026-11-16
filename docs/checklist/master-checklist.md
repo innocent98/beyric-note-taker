@@ -931,12 +931,13 @@ Goal: a **person** subscribes; the hours are theirs; teams are only a place to s
   - [x] `FEATURE_GATES_MODE` (`off` default, `shadow`, `enforce`; blank is off; a bad value stops startup) in `app/config.py`, `.env.example`, `deploy/README.md`
   - [x] `entitlements.can` / `gate` and `app/feature_gates.py`: off reads nothing; shadow logs one line (ids and state only) and proceeds; enforce refuses 403 `plan_inactive` with plain words (no "pilot", no address) and fails closed
   - [x] Gates inside the model-calling functions: `ask.answer`, `translation.request_translation` (also covers sending notes in French or Spanish), `services.regenerate_notes` (the legacy page route cannot bypass it)
-  - [x] Table test: all twelve states of spec 2.2 against every gate in every mode; the reader-only teammate; flag off reads no SQL; shadow logs once; mutation checks on the three call sites (`tests/test_feature_gates.py`, 90 tests)
+  - [x] Table test: all thirteen states of spec 2.2 against every gate in every mode; the reader-only teammate; flag off reads no SQL; shadow logs once; mutation checks on the three call sites (`tests/test_feature_gates.py`, 98 tests)
   - [x] Live captures in `enforce`, `shadow` and `off` (the four 403 bodies and the open calls), FE guide section and verification rows
-  - [ ] CI green on the pushed head and the lead's Opus review
+  - [x] Review M1 fixed: web's INFO lines (the shadow lines, `hours_shadow` too) reach `docker compose logs web` (`app/logging_setup.py`; `tests/test_logging_setup.py` runs a fresh interpreter); admin-on-moved-meeting, failed and stale translation and real-SQL-error-in-shadow tests added
+  - [ ] CI green on the pushed head and the lead's delta review
   - [ ] Decisions to confirm (SOP): a used-up pilot grant is closed at `enforce`; the free "my tasks" answer is gated; sending notes in French or Spanish is gated
   - [ ] A session signal for the screens (which features are open) is not built; needs his or the lead's decision
-  - [ ] Not verified: `past_due` and `lapsed` against the gates except through a replaced `status` (S8); nothing deployed; `enforce` never run on a server
+  - [ ] Not verified: `past_due` and `lapsed` pass by construction (the table replaces `status` for them) until S8 gives real subscriptions; nothing deployed; `enforce` never run on a server
 - [ ] **S4: provider layer and webhook inbox** (M, first half of migration 0050, `BILLING_ENABLED=false`): `app/billing/` protocol, `FakeProvider`, neutral types; webhook route (raw body, dedupe table, 200 at once, worker processes, re-fetch before any grant); replay, wrong amount, wrong currency, wrong reference, bad signature on the fake  **Built and tested locally 2026-11-16 (SOP `docs/sop/2026-11-16-billing-provider-layer.md`); merged as #212 and deployed `8c130196`; dark**
   - [x] `app/billing/`: `PaymentProvider` protocol, `FakeProvider`, neutral types, `new_payment`, inbox, settlement rules, webhook route (404 while `BILLING_ENABLED=false`)
   - [x] Migration 0050 (`payments`, `payment_methods`, `billing_events`); round trip on a scratch database
