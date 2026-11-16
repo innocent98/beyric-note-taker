@@ -5,7 +5,10 @@ default and the original behaviour) or the bot provider's transcript (`skribby`)
 transcript straight from Skribby's segments, as `[Name]: text` turns in the format
 `notes.label_transcript` gives today, and skips our transcription and the model-based labelling. It
 never trusts the segments blindly: `fallback_reason` names why ours must run instead (nothing from
-Skribby, or far too little text for the length of the recording).
+Skribby, far too little text for the length of the recording, a loop, or no segment times). How far
+into the recording the text reaches is NOT checked: a call whose speech ends early (the bot waited
+out its last-person timer) is not a reason to pay for a second transcript
+(docs/sop/2026-11-16-drop-transcript-coverage-rule.md).
 
 Nothing here logs or stores transcript text. `Candidate` and `Metrics` hold numbers and counts only.
 """
@@ -36,11 +39,6 @@ SKRIBBY = "skribby"
 # transcript that lost only part of the call: the sampled shadow check measures that.
 MIN_WORDS_PER_MINUTE = 20
 
-# Skribby's last segment must end at least this far into the recording (its times are seconds from
-# the start of the recording). Trailing quiet (people leaving, the bot waiting out the last-person
-# timer) is normal, so 70% leaves room for about 30% of silence at the end; a transcript that stops
-# earlier lost the rest of the call. Too strict only costs the fallback (about 0.70 USD an hour).
-MIN_COVERAGE = 0.70
 # Distinct words over total words, below which the text is a loop ("Thank you. Thank you. ...") and
 # not speech. Real speech of the lengths that pass the rule above has far more: a hundred-odd
 # distinct words at the very least, and at an hour (about 9,000 words) well over a thousand, so the
@@ -66,7 +64,8 @@ class Candidate:
     unnamed_segments: int  # of those, the ones with no (usable) speaker name
     named: bool  # at least one named speaker: the text carries "[Name]:" turns
     distinct_words: int = 0  # different words (case and punctuation ignored)
-    last_end: float | None = None  # seconds into the recording where the last segment ends
+    last_end: float | None = None  # seconds into the recording where the last segment ends; None
+    # means the provider gave no segment times at all (a fallback reason), not how far it reaches
 
     @property
     def complete(self) -> bool:
@@ -133,9 +132,9 @@ def needed_words(seconds: int, floor: int) -> int:
 def fallback_reason(found: Candidate | None, seconds: int, floor: int) -> str | None:
     """None when Skribby's transcript may be used; else a short fixed phrase naming why not (never
     any text). Four checks: it exists; it has at least `MIN_WORDS_PER_MINUTE` of audio; its words
-    are not a loop (`MIN_DISTINCT_SHARE`); and its last segment ends at least `MIN_COVERAGE` of the
-    way into the recording. No segment times at all fails the last, closed: a transcript whose
-    reach cannot be told is not trusted."""
+    are not a loop (`MIN_DISTINCT_SHARE`); and the provider gave segment times at all (none fails
+    closed: a transcript with no times is not trusted). Where the last segment ends is not checked:
+    speech that stops early is accepted."""
     if found is None:
         return "no transcript"
     if found.words < needed_words(seconds, floor):
@@ -144,8 +143,6 @@ def fallback_reason(found: Candidate | None, seconds: int, floor: int) -> str | 
         return "repeats the same few words"
     if found.last_end is None:
         return "no segment times"
-    if found.last_end < MIN_COVERAGE * seconds:
-        return "stops well before the end of the recording"
     return None
 
 
