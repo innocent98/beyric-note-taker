@@ -249,6 +249,11 @@ def concrete(path: str) -> str:
     return re.sub(r"\{provider\}", "google", re.sub(r"\{(?!provider)\w+\}", "1", path))
 
 
+# Public by the guard's path prefix (`auth.WEBHOOK_PREFIX`), not by an entry in `auth.PUBLIC_API`:
+# called by a payment provider, which has no login; its signature on the raw body is the
+# credential (`app/billing/api.py`). `google` stands in for `{provider}`; billing is off: 404.
+WEBHOOK_PUBLIC = {("POST", "/api/billing/webhooks/google")}
+
 PUBLIC = {
     ("GET", "/api/session"),
     ("POST", "/api/session"),
@@ -265,7 +270,11 @@ PUBLIC = {
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),
     ("GET", "/api/calendar/microsoft/callback"),
-}
+} | WEBHOOK_PUBLIC
+
+# Routes with no CSRF header by design: a provider cannot send ours. `auth.guard` skips the check
+# for exactly the webhook prefix; `test_billing_inbox.py` shows only this route lives under it.
+CSRF_EXEMPT = {("POST", "/api/billing/webhooks/{provider}")}
 
 
 def test_every_api_route_needs_login_except_the_listed_public_ones(anon, app):
@@ -293,7 +302,7 @@ def test_the_routes_that_return_files_are_listed_and_not_public(app):
 
 def test_every_write_needs_the_csrf_header(api, app, template):
     for method, path in api_routes(app):
-        if method == "GET":
+        if method == "GET" or (method, path) in CSRF_EXEMPT:
             continue
         for token in (False, "wrong-token"):
             response = api.call(method, concrete(path), {"x": 1}, csrf=token)

@@ -3,7 +3,7 @@
 Everything in this file is a body, status or message **copied from a real response**: the capture script
 `scripts/capture_series_follow.py` runs the real app (real migrations, auth, CSRF, team roles, visibility,
 the backfill script) on a scratch Postgres and writes every exchange to `docs/fe-captures/series-follow/NN-name.json`. Run it again
-to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 89 and section 11 (the simpler model) 90 to 106**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
+to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 89, section 11 (the simpler model) 90 to 106 and section 12 (bring back, and the hint on a Personal card) 107 to 129**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
 Names, emails and ids are placeholders ("Ada Example", `owner@example.test`, ids from a scratch database:
 yours will differ).
 
@@ -11,7 +11,8 @@ Related: `docs/fe-integration-guide-series.md` (the Series API this builds on),
 `docs/fe-integration-guide-teams.md` (the team switcher and `X-Team-Id`),
 `docs/superpowers/specs/2026-11-14-series-follow-meetings.md` (the design),
 `docs/sop/2026-11-14-series-follow-switch-on.md` (the server steps),
-`docs/sop/2026-11-15-remove-recurring-meeting.md` (section 10, removing a recurring meeting).
+`docs/sop/2026-11-15-remove-recurring-meeting.md` (section 10, removing a recurring meeting),
+`docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md` (section 12, bringing one back).
 
 ## 1. What this is, in the person's terms
 
@@ -789,6 +790,20 @@ Rows left with no meeting after the split: 0
 | Reminders for a calendar-linked Personal card; a hand-made card never reminds; `reminders_on` off by default | **not exercised live**: fake-clock tests only |
 | An owner's explicit share clears the "removed" mark and makes the card again | **verified live** (71 to 73) |
 | Flag off: every rule of section 11 as before | **not exercised live**: `tests/test_series_personal_model.py` |
+| The removed list for a Personal scope and for a team, with a name from the caller's own calendar else `Recurring meeting`, `removed_by`, the scope | **verified live** (112, 113) |
+| An empty list | **verified live** (129) |
+| The list: 403 `team_forbidden` for a plain member, 404 for a team that is not the caller's | **verified live** (114, 115) |
+| Bring back: 200 `{team}` for a team's mark and for a Personal mark | **verified live** (120, 123) |
+| Bring back: 403 for a plain member, 404 for Ada's Personal mark asked by someone else, 404 for an outsider, 404 for an unknown id, 404 the second time | **verified live** (116 to 119, 122) |
+| The hourly sync makes no Personal card while the mark stands and makes it after bring-back | **verified live** (111 and 124: the real `series.sync_from_joins`, run in the capture process, not an HTTP call; 125 the list) |
+| A team's card is not made by the bring-back itself | **verified live** (121) |
+| A team's card made by an owner's auto-shared recording after the bring-back, with the team's meetings of the event joining it | **not exercised live**: `tests/test_series_bring_back.py` |
+| Bring back changes nothing else (meetings, tasks, questions, rows, agenda lines, the other scopes' marks) | **not exercised live**: `tests/test_series_bring_back.py` |
+| A hand-made recurring meeting and a plain creator's removal leave nothing to list; `removed_by` null; the 100-row limit; a malformed id; CSRF | **not exercised live**: `tests/test_series_bring_back.py` |
+| Flag off: the list and bring back work on the default team's mark | **not exercised live**: `tests/test_series_bring_back.py` |
+| `team_card` on a Personal page: null, then the team's card once one exists; null on the team's own page | **verified live** (108, 127, 128) |
+| `team_card` null for a hand-made Personal card, for a card the caller may not see, with the flag off | **not exercised live**: `tests/test_series_bring_back.py` |
+| The Settings section, the hint and the changed removal line in a browser against a live server | **not exercised**: tested against these captures (`web/tests/series-bring-back.test.tsx`), no screenshots |
 
 ## 10. Remove this recurring meeting
 
@@ -1153,8 +1168,8 @@ as success; any other error shows the server's message and stays.
 
 ### 10.6 UX consequences the frontend must surface
 
-* **It cannot be undone from the app.** The row, its waiting agenda lines and its topics are gone, and the event is remembered as removed. There is no "bring it
-  back" call yet (a follow-up). Do not offer an Undo.
+* **It cannot be undone in the sense of getting the row back.** The row, its waiting agenda lines and its topics are gone. The calendar's memory of the removal can be cleared with **Bring back**
+  (section 12), which lets an empty card be made again later. Do not offer an Undo on the removal itself.
 * **It is per team.** The same recurring meeting can be on a team's page and on the person's Personal page. Removing one leaves the other. The dialog says so
   while multi-team is on.
 * **Do not promise the meetings are "deleted".** They are not. Say they stay and are no longer grouped.
@@ -1436,5 +1451,347 @@ The mail is unchanged. A calendar-linked **Personal** card with one recorded mee
 * A recurring meeting from the person's own calendar appears in **Personal**, not in the team's Meetings page. Do not tell a person it will appear in their team.
 * A plain member who shares a recurring meeting sees it shared but not grouped, until an owner or admin makes the team's card. Do not show an error.
 * Do not offer "Add to recurring meeting" or "Make this a recurring meeting?" when `can_make_recurring` is `false`. Send `recurring_team_id` as `X-Team-Id` for the picker's list and create.
-* The Personal card of an event stays the person's own: once a team card exists, their recordings go into the team's card and the lines typed into the Personal card are not carried into it or mailed. A hint on the Personal card would help (not built).
+* The Personal card of an event stays the person's own: once a team card exists, their recordings go into the team's card and the lines typed into the Personal card are not carried into it or mailed. The Personal page now says so: `team_card` (section 12.5).
 * A plain member's shared recordings stay ungrouped while their Personal card is empty, until an owner or admin makes the team's card (then those meetings join it). The empty Personal card is not a fault.
+
+## 12. Bring back a removed recurring meeting, and the hint on a Personal card
+
+**LEAD-DESIGNED** (a follow-up of sections 10 and 11; the designer drew neither piece). Branch `feature/recurring-bring-back`, SOP
+`docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md`. **No migration.** Captures 107 to 129, made by the same script
+(`python scripts/capture_series_follow.py <admin url> --keep 106` writes only 107 and up). Every body below is pasted from a capture.
+It runs with `SERIES_FOLLOW_MEETINGS` **on**. Ids are from a scratch database: yours will differ.
+
+### 12.1 What it is, in the person's terms
+
+Removing a recurring meeting from a calendar (section 10) is remembered **per scope** (a team's, or one person's Personal space) so the sync
+does not make the card again. This section adds a list of what was removed and a **Bring back** button that forgets that one memory.
+
+* **Bring back does not make the card at that moment, and it never restores anything.** It only lets the card be made again: a **Personal** card by
+  the next hourly calendar sync (within the hour, once a join of the event is scheduled); a **team's** card the next time an owner or admin shares a
+  meeting of that event to the team, or their recording of it is shared automatically (the hourly sync only makes Personal cards, section 11). The
+  agenda lines, the "Keeps coming up" topics and the project link that went with the old card are **not** restored, and the past meetings are **not**
+  grouped into the new card (a team's new card does take in the meetings of the same event the team already has, section 11.3).
+* **A recurring meeting made by hand has nothing to bring back.** Removing it leaves no memory (capture 86: `remembered` false), so it is never listed.
+  The same for the empty legacy card a plain member removed (it writes no mark).
+* **Who:** exactly who may remove. A team's list and its Bring back: an **owner or admin** of the team. A Personal list: the person. Any other member of the
+  team gets 403 `team_forbidden`; someone outside the team gets 404.
+* Draw it in **Settings**, as its own card ("Removed recurring meetings"), only for an owner or admin of the current team or the person in their Personal space
+  (`team.can_manage` from `GET /api/team`), and only when the list has something in it.
+
+### 12.2 The list: `GET /api/series/removed`
+
+The `X-Team-Id` header names the team or the person's Personal space (the client sends it on this path like on `GET /api/series`); without it the default team's.
+
+`docs/fe-captures/series-follow/112-bring-back-list-personal.json`
+
+```text
+GET /api/series/removed   (X-Team-Id: 1)  ->  200
+```
+
+```json
+{
+  "removed": [
+    {
+      "id": 5,
+      "title": "Weekly planning",
+      "team": {
+        "id": 1,
+        "name": "My team",
+        "is_personal": true
+      },
+      "removed_at": "2026-11-16T13:52:21.111884Z",
+      "removed_by": "Ada Example"
+    },
+    {
+      "id": 4,
+      "title": "Standup",
+      "team": {
+        "id": 1,
+        "name": "My team",
+        "is_personal": true
+      },
+      "removed_at": "2026-11-16T13:52:20.701333Z",
+      "removed_by": "Ada Example"
+    }
+  ]
+}
+```
+
+`docs/fe-captures/series-follow/113-bring-back-list-team-x.json`
+
+```text
+GET /api/series/removed   (X-Team-Id: 4)  ->  200
+```
+
+```json
+{
+  "removed": [
+    {
+      "id": 6,
+      "title": "Recurring meeting",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "removed_at": "2026-11-16T13:52:21.119545Z",
+      "removed_by": "Ada Example"
+    },
+    {
+      "id": 1,
+      "title": "1:1",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "removed_at": "2026-11-16T13:52:20.535019Z",
+      "removed_by": "Ada Example"
+    }
+  ]
+}
+```
+
+`docs/fe-captures/series-follow/129-bring-back-list-quinn-y-empty.json`
+
+```text
+GET /api/series/removed   (X-Team-Id: 5)  ->  200
+```
+
+```json
+{
+  "removed": []
+}
+```
+
+
+Field notes (all from the captures above):
+
+* **`id` is the removal mark's id, not a series id.** It is what `bring-back` takes. Do not link it to `/series/{id}`.
+* **`title` is what the caller's own calendar calls the event, else `"Recurring meeting"`** (capture 113: the first row, the owner's team list, has no event of her own for it).
+  The server never uses a teammate's calendar title, because the mark holds only the event's id. Expect several rows to say `Recurring meeting`; show the date and the name that removed it so they can be told apart.
+* `removed_by` is a **display name**, or **`null`** once that person has left the team (the `null` case is **not captured live**: tests only; the field is typed `string | null`).
+* Newest removal first. At most 100 rows (not exercised live).
+* The scope is on every row (`team`), so a row says whether it is "Personal" (`team.is_personal`) or a team.
+
+Errors of the list:
+
+`docs/fe-captures/series-follow/114-bring-back-list-pat-x-403.json`
+
+```text
+GET /api/series/removed   (X-Team-Id: 4)  ->  403
+```
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+`docs/fe-captures/series-follow/115-bring-back-list-quinn-x-404.json`
+
+```text
+GET /api/series/removed   (X-Team-Id: 4)  ->  404
+```
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such team."
+  }
+}
+```
+
+
+### 12.3 Bring back: `POST /api/series/removed/{id}/bring-back`
+
+No body. Needs the `X-CSRF-Token` header like every write (a missing token is 403 from the project's usual guard: **not exercised live**, covered by `tests/test_series_bring_back.py`).
+It does not read `X-Team-Id`: the mark's id says which scope.
+
+`docs/fe-captures/series-follow/120-bring-back-team.json`
+
+```text
+POST /api/series/removed/6/bring-back  ->  200
+```
+
+```json
+{
+  "team": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false
+  }
+}
+```
+
+`docs/fe-captures/series-follow/123-bring-back-personal.json`
+
+```text
+POST /api/series/removed/5/bring-back  ->  200
+```
+
+```json
+{
+  "team": {
+    "id": 1,
+    "name": "My team",
+    "is_personal": true
+  }
+}
+```
+
+
+The answer names the scope whose mark was cleared (`team`), so the screen can say which. **A second call for the same mark is 404**, as is an unknown id:
+
+`docs/fe-captures/series-follow/122-bring-back-team-again-404.json`
+
+```text
+POST /api/series/removed/6/bring-back  ->  404
+```
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such removed recurring meeting."
+  }
+}
+```
+
+`docs/fe-captures/series-follow/119-bring-back-unknown-404.json`
+
+```text
+POST /api/series/removed/987654/bring-back  ->  404
+```
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such removed recurring meeting."
+  }
+}
+```
+
+
+Who may not:
+
+`docs/fe-captures/series-follow/116-bring-back-pat-team-403.json`
+
+```text
+POST /api/series/removed/6/bring-back  ->  403
+```
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+`docs/fe-captures/series-follow/117-bring-back-pat-ada-personal-404.json`
+
+```text
+POST /api/series/removed/5/bring-back  ->  404
+```
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such removed recurring meeting."
+  }
+}
+```
+
+`docs/fe-captures/series-follow/118-bring-back-quinn-team-404.json`
+
+```text
+POST /api/series/removed/6/bring-back  ->  404
+```
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such removed recurring meeting."
+  }
+}
+```
+
+
+A malformed id (`/api/series/removed/abc/bring-back`) is a plain 404 (**not exercised live**; `tests/test_series_bring_back.py`).
+
+### 12.4 What the person sees next
+
+* Capture 121 is X's card list right after bringing back X's mark: **no card for it** (the call made none). Capture 111 and 124 are NOT HTTP calls: the real
+  `series.sync_from_joins` run in the capture process. Before the bring-back it made no card for the Personal event (`planning_rows` 0); after it, it made one (`planning_rows` 1).
+  Capture 125 is the Personal list after: the card is back as a **new empty card with a new id** (the old id is gone).
+* After a Personal bring-back the person must wait for the sync (within the hour). Tell them so; do not navigate to a card page.
+* A team's card is made by an owner's or admin's share or auto-shared recording (section 11.3). **Not exercised live for the team case**: covered by
+  `tests/test_series_bring_back.py` (`link_from_calendar` refuses while the mark stands and makes the card after, and the team's meetings of the same event join it).
+* Bring back writes nothing else: the table counts of meetings, tasks, questions, rows and agenda lines are equal before and after (`tests/test_series_bring_back.py`; **not exercised live**).
+
+### 12.5 The hint on a Personal card: `team_card` on `GET /api/series/{id}`
+
+A **new top-level field on the page**, `team_card`, **always present** (`null` or an object). It is non-null only on a **Personal** card from the calendar, only while `scoped` is true,
+and only when an ordinary team **of the caller's** has a card of the **same recurring meeting** that the caller may see. Why the hint exists: a meeting of that event that goes to the team's
+card is grouped there, so the lines typed into the agenda of the Personal card are not used by it (section 11.7). The Personal card keeps working on its own for meetings that stay private.
+
+A Personal page with no team card of the same event (capture 108, trimmed to the field's neighbours; the rest of the page is as in section 5):
+
+```text
+GET /api/series/16  ->  200      (docs/fe-captures/series-follow/108-bring-back-personal-page-no-team-card.json)
+```
+
+```json
+{
+  "team": {"id": 1, "name": "My team", "is_personal": true},
+  "team_card": null,
+  "scoped": true
+}
+```
+
+The same card once X has one (capture 127):
+
+```json
+{
+  "team": {"id": 1, "name": "My team", "is_personal": true},
+  "team_card": {
+    "id": 26,
+    "team": {
+      "id": 4,
+      "name": "Platform team",
+      "is_personal": false
+    }
+  },
+  "scoped": true
+}
+```
+
+And the team's own page (capture 128): `"team_card": null`.
+
+* **Nesting trap:** `team_card.team` is the **team card's** team; the page's own `team` is the Personal space. `team_card.id` is a **series id** (link to `/series/{id}`), unlike `id` in the removed list.
+* The hint is **not** drawn for a hand-made Personal card (it has no recurring event), for a team's page, with the flag off, or when the team's card is one the caller may not see (all
+  **not exercised live**; `tests/test_series_bring_back.py`).
+* The wording the frontend draws, in the Agenda column under "Other agenda items", as an info message: "This recurring meeting also has a card in {team}. Meetings you share with {team} go to that card, so items you add here are not used for them. Add them to {team}'s card instead." (the last words are a link to `/series/{team_card.id}`).
+
+### 12.6 UX consequences the frontend must surface
+
+* **Do not promise the old card back.** Say what comes back: an empty card, later. The lines, topics and project link are gone for good, and past meetings stay ungrouped.
+* **The delay is real.** Personal: up to an hour. Team: not until an owner or admin shares a meeting of the event (or their recording is shared automatically).
+* **The removal dialog now ends "until you bring it back in Settings"** on its calendar line. A hand-made recurring meeting has no such line to follow: for it the removal is final.
+* **Do not draw the list for a plain member** (the call is 403). Draw nothing, not an error, when the call fails.
+* **A row's `title` can be generic.** Do not treat `Recurring meeting` as a bug.
+
+### 12.7 Where it is in the frontend
+
+`web/components/app/settings-removed-recurring.tsx` (mounted by `web/app/settings/page.tsx` when `team.can_manage`), `web/components/app/series-view.tsx` (the hint),
+`web/components/app/series-remove.tsx` (the calendar line), `web/lib/api/client.ts` (`api.series.removed`, `api.series.bringBack`; `/api/series/removed` is team-scoped so the header goes with it),
+`web/tests/series-bring-back.test.tsx` (against captures 108, 112, 113, 114, 120, 122, 127, 128).

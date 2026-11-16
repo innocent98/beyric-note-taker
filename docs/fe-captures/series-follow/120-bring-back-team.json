@@ -1,0 +1,23 @@
+{
+  "note": "Ada brings back X's 'Retro': 200 with the scope. The call makes no card: a team's card is made the next time an owner or admin shares a meeting of the event, or their recording of it is shared automatically (the hourly sync only makes Personal cards).",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/6/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      }
+    }
+  }
+}

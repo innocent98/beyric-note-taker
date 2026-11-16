@@ -1567,6 +1567,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/removed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Removed Series
+         * @description The calendar recurring meetings removed from ONE scope, to bring back (LEAD-DESIGNED). The
+         *     `X-Team-Id` header names the team or the person's Personal space (404 for one the caller is not
+         *     in); without it, the default team's. Only an owner or admin of the team, or the person for
+         *     their own Personal space, sees the list: any other member gets 403 `team_forbidden`. A
+         *     recurring meeting made by hand leaves no mark and is never listed.
+         */
+        get: operations["list_removed_series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/removed/{mark_id}/bring-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bring Back Series
+         * @description Bring back one removed recurring meeting (LEAD-DESIGNED): clear its removal mark, nothing
+         *     else. It makes no card by itself and never touches a meeting, task, note or agenda line. Who
+         *     may is who may remove: an owner or admin of the team, or the person for their own Personal
+         *     space (403 `team_forbidden` for any other member; 404 for someone outside the team, an unknown
+         *     id and a second call). A Personal card is made again by the next hourly calendar sync (once a
+         *     join of the event is scheduled); a team's by the next time an owner or admin shares a meeting
+         *     of it, or their recording of it is shared automatically.
+         */
+        post: operations["bring_back_series"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{series_id}": {
         parameters: {
             query?: never;
@@ -2810,6 +2860,16 @@ export interface components {
             warning?: string | null;
         };
         /**
+         * BroughtBack
+         * @description What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No
+         *     card is made by the call itself (a Personal card is made by the next hourly calendar sync; a
+         *     team's by the next time an owner or admin shares a meeting of it, or their recording is shared
+         *     automatically).
+         */
+        BroughtBack: {
+            team: components["schemas"]["SeriesTeam"];
+        };
+        /**
          * CalendarOut
          * @description The calendar settings page's whole state. `state` is for choosing what to draw
          *     (`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;
@@ -3875,6 +3935,30 @@ export interface components {
             /** Notify Reminders */
             notify_reminders: boolean;
         };
+        /** RemovedList */
+        RemovedList: {
+            /** Removed */
+            removed: components["schemas"]["RemovedRecurring"][];
+        };
+        /**
+         * RemovedRecurring
+         * @description One row of `GET /api/series/removed`: a calendar recurring meeting that was removed from a
+         *     scope and can be brought back. LEAD-DESIGNED, not in the designer's files.
+         */
+        RemovedRecurring: {
+            /** Id */
+            id: number;
+            /**
+             * Removed At
+             * Format: date-time
+             */
+            removed_at: string;
+            /** Removed By */
+            removed_by: string | null;
+            team: components["schemas"]["SeriesTeam"];
+            /** Title */
+            title: string;
+        };
         /** ResetIn */
         ResetIn: {
             /** Password */
@@ -4012,6 +4096,7 @@ export interface components {
             /** Suggested Agenda */
             suggested_agenda: components["schemas"]["AgendaSuggestion"][];
             team: components["schemas"]["SeriesTeam"];
+            team_card: components["schemas"]["SeriesTeamCard"] | null;
             /** Timezone */
             timezone: string;
             /** Title */
@@ -4066,6 +4151,15 @@ export interface components {
             is_personal: boolean;
             /** Name */
             name: string;
+        };
+        /**
+         * SeriesTeamCard
+         * @description A team's card of the same recurring meeting, named on a Personal page (`team_card`).
+         */
+        SeriesTeamCard: {
+            /** Id */
+            id: number;
+            team: components["schemas"]["SeriesTeam"];
         };
         /** SessionState */
         SessionState: {
@@ -9898,6 +9992,123 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_removed_series: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bring_back_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mark_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BroughtBack"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`, or a missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

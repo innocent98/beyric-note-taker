@@ -102,10 +102,10 @@ def at_0048(scratch_url):
     engine.dispose()
 
 
-def test_0049_follows_0048_and_is_the_single_head(scratch_url):
+def test_0049_follows_0048(scratch_url):
+    """(One head is `test_migrations.py::test_single_head`; a later migration moves the head.)"""
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert script.get_revision("0049").down_revision == "0048"
-    assert script.get_heads() == ["0049"]
 
 
 def test_the_backfill_gives_each_person_their_old_cap_minus_their_ledger(at_0048):

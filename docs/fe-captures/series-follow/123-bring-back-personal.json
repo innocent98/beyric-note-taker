@@ -1,0 +1,23 @@
+{
+  "note": "Ada brings back her Personal 'Weekly planning': 200.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/5/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team": {
+        "id": 1,
+        "name": "My team",
+        "is_personal": true
+      }
+    }
+  }
+}

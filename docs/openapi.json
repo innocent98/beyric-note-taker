@@ -821,6 +821,19 @@
         "title": "BotNameOut",
         "type": "object"
       },
+      "BroughtBack": {
+        "description": "What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No\ncard is made by the call itself (a Personal card is made by the next hourly calendar sync; a\nteam's by the next time an owner or admin shares a meeting of it, or their recording is shared\nautomatically).",
+        "properties": {
+          "team": {
+            "$ref": "#/components/schemas/SeriesTeam"
+          }
+        },
+        "required": [
+          "team"
+        ],
+        "title": "BroughtBack",
+        "type": "object"
+      },
       "CalendarOut": {
         "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
@@ -3743,6 +3756,63 @@
         "title": "ReminderPreferencesOut",
         "type": "object"
       },
+      "RemovedList": {
+        "properties": {
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/RemovedRecurring"
+            },
+            "title": "Removed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "RemovedList",
+        "type": "object"
+      },
+      "RemovedRecurring": {
+        "description": "One row of `GET /api/series/removed`: a calendar recurring meeting that was removed from a\nscope and can be brought back. LEAD-DESIGNED, not in the designer's files.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "removed_at": {
+            "format": "date-time",
+            "title": "Removed At",
+            "type": "string"
+          },
+          "removed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed By"
+          },
+          "team": {
+            "$ref": "#/components/schemas/SeriesTeam"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "team",
+          "removed_at",
+          "removed_by"
+        ],
+        "title": "RemovedRecurring",
+        "type": "object"
+      },
       "ResetIn": {
         "additionalProperties": false,
         "properties": {
@@ -4182,6 +4252,16 @@
           "team": {
             "$ref": "#/components/schemas/SeriesTeam"
           },
+          "team_card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesTeamCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -4209,6 +4289,7 @@
           "id",
           "title",
           "team",
+          "team_card",
           "scoped",
           "cadence",
           "platform",
@@ -4336,6 +4417,24 @@
           "is_personal"
         ],
         "title": "SeriesTeam",
+        "type": "object"
+      },
+      "SeriesTeamCard": {
+        "description": "A team's card of the same recurring meeting, named on a Personal page (`team_card`).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/SeriesTeam"
+          }
+        },
+        "required": [
+          "id",
+          "team"
+        ],
+        "title": "SeriesTeamCard",
         "type": "object"
       },
       "SessionState": {
@@ -13663,6 +13762,163 @@
           }
         },
         "summary": "Create Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/removed": {
+      "get": {
+        "description": "The calendar recurring meetings removed from ONE scope, to bring back (LEAD-DESIGNED). The\n`X-Team-Id` header names the team or the person's Personal space (404 for one the caller is not\nin); without it, the default team's. Only an owner or admin of the team, or the person for\ntheir own Personal space, sees the list: any other member gets 403 `team_forbidden`. A\nrecurring meeting made by hand leaves no mark and is never listed.",
+        "operationId": "list_removed_series",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovedList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Removed Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/removed/{mark_id}/bring-back": {
+      "post": {
+        "description": "Bring back one removed recurring meeting (LEAD-DESIGNED): clear its removal mark, nothing\nelse. It makes no card by itself and never touches a meeting, task, note or agenda line. Who\nmay is who may remove: an owner or admin of the team, or the person for their own Personal\nspace (403 `team_forbidden` for any other member; 404 for someone outside the team, an unknown\nid and a second call). A Personal card is made again by the next hourly calendar sync (once a\njoin of the event is scheduled); a team's by the next time an owner or admin shares a meeting\nof it, or their recording of it is shared automatically.",
+        "operationId": "bring_back_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mark_id",
+            "required": true,
+            "schema": {
+              "title": "Mark Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroughtBack"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`, or a missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Bring Back Series",
         "tags": [
           "series"
         ]

@@ -1,0 +1,22 @@
+{
+  "note": "Quinn, outside X, tries X's mark: 404.",
+  "as": "Quinn",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/removed/6/bring-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such removed recurring meeting."
+      }
+    }
+  }
+}

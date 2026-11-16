@@ -27,7 +27,7 @@ event from the calendar was made again by the next sync even if the person did n
 | A row from a calendar recurring event | **remembered as removed for that team (or that person's Personal space)**: the hourly sync does not make it again, a later meeting of the event is not grouped there, and sharing a meeting to that scope does not regroup it | his words |
 | Another team's or person's row of the same event | untouched. A removal acts on ONE row | his words |
 | A hand-made recurring meeting | removed; nothing to remember (no calendar event) | default |
-| **Bringing it back** | **not built.** There is no undo and no list of removed ones. The only way back today is by hand on the server (below) | **real choice**: a "Removed recurring meetings" list with Bring back needs a screen the designer did not draw; I left it as a follow-up rather than invent one |
+| **Bringing it back** | **built later (2026-11-16, `docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md`):** a "Removed recurring meetings" card in Settings with Bring back, which clears the one mark so an empty card can be made again. It restores no lines, topics or grouping. At first it was left out: it needed a screen the designer did not draw | lead-designed, Adebayo 2026-11-16 (the lead's brief) |
 
 The question says (review fix S2): a team row "removes it for everyone in {team}"; "No meeting is deleted" (the lines, topics and link are, and the list says so); "You can't undo this"; a Personal row has its own sentence for the other pages.
 
@@ -113,7 +113,7 @@ that meeting is ungrouped all the same but not counted for them).
 
 ## Follow-ups
 
-* **Bring back:** a "Removed recurring meetings" list with "Bring back" (needs a design), and regrouping the old meetings when it comes back.
+* **Bring back:** the list and the button are built (`docs/sop/2026-11-16-bring-back-removed-recurring-meeting.md`). Still open: regrouping the old meetings when a card comes back.
 * **`suggest_recurring`** stays true on an ungrouped meeting whose link was used before (captures 67 and 72), so "Make this a recurring meeting?" can show right after a removal. Pressing it makes a
   new hand-made recurring meeting. Hide it for a removed event if wanted.
 * **Card menu** on the Recurring cards, if the designer draws one.

@@ -1,0 +1,8 @@
+{
+  "note": "NOT AN HTTP CALL. The real hourly `series.sync_from_joins` right after the removal. The event is removed for Ada's Personal space, so no card is made for it: `planning_rows` is 0. (`rows_made` counts any other recurring events on the calendars that still had no card; none of them is this one.)",
+  "content": {
+    "rows_made": 1,
+    "planning_rows": 0,
+    "recurring_event_id": "rid-connected"
+  }
+}
