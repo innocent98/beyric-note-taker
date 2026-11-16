@@ -321,6 +321,9 @@ PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})
 # verification, password reset, the waitlist, Google sign-in). Everything else under `/api/`
 # needs a login, and every call that is not a read still sends the CSRF header, public or not.
 API_PREFIX = "/api/"
+# Payment webhooks are called by the payment provider, which has no session and no CSRF token: the
+# route checks the provider's own signature on the raw body instead (`app/billing/api.py`).
+WEBHOOK_PREFIX = "/api/billing/webhooks/"
 PUBLIC_API = frozenset(
     {
         ("GET", "/api/session"),
@@ -386,11 +389,12 @@ async def guard(request: Request, db: Session = Depends(get_session)) -> None:
 
     Pages send the token as the `csrf_token` form field. `/api/` calls send it in the
     `X-CSRF-Token` header (no body is read here) on every method except GET, HEAD and OPTIONS.
-    Sets `request.state.user` (None for a visitor).
+    Sets `request.state.user` (None for a visitor). `/health` and the payment webhooks
+    (`WEBHOOK_PREFIX`) skip both checks: the webhook's own signature is its credential.
     """
     path = request_path(request)
     request.state.user = None
-    if path == "/health":
+    if path == "/health" or path.startswith(WEBHOOK_PREFIX):
         return
     session = request.state.session
     request.state.user = load_user(db, session)

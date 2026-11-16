@@ -246,6 +246,10 @@ class Settings(BaseSettings):
     # and logs one line when the two disagree (`hours_shadow`). `enforce` is accepted and does
     # nothing yet (stage S2 makes the new rule decide). Anything else stops the process at startup.
     hours_mode: str = "off"
+    # Payments (billing spec section 5, stage S4). `false` (default): the webhook route
+    # `POST /api/billing/webhooks/{provider}` answers 404 and nothing is stored. No payment provider
+    # is built yet, so `true` still accepts nothing until Paystack (S6) or Flutterwave (S7) lands.
+    billing_enabled: bool = False
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved

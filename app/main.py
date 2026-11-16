@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import api, auth, edge, limits, mail, ratelimit, skribby, web
+from app.billing import api as billing_api
 from app.config import Settings, get_settings
 from app.db import get_rate_session, get_session
 
@@ -132,5 +133,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     api.install_errors(app)
     app.include_router(api.router)
+    app.include_router(billing_api.router)
     app.include_router(web.router)
     return app
