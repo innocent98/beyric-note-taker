@@ -1,5 +1,5 @@
 {
-  "note": "A pilot grant of 5 hours, nothing recorded yet: `state` `pilot`, `warning` null.",
+  "note": "A pilot account that had used 4 of its 5 hours before the grant was made (so it holds 1 hour): the numbers show the ORIGINAL total, `used_seconds` 14400 of `cap_seconds` 18000, while `seconds_left` is the 3600 that can still be recorded. `state` `pilot`.",
   "client": "ada pilot",
   "request": {
     "method": "GET",
@@ -27,10 +27,10 @@
         "recording_acknowledged": false
       },
       "usage": {
-        "used_seconds": 0,
+        "used_seconds": 14400,
         "cap_seconds": 18000,
         "state": "pilot",
-        "seconds_left": 18000,
+        "seconds_left": 3600,
         "warning": null,
         "can_record": true,
         "unlimited": false,

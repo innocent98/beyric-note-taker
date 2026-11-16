@@ -35,7 +35,7 @@
         "recording_acknowledged": false
       },
       "usage": {
-        "used_seconds": 0,
+        "used_seconds": 14400,
         "cap_seconds": 18000,
         "state": null,
         "seconds_left": null,

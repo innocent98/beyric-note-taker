@@ -33,9 +33,9 @@ are made the first time a task is filed or the board is opened) has nothing to s
    own rule, their calendar connection is up (`connected`, or `degraded`: joins carry on) **and**
    the scheduler really has the join (`_join_is_live`): a `scheduled_joins` row for that event
    that is `scheduled`, `dispatching` or `no_capacity`, or `skipped` for a reason the runner
-   retries (`hours_cap`, `no_plan`, `user_limit`, `code_in_use`), and not past its deadline. No row
-   (no usable link) or a final skip means no sentence: the box never promises a bot the runner
-   will not send.
+   retries (`hours_cap`, `no_plan`, `hours_reserved`, `user_limit`, `code_in_use`), and not past
+   its deadline. No row (no usable link) or a final skip means no sentence: the box never
+   promises a bot the runner will not send.
 """
 
 from datetime import date, datetime, timedelta

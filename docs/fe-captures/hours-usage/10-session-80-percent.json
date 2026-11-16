@@ -1,5 +1,5 @@
 {
-  "note": "After a 4-hour recording was counted (`usage.record_usage`, not a real meeting): 80% of the 5 hours held, so `warning` is `low`. `used_seconds` 14400, `cap_seconds` 18000.",
+  "note": "After a 0.8-hour recording was counted (`usage.record_usage`, not a real meeting): 80% of the 1 hour held, so `warning` is `low`. `used_seconds` 17280 of `cap_seconds` 18000: still the original 5-hour total.",
   "client": "ada pilot",
   "request": {
     "method": "GET",
@@ -27,10 +27,10 @@
         "recording_acknowledged": false
       },
       "usage": {
-        "used_seconds": 14400,
+        "used_seconds": 17280,
         "cap_seconds": 18000,
         "state": "pilot",
-        "seconds_left": 3600,
+        "seconds_left": 720,
         "warning": "low",
         "can_record": true,
         "unlimited": false,
