@@ -33,12 +33,12 @@ people appear as "user 1", "user 2", ranked by seconds settled.
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import entitlements, hours  # noqa: E402
@@ -117,8 +117,11 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import SessionLocal
 
     settings = get_settings()
-    now = datetime.now(UTC)
     with SessionLocal() as session:
+        # `now` comes from the database, inside the transaction: a gift made by this run is stamped
+        # with the transaction's `now()` a few milliseconds after any clock read before the session
+        # opened, so a Python clock would leave the gift out of "grants in force" for the whole run.
+        now = session.scalar(select(func.now()))
         rows = reconcile(session, now, settings.max_poll_hours * 3600)
         refused = args.apply and any(row.changes_hours for row in rows)
         if args.apply and not refused:

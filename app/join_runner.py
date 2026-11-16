@@ -811,7 +811,7 @@ def _refused(
                 kind=f"calendar.{reason}",
                 severity="warning",
                 title=title,
-                body=body.format(name=name),
+                body=body.format(name=name, deadline=f"{join.deadline_at:%H:%M}"),
                 dedupe_key=f"calendar.{reason}:{join.id}",
             )
         result = "skipped"
@@ -838,7 +838,8 @@ _NOTICES = {
     "hours_reserved": (
         "Hours are set aside for another meeting",
         "Your recorded hours are set aside for the meeting that is running, so the note taker "
-        'did not join "{name}". Hours a meeting does not use come back when it ends.',
+        'has not joined "{name}" yet. It will keep trying until {deadline} UTC; hours a meeting '
+        "does not use come back when it ends.",
     ),
     "user_limit": (
         "Too many note takers at once",

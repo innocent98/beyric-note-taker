@@ -363,8 +363,13 @@ HTTP**.
   the bar changes to the hours then held. An account that had used more than 5 hours shows e.g. "6 of 6".
 * **A second meeting can be refused while the first runs** (`reason` `reserve`, `can_record` false) even
   with hours left. It is a wait, not a limit: say so and let it clear when the other meeting ends.
-* The share page (`web/app/share/page.tsx`) now shows the same plain words as the refusal (all used, or none
-  held), built from `can_record` and `cap_seconds`; it no longer says "pilot" or gives an address.
+* **Drive the warning from `warning`, never from the bar ratio.** For a pilot person the bar shows the original
+  total, but 80% is of the hours actually held: capture 06 is at 80% of the bar with `warning` null, and `low`
+  first comes at 96% of it (capture 10: 17280 of 18000). The 80% mail goes out at the same moment as `low`.
+* The share page (`web/app/share/page.tsx`) shows the same plain words as the refusal (all used, or none held),
+  built from `can_record`, `seconds_left` and `cap_seconds`; it no longer says "pilot" or gives an address. **A
+  `reserve` refusal does not lock the page** (`ApiError.reason` is `reserve`): the person may try again, and
+  hours set aside for a running meeting are not shown as "used all" up front.
 
 ## Polling
 

@@ -230,31 +230,39 @@ def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 
 def _reserved_beyond_elapsed(
     session: Session, user: User, now: datetime, default_seconds: int, max_poll_seconds: int
 ) -> tuple[int, int]:
-    """For the person's own meetings that are running or just placed and not counted yet:
+    """For the person's own meetings whose bot is in the call (or was just sent) and that are not
+    counted yet (a `processing` meeting has left and reserves nothing):
     `(how many, the seconds still set aside beyond what has elapsed)`. Each reserves
     `default_seconds`, or the calendar event's length when a calendar join made the meeting, never
     more than the poll cap; what has run already is counted by `status`, so only the rest is added.
     """
     counted = select(UsageEntry.meeting_id).where(UsageEntry.meeting_id.is_not(None))
     rows = session.execute(
-        select(Meeting.started_polling_at, ScheduledJoin.starts_at, ScheduledJoin.ends_at)
+        select(
+            Meeting.id, Meeting.started_polling_at, ScheduledJoin.starts_at, ScheduledJoin.ends_at
+        )
         .outerjoin(ScheduledJoin, ScheduledJoin.meeting_id == Meeting.id)
         .where(
             Meeting.owner_user_id == user.id,
-            Meeting.status.in_(usage.RUNNING),
+            Meeting.status == usage.IN_THE_CALL,
             Meeting.started_polling_at.is_not(None),
             Meeting.id.not_in(counted),
         )
+        .order_by(Meeting.id)
     ).all()
+    # `scheduled_joins.meeting_id` is not unique: a meeting reserves once, whatever joins name it
+    meetings = {}
+    for meeting_id, started, event_start, event_end in rows:
+        meetings.setdefault(meeting_id, (started, event_start, event_end))
     extra = 0
-    for started, event_start, event_end in rows:
+    for started, event_start, event_end in meetings.values():
         reserve = default_seconds
         if event_start is not None and event_end is not None and event_end > event_start:
             reserve = int((event_end - event_start).total_seconds())
         reserve = min(reserve, max_poll_seconds)
         elapsed = min(max((now - started).total_seconds(), 0), max_poll_seconds)
         extra += max(int(reserve - elapsed), 0)
-    return len(rows), extra
+    return len(meetings), extra
 
 
 def check_join(
@@ -283,7 +291,11 @@ def check_join(
         running, extra = _reserved_beyond_elapsed(
             session, user, now, reserve_seconds, max_poll_seconds
         )
-        need = min(expected_seconds or reserve_seconds, max_poll_seconds)
+        # A calendar length of zero or less (an event that ends before it starts) is not a length.
+        need = min(
+            expected_seconds if expected_seconds and expected_seconds > 0 else reserve_seconds,
+            max_poll_seconds,
+        )
         if running and s.seconds_left - extra < need:
             return JoinDecision(False, RESERVE, s.seconds_left)
     return JoinDecision(True, None, s.seconds_left)

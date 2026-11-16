@@ -18,6 +18,7 @@ from app.models import (
     Meeting,
     Notification,
     ScheduledJoin,
+    UsageAllocation,
     UsageEntry,
 )
 from app.placement import PlacementRefused, reserve_slot
@@ -229,6 +230,105 @@ def test_the_session_says_a_second_meeting_cannot_start(session, ada, enforce_ap
     assert payload(enforce_app)["seconds_left"] > 0
 
 
+def test_a_meeting_whose_bot_has_left_reserves_nothing(session, ada):
+    """`processing`: the bot is gone and only the audio is not counted yet. 50 minutes held, a
+    25-minute meeting just ended: a new link is a first meeting again, not a second one."""
+    grant(session, ada, 50 * MIN)
+    running(session, ada, "gone-aaaa-aaa", T0 - timedelta(minutes=25), status="processing")
+    assert decide(session, ada).allowed
+    session.query(Meeting).delete()
+    session.commit()
+    running(session, ada, "run-aaaa-aaa", T0 - timedelta(minutes=25))  # still in the call
+    assert not decide(session, ada).allowed  # 25 left - 5 still set aside < 30
+
+
+def test_two_join_rows_on_one_meeting_reserve_it_once(session, ada):
+    grant(session, ada, 60 * MIN)
+    meeting = running(session, ada, "run-aaaa-aaa", T0, event_seconds=30 * MIN)
+    session.add(
+        ScheduledJoin(
+            user_id=ada.id,
+            platform="google_meet",
+            native_id="run-aaaa-aaa",
+            meeting_url="https://meet.google.com/run-aaaa-aaa",
+            starts_at=T0,
+            ends_at=T0 + timedelta(minutes=30),
+            run_at=T0,
+            state="completed",
+            deadline_at=T0,
+            template_id=meeting.template_id,
+            meeting_id=meeting.id,
+        )
+    )
+    session.commit()
+    assert decide(session, ada).allowed  # 30 set aside once, 30 for the new one: exactly 60
+
+
+def test_a_negative_event_length_is_not_a_length(session, ada):
+    grant(session, ada, 40 * MIN)
+    running(session, ada, "run-aaaa-aaa", T0)
+    assert not decide(session, ada, expected=-100).allowed  # falls back to the 30-minute reserve
+    assert not decide(session, ada, expected=0).allowed
+
+
+def test_two_placements_of_one_person_at_once_cannot_both_pass(engine, session, ada):
+    """The reserve check and the new meeting row are under one placement lock: the second request
+    waits for the first to commit its meeting, then sees it and is refused."""
+    import threading
+    import time
+
+    from sqlalchemy.orm import Session as OrmSession
+
+    grant(session, ada, 40 * MIN)
+    template_id = template_of(session, ada).id
+    outcome = {}
+
+    def second():
+        with OrmSession(engine) as other:
+            try:
+                reserve_slot(
+                    other,
+                    other.get(type(ada), ada.id),
+                    platform="google_meet",
+                    native_id="two-aaaa-aaa",
+                    now=T0,
+                    settings=make_settings(hours_mode="enforce", bot_max_local=5, user_bot_limit=5),
+                )
+                outcome["second"] = "allowed"
+            except PlacementRefused as refused:
+                outcome["second"] = refused.reason
+            other.rollback()
+
+    with OrmSession(engine) as first:
+        user = first.get(type(ada), ada.id)
+        reserve_slot(
+            first,
+            user,
+            platform="google_meet",
+            native_id="one-aaaa-aaa",
+            now=T0,
+            settings=make_settings(hours_mode="enforce", bot_max_local=5, user_bot_limit=5),
+        )  # the first one passes and holds the lock
+        worker = threading.Thread(target=second)
+        worker.start()
+        time.sleep(0.5)
+        assert "second" not in outcome  # waiting for the lock
+        first.add(
+            Meeting(
+                owner_user_id=user.id,
+                url="https://meet.google.com/one-aaaa-aaa",
+                platform="google_meet",
+                native_id="one-aaaa-aaa",
+                template_id=template_id,
+                status="bot_sent",
+                started_polling_at=T0,
+            )
+        )
+        first.commit()  # the meeting row and the lock leave together
+    worker.join(timeout=20)
+    assert outcome == {"second": "reserve"}
+
+
 # ---- calendar auto-join and the reserve ----
 
 
@@ -244,7 +344,8 @@ def test_a_skipped_meeting_for_the_reserve_has_its_own_reason_and_no_out_of_hour
     assert bell(session, "usage.hours_out") == []  # they are not out of hours
     [told] = bell(session, "calendar.hours_reserved")
     assert told.title == "Hours are set aside for another meeting"
-    assert "set aside" in told.body
+    assert "set aside" in told.body and "keep trying until" in told.body
+    assert "did not join" not in told.body  # it usually does join once the other ends
 
 
 def test_it_is_tried_again_when_the_other_meeting_has_ended(session, host, cal, world):
@@ -479,3 +580,69 @@ def test_the_spend_order_line_in_the_spec_matches_the_code():
         "admin_gift": 2,
         "pack": 2,
     }
+
+
+# ---- the reconcile script with the real clock (the cap gift it makes counts at once) ----
+
+
+def test_the_script_counts_the_gift_it_just_made_on_the_real_clock(
+    session, engine, ada, monkeypatch
+):
+    """1 h pilot grant, 4 h used before it, the cap raised to 8 h during S1, then 2 h used. The
+    gift (3 h) is stamped with the database's `now()`; a clock read before the session opened
+    would leave it out of "grants in force" for the whole run, and she would end with 3 h left
+    instead of 2 h. Left is 2 h in the end."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy.orm import sessionmaker
+
+    import app.db
+
+    script = load_script()
+    now = datetime.now(UTC)
+    grant(session, ada, HOUR, kind="pilot", starts=now - 10 * DAY)
+    s1_usage(session, ada, 4 * HOUR, now - 11 * DAY)
+    s1_usage(session, ada, 2 * HOUR, now - 3 * DAY)  # used after the raise, during S1
+    ada.hours_cap_seconds = 8 * HOUR
+    session.commit()
+    monkeypatch.setattr(app.db, "SessionLocal", sessionmaker(bind=engine))
+    assert script.main([]) == 0  # the dry run keeps nothing
+    session.expire_all()
+    assert session.scalars(select(HourGrant).where(HourGrant.kind == "admin_gift")).all() == []
+    assert script.main(["--apply"]) == 0
+    session.expire_all()
+    gifts_now = session.scalars(select(HourGrant).where(HourGrant.kind == "admin_gift")).all()
+    assert [g.seconds for g in gifts_now] == [3 * HOUR]
+    final = entitlements.status(session, ada, datetime.now(UTC))
+    assert final.seconds_left == 2 * HOUR  # the old rule: 8 h cap - 6 h used
+    spent = sorted(a.seconds for a in session.scalars(select(UsageAllocation)))
+    assert spent == [HOUR, HOUR]  # the 2 h backlog: 1 h on the pilot grant, 1 h on the gift
+
+
+def test_a_second_persons_failed_allocation_in_the_same_hour_is_told_too(
+    session, ada, ben, monkeypatch
+):
+    admin_user = make_user(session, "admin@example.test", admin=True)
+    grant(session, ada, 10 * HOUR)
+    grant(session, ben, 10 * HOUR)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(hours, "allocate", boom)
+    count(session, ada, 100, code="f-aaaa-aaa")
+    count(session, ben, 100, code="g-aaaa-aaa")
+    session.expire_all()
+    told = list(
+        session.scalars(
+            select(Notification).where(
+                Notification.user_id == admin_user.id,
+                Notification.kind == "admin.hours_allocation_failed",
+            )
+        )
+    )
+    assert sorted(
+        f"user id {u.id}" in n.body for n in told for u in (ada, ben) if f"user id {u.id}" in n.body
+    ) == [True, True]
+    assert len(told) == 2
+    assert all("manual look" in n.body for n in told)

@@ -244,7 +244,8 @@ def _join_is_live(session: Session, user: User, event: CalendarEvent, now: datet
     enough: no row exists for an event with no usable link (`gcal_sync._reconcile` schedules none),
     and the runner can end a row with `needs_reconnect`, `duplicate_meeting`, `account_suspended`
     or `meeting_has_note_taker`, which are final. A `skipped` row counts only while the runner is
-    still retrying it (`join_runner.RETRYABLE_SKIPS`: `hours_cap`, `user_limit`, `code_in_use`)."""
+    still retrying it (`join_runner.RETRYABLE_SKIPS`: `hours_cap`, `no_plan`,
+    `hours_reserved`, `user_limit`, `code_in_use`)."""
     # Imported here, not at the top: join_runner pulls in gcal_sync, services and deletion, which
     # import pipeline, which imports mail and so this module (a cycle at start-up).
     from app.join_runner import RETRYABLE_SKIPS

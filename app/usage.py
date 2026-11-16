@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_CAP_SECONDS = 5 * 3600  # used when there is no app_state row (it has one in production)
 LOW_HOURS_FRACTION = 0.8  # the "most of your hours are used" notice
 RUNNING = ("bot_sent", "processing")
+# The bot is in the call (or was just sent): the only status that reserves hours for a second
+# meeting. A `processing` meeting has left and its elapsed time is already in `running_seconds`.
+IN_THE_CALL = "bot_sent"
 
 
 def email_hash(email: str) -> str:

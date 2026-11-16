@@ -282,8 +282,8 @@ def _tell_admins_of_a_failed_allocation(
     session: Session, user: User, entry: UsageEntry, now: datetime
 ) -> None:
     """A swallowed allocation failure must not stay a log line only: for a person who holds no
-    pilot grant the recording is then free hours for good. One admin alert per hour, naming ids
-    only (no email, no title). Best effort: it must not stop the transcript either."""
+    pilot grant the recording is then free hours for good. One admin alert per person and hour,
+    naming ids only (no email, no title). Best effort: it must not stop the transcript either."""
     try:
         with session.begin_nested():
             alerts.notify_admins(
@@ -292,10 +292,14 @@ def _tell_admins_of_a_failed_allocation(
                 title="A recording was not allocated to a person's hours",
                 body=(
                     f"The recording counted for user id {user.id} (usage entry {entry.id}) could "
-                    "not be split across their hours. It is counted in the ledger. Run "
-                    "scripts/hours_reconcile_backlog.py (a dry run first) once the cause is fixed."
+                    "not be split across their hours. It is counted in the ledger. For a person "
+                    "with a pilot grant, scripts/hours_reconcile_backlog.py (a dry run first) "
+                    "settles it once the cause is fixed; for anyone else it needs a manual look."
                 ),
-                dedupe_key=alerts.bucket_key("admin.hours_allocation_failed", now, minutes=60),
+                # One alert per person and hour: a second person's failure is not hidden
+                dedupe_key=alerts.bucket_key(
+                    f"admin.hours_allocation_failed.{user.id}", now, minutes=60
+                ),
             )
     except Exception as exc:
         logger.error("hours allocation alert failed error=%s", type(exc).__name__)

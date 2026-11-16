@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { capMessageFor } from "@/lib/share-cap";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,6 +125,18 @@ describe("share page, signed in", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
     await screen.findByRole("alert");
     expect((screen.getByRole("button", { name: "Send note taker" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("does not lock after a reserve refusal: hours set aside for a running meeting are a wait", async () => {
+    arriveAt(FRAGMENT);
+    mocks.create.mockRejectedValue(
+      new ApiError(403, "hours_cap_reached", "You do not have enough recorded hours left to record another meeting at the same time.", [], "reserve"),
+    );
+    render(<ShareFlow signedIn templates={templates} />);
+    await screen.findByText("Google Meet abc-defg-hij");
+    await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/another meeting at the same time/);
+    expect((screen.getByRole("button", { name: "Send note taker" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("is locked up front, in the server's sentence, while a bot is on a meeting", async () => {
@@ -269,5 +282,25 @@ describe("pending share storage", () => {
     expect(readShareFragment("#link=javascript%3Aalert(1)").link).toBeNull();
     expect(readShareFragment(`#link=${encodeURIComponent(MEET)}&others=-5`).link?.others).toBe(0);
     expect(readShareFragment(`#link=${encodeURIComponent(MEET)}&others=9999`).link?.others).toBe(99);
+  });
+});
+
+describe("what the share page says up front about the hours", () => {
+  const base = { used_seconds: 0, cap_seconds: 18000 };
+
+  it("says nothing while the person can record", () => {
+    expect(capMessageFor(null)).toBeNull();
+    expect(capMessageFor({ ...base, can_record: true, seconds_left: 18000 })).toBeNull();
+    expect(capMessageFor(base)).toBeNull(); // the old payload: not capped
+  });
+
+  it("locks with the used-up words when nothing is left, and with the no-hours words when none is held", () => {
+    expect(capMessageFor({ used_seconds: 18000, cap_seconds: 18000, can_record: false, seconds_left: 0 })).toMatch(/used all of your recorded hours/);
+    expect(capMessageFor({ used_seconds: 0, cap_seconds: 0, can_record: false, seconds_left: 0 })).toMatch(/do not have any recorded hours/);
+    expect(capMessageFor({ used_seconds: 18000, cap_seconds: 18000 })).toMatch(/used all of your recorded hours/); // flag off
+  });
+
+  it("does not lock for hours that are set aside for a running meeting", () => {
+    expect(capMessageFor({ used_seconds: 0, cap_seconds: 2400, can_record: false, seconds_left: 2400 })).toBeNull();
   });
 });
