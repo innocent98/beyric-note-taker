@@ -493,6 +493,120 @@ def test_a_lone_candidate_nothing_rules_anything_out_for_is_not_a_name():
     ) == ["Ada Example", ""]
 
 
+# ---- a sole consistent candidate (meeting 37) ----
+# Two tags carry Skribby's own names; the third has no `speaker_name` but lists ONE name on every
+# segment, and nobody else has that name. The names below are made up.
+
+
+def several(count, tag, name=None, candidates=None):
+    return [segment(name, f"line {n}", tag=tag, candidates=candidates) for n in range(count)]
+
+
+def meeting_37_shape(*third_tag, own=(), elimination=True):
+    return read(
+        *several(3, "0", name="Ada Example"),
+        *several(2, "1", name="Bo Example"),
+        *third_tag,
+        own=own,
+        elimination=elimination,
+    )
+
+
+def test_a_sole_candidate_on_every_segment_names_the_tag_meeting_37_shape():
+    info = meeting_37_shape(*several(4, "2", candidates=[("Cy Example", 0.8)]))
+    assert [seg["speaker"] for seg in info.segments][-4:] == ["Cy Example"] * 4
+    assert info.evidence["tags"]["2"] == {
+        "name": "Cy Example",
+        "how": "sole_candidate",
+        "note": "",
+    }
+    # the two tags Skribby named itself stay as they were
+    assert info.evidence["tags"]["0"]["how"] == "given"
+
+
+def test_a_sole_candidate_does_nothing_with_elimination_off_but_records_would_be():
+    info = meeting_37_shape(*several(4, "2", candidates=[("Cy Example", 0.8)]), elimination=False)
+    assert [seg["speaker"] for seg in info.segments][-4:] == [""] * 4
+    assert info.evidence["tags"]["2"] == {
+        "name": "",
+        "how": "unknown",
+        "note": "elimination_off",
+        "would_be": "Cy Example",
+    }
+
+
+def test_a_sole_candidate_that_is_the_bot_is_not_a_name():
+    third = several(4, "2", candidates=[("Beyric Meeting Support", 1)])
+    info = meeting_37_shape(*third, own=("Beyric Meeting Support",))
+    assert [seg["speaker"] for seg in info.segments][-4:] == [""] * 4
+    assert info.evidence["tags"]["2"]["how"] == "unknown"
+
+
+def test_a_sole_candidate_another_tag_already_holds_is_not_taken_twice():
+    info = meeting_37_shape(*several(4, "2", candidates=[("Ada Example", 1)]))
+    assert [seg["speaker"] for seg in info.segments][-4:] == [""] * 4
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_two_tags_with_the_same_sole_candidate_both_stay_unknown():
+    info = meeting_37_shape(
+        *several(4, "2", candidates=[("Cy Example", 1)]),
+        *several(4, "3", candidates=[("Cy Example", 1)]),
+    )
+    assert info.evidence["tags"]["2"] == {"name": "", "how": "unknown", "note": "shared_claim"}
+    assert info.evidence["tags"]["3"] == {"name": "", "how": "unknown", "note": "shared_claim"}
+
+
+def test_candidates_that_differ_between_segments_are_not_a_sole_candidate():
+    info = meeting_37_shape(
+        *several(2, "2", candidates=[("Cy Example", 1)]),
+        *several(2, "2", candidates=[("Di Example", 1)]),
+    )
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_a_list_with_a_second_name_on_any_segment_is_not_a_sole_candidate():
+    info = meeting_37_shape(
+        *several(3, "2", candidates=[("Cy Example", 1)]),
+        *several(1, "2", candidates=[("Cy Example", 1), ("Di Example", 0.2)]),
+    )
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_a_list_too_long_to_trust_is_not_a_sole_candidate():
+    long_list = [(f"Guest {n}", 0.1) for n in range(21)]
+    info = meeting_37_shape(
+        *several(3, "2", candidates=[("Cy Example", 1)]),
+        *several(1, "2", candidates=long_list),
+    )
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_a_candidate_missing_from_some_segments_is_not_a_sole_candidate():
+    info = meeting_37_shape(
+        *several(3, "2", candidates=[("Cy Example", 1)]),
+        *several(1, "2"),  # one segment of the tag lists nobody
+    )
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_a_sole_candidate_on_too_few_segments_is_not_a_name():
+    info = meeting_37_shape(*several(2, "2", candidates=[("Cy Example", 1)]))
+    assert info.evidence["tags"]["2"]["name"] == ""
+
+
+def test_a_sole_candidate_spelled_two_ways_is_still_one_name():
+    info = meeting_37_shape(
+        *several(2, "2", candidates=[("Cy Example", 1)]),
+        *several(1, "2", candidates=[("CY  EXAMPLE", 1)]),
+    )
+    assert info.evidence["tags"]["2"] == {
+        "name": "Cy Example",
+        "how": "sole_candidate",
+        "note": "",
+    }
+
+
 def test_two_tags_never_share_a_name():
     # both tags would be named Bo by elimination: neither is
     assert speakers(

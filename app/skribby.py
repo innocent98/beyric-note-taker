@@ -131,6 +131,9 @@ MAX_NAME_CHARS = 80
 # The most `potential_speaker_names` entries one segment may list and still be read (real ones
 # hold a few); a longer list is treated as no usable answer.
 MAX_CANDIDATES = 20
+# A tag is named after a sole candidate only when at least this many of its segments list that name
+# (and all of them do): two or three lines are too little to name a person on.
+MIN_SOLE_CANDIDATE_SEGMENTS = 3
 # Names kept per item in the saved evidence (a real list holds a few).
 MAX_EVIDENCE_NAMES = 50
 # The most the saved speaker events may take (as JSON text). Over it, only the speaking events are
@@ -308,7 +311,8 @@ def _resolve_tags(
 ) -> dict[str, dict[str, str]]:
     """For every diarization tag Skribby used: `{"name", "how", "note"}`. `how` says why the tag
     has the name it has: `given` (its own segments carry exactly one `speaker_name`),
-    `elimination` (see `_tag_names`; only when `by_elimination`) or `unknown` (`name` is empty and
+    `elimination` or `sole_candidate` (see `_tag_names`; only when `by_elimination`) or `unknown`
+    (`name` is empty and
     `note` says why: `several_names`, `no_candidates`, `elimination_off`, `unresolved`,
     `shared_claim`). With elimination off, `note` is `elimination_off` for a tag it would have
     named, and `would_be` holds the name it would have taken, so a saved record shows what the
@@ -316,10 +320,13 @@ def _resolve_tags(
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
+    segments: dict[str, int] = {}  # tag -> its segments
+    listing: dict[str, dict[str, int]] = {}  # tag -> candidate key -> segments that list it
     for item in value:
         tag = _tag(item.get("speaker"))
         if tag is None:
             continue
+        segments[tag] = segments.get(tag, 0) + 1
         named = given.setdefault(tag, {})
         own = _clean_name(item.get("speaker_name"))
         if own:
@@ -330,12 +337,15 @@ def _resolve_tags(
         else:
             for key, name in candidates.items():
                 listed.setdefault(tag, {}).setdefault(key, name)
+                counts = listing.setdefault(tag, {})
+                counts[key] = counts.get(key, 0) + 1
     holders: dict[str, set[str]] = {}  # name key -> the tags that carry it
     for tag, named in given.items():
         for key in named:
             holders.setdefault(key, set()).add(tag)
     claims: dict[str, list[str]] = {}  # candidate key -> the tags that would take it
     chosen: dict[str, str] = {}
+    chosen_how: dict[str, str] = {}
     for tag, named in given.items():
         candidates = listed.get(tag)
         if named or not candidates:
@@ -344,10 +354,20 @@ def _resolve_tags(
         left = {
             key: name for key, name in candidates.items() if key not in bot and key not in ruled_out
         }
-        if ruled_out and len(left) == 1:
-            key, name = next(iter(left.items()))
-            claims.setdefault(key, []).append(tag)
-            chosen[tag] = name
+        if len(left) != 1:
+            continue
+        key, name = next(iter(left.items()))
+        if ruled_out:
+            how = "elimination"
+        elif len(candidates) == 1 and (
+            listing[tag][key] == segments[tag] >= MIN_SOLE_CANDIDATE_SEGMENTS
+        ):
+            how = "sole_candidate"  # one name on every segment, nobody else has it
+        else:
+            continue
+        claims.setdefault(key, []).append(tag)
+        chosen[tag] = name
+        chosen_how[tag] = how
     result: dict[str, dict[str, str]] = {}
     for tag, named in given.items():
         if len(named) == 1:
@@ -357,7 +377,7 @@ def _resolve_tags(
         elif tag in chosen and len(claims[_same(chosen[tag])]) > 1:
             result[tag] = {"name": "", "how": "unknown", "note": "shared_claim"}
         elif tag in chosen and by_elimination:
-            result[tag] = {"name": chosen[tag], "how": "elimination", "note": ""}
+            result[tag] = {"name": chosen[tag], "how": chosen_how[tag], "note": ""}
         elif tag in chosen:
             result[tag] = {
                 "name": "",
@@ -384,9 +404,12 @@ def _tag_names(
     off by default because it can name a tag after someone who is not in the call): a tag with no
     name of its own is named by elimination, its candidates minus the bot's own names, minus every
     name another tag already has, and only when at least one candidate was dropped for being
-    another tag's and exactly one is left (a lone candidate nothing rules anything out for has no
-    support). A name two tags would both take goes to neither. Whatever stays unclear is left out:
-    the label is "unknown", never a name made up."""
+    another tag's and exactly one is left. The one exception, `sole_candidate`: a tag whose
+    segments list one and the same name and nothing else (every segment lists it, at least
+    `MIN_SOLE_CANDIDATE_SEGMENTS` segments), a name no other tag has and the bot does not go by,
+    is named after it although nothing was ruled out (meeting 37: the tag Skribby split off
+    cleanly but never named). A name two tags would both take goes to neither. Whatever stays
+    unclear is left out: the label is "unknown", never a name made up."""
     if by_elimination is None:
         by_elimination = get_settings().skribby_name_by_elimination
     resolved = _resolve_tags(value, own_names, by_elimination)

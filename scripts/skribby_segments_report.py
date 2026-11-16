@@ -10,8 +10,9 @@ treat the output like the transcript: do not paste it anywhere public.
 
 How to read it: each block is one diarization tag ("speaker" in Skribby's answer). The header says
 the name the app gave the tag and why: `given` (Skribby named it on its own segments),
-`elimination` (taken from `potential_speaker_names` by ruling out the others, only while
-SKRIBBY_NAME_BY_ELIMINATION is on) or `unknown` (with the reason). Under it, every segment of that
+`elimination` (taken from `potential_speaker_names` by ruling out the others), `sole_candidate`
+(every segment of the tag listed one and the same name, nobody else has it), both only while
+SKRIBBY_NAME_BY_ELIMINATION is on, or `unknown` (with the reason). Under it, every segment of that
 tag: time, the `speaker_name` Skribby put on that segment, the names it listed as possible, and
 the text. If the names Skribby gave are wrong, the fault is Skribby's; if they are right and the
 notes still credit the wrong person, it is our alignment.
