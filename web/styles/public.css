@@ -12,9 +12,9 @@
 .avatar-18 { width: 18px; height: 18px; font-size: 8px; }
 
 /* ---- Sign-in (Auth.dc.html): the form beside a teal panel ---- */
-/* The header (68px + 1px border) is above this, the footer below: the form is centred in what is left of the window. */
-.auth-split { min-height: calc(100vh - 69px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); background: var(--surface); }
-.auth-main { display: flex; flex-direction: column; padding: 28px clamp(24px, 5vw, 64px); }
+.auth-split { min-height: 100vh; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); background: var(--surface); }
+.auth-main { display: flex; flex-direction: column; min-height: 100vh; padding: 28px clamp(24px, 5vw, 64px); }
+.auth-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .auth-center { flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--space-12) 0; }
 .auth-box { width: 100%; max-width: 400px; }
 .auth-form { display: flex; flex-direction: column; gap: var(--space-6); }
@@ -22,7 +22,10 @@
 .auth-form .field-label { font-weight: 550; }
 .auth-title { margin: 0; font-size: 30px; font-weight: 650; letter-spacing: -0.03em; }
 .auth-sub { margin: var(--space-2) 0 0; color: var(--text-2); font-size: var(--text-md); }
-.auth-panel { display: flex; flex-direction: column; justify-content: center; gap: var(--space-12); padding: clamp(32px, 5vw, 72px); overflow: hidden; background: var(--teal); color: var(--on-teal); }
+.auth-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); font-size: var(--text-xs); color: var(--text-faint); }
+.auth-foot-links { display: flex; gap: 18px; }
+.auth-foot a { color: var(--text-3); }
+.auth-panel { display: flex; flex-direction: column; justify-content: center; gap: var(--space-12); min-height: 100vh; padding: clamp(32px, 5vw, 72px); overflow: hidden; background: var(--teal); color: var(--on-teal); }
 .auth-panel-copy { max-width: 480px; }
 .auth-panel h2 { margin: 0; font-size: clamp(30px, 3vw, 40px); line-height: 1.12; font-weight: 650; letter-spacing: -0.03em; text-wrap: balance; }
 .auth-panel-copy p { max-width: 420px; margin: var(--space-4) 0 0; color: var(--teal-on-panel); font-size: 1rem; line-height: 1.6; }
@@ -322,6 +325,11 @@
 
 /* ---- Account screens (Auth.dc.html): sign-up, confirm email, reset password, waiting list ---- */
 .auth-fields { display: flex; flex-direction: column; gap: var(--space-4); }
+.auth-bar .logo-word, .auth-bar-link { white-space: nowrap; }
+.auth-bar-link { display: flex; align-items: center; gap: 6px; font-size: var(--text-base); color: var(--text-2); }
+/* On a phone the bar has room for the logo and the link, not for the sentence before it. */
+@media (max-width: 480px) { .auth-bar-text { display: none; } }
+.auth-bar-link a { font-weight: 600; }
 .auth-tile { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 14px; background: var(--teal-tint); color: var(--teal); }
 .auth-tile-success { border-radius: 50%; background: var(--success-tint); color: var(--success); }
 .auth-tile-warning { background: var(--warning-tint); color: var(--warning); }

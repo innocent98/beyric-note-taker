@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "The pilot is full", robots: { index:
 export default async function PilotFullPage() {
   const pilot = await getPilot();
   return (
-    <AuthShell>
+    <AuthShell action={{ text: "Already have an account?", label: "Sign in", href: "/login" }}>
       {pilot?.state === "open" ? (
         <div className="auth-form">
           <Alert kind="info" role="status">

@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Confirm your email", robots: { index
 // the server-rendered page.
 export default function VerifyEmailPage() {
   return (
-    <AuthShell>
+    <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
       <VerifyEmailForm />
     </AuthShell>
   );

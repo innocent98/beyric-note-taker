@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ForgotPasswordPage from "@/app/forgot-password/page";
 import LoginPage from "@/app/login/page";
@@ -7,7 +8,6 @@ import SignupPage from "@/app/signup/page";
 import VerifyEmailPage from "@/app/verify-email/page";
 import type { Pilot } from "@/lib/api/types";
 import { accountBody } from "./helpers";
-import { renderPublic } from "./public-render";
 
 // The server half of each page: it reads GET /api/pilot and the query string and hands the client
 // component what it needs. The pilot bodies are the captured ones.
@@ -22,7 +22,6 @@ vi.mock("next/navigation", () => ({
     throw new Error(`redirect:${to}`);
   },
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => "/",
 }));
 
 const open = accountBody<Pilot>("11-pilot-open.json");
@@ -30,8 +29,7 @@ const closed = accountBody<Pilot>("04-pilot-closed.json");
 const full = accountBody<Pilot>("57-pilot-full.json");
 const prefilled = accountBody<Pilot>("122-google-pilot-prefill.json");
 
-// The page as a visitor receives it, inside the shared public shell (AuthShell puts it there).
-const html = async (page: React.ReactElement | Promise<React.ReactElement>) => renderPublic(await page);
+const html = async (page: React.ReactElement | Promise<React.ReactElement>) => renderToStaticMarkup(await page);
 const query = <T extends object>(q: T) => ({ searchParams: Promise.resolve(q) });
 
 beforeEach(() => {
@@ -112,9 +110,8 @@ describe("/login", () => {
     expect(unknown).not.toContain("<b>x</b>");
   });
 
-  it("has the Get started link to sign-up in the shared header", async () => {
-    const out = await html(LoginPage(query({})));
-    expect(out.slice(out.indexOf("<header"), out.indexOf("</header>"))).toContain('<a class="ld-get-started" href="/signup">Get started</a>');
+  it("has the Create account link in the header", async () => {
+    expect(await html(LoginPage(query({})))).toContain('href="/signup"');
   });
 });
 

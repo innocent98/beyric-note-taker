@@ -61,7 +61,7 @@ Nothing to run or migrate. Revert the PR to go back to the three implementations
 
 ## Follow-ups
 
-- Answered yes for the sign-in and sign-up pages (`AuthShell`): see `docs/sop/2026-11-17-auth-shared-header.md`. `web/app/error.tsx` stays outside (client error boundary).
+- Question for Adebayo: should the sign-in and sign-up pages (`AuthShell`) and `web/app/error.tsx` also wear the public header and footer? They stay outside it for now (not in his list; the error boundary is a client component).
 - Nit: a visitor on `/welcome` has "Product" lead to `/#product` (leaves the page) instead of scrolling in place; the content is identical.
 
 - Split Privacy and Terms into separate pages later: add folders under `app/(public)/`, a `NEXT_PAGES` and proxy matcher entry, a sitemap line.

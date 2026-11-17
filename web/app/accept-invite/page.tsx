@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Accept your invitation", robots: { i
 // read in the browser and removed from the address (use-url-token.ts), so it is not in the page.
 export default function AcceptInvitePage() {
   return (
-    <AuthShell>
+    <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
       <AcceptInvite />
     </AuthShell>
   );
