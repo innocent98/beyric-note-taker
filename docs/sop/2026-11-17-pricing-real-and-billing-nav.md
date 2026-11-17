@@ -2,6 +2,14 @@
 
 **What shipped.** (1) The public `/pricing` page now prints what is on sale: a one-time trial, one monthly plan, one pack, with both currencies. (2) The signed-in app got real ways into billing: a **Billing** link under Configure, a sidebar **hours card**, and links on the hours notices and the "Not recorded" hours reasons. No backend change, no migration, no new flag. PR from `feature/pricing-real-and-billing-nav`.
 
+## Go-ahead to print prices, and what it does not settle
+
+Spec section 10 and S11 say no price is printed before S11 and the cost condition of section 4.2. The go-ahead to print now is Adebayo's, **2026-11-17, about 20:12 to 20:20 WAT**, given to the lead: he said "the pricing page is lying", that he wants all billing switched on for everyone, and he approved the plans (the plan, the pack and both naira prices, decided that day). The lead relayed it to this session as the task; this SOP is the record. It does **not** settle the lawyer's items below.
+
+**Two printed lines the lawyer still has to read:** (1) the plan card's "Cancel any time: the plan keeps working until the period you paid for ends" and (2) the FAQ "Can I cancel?" ("Yes, any time. Your plan keeps working until the end of the period you paid for, and then does not renew."). Cancel-any-time is Adebayo's decision (2026-11-16); the exact words are for the lawyer (spec 9, question 1).
+
+**Open conflict, not changed here (lawyer text):** `web/components/legal/terms-content.tsx:30` still says "The Service is free during the pilot ... If we introduce paid plans, we will tell you the price before anything is charged". It contradicts a public page that sells plans (and the JSON-LD offers beside it). S11 pairs the /pricing numbers with the Terms change; the Terms need the lawyer's rewrite before or with the billing switch-on.
+
 ## Why
 
 On 2026-11-17, as billing was being switched on, Adebayo found two things broken: `/pricing` still said no plan was on sale and every price was "To be announced" (with a Team Plus plan that does not exist), and a signed-in person could reach `/billing/plans` only by typing it. Both made the live billing look unfinished.
@@ -15,15 +23,15 @@ On 2026-11-17, as billing was being switched on, Adebayo found two things broken
 | Pack **"10 extra hours"**: 10 hours, **$10** or **₦15,000**, valid **12 months**, only with a live plan | seed (`pack_10h`, 1000 cents, 1,500,000 kobo, `valid_months` 12); spec 4.3 |
 | Nigeria pays naira through Paystack, everyone else US dollars through Flutterwave; "separate prices, not a conversion" | spec 5.2 and section 10 (the BILLING country decides; a public page cannot know the visitor's, so it says who pays in which) |
 | Hours belong to the person; unused plan hours do not roll over | spec 1.4, 3.3 |
-| Cancel any time, access until the period ends, the unused part is not refunded | spec 3.4 (the cancel row) |
+| Cancel any time; the plan keeps working until the period you paid for ends (the plan card line and the FAQ "Can I cancel?") | spec 3.4 (the cancel row); **printed on Adebayo's cancel-any-time decision of 2026-11-16, and still a LAWYER-TO-READ item** (spec 9 puts cancel and the period's end on the Terms list) |
 | Hours run out: running recordings finish, new ones wait; Ask, translate, rewrite keep working on a plan | spec 3.3 |
 | Teammates read shared notes without a plan; they need their own plan or trial for Ask Beyric, translating, rewriting and their own note taker | spec 2.2 |
 
-**Left out on purpose (the lawyer has not read them):** refund windows (7 and 14 days), the failed-payment grace, what happens when payments stop, any "we will tell you" promise, any VAT or invoice wording. A test fails if the page prints `within N days of`, "money-back", "guarantee", "grace", "lapse", or "we will tell". No "free", no "unlimited", no Business or Team Plus.
+**Left out on purpose (the lawyer has not read them):** the sentence that the unused part of a period is not refunded (printed in the first version of this PR, removed after the Opus review: spec 9 and lawyer question 2 are open; a test fails if the page prints "refund" anywhere), refund windows (7 and 14 days), the failed-payment grace, what happens when payments stop, any "we will tell you" promise, any VAT or invoice wording. A test fails if the page prints `within N days of`, "money-back", "guarantee", "grace", "lapse", or "we will tell". No "free", no "unlimited", no Business or Team Plus.
 
 Design is the designer's: the same three cards, table, FAQ and closing band. Changes: copy and data; the plan card shows the dollar price big with the naira price under it; a one-line currency note under the cards; the comparison table has two columns (Trial, the plan) because a pack is an addition, not a plan; a phone-width rule so the two-column table fits without sideways scroll.
 
-CTAs: **Get started** to `/signup` for a visitor; **Choose a plan** to `/billing/plans` for a signed-in person (the page is now `async` and reads the session, as the public shell already does).
+CTAs (the page is `async` and reads the session, as the public shell already does): a visitor gets **Get started** to `/signup`. A signed-in person gets **Choose a plan** to `/billing/plans` **only when billing answers for them** (the page asks `GET /api/billing/subscription` on the server; a 404 or any failure means no), else **Open the app** to `/`, so nobody lands on "Plans are not available for your account yet". JSON-LD: a monthly plan's offers carry a `UnitPriceSpecification` with `billingDuration` `P1M`; a pack's do not.
 
 ## One source of truth for the numbers
 
@@ -69,7 +77,7 @@ Already there from S8b and unchanged: the Settings "Plan and billing" card, `Gat
 
 ## Operate / roll back
 
-Nothing to run. Before the page goes public confirm on the server that `TRIAL_SECONDS=10800` and `TRIAL_DAYS` is 14 (default), or the page's trial line is untrue. Roll back by reverting the PR; no data is touched.
+Nothing to run. **The trial line is true only while the server has `TRIAL_SECONDS=10800`** (default 0 means no trial) **and `TRIAL_DAYS` is 14** (the default). The lead reports it is set on the server now. A blocking check for the switch-on runbook: `docker compose exec -T web python scripts/trial_report.py` shows trials in force, and the env file shows the value. The test reads `app/config.py` (default 0, "10800 is 3 hours") and `deploy/README.md` and compares them with the page, so it fails if the page's hours stop matching the documented value; it cannot see the server's env. Roll back by reverting the PR; no data is touched.
 
 ## Follow-ups
 
@@ -77,6 +85,7 @@ Nothing to run. Before the page goes public confirm on the server that `TRIAL_SE
 |---|---|
 | The page still carries the landing's sentence "Sign-up is invite-only for now. If you have an invitation, create your account; if not, join the waiting list." (`SignupNote`, the designer's, shared with the landing page) next to a **Get started** button | untouched here; decide with the sign-up switch-on whether it still holds |
 | Hero title "Pay when your team runs on it." is the designer's and sits oddly beside per-person hours | copy decision |
-| The refund, failed-payment and stop-paying answers wait for the lawyer (spec 3.4, 3.5, 9) | add FAQ entries once read |
+| The refund, failed-payment and stop-paying answers, and the two cancel lines above, wait for the lawyer (spec 3.4, 3.5, 9) | add or confirm the FAQ entries once read |
+| The Terms still say "free during the pilot ... we will tell you the price" (`terms-content.tsx:30`) | lawyer rewrite, with the billing switch-on |
 | The `GateText` links (Ask, share, rewrite) are drawn whether or not billing is on for the person; the new entry points are gated. Same sentences only appear under enforce, so it is harmless once billing is on for everyone | unify if billing stays on an allow-list |
 | A real `trial ends soon` notice does not exist; the sidebar card shows the hours, not the trial's end date | would need the trial end in `GET /subscription` (it is in `usage.trial_ends_at` of the session) |

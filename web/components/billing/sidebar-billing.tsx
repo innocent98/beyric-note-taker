@@ -32,7 +32,7 @@ export function SidebarHours() {
   const out = hours.warning === "out" || left <= 0;
   const low = hours.warning === "low";
   const title = live && sub ? sub.plan_name : state.state === "trial" ? "Trial" : state.state === "pilot" ? "Pilot hours" : "No plan";
-  const hoursLine = held === 0 ? "No recorded hours" : out ? "Out of hours" : `${formatHours(left)} left`;
+  const hoursLine = held === 0 ? "No recorded hours" : out ? "Out of hours" : low ? `${formatHours(left)} left, running low` : `${formatHours(left)} left`;
   const action = live ? (out ? "Add hours" : null) : "Choose a plan";
 
   return (
@@ -40,7 +40,8 @@ export function SidebarHours() {
       className={`side-hours${out ? " side-hours-out" : low ? " side-hours-low" : ""}`}
       href={href}
       data-side-hours={state.state}
-      aria-label={`${title}, ${hoursLine}. ${live ? "Open billing" : "Choose a plan"}`}
+      // The name is the visible words (label in name), with the destination when no action word is shown.
+      aria-label={`${title}, ${hoursLine}. ${action ?? "Open billing"}`}
     >
       <span className="side-hours-title">{title}</span>
       <span className="side-hours-line">{hoursLine}</span>

@@ -19,7 +19,9 @@
 // (docs/sop/2026-11-17-pricing-real-and-billing-nav.md) says what to do when a price changes.
 // Left out on purpose, because the lawyer has not read them (spec 3.4 and 3.5 are flagged "the lawyer reads them
 // before launch"): refund windows, what happens after a failed payment, what happens when payments stop, and
-// any "we will tell you" promise. No "free" wording, no "unlimited", no Business plan, no Team Plus.
+// any "we will tell you" promise, and the no-refund sentence for the unused part of a period. Two lines are
+// printed that the lawyer still has to read, on Adebayo's decision of cancel-any-time (2026-11-16): the plan card's
+// "Cancel any time: ..." and the FAQ "Can I cancel?" (see the SOP). No "free" wording, no "unlimited", no Business plan, no Team Plus.
 // Cut from the designer's Pricing file: HubSpot sync, Jira and Asana, "Custom retention period" and "Priority
 // support" (not built), "Data used to train models: Never" (not worded as our promise), the "Most teams pick this"
 // badge and the seat FAQ. See docs/sop/2026-11-14-landing-v2-and-pricing.md.
@@ -94,11 +96,27 @@ export const SUMMARY =
   `and extra-hour ${PACK_ENTRIES.length === 1 ? "pack" : "packs"}: ${joined(PACK_ENTRIES.map(packLine))}`;
 
 // The offers the structured data publishes: every entry in both currencies.
-export function offers(siteUrl: string): ReadonlyArray<{ "@type": "Offer"; name: string; price: string; priceCurrency: "USD" | "NGN"; url: string }> {
-  return CATALOG.flatMap((s) => [
-    { "@type": "Offer" as const, name: s.name, price: String(s.usdMajor), priceCurrency: "USD" as const, url: `${siteUrl}/pricing` },
-    { "@type": "Offer" as const, name: s.name, price: String(s.ngnMajor), priceCurrency: "NGN" as const, url: `${siteUrl}/pricing` },
-  ]);
+// A monthly plan's offer carries its billing period (a crawler would otherwise read "$18" as a one-off price).
+export type OfferLd = {
+  "@type": "Offer";
+  name: string;
+  price: string;
+  priceCurrency: "USD" | "NGN";
+  url: string;
+  priceSpecification?: { "@type": "UnitPriceSpecification"; price: string; priceCurrency: "USD" | "NGN"; billingDuration: "P1M" };
+};
+export function offers(siteUrl: string): ReadonlyArray<OfferLd> {
+  const one = (s: Sellable, priceCurrency: "USD" | "NGN", major: number): OfferLd => ({
+    "@type": "Offer",
+    name: s.name,
+    price: String(major),
+    priceCurrency,
+    url: `${siteUrl}/pricing`,
+    ...(s.kind === "plan"
+      ? { priceSpecification: { "@type": "UnitPriceSpecification" as const, price: String(major), priceCurrency, billingDuration: "P1M" as const } }
+      : {}),
+  });
+  return CATALOG.flatMap((s) => [one(s, "USD", s.usdMajor), one(s, "NGN", s.ngnMajor)]);
 }
 
 export type Plan = {
@@ -233,11 +251,11 @@ export const FAQS: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "What happens when my hours run out?",
-    a: "A meeting that is already being recorded finishes and is counted. New recordings, including meetings your note taker would join from your calendar, wait until you add a pack or your plan renews. Ask Beyric, translating and rewriting notes keep working on a plan.",
+    a: "A meeting that is already being recorded finishes and is counted. New recordings, including meetings your note taker would join from your calendar, wait until you add a pack, choose a plan or your plan renews. Ask Beyric, translating and rewriting notes keep working on a plan.",
   },
   {
     q: "Can I cancel?",
-    a: "Yes, any time. Your plan keeps working until the end of the period you paid for, and then does not renew. The unused part of the period is not refunded.",
+    a: "Yes, any time. Your plan keeps working until the end of the period you paid for, and then does not renew.",
   },
 ];
 

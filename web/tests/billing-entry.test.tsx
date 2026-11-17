@@ -90,6 +90,16 @@ describe("the sidebar's Billing link and hours card", () => {
     const card = await screen.findByRole("link", { name: /Out of hours/ });
     expect(card.getAttribute("href")).toBe("/billing");
     expect(card.textContent).toContain("Add hours");
+    // Label in name: the accessible name ends with the visible action word, not another one.
+    expect(card.getAttribute("aria-label")).toBe("20 hours a month, Out of hours. Add hours");
+  });
+
+  it("say 'running low' in words, not in colour alone, and name an active card by what it shows", async () => {
+    mocks.state.mockResolvedValue(stateWith("26-subscription-active.json", { hours: { seconds_left: 7200, holdings_seconds: 72000, warning: "low" } }));
+    render(<SidebarHours />);
+    const card = await screen.findByRole("link", { name: /running low/ });
+    expect(card.textContent).toContain("2 hours left, running low");
+    expect(card.getAttribute("aria-label")).toBe("20 hours a month, 2 hours left, running low. Open billing");
   });
 
   it("draw nothing while billing is not available to the person, and remember it for the tab", async () => {

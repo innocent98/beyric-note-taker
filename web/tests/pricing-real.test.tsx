@@ -28,8 +28,14 @@ import { PublicShell } from "@/components/site/public-shell";
 import { read, REPO } from "./helpers";
 import { renderPublic } from "./public-render";
 
-const state = vi.hoisted(() => ({ session: { authenticated: false } as { authenticated: boolean } }));
-vi.mock("@/lib/api/server", () => ({ getSession: async () => state.session }));
+const state = vi.hoisted(() => ({
+  session: { authenticated: false } as { authenticated: boolean },
+  billing: vi.fn(async () => ({}) as unknown),
+}));
+vi.mock("@/lib/api/server", () => ({
+  getSession: async () => state.session,
+  serverApi: async () => ({ billing: { state: state.billing } }),
+}));
 
 // The pricing page says only what is true: every price and hour count it prints is the one the database is
 // seeded with (the Alembic migrations, first written in 0052_subscriptions.py), the trial is the one decided in the
@@ -90,11 +96,11 @@ function seeded(entry: Sellable) {
   return { name: usdRow[1], hours: Number(usdRow[2]), months: Number(usdRow[4]), usd: minor(usdRow[3]), ngn: minor(ngnRow[3]), ngnName: ngnRow[1] };
 }
 
-const html = async (signedIn = false) => {
+const html = async (signedIn = false, billingOn = false) => {
   state.session = { authenticated: signedIn };
   return renderPublic(
     <PublicShell>
-      <Pricing signedIn={signedIn} />
+      <Pricing signedIn={signedIn} billingOn={billingOn} />
     </PublicShell>,
   );
 };
@@ -140,10 +146,15 @@ describe("the pricing page against the seed", () => {
     expect(migrations).toContain('"is_public": False');
   });
 
-  it("gives the trial the length the code gives it (3 hours is TRIAL_SECONDS=10800 on the server)", () => {
+  it("gives the trial the length the code and the deploy notes give it (3 hours is TRIAL_SECONDS=10800 on the server)", () => {
     const days = last([...config.matchAll(/trial_days: int = Field\(default=(\d+)/g)], "trial_days")[1];
     expect(days).toBe(String(TRIAL.days));
-    expect(TRIAL.hours * 3600).toBe(10800);
+    // The size of the trial is a server setting, off (0) by default; the code's own comment and the deploy README
+    // name the value that means 3 hours, and the page's 3 is only true while the server sets that value.
+    expect(last([...config.matchAll(/trial_seconds: int = Field\(default=(\d+)/g)], "trial_seconds")[1]).toBe("0");
+    const configHours = Number(last([...config.matchAll(/(\d+) is 3 hours/g)], "the trial size in app/config.py")[1]);
+    expect(configHours).toBe(TRIAL.hours * 3600);
+    expect(read(join(REPO, "deploy/README.md"))).toContain(`\`${configHours}\` = 3 hours`);
     expect(body).toContain(`${TRIAL.hours} hours`);
     expect(body).toContain(`${TRIAL.days} days`);
   });
@@ -197,24 +208,50 @@ describe("the pricing page says what is decided and nothing else", () => {
     expect(body).not.toMatch(/\bTeam\b/);
   });
 
-  it("answers cancelling (access to the period's end, no refund of the unused part) and leaves out what the lawyer has not read", () => {
+  it("answers cancelling (access to the period's end) and prints no refund wording: the lawyer has not read it", () => {
     const answers = FAQS.map((f) => `${f.q} ${f.a}`).join(" ");
     expect(answers).toContain("keeps working until the end of the period you paid for");
-    expect(answers).toContain("The unused part of the period is not refunded");
+    expect(page).not.toMatch(/refund/i);
+    expect(pricingMetadata.description).not.toMatch(/refund/i);
     // The refund windows, the failed-payment grace, what happens when payment stops, notice promises: not printed.
     expect(page).not.toMatch(/within \d+ days of|money.?back|guarantee|refund window|grace|past due|lapse|we will (tell|notify|email)|notice of/i);
     expect(page).not.toMatch(/7 days|14 days of the payment/i);
     expect(HERO.body + answers).not.toMatch(/lawyer|legal advice|terms of service/i);
   });
 
-  it("starts at the sign-up page for a visitor and at the plans screen for a signed-in person", async () => {
+  it("says when the hours run out what a trial person can do too: add a pack, choose a plan or renew", () => {
+    expect(body).toContain("wait until you add a pack, choose a plan or your plan renews");
+  });
+
+  it("starts at sign-up for a visitor, at the plans screen for a signed-in person billing answers for, and at the app for one it does not", async () => {
     expect(pageHtml.match(/class="ld-plan-cta" href="\/signup"/g)).toHaveLength(PLANS.length);
     expect(page).toContain("Get started");
-    const signedIn = await html(true);
-    expect(signedIn.match(/class="ld-plan-cta" href="\/billing\/plans"/g)).toHaveLength(PLANS.length);
-    expect(signedIn).toContain('href="/billing/plans"');
-    expect(text(signedIn)).toContain("Choose a plan");
-    expect(signedIn.match(/class="ld-plan-cta" href="\/signup"/g)).toBeNull();
+    const on = await html(true, true);
+    expect(on.match(/class="ld-plan-cta" href="\/billing\/plans"/g)).toHaveLength(PLANS.length);
+    expect(on).toContain('class="btn btn-xl ld-create" href="/billing/plans"');
+    expect(text(on)).toContain("Choose a plan");
+    expect(on.match(/class="ld-plan-cta" href="\/signup"/g)).toBeNull();
+    // Billing off for this person: no dead end at "Plans are not available for your account yet".
+    const off = await html(true, false);
+    expect(off.match(/class="ld-plan-cta" href="\/"/g)).toHaveLength(PLANS.length);
+    expect(off).not.toContain('href="/billing/plans"');
+    expect(text(off)).toContain("Open the app");
+  });
+
+  it("asks billing from the server for a signed-in person only, and a refusal or failure means the app, not the plans", async () => {
+    const cta = async () => text(renderToStaticMarkup(await PricingRoute()));
+    state.billing.mockClear();
+    state.session = { authenticated: false };
+    expect(await cta()).toContain("Get started");
+    expect(state.billing).not.toHaveBeenCalled();
+    state.session = { authenticated: true };
+    state.billing.mockResolvedValueOnce({});
+    expect(await cta()).toContain("Choose a plan");
+    state.billing.mockRejectedValueOnce(new Error("not_found"));
+    const refused = await cta();
+    expect(refused).toContain("Open the app");
+    expect(refused).not.toContain("Choose a plan");
+    state.session = { authenticated: false };
   });
 
   it("sits inside the shared public header and footer, with our entity and mailbox", () => {
@@ -248,6 +285,15 @@ describe("the pricing page says what is decided and nothing else", () => {
       expect(Number(o.price) * 100, `${o.name} ${o.priceCurrency}`).toBe(o.priceCurrency === "USD" ? row.usd : row.ngn);
     }
     expect(software.offers).toHaveLength(2 * CATALOG.length);
+    // A monthly plan says it is monthly; a pack is a one-off and says nothing of a period.
+    for (const o of software.offers) {
+      const entry = CATALOG.find((s) => s.name === o.name) as Sellable;
+      if (entry.kind === "plan") {
+        expect(o.priceSpecification).toEqual({ "@type": "UnitPriceSpecification", price: o.price, priceCurrency: o.priceCurrency, billingDuration: "P1M" });
+      } else {
+        expect(o.priceSpecification).toBeUndefined();
+      }
+    }
     expect(JSON.stringify(organizationJsonLd())).not.toContain("Offer");
   });
 });

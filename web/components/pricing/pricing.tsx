@@ -19,7 +19,17 @@ import {
 // content.ts, which web/tests/pricing-real.test.tsx pins to the seeded prices. `signedIn`: the buttons lead a
 // signed-in person to the plans screen, everyone else to sign-up.
 
-function PlanCard({ plan, signedIn }: { plan: Plan; signedIn: boolean }) {
+// Where the buttons lead. A person for whom billing answers goes to the plans screen; a signed-in person billing does
+// not reach (switched off, or not on the allow-list) would land on a dead end there, so goes to the app; a visitor
+// signs up.
+type Entry = { href: string; label: string; closing: string };
+function entryFor(signedIn: boolean, billingOn: boolean): Entry {
+  if (signedIn && billingOn) return { href: BILLING_PLANS_HREF, label: "Choose a plan", closing: "Choose a plan" };
+  if (signedIn) return { href: "/", label: "Open the app", closing: "Open the app" };
+  return { href: "/signup", label: "Get started", closing: "Create your account" };
+}
+
+function PlanCard({ plan, entry }: { plan: Plan; entry: Entry }) {
   return (
     <div className={`ld-plan${plan.main ? " ld-plan-main" : ""}`}>
       <div className="ld-plan-head">
@@ -31,8 +41,8 @@ function PlanCard({ plan, signedIn }: { plan: Plan; signedIn: boolean }) {
         <span className="ld-plan-unit">{plan.unit}</span>
         {plan.alt ? <span className="ld-plan-alt">{plan.alt}</span> : null}
       </div>
-      <AppLink className="ld-plan-cta" href={signedIn ? BILLING_PLANS_HREF : "/signup"}>
-        {signedIn ? "Choose a plan" : "Get started"}
+      <AppLink className="ld-plan-cta" href={entry.href}>
+        {entry.label}
       </AppLink>
       <ul className="ld-plan-list">
         <li className="ld-plan-lead">{plan.hoursLine}</li>
@@ -78,7 +88,8 @@ function Table() {
   );
 }
 
-export function Pricing({ signedIn = false }: { signedIn?: boolean }) {
+export function Pricing({ signedIn = false, billingOn = false }: { signedIn?: boolean; billingOn?: boolean }) {
+  const entry = entryFor(signedIn, billingOn);
   return (
     <>
       <section className="ld-phero">
@@ -89,7 +100,7 @@ export function Pricing({ signedIn = false }: { signedIn?: boolean }) {
       </section>
       <section className="ld-plans" aria-label="Plans">
         {PLANS.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} signedIn={signedIn} />
+          <PlanCard key={plan.id} plan={plan} entry={entry} />
         ))}
       </section>
       <p className="ld-plans-note">{CURRENCY_NOTE}</p>
@@ -104,8 +115,8 @@ export function Pricing({ signedIn = false }: { signedIn?: boolean }) {
             <h2 className="ld-h2">{CLOSING_TITLE}</h2>
             <SignupNote className="ld-signup-note-on-teal" />
           </div>
-          <AppLink className="btn btn-xl ld-create" href={signedIn ? BILLING_PLANS_HREF : "/signup"}>
-            {signedIn ? "Choose a plan" : "Create your account"}
+          <AppLink className="btn btn-xl ld-create" href={entry.href}>
+            {entry.closing}
           </AppLink>
         </div>
       </section>
