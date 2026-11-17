@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Your payment", robots: { index: fals
 export default async function BillingReturnPage() {
   await requireOwner();
   return (
-    <AppShell current="settings" reviewOpen={await getReviewOpen()}
+    <AppShell current="billing" reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()} timeZone={await getTimeZone()}>
       <Suspense fallback={null}>
         <ReturnView />

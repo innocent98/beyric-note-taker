@@ -1,3 +1,4 @@
+import { SUMMARY } from "@/components/pricing/content";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, LEGAL_NAME } from "@/lib/site";
 
 // A plain-text summary for language-model crawlers (llmstxt.org). Same rule as the JSON-LD:
@@ -22,7 +23,7 @@ ${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a pilot with a li
 
 ## Pages
 
-- [Pricing](${SITE_URL}/pricing): the plans we expect to offer. No plan is on sale yet; every price and number of hours is still to be announced.
+- [Pricing](${SITE_URL}/pricing): ${SUMMARY}. Naira is paid through Paystack in Nigeria; US dollars through Flutterwave everywhere else. Hours belong to the person, not the team.
 - [Privacy Policy](${SITE_URL}/privacy): what is collected, how Google user data is handled, retention, your rights.
 - [Terms of Service](${SITE_URL}/terms): rules for use, including your duty to tell participants about recording.
 

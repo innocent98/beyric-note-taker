@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Billing", robots: { index: false, fo
 export default async function BillingPage() {
   await requireOwner();
   return (
-    <AppShell current="settings" reviewOpen={await getReviewOpen()}
+    <AppShell current="billing" reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()} timeZone={await getTimeZone()}>
       <BillingView />
     </AppShell>
