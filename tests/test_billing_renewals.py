@@ -1047,6 +1047,38 @@ def test_an_unpaid_pay_link_page_is_returned_again_however_old_it_is(
     assert len(providers.usd.checkouts) == checkouts  # and no second page was made
 
 
+def test_a_pay_link_page_being_opened_right_now_blocks_a_second_click(
+    session, ada, providers, bought
+):
+    """Request A has committed its row and is waiting for the provider's page (the lock is free
+    meanwhile). A double click must not make a second page for the same period."""
+    due = bought
+    fail_all(providers)
+    tick(session, due + timedelta(seconds=7))
+    sub = live(session, ada)
+    opening = new_payment(
+        session,
+        payer=ada,
+        provider="flutterwave",
+        kind="renewal",
+        currency="USD",
+        amount_minor=1800,
+        subscription_id=sub.id,
+    )
+    opening.plan_price_id, opening.cycle_end = sub.price_id, sub.current_period_end
+    opening.created_at = due + timedelta(hours=1)
+    session.commit()
+    checkouts = len(providers.usd.checkouts)
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(hours=1, seconds=30))
+
+    assert (refused.value.status, refused.value.code) == (409, "payment_in_progress")
+    assert len(providers.usd.checkouts) == checkouts  # no second page
+    session.expire_all()
+    assert session.get(Payment, opening.id).status == "pending"  # and the first is left alone
+
+
 def test_a_half_made_pay_link_row_with_no_page_is_abandoned_not_a_block(
     session, ada, providers, bought
 ):
@@ -1067,7 +1099,7 @@ def test_a_half_made_pay_link_row_with_no_page_is_abandoned_not_a_block(
     orphan.created_at = due + timedelta(hours=1)  # the process died before the page was stored
     session.commit()
 
-    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=2))
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=1, minutes=11))
 
     assert started.payment.id != orphan.id and started.url.startswith("https://fake.test/pay/")
     session.expire_all()
@@ -1103,3 +1135,16 @@ def test_a_payment_the_rules_refuse_is_not_reported_as_received(
     assert "received" not in refused.value.message
     assert notices(session, admin, "admin.billing_payment_refused")
     assert live(session, ada).status == "past_due"  # nothing was granted
+
+
+def test_the_sweeper_alerts_an_admin_for_a_paid_payment_the_rules_refuse(
+    session, ada, admin, providers
+):
+    choose_country(session, ada, "US")
+    started = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+    providers.usd.complete(started.payment, amount_minor=started.payment.amount_minor - 1)
+
+    renewals.sweep(session, T0 + timedelta(minutes=3), settings())
+
+    assert live(session, ada) is None  # nothing granted
+    assert notices(session, admin, "admin.billing_payment_refused")
