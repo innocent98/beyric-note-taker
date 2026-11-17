@@ -32,6 +32,14 @@ vi.mock("next/navigation", () => ({ usePathname: () => state.pathname, useRouter
 
 const owner = { authenticated: true };
 
+// The markup itself, pinned. It is the landing page's own header and footer as `main` drew them before
+// this change (same elements, classes and order); the only difference is that the section links start
+// with the landing page's address, so they work from other pages. A quiet class or order change fails here.
+const VISITOR_HEADER = "<header class=\"ld-header\"><div class=\"ld-header-in\"><a class=\"logo logo-lg\" href=\"/\"><svg width=\"30\" height=\"30\" viewBox=\"0 0 120 120\" aria-hidden=\"true\" class=\"logo-mark\"><rect width=\"120\" height=\"120\" rx=\"28\" class=\"logo-tile\"></rect><path d=\"M38 24V72A24 24 0 1 0 62 48\" class=\"logo-glyph\" stroke-width=\"14\"></path><circle cx=\"62\" cy=\"72\" r=\"6\" class=\"logo-dot\"></circle></svg><span class=\"logo-word\"><span>Beyric</span><span class=\"logo-sub\">Note Taker</span></span></a><nav class=\"ld-nav\" aria-label=\"Main\"><a href=\"/#product\">Product</a><a href=\"/#teams\">Who it&#x27;s for</a><a href=\"/pricing\">Pricing</a><a href=\"/#security\">Security</a></nav><div class=\"ld-header-actions\"><a class=\"ld-signin\" href=\"/login\">Sign in</a><a class=\"ld-get-started\" href=\"/signup\">Get started</a></div></div></header>";
+const OWNER_HEADER = "<header class=\"ld-header\"><div class=\"ld-header-in\"><a class=\"logo logo-lg\" href=\"/welcome\"><svg width=\"30\" height=\"30\" viewBox=\"0 0 120 120\" aria-hidden=\"true\" class=\"logo-mark\"><rect width=\"120\" height=\"120\" rx=\"28\" class=\"logo-tile\"></rect><path d=\"M38 24V72A24 24 0 1 0 62 48\" class=\"logo-glyph\" stroke-width=\"14\"></path><circle cx=\"62\" cy=\"72\" r=\"6\" class=\"logo-dot\"></circle></svg><span class=\"logo-word\"><span>Beyric</span><span class=\"logo-sub\">Note Taker</span></span></a><nav class=\"ld-nav\" aria-label=\"Main\"><a href=\"/welcome#product\">Product</a><a href=\"/welcome#teams\">Who it&#x27;s for</a><a href=\"/pricing\">Pricing</a><a href=\"/welcome#security\">Security</a></nav><div class=\"ld-header-actions\"><a class=\"ld-get-started\" href=\"/\">Open the app</a></div></div></header>";
+const VISITOR_FOOTER = "<footer class=\"ld-footer\"><div class=\"ld-footer-in\"><div class=\"ld-footer-cols\"><div class=\"ld-footer-brand\"><a class=\"logo logo-sm\" href=\"/\"><svg width=\"26\" height=\"26\" viewBox=\"0 0 120 120\" aria-hidden=\"true\" class=\"logo-mark\"><rect width=\"120\" height=\"120\" rx=\"28\" class=\"logo-tile\"></rect><path d=\"M38 24V72A24 24 0 1 0 62 48\" class=\"logo-glyph\" stroke-width=\"14\"></path><circle cx=\"62\" cy=\"72\" r=\"6\" class=\"logo-dot\"></circle></svg><span class=\"logo-word\"><span>Beyric</span><span class=\"logo-sub\">Note Taker</span></span></a><p>Meeting notes, decisions and tasks for teams, from Beyrichq LTD.</p></div><div class=\"ld-footer-col\"><span>Product</span><a href=\"/#product\">Product</a><a href=\"/#features\">Features</a><a href=\"/pricing\">Pricing</a><a href=\"/#security\">Security</a></div><div class=\"ld-footer-col\"><span>Company</span><a href=\"/privacy\">Privacy</a><a href=\"/terms\">Terms</a><a href=\"mailto:privacy@beyrictech.com\">Contact</a></div></div><div class=\"ld-footer-base\"><span>\u00a9 2026 Beyrichq LTD</span><span>notes.beyrictech.com</span></div></div></footer>";
+const OWNER_FOOTER = "<footer class=\"ld-footer\"><div class=\"ld-footer-in\"><div class=\"ld-footer-cols\"><div class=\"ld-footer-brand\"><a class=\"logo logo-sm\" href=\"/welcome\"><svg width=\"26\" height=\"26\" viewBox=\"0 0 120 120\" aria-hidden=\"true\" class=\"logo-mark\"><rect width=\"120\" height=\"120\" rx=\"28\" class=\"logo-tile\"></rect><path d=\"M38 24V72A24 24 0 1 0 62 48\" class=\"logo-glyph\" stroke-width=\"14\"></path><circle cx=\"62\" cy=\"72\" r=\"6\" class=\"logo-dot\"></circle></svg><span class=\"logo-word\"><span>Beyric</span><span class=\"logo-sub\">Note Taker</span></span></a><p>Meeting notes, decisions and tasks for teams, from Beyrichq LTD.</p></div><div class=\"ld-footer-col\"><span>Product</span><a href=\"/welcome#product\">Product</a><a href=\"/welcome#features\">Features</a><a href=\"/pricing\">Pricing</a><a href=\"/welcome#security\">Security</a></div><div class=\"ld-footer-col\"><span>Company</span><a href=\"/privacy\">Privacy</a><a href=\"/terms\">Terms</a><a href=\"mailto:privacy@beyrictech.com\">Contact</a></div></div><div class=\"ld-footer-base\"><span>\u00a9 2026 Beyrichq LTD</span><span>notes.beyrictech.com</span></div></div></footer>";
+
 const PAGES: ReadonlyArray<{ name: string; path: string; render: () => Promise<string> }> = [
   { name: "the landing page at /", path: "/", render: async () => renderPublic((await HomePage()) as ReactElement) },
   { name: "/welcome", path: "/welcome", render: () => renderInPublicLayout(WelcomePage()) },
@@ -146,6 +154,36 @@ describe("the public header and footer", () => {
   });
 });
 
+describe("the pinned markup", () => {
+  it("is exactly the landing page's header and footer for a visitor", async () => {
+    const html = await reference();
+    expect(header(html)).toBe(VISITOR_HEADER);
+    expect(footer(html)).toBe(VISITOR_FOOTER);
+  });
+
+  it("is exactly the landing page's header and footer for the signed-in owner", async () => {
+    state.session = owner;
+    const html = await reference();
+    expect(header(html)).toBe(OWNER_HEADER);
+    expect(footer(html)).toBe(OWNER_FOOTER);
+  });
+
+  it("marks the current page on the same markup and changes nothing else", async () => {
+    state.pathname = "/pricing";
+    const html = await reference();
+    expect(header(html)).toBe(VISITOR_HEADER.replace('<a href="/pricing">', '<a aria-current="page" href="/pricing">'));
+    expect(footer(html)).toBe(VISITOR_FOOTER.replace('<a href="/pricing">', '<a aria-current="page" href="/pricing">'));
+  });
+
+  it("gives every page exactly one h1", async () => {
+    for (const { name, path, render } of PAGES) {
+      state.pathname = path;
+      const html = await render();
+      expect(html.match(/<h1[ >]/g), name).toHaveLength(1);
+    }
+  });
+});
+
 describe("what each page keeps of its own", () => {
   it("keeps the legal pages' 'On this page' list and their text inside the shared main landmark", async () => {
     for (const page of [PrivacyPage, TermsPage]) {
@@ -183,6 +221,8 @@ describe("one implementation, wired once", () => {
     const sources = [...filesUnder("components", [".tsx", ".ts"]), ...filesUnder("app", [".tsx"]), ...filesUnder("styles", [".css"])];
     const banned = /lg-header|lg-footer|lg-tabs|ld-pfooter|LegalShell|LandingHeader|LandingFooter|PricingFooter|PricingPage/;
     expect(sources.filter((file) => banned.test(read(file))).map(rel)).toEqual([]);
+    // No leftover selector of the old legal page frame either (`.lg`, `.lg > main`, `.lg #main`).
+    expect(read(join(WEB, "styles/public.css"))).not.toMatch(/^\.lg[ ,{>:]/m);
     const headers = sources.filter((file) => /<header[ >]/.test(read(file)) && /public|landing|legal|pricing/.test(rel(file))).map(rel);
     expect(headers).toEqual(["components/site/public-header.tsx"]);
   });

@@ -23,6 +23,8 @@ Which one is the designed one: the designer's second Landing file (2026-11-14, a
 
 Rejected: marking the current page per page with a prop (every new page would need wiring; the client link does it from the address). Putting `/` in the group with a redirect (changes the owner's app). Keeping the legal tab header (it would be a second header).
 
+Two small visual points, both kept equal to before this change: the footer links keep their old hover (a hover rule added at first was removed, because it changed `/`); the legal pages' links keep their hover underline (`.lg-article a:hover`), which `.ld a { text-decoration: none }` would otherwise have removed.
+
 Header on a phone: the four links hide below 720 px as before (SOP D34), Pricing stays reachable from the footer; below 480 px the logo drops "Note Taker".
 
 ## Removed (dead code)
@@ -33,7 +35,14 @@ Header on a phone: the four links hide below 720 px as before (SOP D34), Pricing
 
 `web/app/(public)/pricing/page.tsx` description and `web/components/pricing/content.ts`: hours "each month, for you"; "Extra-hour packs when you need more"; table row "Hours shared across the team" is now "Hours belong to the person" (Yes on every plan); FAQ "How are meeting hours counted?" says the hours belong to the person who has the plan, a team is only a place to share notes, teammates read shared notes without a plan of their own, packs add more. No price, no hour number printed. Left as they were: plan names Team / Team Plus and their taglines (names are open per the billing spec section 10), the hero "Pay when your team runs on it."
 
-Other places that still say team-shared hours: none in `web/` or `app/` code (checked by search). Only docs say it: `docs/sop/2026-11-14-landing-v2-and-pricing.md:12` (now annotated), and the billing spec section 10 and master checklist S11 line, which already list this change as a go-live edit.
+Other places that said team-shared hours: none in `web/` or `app/` code (checked by search). Docs only:
+
+| File | State |
+|---|---|
+| `docs/sop/2026-11-14-landing-v2-and-pricing.md:12` and `:87` (row P10) | corrected with a dated note |
+| `docs/checklist/master-checklist.md:976` (S11) | corrected |
+| `docs/sop/2026-11-13-welcome-page-and-sticky-public-header.md` (paths, `LegalShell`, `.lg #main`) | updated with dated notes |
+| `docs/superpowers/specs/2026-11-14-public-pages-audit.md:159,246`, `docs/HANDOFF-master.md:134,136`, `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md:562,565` | mentioned, not changed (history; the lead handles the handoff and the spec) |
 
 ## Files
 
@@ -41,15 +50,19 @@ Other places that still say team-shared hours: none in `web/` or `app/` code (ch
 
 ## Verification
 
-- Local: `npm run lint` and `npm run typecheck` (as CI's web job runs them) clean apart from three old warnings in `scripts/parity-meeting-delete.mjs`; tests of the touched files and the guards, legal and security-copy tests: 8 files, 96 tests green. Not run locally: the full suite and `npm run build` (CI runs them).
+- Local: `npm run lint` and `npm run typecheck` (as CI's web job runs them) clean apart from three old warnings in `scripts/parity-meeting-delete.mjs`; tests of the touched files and the guards, legal and security-copy tests: 8 files, 96 tests green on the first pass; after the review fixes the six touched files (88 tests) are green again. Not run locally: the full suite and `npm run build` (CI runs them).
 - `public-shell.test.tsx`: each of the six pages, as visitor and (for the five public ones) as owner, has header and footer equal to the shared shell's; one `header`, `footer`, `main`, `nav`; skip link first; exact header and footer link lists for both variants; Sign in with no session; section links start with the home path; `aria-current` on Pricing, Privacy, Terms and nowhere else.
-- Dev server (`next dev`, FastAPI not running, so visitor view only): `/`, `/welcome`, `/pricing`, `/privacy`, `/terms` returned 200 with one header, footer and main each, and the right link marked current. Screenshots at 1280 and 390 px in the session's notes folder. The 404 page was drawn through a throwaway page that calls `notFound()` (removed). Not checked: the signed-in owner in a browser (needs FastAPI), dark mode (the public pages have none), a real production build.
+- Dev server (`next dev`, FastAPI not running, so visitor view only): `/`, `/welcome`, `/pricing`, `/privacy`, `/terms` returned 200 with one header, footer and main each, and the right link marked current. Screenshots at 1280 and 390 px in the session's notes folder. The 404 page was drawn through a throwaway page that calls `notFound()` (removed). - Second pass (2026-11-17, dev server plus a stand-in for `GET /api/session` returning `{"authenticated": true}`, then FastAPI down): the owner's header on `/pricing` reads "Open the app" with the logo and section links on `/welcome`; clicking "Security" from `/pricing` and "Who it's for" on `/welcome` both land the section at 69 px, just under the header; at 390 px the footer's "Security" link on `/pricing` leads to `/#security` at 69 px with no sideways scroll; the legal link underlines on hover; a visitor with FastAPI down sees Sign in and Get started. The markup is also pinned in a test against fixed strings (header and footer, visitor and owner), and every page is checked for exactly one `h1`.
+- Not checked: a real phone, the live site, dark mode (the public pages have none), a production build outside CI.
 
 ## Operate / roll back
 
 Nothing to run or migrate. Revert the PR to go back to the three implementations.
 
 ## Follow-ups
+
+- Question for Adebayo: should the sign-in and sign-up pages (`AuthShell`) and `web/app/error.tsx` also wear the public header and footer? They stay outside it for now (not in his list; the error boundary is a client component).
+- Nit: a visitor on `/welcome` has "Product" lead to `/#product` (leaves the page) instead of scrolling in place; the content is identical.
 
 - Split Privacy and Terms into separate pages later: add folders under `app/(public)/`, a `NEXT_PAGES` and proxy matcher entry, a sitemap line.
 - Plan names and taglines still say "Team" under a per-person model (billing spec section 10).

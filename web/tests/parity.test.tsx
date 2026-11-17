@@ -97,12 +97,14 @@ describe("logo", () => {
   });
 });
 
-describe("landing page", async () => {
-  const html = await renderPublic(
-    <PublicShell>
-      <Landing />
-    </PublicShell>,
-  );
+const landingHtml = await renderPublic(
+  <PublicShell>
+    <Landing />
+  </PublicShell>,
+);
+
+describe("landing page", () => {
+  const html = landingHtml;
 
   it("has the designer's sections, the anchors in its header, and six questions", () => {
     for (const id of ["product", "teams", "security", "features", "faq"]) {
