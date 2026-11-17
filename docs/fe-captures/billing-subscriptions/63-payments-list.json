@@ -1,0 +1,93 @@
+{
+  "note": "The billing history: Ada's own payments, newest first. `pay_url` is set only on a pending one.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payments": [
+        {
+          "reference": "bn-7-206192995e94f44b",
+          "kind": "renewal",
+          "status": "pending",
+          "currency": "USD",
+          "amount_minor": 3400,
+          "created_at": "2026-11-17T16:27:31.967339Z",
+          "paid_at": null,
+          "pay_url": "https://fake.test/3ds/open-charge"
+        },
+        {
+          "reference": "bn-6-1fc3293b9a854155",
+          "kind": "pack",
+          "status": "pending",
+          "currency": "USD",
+          "amount_minor": 1000,
+          "created_at": "2026-11-17T16:27:31.804361Z",
+          "paid_at": null,
+          "pay_url": "https://fake.test/pay/bn-6-1fc3293b9a854155"
+        },
+        {
+          "reference": "bn-5-cc0a7f73fee1b704",
+          "kind": "renewal",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 3400,
+          "created_at": "2026-11-17T16:27:31.741046Z",
+          "paid_at": "2026-11-17T16:27:31.846924Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-4-d828bcde666019c9",
+          "kind": "renewal",
+          "status": "failed",
+          "currency": "USD",
+          "amount_minor": 3400,
+          "created_at": "2026-11-17T16:27:31.283611Z",
+          "paid_at": null,
+          "pay_url": null
+        },
+        {
+          "reference": "bn-3-ea278de93a0ba827",
+          "kind": "upgrade",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1599,
+          "created_at": "2026-11-17T16:27:30.445612Z",
+          "paid_at": "2026-11-17T16:27:30.620339Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-2-fa46fc6ca99d7635",
+          "kind": "pack",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1000,
+          "created_at": "2026-11-17T16:27:29.469010Z",
+          "paid_at": "2026-11-17T16:27:29.550150Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-1-401d29c8bdee865f",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T16:27:28.526857Z",
+          "paid_at": "2026-11-17T16:27:28.762167Z",
+          "pay_url": null
+        }
+      ]
+    }
+  }
+}

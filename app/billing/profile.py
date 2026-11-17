@@ -24,10 +24,9 @@ of stage S8); it writes no second row, the first already carries `effective_at`.
 **The live subscription is one question** (`live_subscription`): the person's live subscription as
 `LiveSubscription(period_end, currency, provider)`, or None if they have none. The route it was
 SOLD on is what a change is compared with, not today's route table: an operator editing the table
-mid-period must not make a Nigerian naira subscription look like a dollar one. The subscriptions
-table arrives with stage S8, so today it answers None for everyone, and **S8 must replace it**:
-while it is the stub it raises as soon as a `subscriptions` table exists, and a test says the same.
-Tests replace it with a stub for the live branches.
+mid-period must not make a Nigerian naira subscription look like a dollar one. Stage S8 made
+it real: it reads the subscriptions table (the stub and its tripwire are gone). Tests may still
+replace it with a stub for a particular branch.
 """
 
 from dataclasses import dataclass
@@ -40,7 +39,13 @@ from sqlalchemy.orm import Session
 
 from app.billing import routing
 from app.billing.types import BillingError
-from app.models import Base, BillingCountryChange, BillingProfile, User
+from app.models import (
+    LIVE_SUBSCRIPTION_STATUSES,
+    BillingCountryChange,
+    BillingProfile,
+    Subscription,
+    User,
+)
 
 # At most one change in this many days. The first choice is not a change.
 CHANGE_WINDOW = timedelta(days=30)
@@ -87,29 +92,26 @@ class CountryChange:
 
 
 def has_subscription_table(table_names) -> bool:
-    """True if any table is about subscriptions, whatever S8 calls it (`subscriptions`,
-    `billing_subscriptions`, `plan_subscriptions`): the tripwire must not depend on one spelling."""
+    """True if any table is about subscriptions, whatever it is called: the tripwire below must not
+    depend on one spelling. Kept as the test of record that the table exists (stage S8 made it)."""
     return any("subscription" in name for name in table_names)
 
 
-def _subscriptions_table_exists() -> bool:
-    return has_subscription_table(Base.metadata.tables)
-
-
 def live_subscription(db: Session, user_id: int, now: datetime) -> LiveSubscription | None:
-    """The person's live paid subscription, or None. **Stage S8 replaces this function** (and
-    removes `is_stub`): subscriptions do not exist yet, so nobody has one and every change applies
-    at once. The tripwire: if a `subscriptions` table exists while this is still the stub, it raises
-    instead of quietly letting every crossing change through."""
-    if _subscriptions_table_exists():
-        raise RuntimeError(
-            "billing.profile.live_subscription is still the stage S5 stub but a subscriptions "
-            "table exists: stage S8 must replace it before any country change is allowed"
+    """The person's live subscription (`active` or `past_due`), or None. `period_end` is when the
+    paid period ends (during the grace it is already past, so a change applies at once: nothing
+    paid is left to protect), and `currency` and `provider` are the route it was SOLD on, stored on
+    the row, so a change in the country table mid-period cannot turn a naira subscription into a
+    dollar one. This replaced the stage S5 stub (and its tripwire) in stage S8."""
+    row = db.execute(
+        select(Subscription.current_period_end, Subscription.currency, Subscription.provider).where(
+            Subscription.user_id == user_id,
+            Subscription.status.in_(LIVE_SUBSCRIPTION_STATUSES),
         )
-    return None
-
-
-live_subscription.is_stub = True
+    ).first()
+    if row is None:
+        return None
+    return LiveSubscription(period_end=row[0], currency=row[1], provider=row[2])
 
 
 def country_view(row: BillingProfile | None, at: datetime) -> CountryView:
@@ -140,6 +142,19 @@ def _locked_profile(db: Session, user: User) -> BillingProfile:
         .with_for_update()
         .execution_options(populate_existing=True)
     ).one()
+
+
+def settle_due_country(db: Session, user: User, now: datetime) -> CountryView:
+    """Write a scheduled country change whose time has come (locking the profile row), and return
+    the countries as they apply now. For the renewal and the pay link: the route they use must be
+    the one the person is on, not the one before a change that has already taken effect. Flushed,
+    not committed."""
+    if get_profile(db, user) is None:
+        return CountryView(None, None, None)
+    profile = _locked_profile(db, user)
+    apply_due_pending(profile, now)
+    db.flush()
+    return country_view(profile, now)
 
 
 def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:

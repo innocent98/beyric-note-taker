@@ -1,0 +1,28 @@
+{
+  "note": "The pack's payment verified: 10 hours granted, valid 12 months.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-3",
+      "kind": "charge_succeeded",
+      "reference": "bn-2-fa46fc6ca99d7635",
+      "tx_id": "fake-tx-3",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

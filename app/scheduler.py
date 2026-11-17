@@ -267,6 +267,19 @@ def register_jobs(scheduler: Scheduler, settings) -> None:
     from app.sweeps import register_default_sweeps  # imports this module, so not at the top
 
     register_default_sweeps(scheduler, settings)
+    if settings.billing_enabled:
+        # Our own billing clock (billing stage S8): due renewals, the retries on day 1 and day 2,
+        # the grace and the lapse, and the sweeper for payments whose webhook never came. On the
+        # sync loop so a provider's slow answer never delays a join dispatch; leader-only, like
+        # every job here, so two schedulers never both run it. Not imported while billing is off.
+        from app.billing import renewals
+
+        scheduler.register(
+            "billing_clock",
+            60,
+            lambda session, now: renewals.run(session, now, settings),
+            loop="sync",
+        )
     if settings.calendar_enabled:
         from app.calendar_providers import build_sources
         from app.gcal_sync import register_calendar_sync

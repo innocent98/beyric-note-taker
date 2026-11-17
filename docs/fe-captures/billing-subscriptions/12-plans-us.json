@@ -1,0 +1,57 @@
+{
+  "note": "The seeded catalog in dollars (`amount_minor` is cents): the real decided plan, 20 hours at 1800, and the 10-hour pack at 1000. `capture_40h` is this capture's extra plan.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "plans": [
+        {
+          "code": "plan_20h",
+          "name": "20 hours a month",
+          "monthly_seconds": 72000,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 1800
+          }
+        },
+        {
+          "code": "capture_40h",
+          "name": "40 hours a month",
+          "monthly_seconds": 144000,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 3400
+          }
+        }
+      ],
+      "packs": [
+        {
+          "code": "pack_10h",
+          "name": "10 extra hours",
+          "seconds": 36000,
+          "valid_months": 12,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 1000
+          }
+        }
+      ]
+    }
+  }
+}

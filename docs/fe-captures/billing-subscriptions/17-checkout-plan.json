@@ -1,0 +1,36 @@
+{
+  "note": "Starts the hosted checkout. The payment row is made first (`pending`); `checkout_url` is where to send the person (here the fake provider's address). Nothing is granted by this call.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-1-401d29c8bdee865f",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-17T16:27:28.526857Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-1-401d29c8bdee865f"
+      },
+      "checkout_url": "https://fake.test/pay/bn-1-401d29c8bdee865f"
+    }
+  }
+}

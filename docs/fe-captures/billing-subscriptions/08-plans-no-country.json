@@ -1,0 +1,24 @@
+{
+  "note": "No billing country chosen yet: no route and no prices. Nothing is guessed.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": null,
+      "plans": [],
+      "packs": []
+    }
+  }
+}

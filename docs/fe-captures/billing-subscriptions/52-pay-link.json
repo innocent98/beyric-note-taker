@@ -1,0 +1,33 @@
+{
+  "note": "The provider's page to pay what is overdue: a fresh hosted checkout for the renewal amount.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/pay-link",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-5-cc0a7f73fee1b704",
+        "kind": "renewal",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 3400,
+        "created_at": "2026-11-17T16:27:31.741046Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-5-cc0a7f73fee1b704"
+      },
+      "checkout_url": "https://fake.test/pay/bn-5-cc0a7f73fee1b704"
+    }
+  }
+}
