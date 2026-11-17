@@ -14,9 +14,9 @@ renewal read them without any code change. `sort_order` 2 and 3 puts them after 
 Not public (`is_public` false): the public /pricing page prints them from
 `web/components/pricing/content.ts`, which a test pins to these rows, like the first plan's.
 
-The names "Pro" and "Scale" are the lead's proposal. They are written once here (`PRO_NAME`,
-`SCALE_NAME`) and once in `web/components/pricing/content.ts`; a rename after this has run is a
-new migration that updates `plans.name`, plus that one line.
+The names "Pro" and "Scale" are the lead's proposal. They are written here and in one place in
+`web/components/pricing/content.ts` (`PRO_NAME`, `SCALE_NAME`); a test fails if they differ. A
+rename after this has run is a new migration that updates `plans.name`, plus that one line.
 
 A price change is a NEW `plan_prices` row, never an edit of these (spec 3.4: a subscription keeps
 its price until its renewal).
@@ -43,14 +43,7 @@ down_revision = "0052"  # becomes "0053" once #234 (S9) has merged
 branch_labels = None
 depends_on = None
 
-PRO_NAME = "Pro"
-SCALE_NAME = "Scale"
-
-# (code, name, hours a month, sort order, USD minor units, NGN minor units)
-PLANS = (
-    ("plan_50h", PRO_NAME, 50, 2, 4000, 5_600_000),
-    ("plan_100h", SCALE_NAME, 100, 3, 8000, 11_200_000),
-)
+PLAN_CODES = ("plan_50h", "plan_100h")
 
 
 def upgrade() -> None:
@@ -72,39 +65,67 @@ def upgrade() -> None:
         sa.column("active_from"),
     )
     now = datetime.now(UTC)
+    # Written out row by row, in the shape of 0052's seed, so that web/tests/pricing-real.test.tsx
+    # can read the names, hours and prices straight from the file.
     op.bulk_insert(
         plans,
         [
             {
-                "code": code,
-                "name": name,
-                "monthly_seconds": hours * 3600,
+                "code": "plan_50h",
+                "name": "Pro",
+                "monthly_seconds": 50 * 3600,
                 "is_public": False,
-                "sort_order": order,
+                "sort_order": 2,
                 "active": True,
-            }
-            for code, name, hours, order, _usd, _ngn in PLANS
+            },
+            {
+                "code": "plan_100h",
+                "name": "Scale",
+                "monthly_seconds": 100 * 3600,
+                "is_public": False,
+                "sort_order": 3,
+                "active": True,
+            },
         ],
     )
     op.bulk_insert(
         prices,
         [
             {
-                "plan_code": code,
-                "currency": currency,
+                "plan_code": "plan_50h",
+                "currency": "USD",
                 "interval": "month",
-                "amount_minor": amount,
+                "amount_minor": 4000,
                 "active_from": now,
-            }
-            for code, _name, _hours, _order, usd, ngn in PLANS
-            for currency, amount in (("USD", usd), ("NGN", ngn))
+            },
+            {  # NGN 56,000 a month (kobo)
+                "plan_code": "plan_50h",
+                "currency": "NGN",
+                "interval": "month",
+                "amount_minor": 5_600_000,
+                "active_from": now,
+            },
+            {
+                "plan_code": "plan_100h",
+                "currency": "USD",
+                "interval": "month",
+                "amount_minor": 8000,
+                "active_from": now,
+            },
+            {  # NGN 112,000 a month (kobo)
+                "plan_code": "plan_100h",
+                "currency": "NGN",
+                "interval": "month",
+                "amount_minor": 11_200_000,
+                "active_from": now,
+            },
         ],
     )
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    codes = tuple(code for code, *_ in PLANS)
+    codes = PLAN_CODES
     in_use = conn.execute(
         sa.text(
             "select (select count(*) from subscriptions where plan_code = any(:codes) "

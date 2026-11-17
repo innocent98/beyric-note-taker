@@ -43,6 +43,10 @@ describe("llms.txt and the structured data", () => {
     expect(software.offers.map((o) => [o.name, o.priceCurrency, o.price])).toEqual([
       ["20 hours a month", "USD", "18"],
       ["20 hours a month", "NGN", "25000"],
+      ["Pro", "USD", "40"],
+      ["Pro", "NGN", "56000"],
+      ["Scale", "USD", "80"],
+      ["Scale", "NGN", "112000"],
       ["10 extra hours", "USD", "10"],
       ["10 extra hours", "NGN", "15000"],
     ]);
