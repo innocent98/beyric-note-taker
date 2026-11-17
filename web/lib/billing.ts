@@ -161,6 +161,13 @@ export function samePrice(payment: Pick<BillingPayment, "currency" | "amount_min
   return payment.currency === price.currency && payment.amount_minor === price.amount_minor;
 }
 
+// An upgrade is prorated by the server to the second, so the amount made at the confirm is a little LOWER than the
+// preview's (about one minor unit every second or two in kobo) and that is fine. Only a HIGHER amount, or another
+// currency, stops the redirect.
+export function notDearer(payment: Pick<BillingPayment, "currency" | "amount_minor">, shown: Price): boolean {
+  return payment.currency === shown.currency && payment.amount_minor <= shown.amount_minor;
+}
+
 // ---- the return page ----
 
 // Where the reference of the payment the person comes back to can be: Paystack adds `reference` and

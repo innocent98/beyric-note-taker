@@ -445,7 +445,29 @@ describe("a price that moved between the page and the checkout", () => {
     expect((screen.getByRole("button", { name: "Buy these hours" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("does not send the person to pay a different upgrade amount than the preview, and shows the new one to confirm", async () => {
+  it("redirects when the confirm amount is LOWER than the preview (the server prorates to the second, a kobo or a cent less)", async () => {
+    mocks.previewChange.mockResolvedValue(cap("41-preview-upgrade.json"));
+    const done = cap<{ payment: Record<string, unknown>; checkout_url: string }>("42-change-upgrade.json");
+    mocks.changePlan.mockResolvedValue({ ...done, payment: { ...done.payment, amount_minor: 1598 } });
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm and pay $15.99" }));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(done.checkout_url));
+    expect(screen.queryByText(/The price of this change is now/)).toBeNull();
+  });
+
+  it("refuses when the confirm amount is in another currency, even if the number is lower", async () => {
+    mocks.previewChange.mockResolvedValue(cap("41-preview-upgrade.json"));
+    const done = cap<{ payment: Record<string, unknown> }>("42-change-upgrade.json");
+    mocks.changePlan.mockResolvedValue({ ...done, payment: { ...done.payment, currency: "NGN", amount_minor: 1000 } });
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm and pay $15.99" }));
+    expect(await screen.findByText(/The price of this change is now/)).toBeTruthy();
+    expect(mocks.goTo).not.toHaveBeenCalled();
+  });
+
+  it("does not send the person to pay a HIGHER upgrade amount than the preview, and shows the new one to confirm", async () => {
     mocks.previewChange.mockResolvedValue(cap("41-preview-upgrade.json"));
     const done = cap<{ payment: Record<string, unknown> }>("42-change-upgrade.json");
     mocks.changePlan.mockResolvedValue({ ...done, payment: { ...done.payment, amount_minor: 1700 } });

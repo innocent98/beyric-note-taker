@@ -9,7 +9,7 @@ import {
   formatHours,
   formatMoney,
   rememberReference,
-  samePrice,
+  notDearer,
   type ChangePreview,
   type PlanOffer,
   type Plans,
@@ -63,9 +63,9 @@ export function ChangePlan({
     try {
       const done = await api.billing.changePlan(plan.code);
       if (done.result === "checkout" && done.checkout_url && done.payment) {
-        // The price may have moved since the preview (the server works it out again at the confirm): never send the
-        // person to pay a different amount than the one they were shown, without saying so.
-        if (preview && preview.answer.amount_minor !== null && !samePrice(done.payment, { currency: preview.answer.currency, amount_minor: preview.answer.amount_minor })) {
+        // The server prorates again at the confirm to the second, so the amount is usually a little lower than the
+        // preview (fine). Never send the person to pay MORE than they were shown, or in another currency, without saying so.
+        if (preview && preview.answer.amount_minor !== null && !notDearer(done.payment, { currency: preview.answer.currency, amount_minor: preview.answer.amount_minor })) {
           setError(
             `The price of this change is now ${formatMoney(done.payment.amount_minor, done.payment.currency)}, not the ${formatMoney(preview.answer.amount_minor, preview.answer.currency)} shown. Nothing was charged. Check it and confirm again.`,
           );

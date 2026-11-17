@@ -116,7 +116,7 @@ export function BillingBanner() {
           are closed, and new recordings, including the meetings your note taker joins from your calendar, only start
           {hasHours ? " from the extra hours you still hold" : " once you have hours again"}. You can still read, search and
           export your notes.
-          {state.pending_payment?.pay_url
+          {state.pending_payment?.kind === "renewal" && state.pending_payment.pay_url
             ? " You can finish paying the charge that is still waiting, and your plan comes back, or choose a plan instead. Do one of the two, not both."
             : ""}
         </p>

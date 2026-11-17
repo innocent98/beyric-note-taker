@@ -219,6 +219,17 @@ describe("a plan payment that is still waiting", () => {
   });
 });
 
+describe("a waiting plan page for the same plan", () => {
+  it("goes straight to the checkout (the server returns the same page for the same price) with no question about paying twice", async () => {
+    mocks.state.mockResolvedValue(cap("19-subscription-pending.json"));
+    mocks.checkout.mockResolvedValue(cap("17-checkout-plan.json"));
+    render(<PlansView />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[0]);
+    await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith("plan", "plan_20h"));
+    expect(screen.queryByText(/If you pay both/)).toBeNull();
+  });
+});
+
 describe("a price that moved since the plans were read", () => {
   it("does not redirect, says the new price, and reads the plans again", async () => {
     const started = cap<{ payment: Record<string, unknown>; checkout_url: string }>("17-checkout-plan.json");

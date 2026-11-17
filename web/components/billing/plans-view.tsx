@@ -219,7 +219,14 @@ export function PlansView() {
                 type="button"
                 className="btn btn-primary pl-btn"
                 disabled={!route || !plan.price || hasPlan || busy !== null}
-                onClick={() => void choose(plan, waiting?.kind === "plan" && waiting.status === "pending")}
+                onClick={() =>
+                  void choose(
+                    plan,
+                    waiting?.kind === "plan" &&
+                      waiting.status === "pending" &&
+                      !(plan.price && samePrice(waiting, plan.price)),
+                  )
+                }
               >
                 {busy === plan.code ? "Opening the payment page..." : "Choose this plan"}
               </button>

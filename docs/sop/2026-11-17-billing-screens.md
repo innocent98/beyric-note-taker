@@ -76,6 +76,7 @@ Nothing to run: the pages ship with the web container. They are inert until `BIL
 | Item | Where |
 |---|---|
 | The five contract gaps above, and on the backend: **upgrades and packs are not de-duplicated** (reuse an open upgrade payment for the same period and price; two tabs can pay two upgrades) | S9 / the lead |
+| A pack or plan checkout the screen refuses (the price had moved) leaves a pending payment page behind; the person may find it under Payments as "Continue to pay". Reuse it, or have the server expire it | API |
 | Disable or warn on a second plan page by comparing the waiting payment's plan (the payment does not say which plan it is for: a field would let the screen compare instead of asking twice) | API |
 | A designer's pass on every screen (screenshots are the brief); the `bill-*` CSS is glue only | design |
 | Show the card brand and last four digits on the plan card | S9, with the API |

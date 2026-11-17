@@ -54,7 +54,6 @@ export function HoursCard({ state }: { state: BillingState }) {
           {planEnded
             ? ""
             : " They start again when you add extra hours, upgrade, or your plan renews. Ask Beyric, translating and rewriting notes keep working."}{" "}
-         
         </Alert>
       ) : null}
 

@@ -72,6 +72,15 @@ describe("a lapsed plan", () => {
     expect(screen.getByRole("link", { name: "Choose a plan" }).getAttribute("href")).toBe("/billing/plans");
   });
 
+  it("does not offer to finish paying a waiting payment that is not a renewal charge", async () => {
+    const lapsed = cap<{ pending_payment: Record<string, unknown> }>("61-subscription-lapsed-after-pass.json");
+    mocks.state.mockResolvedValue({ ...lapsed, pending_payment: { ...lapsed.pending_payment, kind: "pack" } });
+    render(<BillingBanner />);
+    await screen.findByText(/Your plan has ended because a payment was not made/);
+    expect(screen.queryByText(/finish paying the charge that is still waiting/)).toBeNull();
+    expect(screen.queryByText(/Do one of the two/)).toBeNull();
+  });
+
   it("says recordings need hours again when none are held", async () => {
     mocks.state.mockResolvedValue({
       ...cap<Record<string, unknown>>("61-subscription-lapsed-after-pass.json"),
