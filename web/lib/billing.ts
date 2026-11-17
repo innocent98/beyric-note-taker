@@ -126,11 +126,17 @@ export function formatMoney(amountMinor: number, currency: string): string {
   }
 }
 
-// "20 hours", "1.5 hours", "1 hour", "0 hours": one decimal at most, as the hours are counted.
+// Hours as a person says them: "20 hours", "1 hour 30 minutes", "12 minutes", "less than a minute", "0 minutes". Under
+// an hour it is minutes (a decimal like "0.2 hours" tells nobody anything, and "0 hours left" must never be shown
+// while recording still works).
 export function formatHours(seconds: number): string {
-  const hours = Math.round((Math.max(seconds, 0) / 3600) * 10) / 10;
-  const text = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
-  return `${text} ${hours === 1 ? "hour" : "hours"}`;
+  const total = Math.max(Math.round(seconds / 60), 0);
+  if (total === 0) return seconds > 0 ? "less than a minute" : "0 minutes";
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (total < 60) return unit(total, "minute");
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return minutes === 0 ? unit(hours, "hour") : `${unit(hours, "hour")} ${unit(minutes, "minute")}`;
 }
 
 export const PAYMENT_KIND_WORDS: Record<PaymentKind, string> = {
@@ -220,4 +226,50 @@ export const GATE_HOURS_MARK = "will not join new meetings";
 
 export function isPlanInactive(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === "plan_inactive";
+}
+
+// ---- what the banner remembers for this browser tab ----
+// A 404 means billing is not available to this person; a healthy answer (no banner to show) is good for a minute.
+// Both are per tab (`sessionStorage`), and both are forgotten when this client signs someone in or out. A failure to
+// read or write them is never fatal: the banner then simply asks.
+const UNAVAILABLE_KEY = "beyric.billing.unavailable";
+const HEALTHY_KEY = "beyric.billing.healthy";
+export const HEALTHY_FOR_MS = 60_000;
+
+export function billingKnownAbsent(): boolean {
+  try {
+    return window.sessionStorage.getItem(UNAVAILABLE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+export function rememberBillingAbsent(): void {
+  try {
+    window.sessionStorage.setItem(UNAVAILABLE_KEY, "1");
+  } catch {
+    // asking again next time is only a wasted request
+  }
+}
+export function billingRecentlyHealthy(now: number = Date.now()): boolean {
+  try {
+    const at = Number(window.sessionStorage.getItem(HEALTHY_KEY));
+    return at > 0 && now - at < HEALTHY_FOR_MS;
+  } catch {
+    return false;
+  }
+}
+export function rememberBillingHealthy(now: number = Date.now()): void {
+  try {
+    window.sessionStorage.setItem(HEALTHY_KEY, String(now));
+  } catch {
+    // see above
+  }
+}
+export function forgetBillingTabState(): void {
+  try {
+    window.sessionStorage.removeItem(UNAVAILABLE_KEY);
+    window.sessionStorage.removeItem(HEALTHY_KEY);
+  } catch {
+    // nothing to forget
+  }
 }

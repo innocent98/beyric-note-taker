@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, AppLink } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { BILLING_PLANS_HREF, formatHours, formatMoney, rememberReference, type PackOffer, type Subscription } from "@/lib/billing";
 import { goTo } from "@/lib/navigate";
 import { billingErrorMessage } from "./common";
+import { usePageRestore } from "./use-page-restore";
 
 // Extra hours (billing stage S8b part B). A pack is valid only with a live plan (the server answers 409
 // `plan_required` otherwise, and a plan in its grace may still buy one), and is paid on the route the
@@ -14,6 +15,7 @@ export function Packs({ packs, sub }: { packs: PackOffer[]; sub: Subscription | 
   const live = sub !== null && (sub.status === "active" || sub.status === "past_due");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  usePageRestore(useCallback(() => setBusy(null), []));
 
   async function buy(pack: PackOffer) {
     if (busy) return;

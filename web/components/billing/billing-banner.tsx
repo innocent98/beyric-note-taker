@@ -5,7 +5,16 @@ import { usePathname } from "next/navigation";
 import { Alert, Button } from "@/components/ui";
 import { LocalTime } from "@/components/app/local-time";
 import { api } from "@/lib/api/browser";
-import { BILLING_HREF, BILLING_PLANS_HREF, type BillingState } from "@/lib/billing";
+import {
+  BILLING_HREF,
+  BILLING_PLANS_HREF,
+  billingKnownAbsent,
+  billingRecentlyHealthy,
+  rememberBillingAbsent,
+  rememberBillingHealthy,
+  forgetBillingTabState,
+  type BillingState,
+} from "@/lib/billing";
 import { billingUnavailable } from "./common";
 import { PayNow } from "./pay-now";
 
@@ -18,25 +27,9 @@ import { PayNow } from "./pay-now";
 //   lapsed     the grace ended unpaid: what is closed, what is kept, and the way back (choose a plan, or
 //              confirm the charge still waiting: paying it late brings the plan back).
 // A 404 means billing is not available to this person: nothing is drawn, and the tab remembers it so the
-// question is not asked again on every page. While a banner shows, the state is read again every 60
+// question is not asked again on every page. A healthy answer (nothing to say) is remembered for a minute for the
+// same reason; an answer that shows a notice is never remembered, so paying makes it go away at the next page. While a banner shows, the state is read again every 60
 // seconds and when the window gains focus (the guide's polling). Nothing here ever says "paid".
-const UNAVAILABLE_KEY = "beyric.billing.unavailable";
-
-function remembered(): boolean {
-  try {
-    return window.sessionStorage.getItem(UNAVAILABLE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-function remember() {
-  try {
-    window.sessionStorage.setItem(UNAVAILABLE_KEY, "1");
-  } catch {
-    // asking again next time is only a wasted request
-  }
-}
-
 export function BillingBanner() {
   const pathname = usePathname();
   const onBillingPage = pathname === "/billing" || (pathname ?? "").startsWith("/billing/");
@@ -49,18 +42,23 @@ export function BillingBanner() {
       .state()
       .then(setState)
       .catch((caught) => {
-        if (billingUnavailable(caught)) remember();
+        if (billingUnavailable(caught)) rememberBillingAbsent();
       });
   }, []);
 
   useEffect(() => {
-    if (onBillingPage || remembered()) return;
+    if (onBillingPage || billingKnownAbsent() || billingRecentlyHealthy()) return;
     let alive = true;
     api.billing
       .state()
-      .then((answer) => alive && setState(answer))
+      .then((answer) => {
+        const shows = answer.subscription?.status === "past_due" || answer.subscription?.status === "lapsed";
+        if (shows) forgetBillingTabState();
+        else rememberBillingHealthy();
+        if (alive) setState(answer);
+      })
       .catch((caught) => {
-        if (billingUnavailable(caught)) remember();
+        if (billingUnavailable(caught)) rememberBillingAbsent();
       });
     return () => {
       alive = false;

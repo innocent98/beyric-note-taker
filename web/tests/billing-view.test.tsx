@@ -2,6 +2,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "@testing-library/react";
 import { BillingView } from "@/components/billing/billing-view";
 import { SettingsBilling } from "@/components/billing/settings-billing";
 import { ApiError } from "@/lib/api/client";
@@ -119,7 +120,7 @@ describe("changing plan", () => {
     await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
     expect(mocks.previewChange).toHaveBeenCalledWith("capture_40h");
     expect(await screen.findByText(/You pay \$15\.99 today/)).toBeTruthy();
-    expect(screen.getByText(/19\.9 hours extra this month/)).toBeTruthy();
+    expect(screen.getByText(/19 hours 54 minutes extra this month/)).toBeTruthy();
     expect(screen.getByText(/You are charged as soon as you confirm/)).toBeTruthy();
     expect(mocks.changePlan).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Confirm and pay $15.99" }));
@@ -289,5 +290,125 @@ describe("the Settings card", () => {
     render(<SettingsBilling />);
     expect(await screen.findByText("You do not have a plan")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Choose a plan" }).getAttribute("href")).toBe("/billing/plans");
+  });
+});
+
+// A promise a test settles by hand, to hold a call in flight while the button is pressed again.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("a money button pressed twice calls once", () => {
+  it("cancel", async () => {
+    const held = deferred<unknown>();
+    mocks.cancel.mockReturnValue(held.promise);
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
+    const yes = screen.getByRole("button", { name: "Yes, cancel my plan" });
+    await userEvent.click(yes);
+    await userEvent.click(yes);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    expect((yes as HTMLButtonElement).disabled).toBe(true);
+    held.resolve(cap("36-cancel.json"));
+  });
+
+  it("buying extra hours, and the button stays busy while the browser leaves", async () => {
+    mocks.checkout.mockResolvedValue(cap("33-checkout-pack.json"));
+    render(<BillingView />);
+    const buy = await screen.findByRole("button", { name: "Buy these hours" });
+    await userEvent.click(buy);
+    await userEvent.click(buy);
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledTimes(1));
+    expect(mocks.checkout).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("button", { name: "Opening the payment page..." }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("confirming an upgrade: the button stays disabled after the call succeeds, while the browser leaves", async () => {
+    mocks.previewChange.mockResolvedValue(cap("41-preview-upgrade.json"));
+    mocks.changePlan.mockResolvedValue(cap("42-change-upgrade.json"));
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
+    const confirm = await screen.findByRole("button", { name: "Confirm and pay $15.99" });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledTimes(1));
+    expect(mocks.changePlan).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("button", { name: "Opening the payment page..." }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("pay now in the grace", async () => {
+    show(cap("50-subscription-past-due.json"));
+    mocks.payLink.mockResolvedValue(cap("52-pay-link.json"));
+    render(<BillingView />);
+    const pay = await screen.findByRole("button", { name: "Pay now" });
+    await userEvent.click(pay);
+    await userEvent.click(pay);
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledTimes(1));
+    expect(mocks.payLink).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("coming back with the browser's back button", () => {
+  it("frees a button that was left busy (a page restored from the back/forward cache)", async () => {
+    mocks.checkout.mockResolvedValue(cap("33-checkout-pack.json"));
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buy these hours" }));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Buy these hours" })).toBeNull();
+    act(() => {
+      const event = new Event("pageshow") as Event & { persisted: boolean };
+      event.persisted = true;
+      window.dispatchEvent(event);
+    });
+    expect((screen.getByRole("button", { name: "Buy these hours" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("a re-read that fails", () => {
+  it("keeps the page and shows the error above it, with Try again", async () => {
+    render(<BillingView />);
+    await screen.findByText("20 hours a month");
+    mocks.state.mockRejectedValue(new ApiError(502, "gateway_error", "slow"));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(await screen.findByText(/What you see may be out of date/)).toBeTruthy();
+    expect(screen.getByText("20 hours a month")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel plan" })).toBeTruthy();
+  });
+});
+
+describe("the cancel question", () => {
+  it("is announced (role alert) and takes focus", async () => {
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/Cancel your plan\?/);
+    expect(document.activeElement?.textContent).toBe("Cancel your plan?");
+  });
+
+  it("shows the server's sentence when the cancel is refused", async () => {
+    mocks.cancel.mockRejectedValue(new ApiError(409, "no_subscription", "You do not have a plan."));
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
+    await userEvent.click(screen.getByRole("button", { name: "Yes, cancel my plan" }));
+    expect(await screen.findByText("You do not have a plan.")).toBeTruthy();
+  });
+});
+
+describe("an upgrade preview the API could not price", () => {
+  it("says so and offers Try again instead of a dead end", async () => {
+    mocks.previewChange.mockResolvedValue({ ...cap<Json>("41-preview-upgrade.json"), amount_minor: null });
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
+    expect(await screen.findByText(/We could not work out the price of this change/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Confirm and pay/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.previewChange).toHaveBeenCalledTimes(2);
   });
 });

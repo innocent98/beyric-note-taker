@@ -33,6 +33,7 @@ import sys
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 # The hours rule and the feature gates read the process environment (`get_settings`), not the
 # Settings object handed to `create_app`, so they are switched on here, before the app is imported.
@@ -43,7 +44,7 @@ os.environ["BILLING_ALLOWED_EMAILS"] = "*"
 
 import capture_calendar_connect as base  # noqa: E402  reads sys.argv[1] at import (the admin database URL)
 
-if not any(host in base.ADMIN_URL for host in ("localhost", "127.0.0.1")):
+if urlparse(base.ADMIN_URL).hostname not in ("localhost", "127.0.0.1", "::1"):
     sys.exit("This script only runs against a local scratch database.")
 
 import httpx  # noqa: E402

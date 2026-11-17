@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlansView } from "@/components/billing/plans-view";
@@ -164,5 +164,38 @@ describe("billing that is not available to this person", () => {
     mocks.plans.mockRejectedValue(new ApiError(404, "not_found", "Not found."));
     render(<PlansView />);
     expect(await screen.findByText("Plans are not available for your account yet")).toBeTruthy();
+  });
+});
+
+describe("the plan button", () => {
+  it("calls the checkout once however often it is pressed, and is freed when the page comes back from the cache", async () => {
+    mocks.checkout.mockResolvedValue(cap("17-checkout-plan.json"));
+    render(<PlansView />);
+    const first = (await screen.findAllByRole("button", { name: "Choose this plan" }))[0];
+    await userEvent.click(first);
+    await userEvent.click(first);
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledTimes(1));
+    expect(mocks.checkout).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Opening the payment page...")).toBeTruthy();
+    act(() => {
+      const event = new Event("pageshow") as Event & { persisted: boolean };
+      event.persisted = true;
+      window.dispatchEvent(event);
+    });
+    expect(screen.queryByText("Opening the payment page...")).toBeNull();
+  });
+
+  it("keeps the plans and shows the error above them when a re-read fails", async () => {
+    mocks.profile.mockResolvedValue(PROFILE_NONE);
+    mocks.plans.mockResolvedValue(cap("08-plans-no-country.json"));
+    mocks.routeFor.mockResolvedValue({ currency: "USD", provider: "flutterwave", billing_country: "US" });
+    mocks.setCountry.mockResolvedValue({ result: "applied", profile: PROFILE_US });
+    render(<PlansView />);
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Billing country" }), "US");
+    await screen.findByText("Prices in US dollars, paid through Flutterwave.");
+    mocks.plans.mockRejectedValue(new ApiError(502, "gateway_error", "slow"));
+    await userEvent.click(screen.getByRole("button", { name: "Save country" }));
+    expect(await screen.findByText(/What you see may be out of date/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Billing country" })).toBeTruthy();
   });
 });

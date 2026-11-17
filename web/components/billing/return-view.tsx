@@ -15,6 +15,7 @@ import {
   type BillingPayment,
 } from "@/lib/billing";
 import { billingErrorMessage, billingUnavailable } from "./common";
+import { Headline } from "./headline";
 
 // Where the provider sends the person after the hosted page (`/billing/return`, billing stage S8b part A).
 // The address only tells us WHICH payment to look at (our reference: `reference` or `trxref` from Paystack,
@@ -34,13 +35,17 @@ import { billingErrorMessage, billingUnavailable } from "./common";
 //                     payment does"), so a "mismatch" can only look like this: the page says what to do (keep the
 //                     reference). A distinct state would need an API change (reported to the lead).
 //   refunded          the payment was refunded
-//   unknown           no such payment for this person (404)
+//   unknown           no such payment for this person: 404 `not_found` on the payment. The same code and sentence also mean
+//                     "billing is off for this account" (guide, errors), so the page asks for the state to tell the two
+//                     apart; a person with billing off does not arrive here with a reference, so unknown is the rule
+//   stalled           the connection failed for the whole 5 minutes: polling has stopped, so it says so (not "we will try again")
 //   none              the address named no payment
 type View =
   | { kind: "checking" }
   | { kind: "none" }
   | { kind: "unknown" }
   | { kind: "unavailable" }
+  | { kind: "stalled" }
   | { kind: "payment"; payment: BillingPayment; waited: boolean; hint: "cancelled" | null };
 
 const subscribe = () => () => {};
@@ -78,17 +83,24 @@ export function ReturnView() {
         if (!pending) forgetReference();
       } catch (caught) {
         if (!alive) return;
-        if (billingUnavailable(caught)) {
-          setView({ kind: "unavailable" });
-          return;
-        }
         if (caught instanceof ApiError && caught.status === 404) {
-          setView({ kind: "unknown" });
+          // 404 not_found is the answer for an unknown (or another person's) payment AND for billing being off:
+          // ask for the state, which is 404 only when billing is off.
+          const off = await api.billing.state().then(
+            () => false,
+            (stateError) => billingUnavailable(stateError),
+          );
+          if (alive) setView({ kind: off ? "unavailable" : "unknown" });
           return;
         }
-        // A lost connection or a slow gateway is not an answer about the payment: say so and keep trying.
-        setTrouble(billingErrorMessage(caught));
+        // A lost connection or a slow gateway is not an answer about the payment: say so and keep trying,
+        // and when the 5 minutes are over say that it stopped.
         delay = nextPollDelay(Date.now() - startedAt);
+        if (delay === null) {
+          setView({ kind: "stalled" });
+          return;
+        }
+        setTrouble(billingErrorMessage(caught));
       }
       if (delay !== null) timer = setTimeout(() => void read(), delay);
     }
@@ -104,14 +116,18 @@ export function ReturnView() {
   return (
     <div className="stack-md measure">
       <PageHead title="Your payment" />
-      <Body
-        view={shown}
-        trouble={trouble}
-        onCheckAgain={() => {
-          setView({ kind: "checking" });
-          setAttempt((n) => n + 1);
-        }}
-      />
+      {/* One live region that stays, so a change from "Confirming" to "Payment received" is spoken. */}
+      <div aria-live="polite" aria-atomic="true">
+        <Body
+          view={shown}
+          trouble={trouble}
+          onCheckAgain={() => {
+            setTrouble(null);
+            setView({ kind: "checking" });
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -130,7 +146,7 @@ function Body({
     return (
       <Card>
         <div className="stack-sm">
-          <strong>There is no payment to check here.</strong>
+          <Headline>There is no payment to check here.</Headline>
           <p className="set-sub">Open Billing to see your payments.</p>
           <div>
             <Button href="/billing" kind="secondary">
@@ -145,10 +161,31 @@ function Body({
     return (
       <Card>
         <div className="stack-sm" role="alert">
-          <strong>We could not find that payment.</strong>
+          <Headline>We could not find that payment.</Headline>
           <p className="set-sub">It may belong to another account. Open Billing to see your own payments.</p>
           <div>
             <Button href="/billing" kind="secondary">
+              Go to Billing
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+  if (view.kind === "stalled") {
+    return (
+      <Card>
+        <div className="stack-sm">
+          <Headline>We could not reach the server to check your payment.</Headline>
+          <p className="set-sub">
+            We stopped trying after 5 minutes. If you paid, your hours appear when the payment is confirmed, whether or
+            not this page is open. Check your connection and try again.
+          </p>
+          <div className="pl-controls bill-actions">
+            <Button type="button" kind="secondary" onClick={onCheckAgain}>
+              Check again
+            </Button>
+            <Button href="/billing" kind="quiet">
               Go to Billing
             </Button>
           </div>
@@ -160,7 +197,7 @@ function Body({
     return (
       <Card>
         <div className="stack-sm">
-          <strong>Billing is not available for your account.</strong>
+          <Headline>Billing is not available for your account.</Headline>
         </div>
       </Card>
     );
@@ -178,8 +215,8 @@ function Body({
   if (payment.status === "succeeded") {
     return (
       <Card>
-        <div className="stack-sm" role="status">
-          <strong>Payment received.</strong>
+        <div className="stack-sm">
+          <Headline>Payment received.</Headline>
           <p className="set-sub">{succeededWords(payment)}</p>
           <p className="set-sub">
             {amount} for {what}.
@@ -201,7 +238,7 @@ function Body({
     return (
       <Card>
         <div className="stack-sm" role="alert">
-          <strong>The payment did not go through.</strong>
+          <Headline>The payment did not go through.</Headline>
           <p className="set-sub">No hours were added and your plan has not changed. You can try again with the same card or another one.</p>
           {ref}
           <div className="pl-controls bill-actions">
@@ -219,8 +256,8 @@ function Body({
   if (payment.status === "refunded" || payment.status === "partly_refunded") {
     return (
       <Card>
-        <div className="stack-sm" role="status">
-          <strong>{payment.status === "refunded" ? "This payment was refunded." : "Part of this payment was refunded."}</strong>
+        <div className="stack-sm">
+          <Headline>{payment.status === "refunded" ? "This payment was refunded." : "Part of this payment was refunded."}</Headline>
           {ref}
           <div>
             <Button href="/billing" kind="secondary">
@@ -236,8 +273,8 @@ function Body({
   if (view.hint === "cancelled") {
     return (
       <Card>
-        <div className="stack-sm" role="status">
-          <strong>You did not finish paying.</strong>
+        <div className="stack-sm">
+          <Headline>You did not finish paying.</Headline>
           <p className="set-sub">
             No hours were added. If you did pay, keep this page open: it updates when the payment is confirmed.
           </p>
@@ -259,8 +296,8 @@ function Body({
   if (view.waited) {
     return (
       <Card>
-        <div className="stack-sm" role="status">
-          <strong>We are still confirming your payment.</strong>
+        <div className="stack-sm">
+          <Headline>We are still confirming your payment.</Headline>
           <p className="set-sub">
             Your hours will appear when the payment is confirmed, and you can leave this page. If you paid and nothing
             changes within a few minutes, keep the reference below and tell us.
@@ -289,7 +326,7 @@ function Body({
 function Checking({ trouble }: { trouble: string | null }) {
   return (
     <Card>
-      <div role="status" className="stack-sm">
+      <div className="stack-sm">
         <strong>Confirming your payment...</strong>
         <p className="set-sub">
           Please keep this page open. It usually takes a few seconds. Your hours are added when the payment is confirmed,

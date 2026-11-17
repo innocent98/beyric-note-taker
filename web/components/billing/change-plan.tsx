@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Badge } from "@/components/ui";
 import { LocalTime } from "@/components/app/local-time";
 import { api } from "@/lib/api/browser";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/billing";
 import { goTo } from "@/lib/navigate";
 import { billingErrorMessage } from "./common";
+import { usePageRestore } from "./use-page-restore";
 
 // Change plan (billing stage S8b part B). The server decides what a change is: asking for the preview
 // first (GET /subscription/change-plan/preview) is what makes the price visible BEFORE the person commits,
@@ -36,6 +37,7 @@ export function ChangePlan({
   const [preview, setPreview] = useState<{ plan: PlanOffer; answer: ChangePreview } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  usePageRestore(useCallback(() => setBusy(null), []));
   const others = plans.plans.filter((plan) => plan.code !== sub.plan_code);
   const waiting = sub.pending_plan_code ? plans.plans.find((plan) => plan.code === sub.pending_plan_code) : undefined;
 
@@ -60,15 +62,17 @@ export function ChangePlan({
     try {
       const done = await api.billing.changePlan(plan.code);
       if (done.result === "checkout" && done.checkout_url && done.payment) {
+        // The browser is leaving for the provider: the button stays busy so it cannot be pressed twice. It is
+        // freed if the person comes back with the back button (`usePageRestore`).
         rememberReference(done.payment.reference);
         goTo(done.checkout_url);
         return;
       }
       setPreview(null);
+      setBusy(null);
       onChanged();
     } catch (caught) {
       setError(billingErrorMessage(caught));
-    } finally {
       setBusy(null);
     }
   }
@@ -156,6 +160,17 @@ export function ChangePlan({
                     </p>
                     <button type="button" className="btn btn-primary pl-btn" disabled={busy !== null} onClick={() => void confirm(plan)}>
                       {busy === plan.code ? "Opening the payment page..." : `Confirm and pay ${formatMoney(open.amount_minor, open.currency)}`}
+                    </button>
+                  </>
+                ) : null}
+                {open.kind === "upgrade" && open.amount_minor === null ? (
+                  <>
+                    <p className="alert-text">
+                      We could not work out the price of this change just now, so we have not offered it. Nothing was
+                      charged.
+                    </p>
+                    <button type="button" className="btn btn-secondary pl-btn" disabled={busy !== null} onClick={() => void ask(plan)}>
+                      Try again
                     </button>
                   </>
                 ) : null}

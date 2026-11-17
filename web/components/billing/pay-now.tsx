@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Button } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { rememberReference, type BillingState } from "@/lib/billing";
 import { goTo } from "@/lib/navigate";
 import { billingErrorMessage } from "./common";
+import { usePageRestore } from "./use-page-restore";
 
 // The one way to pay what is overdue, used by the banner and the billing page.
 //  * A saved-card charge the bank wants the payer to confirm (3-D Secure) is already a payment of its own,
@@ -17,6 +18,7 @@ import { billingErrorMessage } from "./common";
 export function PayNow({ state, size = "sm" }: { state: BillingState; size?: "sm" | "md" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  usePageRestore(useCallback(() => setBusy(false), []));
   const waiting = state.pending_payment;
   const bankPage = waiting && waiting.kind === "renewal" && waiting.status === "pending" ? waiting.pay_url : null;
 

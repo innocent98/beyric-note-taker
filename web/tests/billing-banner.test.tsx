@@ -101,6 +101,23 @@ describe("when there is nothing to say", () => {
     expect(second.container.innerHTML).toBe("");
   });
 
+  it("does not ask again on the next page for a minute after a healthy answer, but always asks while a notice shows", async () => {
+    mocks.state.mockResolvedValue(cap("26-subscription-active.json"));
+    const first = render(<BillingBanner />);
+    await waitFor(() => expect(mocks.state).toHaveBeenCalledTimes(1));
+    first.unmount();
+    render(<BillingBanner />);
+    expect(mocks.state).toHaveBeenCalledTimes(1);
+    cleanup();
+    window.sessionStorage.clear();
+    mocks.state.mockResolvedValue(cap("50-subscription-past-due.json"));
+    const shown = render(<BillingBanner />);
+    await screen.findByText(/Your plan payment did not go through/);
+    shown.unmount();
+    render(<BillingBanner />);
+    await waitFor(() => expect(mocks.state).toHaveBeenCalledTimes(3));
+  });
+
   it("never turns a failed read into an error on the page", async () => {
     mocks.state.mockRejectedValue(new ApiError(502, "gateway_error", "slow"));
     const { container } = render(<BillingBanner />);

@@ -155,17 +155,21 @@ export function BillingCountry({
         </div>
       ) : null}
 
-      <ul className="bill-rules">
-        <li>You can fix a wrong first choice once, straight away. After that you can change it once every 30 days.</li>
-        <li>
-          If you already have a plan and you move between Nigeria and another country, the change waits until your paid
-          month ends. You then pay again on the new route, because a saved card cannot be moved.
-        </li>
-        <li>
-          A card from any country is accepted. If you are billed in US dollars, use a card your bank lets you spend in
-          dollars. If you are established in Nigeria, choose Nigeria so you pay in naira.
-        </li>
-      </ul>
+      {/* Said in full while no country is chosen yet; folded away once one is, so the plans are not pushed down a phone. */}
+      <details className="bill-more" open={!chosen}>
+        <summary>How the billing country works</summary>
+        <ul className="bill-rules">
+          <li>You can fix a wrong first choice once, straight away. After that you can change it once every 30 days.</li>
+          <li>
+            If you already have a plan and you move between Nigeria and another country, the change waits until your paid
+            month ends. You then pay again on the new route, because a saved card cannot be moved.
+          </li>
+          <li>
+            A card from any country is accepted. If you are billed in US dollars, use a card your bank lets you spend in
+            dollars. If you are established in Nigeria, choose Nigeria so you pay in naira.
+          </li>
+        </ul>
+      </details>
       <Toast message={toast} />
     </section>
   );

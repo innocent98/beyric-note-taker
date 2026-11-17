@@ -17,6 +17,7 @@ import {
 import { BillingCountry } from "./billing-country";
 import { ChangePlan } from "./change-plan";
 import { billingErrorMessage, billingUnavailable } from "./common";
+import { Headline } from "./headline";
 import { HoursCard } from "./hours-card";
 import { Packs } from "./packs";
 import { PayNow } from "./pay-now";
@@ -46,7 +47,11 @@ export function BillingView() {
   useEffect(() => {
     let alive = true;
     Promise.all([api.billing.state(), api.billing.plans(), api.billing.payments(), api.billing.profile()])
-      .then(([state, plans, payments, profile]) => alive && setData({ state, plans, payments, profile }))
+      .then(([state, plans, payments, profile]) => {
+        if (!alive) return;
+        setData({ state, plans, payments, profile });
+        setLoadError(null);
+      })
       .catch((caught) => {
         if (!alive) return;
         if (billingUnavailable(caught)) setUnavailable(true);
@@ -76,7 +81,9 @@ export function BillingView() {
       </div>
     );
   }
-  if (loadError) {
+  // A failed first read is the whole page; a failed re-read (on focus, after a change) keeps what is on screen and
+  // says so above it.
+  if (loadError && !data) {
     return (
       <div className="stack-md measure">
         <PageHead title="Billing" />
@@ -107,6 +114,16 @@ export function BillingView() {
   return (
     <div className="stack-md measure">
       <PageHead title="Billing" subtitle="Your plan, your hours and your payments." />
+      {loadError ? (
+        <Alert kind="error">
+          <p className="alert-text">{loadError} What you see may be out of date.</p>
+          <div className="alert-actions">
+            <Button kind="secondary" size="sm" type="button" onClick={() => load()}>
+              Try again
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
       {state.pending_payment && state.pending_payment.kind !== "renewal" ? (
         <WaitingPayment payment={state.pending_payment} />
       ) : null}
@@ -305,9 +322,9 @@ function PlanCard({
       </div>
 
       {sub.can_cancel && confirming ? (
-        <Alert kind="notice">
+        <Alert kind="notice" role="alert">
           <p className="alert-text">
-            <strong>Cancel your plan?</strong> It keeps working until <LocalTime iso={sub.current_period_end} kind="day" />. You will
+            <Headline>Cancel your plan?</Headline> It keeps working until <LocalTime iso={sub.current_period_end} kind="day" />. You will
             not be charged again. The unused part of this month is not refunded, extra hours you bought stay valid, and you can
             take the cancel back until then.
             {overdue ? " Cancelling now also stops us trying your card." : ""}

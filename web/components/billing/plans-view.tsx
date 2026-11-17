@@ -19,6 +19,7 @@ import {
 import { goTo } from "@/lib/navigate";
 import { BillingCountry } from "./billing-country";
 import { billingErrorMessage, billingUnavailable } from "./common";
+import { usePageRestore } from "./use-page-restore";
 
 type Loaded = { plans: Plans; state: BillingState; profile: BillingProfile };
 
@@ -37,6 +38,7 @@ export function PlansView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  usePageRestore(useCallback(() => setBusy(null), []));
   const [reads, setReads] = useState(0);
   const load = useCallback(() => {
     setLoadError(null);
@@ -46,7 +48,11 @@ export function PlansView() {
   useEffect(() => {
     let alive = true;
     Promise.all([api.billing.plans(), api.billing.state(), api.billing.profile()])
-      .then(([plans, state, profile]) => alive && setData({ plans, state, profile }))
+      .then(([plans, state, profile]) => {
+        if (!alive) return;
+        setData({ plans, state, profile });
+        setLoadError(null);
+      })
       .catch((caught) => {
         if (!alive) return;
         if (billingUnavailable(caught)) setUnavailable(true);
@@ -83,7 +89,8 @@ export function PlansView() {
       </div>
     );
   }
-  if (loadError) {
+  // A failed first read is the whole page; a failed re-read keeps what is on screen and says so above it.
+  if (loadError && !data) {
     return (
       <div className="stack-md measure">
         <PageHead title="Choose a plan" />
@@ -116,6 +123,16 @@ export function PlansView() {
   return (
     <div className="stack-md measure">
       <PageHead title="Choose a plan" subtitle="Each plan gives you recorded hours every month, for you alone." />
+      {loadError ? (
+        <Alert kind="error">
+          <p className="alert-text">{loadError} What you see may be out of date.</p>
+          <div className="alert-actions">
+            <Button kind="secondary" size="sm" type="button" onClick={() => load()}>
+              Try again
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
 
       {hasPlan ? (
         <Alert kind="info">

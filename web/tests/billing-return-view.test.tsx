@@ -9,8 +9,8 @@ import { cap } from "./billing-fixtures";
 // Bodies are the captured ones (17/18 pending, 25 paid); the failed, refunded and abandoned shapes are the same
 // payment object with another `status`, which the guide documents but the capture run could not produce over HTTP.
 
-const mocks = vi.hoisted(() => ({ payment: vi.fn(), search: "" }));
-vi.mock("@/lib/api/browser", () => ({ api: { billing: { payment: mocks.payment } } }));
+const mocks = vi.hoisted(() => ({ payment: vi.fn(), state: vi.fn(), search: "" }));
+vi.mock("@/lib/api/browser", () => ({ api: { billing: { payment: mocks.payment, state: mocks.state } } }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
 
 const pending = cap<Record<string, unknown>>("18-payment-pending.json");
@@ -111,11 +111,14 @@ describe("the other states", () => {
     expect(screen.getByText("This payment was refunded.")).toBeTruthy();
   });
 
-  it("says it cannot find a payment that is not theirs (404)", async () => {
-    mocks.payment.mockRejectedValue(new ApiError(404, "payment_not_found", "No such payment."));
+  it("says it cannot find a payment that is not theirs: the real route answers 404 not_found, and billing is on (the state answers)", async () => {
+    mocks.payment.mockRejectedValue(new ApiError(404, "not_found", "Not found."));
+    mocks.state.mockResolvedValue(cap("26-subscription-active.json"));
     render(<ReturnView />);
     await settle();
     expect(screen.getByText("We could not find that payment.")).toBeTruthy();
+    expect(screen.queryByText("Billing is not available for your account.")).toBeNull();
+    expect(mocks.payment).toHaveBeenCalledTimes(1);
   });
 
   it("keeps trying after a lost connection and says so", async () => {
@@ -145,10 +148,40 @@ describe("the other states", () => {
     expect(screen.getByText("Payment received.")).toBeTruthy();
   });
 
-  it("says billing is not available when the route answers 404 not_found", async () => {
+  it("says billing is not available only when the state is a 404 too (billing off for this account)", async () => {
     mocks.payment.mockRejectedValue(new ApiError(404, "not_found", "Not found."));
+    mocks.state.mockRejectedValue(new ApiError(404, "not_found", "Not found."));
     render(<ReturnView />);
     await settle();
     expect(screen.getByText("Billing is not available for your account.")).toBeTruthy();
+  });
+
+  it("stops after 5 minutes of lost connection, says so (not that it will try again) and offers Check again", async () => {
+    mocks.payment.mockRejectedValue(new ApiError(0, "network_error", NETWORK_MESSAGE));
+    render(<ReturnView />);
+    await settle();
+    expect(screen.getByText(/We will try again/)).toBeTruthy();
+    await settle(310_000);
+    expect(screen.getByText("We could not reach the server to check your payment.")).toBeTruthy();
+    expect(screen.queryByText(/We will try again/)).toBeNull();
+    const calls = mocks.payment.mock.calls.length;
+    await settle(120_000);
+    expect(mocks.payment.mock.calls.length).toBe(calls);
+    mocks.payment.mockResolvedValue(paid);
+    await act(async () => {
+      screen.getByRole("button", { name: "Check again" }).click();
+    });
+    await settle();
+    expect(screen.getByText("Payment received.")).toBeTruthy();
+  });
+
+  it("moves focus to the new answer and keeps one live region", async () => {
+    mocks.payment.mockResolvedValueOnce(pending).mockResolvedValue(paid);
+    const { container } = render(<ReturnView />);
+    await settle();
+    expect(container.querySelectorAll('[aria-live="polite"]').length).toBe(1);
+    await settle(2000);
+    expect(document.activeElement?.textContent).toBe("Payment received.");
+    expect(container.querySelectorAll('[aria-live="polite"]').length).toBe(1);
   });
 });

@@ -28,12 +28,21 @@ describe("the words", () => {
     expect(formatMoney(15_000_000, "NGN")).toContain("150,000.00");
   });
 
-  it("writes hours with one decimal at most", () => {
+  it("writes hours as hours and minutes, and minutes under an hour (the captured 720 s is 12 minutes, not 0.2 hours)", () => {
     expect(formatHours(72000)).toBe("20 hours");
     expect(formatHours(3600)).toBe("1 hour");
-    expect(formatHours(71640)).toBe("19.9 hours");
-    expect(formatHours(0)).toBe("0 hours");
-    expect(formatHours(-5)).toBe("0 hours");
+    expect(formatHours(5400)).toBe("1 hour 30 minutes");
+    expect(formatHours(71640)).toBe("19 hours 54 minutes");
+    expect(formatHours(720)).toBe("12 minutes");
+    expect(formatHours(2400)).toBe("40 minutes");
+    expect(formatHours(60)).toBe("1 minute");
+  });
+
+  it("never says 0 hours while some time is left", () => {
+    expect(formatHours(100)).toBe("2 minutes");
+    expect(formatHours(20)).toBe("less than a minute");
+    expect(formatHours(0)).toBe("0 minutes");
+    expect(formatHours(-5)).toBe("0 minutes");
   });
 });
 
