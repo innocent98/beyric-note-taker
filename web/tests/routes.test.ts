@@ -5,7 +5,7 @@ import { filesUnder, rel } from "./helpers";
 
 describe("routes", () => {
   const pathOf = (file: string, leaf: string) =>
-    "/" + rel(file).replace(/^app\//, "").replace(new RegExp(`/?${leaf}$`), "");
+    "/" + rel(file).replace(/^app\//, "").replace(/\([^/]+\)\//g, "").replace(new RegExp(`/?${leaf}$`), "");
   const pagePaths = filesUnder("app", ["page.tsx"]).map((p) => pathOf(p, "page\\.tsx")).sort();
 
   it("lists exactly the pages under app/ in NEXT_PAGES", () => {

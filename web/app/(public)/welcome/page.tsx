@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing/landing-page";
-import { getSession } from "@/lib/api/server";
 
 // The landing page for everyone, the owner included: `/` is the owner's Meetings page, so without this
 // an owner could never read it. The words are the same as the visitor's `/`. Search: the canonical is
@@ -12,7 +11,6 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function WelcomePage() {
-  const signedIn = (await getSession())?.authenticated === true;
-  return <LandingPage signedIn={signedIn} />;
+export default function WelcomePage() {
+  return <LandingPage />;
 }
