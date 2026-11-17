@@ -21,11 +21,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import func, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import pilot_expiry, trial  # noqa: E402
 from app.config import Settings  # noqa: E402
+from app.models import HourGrant  # noqa: E402
 
 
 def _hours(seconds: int) -> str:
@@ -34,11 +35,11 @@ def _hours(seconds: int) -> str:
 
 def build(session: Session, settings: Settings, now: datetime) -> list[str]:
     lines = [f"Trial and pilot expiry report, {now:%Y-%m-%d %H:%M} UTC", ""]
-    rule = trial.hours_rule_in_force(settings)
+    enforcing = settings.hours_mode == "enforce"
     lines.append(
-        f"The hours rule is {'in force' if rule else 'NOT in force'} "
-        f"(HOURS_MODE={settings.hours_mode}, FEATURE_GATES_MODE={settings.feature_gates_mode}); "
-        "the trial does not depend on it, the pilot expiry acts only when it is."
+        f"HOURS_MODE is {settings.hours_mode} ({'enforcing' if enforcing else 'NOT enforcing'}); "
+        f"FEATURE_GATES_MODE is {settings.feature_gates_mode}. The trial does not depend on them; "
+        "the pilot expiry acts only under HOURS_MODE=enforce."
     )
     lines += ["", "TRIAL"]
     if settings.trial_seconds <= 0:
@@ -65,6 +66,7 @@ def build(session: Session, settings: Settings, now: datetime) -> list[str]:
             lines.append(
                 f"Hours that would be given at once: {_hours(waiting * settings.trial_seconds)}."
             )
+    lines += _trial_lapse(session, settings, now, enforcing)
     lines += ["", "PILOT EXPIRY"]
     end = pilot_expiry.end_of(settings)
     if end is None:
@@ -78,14 +80,55 @@ def build(session: Session, settings: Settings, now: datetime) -> list[str]:
     )
     lines.append(
         f"The one mail goes {settings.pilot_expiry_notice_days} days before: "
-        f"from {end - timedelta(days=settings.pilot_expiry_notice_days):%Y-%m-%d} UTC."
+        f"from {end - timedelta(days=settings.pilot_expiry_notice_days):%Y-%m-%d} UTC; nobody's "
+        f"hours end sooner than {settings.pilot_expiry_min_notice_days} days after their mail."
     )
+    if not enforcing:
+        lines.append(
+            "NOTE: HOURS_MODE is not enforce, so the job would do nothing yet (no end, no mail)."
+        )
     lines.append(
         f"People holding pilot grants in force: {len(holders)}; with hours left (they would be "
         f"mailed): {len(told)}."
     )
     if end <= now:
-        lines.append("WARNING: that end is already past. With no mail ever sent, nothing expires.")
+        lines.append(
+            "WARNING: that end is already past. If any pilot grant was never given an end, "
+            "nothing expires until the date is moved."
+        )
+    return lines
+
+
+def _trial_lapse(session: Session, settings: Settings, now: datetime, enforcing: bool) -> list[str]:
+    """The preflight for the switch-on order: a trial lasts TRIAL_DAYS in every mode, so trials
+    given before HOURS_MODE=enforce end on their own clock. Warn when enforce is not on yet and
+    some will end (or already ended with hours unused) before it can be switched on."""
+    held = session.execute(
+        select(func.count(), func.min(HourGrant.expires_at)).where(
+            HourGrant.kind == "trial", HourGrant.expires_at > now
+        )
+    ).one()
+    ended = session.scalar(
+        select(func.count()).where(HourGrant.kind == "trial", HourGrant.expires_at <= now)
+    )
+    lines = [
+        f"Trials in force: {held[0]}"
+        + (f", the first ends {held[1]:%Y-%m-%d %H:%M} UTC." if held[0] else ".")
+    ]
+    if enforcing:
+        return lines
+    if held[0]:
+        days = max((held[1] - now).days, 0)
+        lines.append(
+            f"WARNING: HOURS_MODE is not enforce. {held[0]} trial(s) end on their own clock, the "
+            f"first in {days} day(s): switch HOURS_MODE=enforce before then, or those people are "
+            "refused `no_plan` (no plan can be bought yet)."
+        )
+    if ended:
+        lines.append(
+            f"WARNING: {ended} trial(s) already ended while HOURS_MODE was not enforce. Those "
+            "people hold nothing at enforce; see the SOP for the one-line fix."
+        )
     return lines
 
 

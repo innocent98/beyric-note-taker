@@ -1,6 +1,6 @@
 {
   "note": "",
-  "client": "quinn",
+  "client": "rita",
   "request": {
     "method": "GET",
     "path": "/api/session",

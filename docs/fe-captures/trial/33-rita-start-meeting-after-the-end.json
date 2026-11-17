@@ -1,6 +1,6 @@
 {
   "note": "403 `hours_cap_reached` with `reason` `no_plan`: no grant is in force.",
-  "client": "quinn",
+  "client": "rita",
   "request": {
     "method": "POST",
     "path": "/api/meetings",
@@ -10,7 +10,7 @@
     },
     "body": {
       "url": "https://meet.google.com/abc-defg-hij",
-      "template_id": 14
+      "template_id": 15
     }
   },
   "response": {

@@ -84,6 +84,12 @@ def register_default_sweeps(
             loop="sync",
         )
     if settings.paid_plans_open_on is not None:
+        if settings.hours_mode != "enforce":
+            logger.warning(
+                "PAID_PLANS_OPEN_ON is set but HOURS_MODE is %s: no pilot hours expire and no mail "
+                "goes until HOURS_MODE=enforce",
+                settings.hours_mode,
+            )
         scheduler.register(
             "pilot_expiry",
             HOURLY,

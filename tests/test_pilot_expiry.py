@@ -194,21 +194,39 @@ def test_one_mail_goes_to_a_person_with_hours_left_once_the_window_opens_and_nev
     assert len(sent) == 1
 
 
-def test_the_text_is_exact(session):
+def test_the_text_is_exact_with_the_hours_rule_only(session):
+    """Only HOURS_MODE=enforce is on: the mail names only the recording rule, never Ask."""
     pilot_person(session, "ada", seconds=int(1.5 * HOUR))
     pilot_expiry.run(session, NOTICE_FROM, on())
     (note,) = notices(session)
     assert note.title == "Your pilot hours will expire"
     assert note.body == (
         "Paid plans opened on 1 February 2027. The recorded hours you still have from the pilot "
-        "(1.5 h) can be used until the end of 2 April 2027 (UTC), 60 days later, and then they "
-        "expire. After that your notes, transcripts and exports stay exactly as they are and you "
-        "can still read, search and export them, but the note taker will not join new meetings, "
-        "and Ask Beyric, new translations and rewriting notes with another template will not "
-        "work, until you take a plan. Nothing is deleted. If you do not need more hours, you do "
-        "not need to do anything."
+        "(1.5 h) can be used until the end of 2 April 2027 (UTC), and then they expire. After "
+        "that the note taker will not join new meetings until you take a plan. You can still "
+        "read, search and export your notes and transcripts, which we keep until you ask us to "
+        "delete them or close your account. If you do not need more hours, you do not need to do "
+        "anything."
     )
-    assert "free" not in note.body.lower()
+    for false_promise in ("free", "Nothing is deleted", "exactly as they are", "Ask Beyric"):
+        assert false_promise not in note.body
+
+
+def test_the_text_names_ask_translation_and_rewriting_only_when_the_gates_are_on(session):
+    pilot_person(session, "ada", seconds=int(1.5 * HOUR))
+    pilot_expiry.run(session, NOTICE_FROM, on(feature_gates_mode="enforce"))
+    (note,) = notices(session)
+    assert (
+        "After that the note taker will not join new meetings, and Ask Beyric, new translations "
+        "and rewriting notes with another template will not work, until you take a plan."
+    ) in note.body
+
+
+@pytest.mark.parametrize(
+    ("seconds", "shown"), [(30, "1 min"), (45 * 60, "45 min"), (HOUR, "1 h"), (5400, "1.5 h")]
+)
+def test_a_small_amount_is_not_rounded_down_to_zero_hours(seconds, shown):
+    assert pilot_expiry._amount(seconds) == shown
 
 
 def test_the_hours_in_the_mail_are_what_is_left_not_what_was_granted(session):
@@ -315,9 +333,90 @@ def test_a_date_already_past_with_no_notice_ever_sent_expires_nothing(session, c
     assert "nothing is expired" in caplog.text
 
 
-def test_a_date_inside_the_notice_window_when_first_seen_sends_the_mail_at_once(session):
+def test_a_date_first_seen_inside_the_minimum_notice_moves_the_end_out_and_the_mail_says_so(
+    session,
+):
+    """Set late: 3 days before the end. The mail goes at once, but the hours end a full week after
+    it (the first midnight UTC at least 7 days ahead), and the mail names that date."""
     pilot_person(session, "ada")
-    assert pilot_expiry.run(session, END - 3 * DAY, on()) == (1, 1)
+    now = END - 3 * DAY
+    assert pilot_expiry.run(session, now, on()) == (1, 1)
+    pushed = now + 7 * DAY
+    assert {g.expires_at for g in pilots(session)} == {pushed}
+    assert pushed - now >= timedelta(days=7)
+    assert "until the end of 6 April 2027 (UTC)" in notices(session)[0].body
+
+
+def test_a_scheduler_that_was_down_through_the_window_still_gives_a_full_minimum_notice(session):
+    ada = pilot_person(session, "ada")
+    pilot_expiry.run(session, BEFORE, on())  # the end is set long before
+    back = END - timedelta(hours=2)  # the scheduler comes back two hours before it
+    assert pilot_expiry.run(session, back, on()) == (0, 1)
+    (grant,) = pilots(session)
+    assert grant.expires_at - back >= timedelta(days=7)
+    assert grant.expires_at == datetime(2027, 4, 10, tzinfo=UTC)
+    assert entitlements.check_join(
+        session, ada, END + DAY
+    ).allowed  # still in force after the old end
+    assert not entitlements.check_join(session, ada, grant.expires_at).allowed
+    assert pilot_expiry.run(session, back + timedelta(hours=1), on()) == (0, 0)  # told once
+
+
+def test_the_end_is_never_moved_closer_for_a_person_who_was_already_told(session):
+    pilot_person(session, "ada")
+    pilot_expiry.run(session, NOTICE_FROM, on())
+    earlier = on(paid_plans_open_on=OPENS - timedelta(days=10))  # the date moved earlier
+    assert pilot_expiry.run(session, NOTICE_FROM + DAY, earlier) == (0, 0)
+    assert {g.expires_at for g in pilots(session)} == {END}
+    assert len(notices(session)) == 1
+
+
+def test_a_date_moved_earlier_still_applies_to_people_not_yet_told(session):
+    pilot_person(session, "ada")
+    pilot_expiry.run(session, BEFORE, on())
+    earlier = on(paid_plans_open_on=OPENS - timedelta(days=10))
+    assert pilot_expiry.run(session, BEFORE + DAY, earlier) == (1, 0)
+    assert {g.expires_at for g in pilots(session)} == {END - 10 * DAY}
+
+
+def test_an_unconfirmed_account_is_not_mailed_although_it_holds_a_pilot_grant(session):
+    """Migration 0049 gave a grant to every non-admin row, an unconfirmed one included: it may be
+    someone else's address."""
+    pilot_person(session, "unconfirmed", email_verified_at=None)
+    pilot_person(session, "confirmed")
+    pilot_expiry.run(session, NOTICE_FROM, on())
+    assert [n.user_id for n in notices(session)] != []
+    assert len(notices(session)) == 1
+    assert [m.to_email for m in mails(session)] == ["confirmed@example.test"]
+
+
+def test_the_gates_alone_do_not_start_the_job(session):
+    pilot_person(session, "ada")
+    settings = on(hours_mode="off", feature_gates_mode="enforce")
+    assert pilot_expiry.run(session, NOTICE_FROM, settings) == (0, 0)
+    assert [g.expires_at for g in pilots(session)] == [None]
+
+
+def test_no_warning_after_the_end_when_every_grant_was_given_its_end(session, caplog):
+    """Two people, one with nothing left to be told: the job ran, every grant carries the end, so a
+    later run logs nothing (the first version warned every hour for ever)."""
+    pilot_person(session, "ada")
+    pilot_expiry.run(session, NOTICE_FROM, on())
+    with caplog.at_level(logging.WARNING, logger="app.pilot_expiry"):
+        pilot_expiry.run(session, END + 5 * DAY, on())
+        pilot_expiry.run(session, END + 100 * DAY, on())  # past the bell's 90-day pruning too
+    assert caplog.text == ""
+
+
+def test_the_notice_days_are_checked_at_startup():
+    with pytest.raises(ValueError, match="PILOT_EXPIRY_NOTICE_DAYS"):
+        make_settings(pilot_expiry_notice_days=60)  # not smaller than the 60 days
+    with pytest.raises(ValueError, match="PILOT_EXPIRY_NOTICE_DAYS"):
+        make_settings(pilot_expiry_notice_days=5)  # under the 7-day minimum
+    with pytest.raises(ValueError):
+        make_settings(pilot_expiry_notice_days=61)  # beyond the field's own limit (bell pruning)
+    assert make_settings(pilot_expiry_notice_days=59).pilot_expiry_notice_days == 59
+    assert make_settings(pilot_expiry_min_notice_days="").pilot_expiry_min_notice_days == 7
 
 
 # ---- the scheduler ----
@@ -333,3 +432,9 @@ def test_the_jobs_exist_only_when_their_settings_are_on():
     assert not {"trial_sweep", "pilot_expiry"} & job_names(make_settings())
     assert "trial_sweep" in job_names(make_settings(trial_seconds=HOUR))
     assert "pilot_expiry" in job_names(make_settings(paid_plans_open_on=OPENS))
+
+
+def test_setting_the_date_without_enforce_is_logged_once_at_startup(caplog):
+    with caplog.at_level(logging.WARNING, logger="app.sweeps"):
+        job_names(make_settings(paid_plans_open_on=OPENS, hours_mode="shadow"))
+    assert "no pilot hours expire" in caplog.text

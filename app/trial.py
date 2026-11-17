@@ -55,12 +55,6 @@ WINDOW = timedelta(hours=24)
 REASON = "trial: given once to a person when their email was first confirmed"
 
 
-def hours_rule_in_force(settings: Settings) -> bool:
-    """Whether grants decide anything: the hours rule or the feature gates is `enforce`. The pilot
-    expiry (`app/pilot_expiry.py`) acts only then: its mail promises what only `enforce` does."""
-    return settings.hours_mode == "enforce" or settings.feature_gates_mode == "enforce"
-
-
 def enabled(settings: Settings) -> bool:
     """The trial is given whenever `TRIAL_SECONDS` is set, in any mode: a person who signs up
     before `HOURS_MODE=enforce` already holds their 3 hours when it comes on."""
@@ -134,6 +128,9 @@ def give_on_confirmation(
     """`give`, from the moment an email is confirmed. Best effort and inside a savepoint: a failure
     is logged by class (never the message, it could carry parameters) and the confirmation goes on.
     The sweep gives the trial a minute later."""
+    settings = settings or get_settings()
+    if not enabled(settings):
+        return  # off: not even a savepoint
     try:
         with session.begin_nested():
             give(session, user, now, settings)

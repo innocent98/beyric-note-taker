@@ -107,6 +107,7 @@ class Settings(BaseSettings):
         "paid_plans_open_on",
         "pilot_expiry_days",
         "pilot_expiry_notice_days",
+        "pilot_expiry_min_notice_days",
         mode="before",
     )
     @classmethod
@@ -120,6 +121,17 @@ class Settings(BaseSettings):
     def _trial_settings_make_sense(self):
         """A budget under one trial would stop every trial without saying why, so it stops the
         process at startup instead."""
+        if not (
+            self.pilot_expiry_min_notice_days
+            <= self.pilot_expiry_notice_days
+            < self.pilot_expiry_days
+        ):
+            # Above the days of the expiry the mail would say "Paid plans opened on" a future
+            # date; under the minimum the window would close before the minimum notice is given.
+            raise ValueError(
+                "PILOT_EXPIRY_NOTICE_DAYS must be at least PILOT_EXPIRY_MIN_NOTICE_DAYS and "
+                "smaller than PILOT_EXPIRY_DAYS"
+            )
         budget = self.trial_daily_budget_seconds
         if budget and self.trial_seconds and budget < self.trial_seconds:
             raise ValueError(
@@ -521,7 +533,11 @@ class Settings(BaseSettings):
     # gets one mail `PILOT_EXPIRY_NOTICE_DAYS` days before (`app/pilot_expiry.py`).
     paid_plans_open_on: date | None = None
     pilot_expiry_days: int = Field(default=60, ge=1, le=3650)
-    pilot_expiry_notice_days: int = Field(default=14, ge=1, le=365)
+    pilot_expiry_notice_days: int = Field(default=14, ge=1, le=60)
+    # The least notice a person gets: their pilot hours never end sooner than this after the mail
+    # (a week: the mail must be read by someone who checks their inbox about once a week, with time
+    # left to take a plan). If the job first acts closer to the end, that person's end moves out.
+    pilot_expiry_min_notice_days: int = Field(default=7, ge=1, le=60)
     # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
     # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
     # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under

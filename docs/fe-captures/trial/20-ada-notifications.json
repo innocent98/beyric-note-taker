@@ -24,7 +24,7 @@
           "title": "You are out of recorded hours",
           "body": "You have used all of your recorded hours, so the note taker will not join new meetings. A meeting that is recording now will finish. Your notes, transcripts and exports stay as they are.",
           "meeting_id": null,
-          "created_at": "2026-11-17T15:20:36.713502Z",
+          "created_at": "2026-11-17T16:08:32.755606Z",
           "read_at": null
         },
         {
@@ -34,7 +34,7 @@
           "title": "Most of your recorded hours are used",
           "body": "You have used 2.4 of your 3 recorded hours. When they run out the note taker will not join new meetings.",
           "meeting_id": null,
-          "created_at": "2026-11-17T15:20:36.636483Z",
+          "created_at": "2026-11-17T16:08:31.563275Z",
           "read_at": null
         }
       ],

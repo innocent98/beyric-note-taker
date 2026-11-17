@@ -463,3 +463,75 @@ def test_a_failure_giving_the_trial_never_fails_the_confirmation(session, monkey
     assert "RuntimeError" in caplog.text and "secret detail" not in caplog.text
     monkeypatch.undo()
     assert trial.sweep(session, NOW + timedelta(minutes=1), on()) == 1  # the sweep makes it up
+
+
+# ---- the lock: two workers at once ----
+
+
+def _in_two_connections(engine, first_work, second_work):
+    """Run `first_work(session)` and `second_work(session)` in two sessions on two connections.
+    The first gives its trial and keeps its transaction open until the second is either blocked on
+    the first's lock (an ungranted lock shows in `pg_locks`) or has finished: so the second really
+    meets the first's uncommitted row, however slow the machine is."""
+    import threading
+    import time
+
+    from sqlalchemy import text as sql
+    from sqlalchemy.orm import Session
+
+    first_gave, second_done = threading.Event(), threading.Event()
+    results: dict[str, object] = {}
+
+    def first():
+        with Session(engine) as s:
+            results["first"] = first_work(s)
+            first_gave.set()
+            deadline = time.time() + 10
+            while time.time() < deadline and not second_done.is_set():
+                if s.scalar(sql("select count(*) from pg_locks where not granted")):
+                    break  # the second is waiting on us
+                time.sleep(0.05)
+            s.commit()
+
+    def second():
+        first_gave.wait(10)
+        with Session(engine) as s:
+            results["second"] = second_work(s)
+            s.commit()
+        second_done.set()
+
+    threads = [threading.Thread(target=first), threading.Thread(target=second)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    return results
+
+
+def test_two_workers_confirming_one_person_at_once_give_one_trial(engine, session):
+    ada = person(session, "ada")
+    ada_id = ada.id
+    settings = on()
+
+    def give_to_ada(s):
+        user = s.get(User, ada_id)
+        return trial.give(s, user, NOW, settings) is not None
+
+    results = _in_two_connections(engine, give_to_ada, give_to_ada)
+    assert (results["first"], results["second"]) == (True, False)
+    session.expire_all()
+    assert len(grants_of(session, kind="trial")) == 1
+
+
+def test_two_workers_cannot_spend_one_budget_twice(engine, session):
+    ada, ben = person(session, "ada"), person(session, "ben")
+    ids = {"ada": ada.id, "ben": ben.id}
+    settings = on(trial_daily_budget_seconds=TRIAL)  # room for exactly one
+
+    def give_to(name):
+        return lambda s: trial.give(s, s.get(User, ids[name]), NOW, settings) is not None
+
+    results = _in_two_connections(engine, give_to("ada"), give_to("ben"))
+    assert sorted([results["first"], results["second"]]) == [False, True]
+    session.expire_all()
+    assert len(grants_of(session, kind="trial")) == 1

@@ -1,0 +1,10 @@
+{
+  "note": "The pilot job run in this process with the clock ten days before an end that is already past on the app's own clock (the server cannot be moved in time): `(grants changed, people told)`.",
+  "content": {
+    "result": [
+      1,
+      1
+    ],
+    "end": "2026-11-16T00:00:00+00:00"
+  }
+}

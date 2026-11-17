@@ -60,7 +60,7 @@ OUT = ROOT / "docs" / "fe-captures" / "trial"
 P.OUT = OUT
 HOUR = 3600
 PASSWORD = "-".join(["chosen", "local", "password", "1"])
-PEOPLE = {n: f"{n}@example.test" for n in ("gap", "ada", "paula", "quinn")}
+PEOPLE = {n: f"{n}@example.test" for n in ("gap", "ada", "paula", "quinn", "rita")}
 
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
@@ -265,6 +265,29 @@ def proof(label: str, command: list[str], env: dict, sink: list[str]) -> str:
     return result.stdout
 
 
+def add_pilot(engine, who: str) -> None:
+    """A pilot account in the shape migration 0049 leaves: confirmed, 2 hours held."""
+    with Session(engine) as s:
+        user = User(
+            email=PEOPLE[who],
+            password_hash=hash_password(PASSWORD),
+            email_verified_at=datetime.now(UTC),
+        )
+        s.add(user)
+        s.flush()
+        s.add(Template(owner_user_id=user.id, name="General", instructions="Write notes."))
+        s.add(
+            HourGrant(
+                user_id=user.id,
+                email_hash=email_hash(PEOPLE[who]),
+                kind="pilot",
+                seconds=2 * HOUR,
+                starts_at=datetime.now(UTC) - timedelta(days=80),
+            )
+        )
+        s.commit()
+
+
 def main() -> None:
     if not sys.argv[1:]:
         sys.exit(__doc__)
@@ -426,26 +449,8 @@ def main() -> None:
             "HOURS_MODE": "enforce",
             "PAID_PLANS_OPEN_ON": opened.isoformat(),
         }
-        with Session(engine) as s:
-            for who in ("paula", "quinn"):
-                user = User(
-                    email=PEOPLE[who],
-                    password_hash=hash_password(PASSWORD),
-                    email_verified_at=datetime.now(UTC),
-                )
-                s.add(user)
-                s.flush()
-                s.add(Template(owner_user_id=user.id, name="General", instructions="Write notes."))
-                s.add(
-                    HourGrant(
-                        user_id=user.id,
-                        email_hash=email_hash(PEOPLE[who]),
-                        kind="pilot",
-                        seconds=2 * HOUR,
-                        starts_at=datetime.now(UTC) - timedelta(days=80),
-                    )
-                )
-            s.commit()
+        for who in ("paula", "quinn"):
+            add_pilot(engine, who)
         proof("what the pilot job would do", ["scripts/trial_report.py"], env, proofs)
         base = launch(env)
         wait_for(
@@ -501,28 +506,29 @@ def main() -> None:
             paid_plans_open_on=today - timedelta(days=62),
         )
         alerts.get_settings = lambda: ended
+        add_pilot(engine, "rita")  # nobody has mailed her yet: the job below is her first notice
         with Session(engine) as s:
-            result = pilot_expiry.run(s, end - timedelta(days=3), ended)
+            result = pilot_expiry.run(s, end - timedelta(days=10), ended)
         P.note_file(
-            "quinn-pilot-job-injected-clock",
-            "The pilot job run in this process with the clock three days before an end that is already past on the app's own clock (the server cannot be moved in time): `(grants changed, people told)`.",
+            "rita-pilot-job-injected-clock",
+            "The pilot job run in this process with the clock ten days before an end that is already past on the app's own clock (the server cannot be moved in time): `(grants changed, people told)`.",
             {"result": list(result), "end": end.isoformat()},
         )
         base = launch({"TRIAL_SECONDS": "10800", "HOURS_MODE": "enforce"})
-        quinn = signed_in(base, "quinn")
-        quinn.call(
-            "quinn-session-after-the-end",
+        rita = signed_in(base, "rita")
+        rita.call(
+            "rita-session-after-the-end",
             "GET",
             "/api/session",
             note="The app's clock is now after the pilot end: the pilot hours are not in force. `state` `none`, nothing left, `can_record` false, `cap_seconds` 0.",
         )
-        r = quinn.call(
-            "quinn-start-meeting-after-the-end",
+        r = rita.call(
+            "rita-start-meeting-after-the-end",
             "POST",
             "/api/meetings",
             body={
                 "url": "https://meet.google.com/abc-defg-hij",
-                "template_id": template_of(engine, PEOPLE["quinn"]),
+                "template_id": template_of(engine, PEOPLE["rita"]),
             },
             note="403 `hours_cap_reached` with `reason` `no_plan`: no grant is in force.",
         )

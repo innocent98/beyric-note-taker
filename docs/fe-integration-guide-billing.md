@@ -597,6 +597,7 @@ and a new recording is refused (trial capture 33) with `reason` `no_plan`:
 
 **UX consequences to surface:**
 
+* **The end date is per person, not one global date.** Nobody's pilot hours end sooner than 7 days after their mail: someone first reached close to the end has their end moved out to at least a week after it, and the mail names that date. Unconfirmed accounts get no mail. The mail names only what is switched on (the Ask, translation and rewriting sentence appears only when the feature gates are on). The wording needs Adebayo's and the lawyer's confirmation before the date is set.
 * A pilot person whose hours end is **not** told by the session payload (there is no `pilot_ends_at` field yet:
   see the SOP follow-ups); the bell and the mail carry the date. Do not invent a countdown from other fields.
 * After the end, `warning` is `null` and `cap_seconds` is 0, **not** `out`: this is "holds nothing", the same

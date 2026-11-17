@@ -2,7 +2,7 @@
 dates only, read-only, and it never gives or expires anything."""
 
 import importlib.util
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -31,7 +31,7 @@ def text(session, **settings):
 def test_everything_off_says_so_and_names_nobody(session):
     make_user(session, "ada@example.test")
     out = text(session, hours_mode="off")
-    assert "NOT in force" in out
+    assert "NOT enforcing" in out
     assert "the trial is off" in out
     assert "PAID_PLANS_OPEN_ON is unset" in out
     assert "ada" not in out
@@ -82,3 +82,32 @@ def test_it_is_read_only_and_gives_nothing(session):
         session.execute(sql("update users set name = 'x'"))
     session.rollback()
     assert session.scalars(select(HourGrant)).all() == []
+
+
+def test_it_warns_when_trials_will_end_before_enforce_is_on(session):
+    for name, started in (("a", NOW - timedelta(days=2)), ("b", NOW - timedelta(days=20))):
+        user = make_user(session, f"{name}@example.test")
+        session.add(
+            HourGrant(
+                user_id=user.id,
+                email_hash=email_hash(user.email),
+                kind="trial",
+                seconds=3 * HOUR,
+                starts_at=started,
+                expires_at=started + timedelta(days=14),
+            )
+        )
+    session.commit()
+    out = text(session, hours_mode="shadow", trial_seconds=3 * HOUR)
+    assert "Trials in force: 1, the first ends 2027-03-13" in out
+    assert "WARNING: HOURS_MODE is not enforce. 1 trial(s) end on their own clock" in out
+    assert "the first in 12 day(s)" in out
+    assert "WARNING: 1 trial(s) already ended while HOURS_MODE was not enforce" in out
+    enforcing = text(session, hours_mode="enforce", trial_seconds=3 * HOUR)
+    assert "WARNING" not in enforcing and "Trials in force: 1" in enforcing
+
+
+def test_it_says_the_pilot_job_waits_for_enforce_and_the_minimum_notice(session):
+    out = text(session, hours_mode="shadow", paid_plans_open_on=date(2027, 4, 1))
+    assert "the job would do nothing yet" in out
+    assert "nobody's hours end sooner than 7 days after their mail" in out
