@@ -24,14 +24,14 @@
       },
       "subscription": null,
       "pending_payment": {
-        "reference": "bn-1-8e578942a951e7e4",
+        "reference": "bn-1-d7a474060ee87b94",
         "kind": "plan",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 1800,
-        "created_at": "2026-11-17T15:37:38.720374Z",
+        "created_at": "2026-11-17T16:00:04.871227Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-1-8e578942a951e7e4"
+        "pay_url": "https://fake.test/pay/bn-1-d7a474060ee87b94"
       }
     }
   }

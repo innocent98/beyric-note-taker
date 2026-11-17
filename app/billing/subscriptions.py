@@ -193,6 +193,23 @@ def start_plan_checkout(
             "price_not_available",
             f"That plan is not on sale in {route.currency} yet.",
         )
+    # A double click or a second tab asks for the same plan again: the first page, not a second
+    # payment that could be paid too (which would be a refund by hand). Only an unpaid checkout of
+    # this price, made in the last day.
+    open_one = db.scalars(
+        select(Payment)
+        .where(
+            Payment.payer_user_id == user.id,
+            Payment.kind == "plan",
+            Payment.status == "pending",
+            Payment.plan_price_id == price.id,
+            Payment.pay_url.is_not(None),
+            Payment.created_at > now - timedelta(days=1),
+        )
+        .order_by(Payment.id.desc())
+    ).first()
+    if open_one is not None:
+        return Started(open_one, open_one.pay_url)
     adapter = _adapter(route.provider, settings)
     payment = new_payment(
         db,
@@ -386,8 +403,9 @@ def on_payment_succeeded(db: Session, payment: Payment) -> None:
 def _plan_paid(db: Session, payment: Payment) -> None:
     price = db.get(PlanPrice, payment.plan_price_id) if payment.plan_price_id else None
     payer = db.get(User, payment.payer_user_id) if payment.payer_user_id else None
-    if price is None or payer is None:
-        return needs_refund(db, payment, "the plan or the person is gone")
+    if price is None or payer is None or payer.status != "active":
+        # (a checkout paid after the account was deleted makes no plan for a ghost)
+        return needs_refund(db, payment, "the plan is gone or the account is not active")
     plan = db.get(Plan, price.plan_code)
     start = payment.paid_at
     sub = Subscription(
@@ -505,6 +523,11 @@ def _upgrade_paid(db: Session, payment: Payment) -> None:
         or sub.user_id is None
         or sub.status != states.ACTIVE
         or payment.cycle_end != sub.current_period_end
+        # It must land INSIDE the period it was for, judged by the clock at the payment: paid at
+        # or after the due moment, before the scheduler pass has run (or while the renewal's
+        # outcome is unknown), the stored row still says `active` but the extra hours would end
+        # before they began and a late old-price renewal would flip the plan back.
+        or state_now(sub, payment.paid_at) != states.ACTIVE
     ):
         return needs_refund(db, payment, "the period it was for has moved on")
     user = db.get(User, sub.user_id)
@@ -544,8 +567,8 @@ def _pack_paid(db: Session, payment: Payment) -> None:
 
     product = db.get(Product, payment.product_id) if payment.product_id else None
     payer = db.get(User, payment.payer_user_id) if payment.payer_user_id else None
-    if product is None or payer is None:
-        return needs_refund(db, payment, "the pack or the person is gone")
+    if product is None or payer is None or payer.status != "active":
+        return needs_refund(db, payment, "the pack is gone or the account is not active")
     _grant(
         db,
         payer,

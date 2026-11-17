@@ -5,11 +5,13 @@ money half. New tables nothing from before reads, plus additive columns on `paym
 
 - `plans` and `plan_prices`: what is for sale, as data. A price row is one price for one plan in
   one currency from `active_from` to `active_until`; a price change is a new row. Seeded here with
-  what is DECIDED only: one plan of 20 hours a month at 18 USD, not public (`is_public` false, so
-  nothing prints it on /pricing). No naira price and no second tier is seeded: those are Adebayo's
-  open facts, so a person billed from Nigeria cannot buy a plan until a naira row is added.
-- `products`: packs, one row per (code, currency). One pack of 10 hours at 10 USD, valid 12 months
-  (the spec says "about 10 USD": confirm the number).
+  what is DECIDED: one plan of 20 hours a month at 18 USD and at NGN 25,000 (Adebayo, 2026-11-17:
+  1 USD is about 1500 NGN, "round figure of 25k"; 2,500,000 kobo), not public (`is_public` false,
+  so nothing prints it on /pricing). No second tier is seeded: it is an open fact.
+- `products`: packs, one row per (code, currency). One pack of 10 hours, valid 12 months, at 10 USD
+  (the spec says "about 10 USD": confirm the number) and at NGN 14,000 (1,400,000 kobo): **the naira
+  pack price is only a PROPOSAL, not confirmed by Adebayo, so that row is seeded INACTIVE** and is
+  not sold until `update products set active = true where code = 'pack_10h' and currency = 'NGN'`.
 - `subscriptions`: one row per subscription with the route it was SOLD on (`currency` and
   `provider`), so a later edit of the country-to-provider table cannot change what an existing
   subscription is. A partial unique index allows one LIVE row (`active` or `past_due`) per person.
@@ -206,6 +208,9 @@ def upgrade() -> None:
     op.add_column("payments", sa.Column("cycle_end", sa.DateTime(timezone=True), nullable=True))
     op.add_column("payments", sa.Column("attempt", sa.Integer(), nullable=True))
     op.add_column("payments", sa.Column("pay_url", sa.Text(), nullable=True))
+    op.add_column(
+        "payments", sa.Column("last_checked_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.create_check_constraint("ck_payments_attempt", "payments", "attempt is null or attempt >= 0")
     op.create_foreign_key(
         "fk_payments_subscription_id",
@@ -255,7 +260,7 @@ def upgrade() -> None:
         postgresql_where=sa.text("processed_at is null"),
     )
 
-    # ---- what is for sale: decided facts only
+    # ---- what is for sale: decided facts (and one inactive proposal)
     now = datetime.now(UTC)
     op.bulk_insert(
         plans,
@@ -279,7 +284,14 @@ def upgrade() -> None:
                 "interval": "month",
                 "amount_minor": 1800,
                 "active_from": now,
-            }
+            },
+            {  # decided 2026-11-17: NGN 25,000 a month (kobo)
+                "plan_code": "plan_20h",
+                "currency": "NGN",
+                "interval": "month",
+                "amount_minor": 2_500_000,
+                "active_from": now,
+            },
         ],
     )
     op.bulk_insert(
@@ -293,7 +305,16 @@ def upgrade() -> None:
                 "amount_minor": 1000,
                 "valid_months": 12,
                 "active": True,
-            }
+            },
+            {  # a PROPOSAL (10 of 18 USD, scaled), not confirmed: inactive until he says so
+                "code": "pack_10h",
+                "name": "10 extra hours",
+                "currency": "NGN",
+                "seconds": 10 * 3600,
+                "amount_minor": 1_400_000,
+                "valid_months": 12,
+                "active": False,
+            },
         ],
     )
 
@@ -322,7 +343,14 @@ def downgrade() -> None:
     op.drop_index("ix_payments_subscription_id", table_name="payments")
     op.drop_constraint("fk_payments_subscription_id", "payments", type_="foreignkey")
     op.drop_constraint("ck_payments_attempt", "payments", type_="check")
-    for column in ("pay_url", "attempt", "cycle_end", "product_id", "plan_price_id"):
+    for column in (
+        "last_checked_at",
+        "pay_url",
+        "attempt",
+        "cycle_end",
+        "product_id",
+        "plan_price_id",
+    ):
         op.drop_column("payments", column)
     op.drop_index("ix_subscriptions_live_due", table_name="subscriptions")
     op.drop_index("uq_subscriptions_one_live", table_name="subscriptions")

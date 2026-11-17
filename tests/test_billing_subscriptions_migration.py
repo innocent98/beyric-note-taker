@@ -56,16 +56,29 @@ def test_the_round_trip_and_the_seed_of_decided_facts_only(scratch_url):
             text("select code, monthly_seconds, is_public, active from plans")
         ).all()
         prices = conn.execute(
-            text("select plan_code, currency, interval, amount_minor from plan_prices")
+            text(
+                "select plan_code, currency, interval, amount_minor from plan_prices "
+                "order by currency desc"
+            )
         ).all()
         packs = conn.execute(
-            text("select code, currency, seconds, amount_minor, valid_months from products")
+            text(
+                "select code, currency, seconds, amount_minor, valid_months, active "
+                "from products order by currency desc"
+            )
         ).all()
-    # only what is decided: 20 hours at 18.00 USD, not public; one 10-hour pack at 10.00 USD for
-    # 12 months. No naira price and no second tier (Adebayo's open facts).
+    # what is decided: 20 hours at 18.00 USD and NGN 25,000.00 (kobo), not public; a 10-hour pack
+    # at 10.00 USD for 12 months, and NGN 14,000.00 which is only a PROPOSAL, so INACTIVE. No
+    # second tier (an open fact).
     assert plan == [("plan_20h", 72000, False, True)]
-    assert prices == [("plan_20h", "USD", "month", 1800)]
-    assert packs == [("pack_10h", "USD", 36000, 1000, 12)]
+    assert prices == [
+        ("plan_20h", "USD", "month", 1800),
+        ("plan_20h", "NGN", "month", 2_500_000),
+    ]
+    assert packs == [
+        ("pack_10h", "USD", 36000, 1000, 12, True),
+        ("pack_10h", "NGN", 36000, 1_400_000, 12, False),
+    ]
     command.downgrade(cfg, "0051")
     assert not TABLES & set(inspect(engine).get_table_names())
     columns = {c["name"] for c in inspect(engine).get_columns("payments")}

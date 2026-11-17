@@ -597,7 +597,7 @@ Each is a fact someone has to supply or measure, with who and what it blocks.
 |---|---|---|
 | Test keys for both new accounts (Paystack and Flutterwave), created by him and kept in a local env file only; whether each account's business verification is finished | Adebayo | S6 and S7 in the vendors' test modes; S11 |
 | Beyrichq's registration and tax numbers for invoices; whether it charges VAT (section 6); the accountant's answers | Adebayo, accountant | S9 invoices; S11 |
-| The naira price list and the rate it is based on | Adebayo | S5 and S8 data rows; S11 |
+| The naira price list: **the 20-hour plan is decided, NGN 25,000 a month (2026-11-17: 1 USD is about 1,500 NGN, "round figure of 25k"; seeded by migration 0052)**; the 10-hour pack at NGN 14,000 is a proposal (seeded inactive); the second tier's naira price is open | Adebayo | the pack and the second tier; S11 |
 | The measured cost per hour after the flip: a new `scripts/ai_cost_report.py` run on flipped meetings and the monthly Skribby invoice (the condition in 4.2) | the lead, Adebayo | printing the price in S11 |
 | Plan names ("Team" no longer fits a per-person plan) and the second tier's number | Adebayo | S8 data rows; S11 |
 | The lawyer's list: the six open questions from #198 together with the twelve in section 9 | Adebayo, lawyer | S11 |

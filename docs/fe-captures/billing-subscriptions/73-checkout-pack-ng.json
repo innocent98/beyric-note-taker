@@ -1,5 +1,5 @@
 {
-  "note": "422 `price_not_available`: the real answer today for a person billed from Nigeria.",
+  "note": "The naira pack is an unconfirmed proposal and inactive: 404 `product_not_found`.",
   "client": "ben billing-on",
   "request": {
     "method": "POST",
@@ -9,20 +9,20 @@
       "Cookie": "device=<cookie>; session=<cookie>"
     },
     "body": {
-      "kind": "plan",
-      "code": "plan_20h"
+      "kind": "pack",
+      "code": "pack_10h"
     }
   },
   "response": {
-    "status": 422,
+    "status": 404,
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store"
     },
     "body": {
       "error": {
-        "code": "price_not_available",
-        "message": "That plan is not on sale in NGN yet."
+        "code": "product_not_found",
+        "message": "That pack is not on sale in your currency."
       }
     }
   }

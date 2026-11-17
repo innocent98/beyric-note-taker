@@ -25,8 +25,9 @@ pass (`renewals.run_due`), the pay link, every error shape.
   with the real time, once, by this script (the scheduler would do it every 60 seconds).
 - **A second plan exists only here.** The real catalog has one decided plan (20 hours, 18 USD);
   upgrade and downgrade need a second, so this script inserts `capture_40h` (40 hours, 34 USD).
-  It is not a decided plan; the real second tier and the naira list are Adebayo's open facts, so a
-  person billed from Nigeria really gets 422 `price_not_available` today (capture shows it).
+  It is not a decided plan; the real second tier is Adebayo's open fact (so it has no naira price
+  either). The seeded naira plan price (NGN 25,000, decided 2026-11-17) is real; the naira pack
+  (NGN 14,000) is only a proposal and is seeded inactive.
 - A 3-D Secure charge's own link is the fake's `https://fake.test/3ds/open-charge`.
 """
 
@@ -671,15 +672,42 @@ def run(engine, on, off, settings) -> None:
         "plans-ng",
         "GET",
         "/api/billing/plans",
-        note="**The naira price list is not decided yet** (Adebayo's open fact), so no naira "
-        "price is seeded: `price` is null and `packs` is empty.",
+        note="The seeded naira list (decided 2026-11-17: NGN 25,000 a month, `amount_minor` is "
+        "kobo). **The naira pack is only a proposal (NGN 14,000), seeded inactive**, so `packs` "
+        "is empty until he confirms it.",
     )
-    ben.call(
-        "checkout-ng-no-price",
+    ng = ben.call(
+        "checkout-ng",
         "POST",
         "/api/billing/checkout",
         body={"kind": "plan", "code": "plan_20h"},
-        note="422 `price_not_available`: the real answer today for a person billed from Nigeria.",
+        note="A person billed from Nigeria: naira, through the provider named `paystack` (here "
+        "the scripted one).",
+    ).json()
+    ng_tx = NGN.complete(
+        payment_by_reference(engine, ng["payment"]["reference"]),
+        card_token="tok-capture-ng",
+        payer_email=BEN,
+    )
+    webhook(
+        on,
+        "webhook-ng-paid",
+        NGN,
+        ng_tx,
+        "The naira payment verified through the route named `paystack`: 20 hours granted.",
+    )
+    ben.call(
+        "subscription-ng-active",
+        "GET",
+        "/api/billing/subscription",
+        note="Active in naira: `amount_minor` 2500000 kobo is the next renewal.",
+    )
+    ben.call(
+        "checkout-pack-ng",
+        "POST",
+        "/api/billing/checkout",
+        body={"kind": "pack", "code": "pack_10h"},
+        note="The naira pack is an unconfirmed proposal and inactive: 404 `product_not_found`.",
     )
     base.note_file("rows-at-the-end", "The rows at the end of the run.", rows(engine))
 

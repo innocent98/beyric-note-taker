@@ -11,7 +11,7 @@
     "body": {
       "id": "evt-charge_succeeded-fake-tx-3",
       "kind": "charge_succeeded",
-      "reference": "bn-2-6ce6cfc67bd2c81e",
+      "reference": "bn-2-cc67d00d80d62af7",
       "tx_id": "fake-tx-3",
       "amount_minor": 1000,
       "currency": "USD",

@@ -1,5 +1,5 @@
 {
-  "note": "**The naira price list is not decided yet** (Adebayo's open fact), so no naira price is seeded: `price` is null and `packs` is empty.",
+  "note": "The seeded naira list (decided 2026-11-17: NGN 25,000 a month, `amount_minor` is kobo). **The naira pack is only a proposal (NGN 14,000), seeded inactive**, so `packs` is empty until he confirms it.",
   "client": "ben billing-on",
   "request": {
     "method": "GET",
@@ -25,7 +25,10 @@
           "code": "plan_20h",
           "name": "20 hours a month",
           "monthly_seconds": 72000,
-          "price": null
+          "price": {
+            "currency": "NGN",
+            "amount_minor": 2500000
+          }
         },
         {
           "code": "capture_40h",

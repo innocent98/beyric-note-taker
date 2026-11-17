@@ -74,7 +74,7 @@ SWEEP_AFTER = timedelta(
 )  # a payment or event younger than this is the webhook's to settle
 SWEEP_LOOKBACK = timedelta(days=3)  # older unpaid checkouts are left alone
 MIN_RETRY_GAP = timedelta(hours=1)  # a late pass never fires two attempts back to back
-OPEN_LINK_REUSE = timedelta(days=1)
+OPEN_LINK_REUSE = timedelta(days=1)  # a pay-link checkout the provider cannot be asked about
 UNRESOLVED_AFTER = timedelta(hours=6)
 
 
@@ -214,6 +214,7 @@ def _attempt(
 ) -> None:
     """Attempt number `n` of this period's renewal (see the module note for the order)."""
     cycle = sub.current_period_end
+    sub_id = sub.id
     user = session.get(User, sub.user_id) if sub.user_id else None
     outcome = _settle_open_payments(session, sub, now, settings)
     if outcome == "paid":
@@ -250,9 +251,20 @@ def _attempt(
             payment.attempt = n
             payment.created_at = now
             session.flush()
-    except IntegrityError:  # another worker holds this slot
+    except IntegrityError:  # the slot has its row already
         session.rollback()
-        return
+        slot = session.scalars(
+            select(Payment).where(
+                Payment.subscription_id == sub_id,
+                Payment.kind == "renewal",
+                Payment.cycle_end == cycle,
+                Payment.attempt == n,
+            )
+        ).first()
+        if slot is not None and slot.status == "failed":
+            # a pass recorded this attempt as failed and died before the status moved: finish it
+            return _fail(session, sub_id, cycle, n, now)
+        return  # another worker holds it
     payment_id, reference, amount = payment.id, payment.reference, price.amount_minor
     token, email = card
     sub_id, currency = sub.id, sub.currency
@@ -281,7 +293,11 @@ def _attempt(
     elif tx.status == "failed":
         settle.settle_transaction(session, adapter, payment_id, tx, now)
         session.commit()
-    elif tx.status == "pending" and tx.payer_action_url:
+    elif tx.status == "pending":
+        if not tx.payer_action_url:
+            # queued or processing, and nothing for the payer to do: not a failure. Wait; the next
+            # pass settles it by reference (an unknown outcome is handled the same way).
+            return
         row = session.get(Payment, payment_id)
         row.pay_url = tx.payer_action_url  # THIS charge's own link: never a second checkout
         session.commit()
@@ -498,9 +514,10 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
         .where(
             BillingEvent.processed_at.is_(None),
             BillingEvent.received_at <= now - SWEEP_AFTER,
+            BillingEvent.received_at > now - SWEEP_LOOKBACK,
             BillingEvent.type.in_(("charge_succeeded", "charge_failed")),
         )
-        .order_by(BillingEvent.received_at)
+        .order_by(BillingEvent.received_at.desc())  # newest first: a stuck pile never starves it
         .limit(BATCH)
     ).all()
     for row in rows:
@@ -521,23 +538,41 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
     """A payment still `pending` after two minutes: ask the provider by our reference, and settle
     it only if the provider says it succeeded (an unpaid or abandoned checkout is left alone: the
     payer may still finish it)."""
+    hour, day = timedelta(hours=1), timedelta(days=1)
+    # Each payment is asked about on a back-off that grows with its age (every 2 minutes for the
+    # first hour, every 30 minutes for the first day, every 3 hours after), and the ones asked about
+    # least recently (never first) go first: a pile of abandoned checkouts cannot hold back a
+    # payment that was just paid, and costs a handful of lookups a day instead of one a minute.
+    due = or_(
+        Payment.last_checked_at.is_(None),
+        and_(Payment.created_at > now - hour, Payment.last_checked_at <= now - SWEEP_AFTER),
+        and_(
+            Payment.created_at <= now - hour,
+            Payment.created_at > now - day,
+            Payment.last_checked_at <= now - timedelta(minutes=30),
+        ),
+        and_(Payment.created_at <= now - day, Payment.last_checked_at <= now - timedelta(hours=3)),
+    )
     rows = session.scalars(
         select(Payment)
         .where(
             Payment.status == "pending",
             Payment.created_at <= now - SWEEP_AFTER,
             Payment.created_at > now - SWEEP_LOOKBACK,
+            due,
         )
-        .order_by(Payment.created_at)
+        .order_by(Payment.last_checked_at.asc().nullsfirst(), Payment.id.desc())
         .limit(BATCH)
     ).all()
     for payment in rows:
         adapter = provider_named(payment.provider, settings)
         if adapter is None:
             continue
-        payment_id = payment.id
+        payment_id, reference = payment.id, payment.reference
+        session.execute(update(Payment).where(Payment.id == payment_id).values(last_checked_at=now))
+        session.commit()
         try:
-            tx = lookup_by_reference(adapter, payment.reference)
+            tx = lookup_by_reference(adapter, reference)
             if tx.status != "successful":
                 continue
             settle.settle_transaction(session, adapter, payment_id, tx, now)
@@ -552,6 +587,73 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
 # ---- the pay link ----
 
 
+def _open_page(
+    session: Session, sub: Subscription, now: datetime, settings: Settings
+) -> Payment | None:
+    """The payment of this period whose page the person can still pay, or None when a fresh one may
+    be made. Asks the provider about every unpaid renewal payment of the period (newest first):
+
+    - `successful`: it is settled now (the plan is renewed) and the caller is told nothing is due;
+    - `failed`: marked failed, and does not count;
+    - still open with a link: that is the page (an open charge keeps its own link for ever);
+    - open with no link (a charge in flight): refused, 409 `payment_in_progress`;
+    - the provider cannot be asked: a pay-link checkout under a day old is reused (it is only a
+      page); anything else is refused, 502 `provider_error`, rather than guessed.
+    """
+    pending = session.scalars(
+        select(Payment)
+        .where(
+            Payment.subscription_id == sub.id,
+            Payment.kind == "renewal",
+            Payment.cycle_end == sub.current_period_end,
+            Payment.status == "pending",
+        )
+        .order_by(Payment.id.desc())
+    ).all()
+    chosen = None
+    for payment in pending:
+        adapter = provider_named(payment.provider, settings)
+        try:
+            if adapter is None:
+                raise ProviderError("no provider is configured for this payment")
+            tx = lookup_by_reference(adapter, payment.reference)
+        except ProviderError:
+            young_link = (
+                payment.attempt is None
+                and payment.pay_url
+                and payment.created_at > now - OPEN_LINK_REUSE
+            )
+            if young_link:
+                chosen = chosen or payment
+                continue
+            session.rollback()
+            raise subscriptions.Refused(
+                502,
+                "provider_error",
+                "We could not check your open payment just now. Try again in a moment.",
+            ) from None
+        if tx.status == "successful":
+            try:
+                settle.settle_transaction(session, adapter, payment.id, tx, now)
+                session.commit()
+            except RetryLater:
+                session.rollback()
+            raise subscriptions.Refused(409, "nothing_due", "Your payment has just been received.")
+        if tx.status == "failed":
+            settle.settle_transaction(session, adapter, payment.id, tx, now)
+            continue
+        if payment.pay_url:
+            chosen = chosen or payment
+        else:
+            session.rollback()
+            raise subscriptions.Refused(
+                409,
+                "payment_in_progress",
+                "A payment is already being processed. Wait a moment and check again.",
+            )
+    return chosen
+
+
 def pay_link(
     session: Session, user: User, settings: Settings, now: datetime
 ) -> subscriptions.Started:
@@ -564,22 +666,19 @@ def pay_link(
     if states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
         session.rollback()
         raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
-    open_payment = session.scalars(
-        select(Payment)
-        .where(
-            Payment.subscription_id == sub.id,
-            Payment.kind == "renewal",
-            Payment.cycle_end == sub.current_period_end,
-            Payment.status == "pending",
-            Payment.pay_url.is_not(None),
-            Payment.created_at > now - OPEN_LINK_REUSE,
-        )
-        .order_by(Payment.id.desc())
-    ).first()
-    if open_payment is not None:
-        started = subscriptions.Started(open_payment, open_payment.pay_url)
-        session.rollback()
+    # Anything already open for this period is asked about FIRST, by our reference, at the
+    # provider: a person must never be given a second page while a first one can still be paid
+    # (that is a double charge). Nothing new is made until the provider says every open one is
+    # failed, and an open charge keeps its OWN link however old it is.
+    chosen = _open_page(session, sub, now, settings)
+    if chosen is not None:
+        started = subscriptions.Started(chosen, chosen.pay_url)
+        session.commit()  # keeps anything `_open_page` marked failed
         return started
+    sub = subscriptions.live_row(session, user.id, lock=True)  # the lock may have been released
+    if sub is None or states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
+        session.rollback()
+        raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
 
     sold = subscriptions.sold_route(sub)
     route = sold

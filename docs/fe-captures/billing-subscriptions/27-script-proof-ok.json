@@ -8,7 +8,7 @@
       "  [ok] the subscription is on the plan that payment bought: plan plan_20h, USD via flutterwave",
       "  [ok] exactly one plan-period grant came from that payment",
       "  [ok] the grant has the plan's hours: 72000 s",
-      "  [ok] the grant ends with the period: ends 2026-12-17T15:37:38.784707+00:00",
+      "  [ok] the grant ends with the period: ends 2026-12-17T16:00:06.238853+00:00",
       "  [ok] saved card for renewals: yes",
       "  state now: active, hours left: 20.00"
     ]

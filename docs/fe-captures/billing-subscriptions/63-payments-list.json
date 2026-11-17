@@ -18,73 +18,73 @@
     "body": {
       "payments": [
         {
-          "reference": "bn-7-c952b99f437ab0d5",
+          "reference": "bn-7-62a67438d8dd89ad",
           "kind": "renewal",
           "status": "pending",
           "currency": "USD",
           "amount_minor": 3400,
-          "created_at": "2026-11-17T15:37:39.329342Z",
+          "created_at": "2026-11-17T16:00:20.019399Z",
           "paid_at": null,
           "pay_url": "https://fake.test/3ds/open-charge"
         },
         {
-          "reference": "bn-6-b67f10444a8abc5a",
+          "reference": "bn-6-84f6c2d1fd3c4c08",
           "kind": "pack",
           "status": "pending",
           "currency": "USD",
           "amount_minor": 1000,
-          "created_at": "2026-11-17T15:37:39.278938Z",
+          "created_at": "2026-11-17T16:00:18.704206Z",
           "paid_at": null,
-          "pay_url": "https://fake.test/pay/bn-6-b67f10444a8abc5a"
+          "pay_url": "https://fake.test/pay/bn-6-84f6c2d1fd3c4c08"
         },
         {
-          "reference": "bn-5-3d7b934f67285800",
+          "reference": "bn-5-962af41a44110e02",
           "kind": "renewal",
           "status": "succeeded",
           "currency": "USD",
           "amount_minor": 3400,
-          "created_at": "2026-11-17T15:37:39.252335Z",
-          "paid_at": "2026-11-17T15:37:39.294220Z",
+          "created_at": "2026-11-17T16:00:18.312654Z",
+          "paid_at": "2026-11-17T16:00:19.004582Z",
           "pay_url": null
         },
         {
-          "reference": "bn-4-ad97f155617803e6",
+          "reference": "bn-4-613ab11b848e4137",
           "kind": "renewal",
           "status": "failed",
           "currency": "USD",
           "amount_minor": 3400,
-          "created_at": "2026-11-17T15:37:39.084793Z",
+          "created_at": "2026-11-17T16:00:14.397596Z",
           "paid_at": null,
           "pay_url": null
         },
         {
-          "reference": "bn-3-600e0bbd3bce2f5c",
+          "reference": "bn-3-5680d6f2b157268b",
           "kind": "upgrade",
           "status": "succeeded",
           "currency": "USD",
           "amount_minor": 1599,
-          "created_at": "2026-11-17T15:37:38.997342Z",
-          "paid_at": "2026-11-17T15:37:39.016200Z",
+          "created_at": "2026-11-17T16:00:11.609342Z",
+          "paid_at": "2026-11-17T16:00:12.448161Z",
           "pay_url": null
         },
         {
-          "reference": "bn-2-6ce6cfc67bd2c81e",
+          "reference": "bn-2-cc67d00d80d62af7",
           "kind": "pack",
           "status": "succeeded",
           "currency": "USD",
           "amount_minor": 1000,
-          "created_at": "2026-11-17T15:37:38.914240Z",
-          "paid_at": "2026-11-17T15:37:38.930941Z",
+          "created_at": "2026-11-17T16:00:09.657396Z",
+          "paid_at": "2026-11-17T16:00:09.904633Z",
           "pay_url": null
         },
         {
-          "reference": "bn-1-8e578942a951e7e4",
+          "reference": "bn-1-d7a474060ee87b94",
           "kind": "plan",
           "status": "succeeded",
           "currency": "USD",
           "amount_minor": 1800,
-          "created_at": "2026-11-17T15:37:38.720374Z",
-          "paid_at": "2026-11-17T15:37:38.784707Z",
+          "created_at": "2026-11-17T16:00:04.871227Z",
+          "paid_at": "2026-11-17T16:00:06.238853Z",
           "pay_url": null
         }
       ]

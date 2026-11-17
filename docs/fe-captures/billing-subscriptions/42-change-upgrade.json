@@ -27,8 +27,8 @@
         "plan_name": "20 hours a month",
         "currency": "USD",
         "amount_minor": 1800,
-        "current_period_start": "2026-11-17T15:37:38.784707Z",
-        "current_period_end": "2026-12-17T15:37:38.784707Z",
+        "current_period_start": "2026-11-17T16:00:06.238853Z",
+        "current_period_end": "2026-12-17T16:00:06.238853Z",
         "cancel_at_period_end": false,
         "pending_plan_code": null,
         "grace_ends_at": null,
@@ -39,16 +39,16 @@
         "can_pay_now": false
       },
       "payment": {
-        "reference": "bn-3-600e0bbd3bce2f5c",
+        "reference": "bn-3-5680d6f2b157268b",
         "kind": "upgrade",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 1599,
-        "created_at": "2026-11-17T15:37:38.997342Z",
+        "created_at": "2026-11-17T16:00:11.609342Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-3-600e0bbd3bce2f5c"
+        "pay_url": "https://fake.test/pay/bn-3-5680d6f2b157268b"
       },
-      "checkout_url": "https://fake.test/pay/bn-3-600e0bbd3bce2f5c"
+      "checkout_url": "https://fake.test/pay/bn-3-5680d6f2b157268b"
     }
   }
 }

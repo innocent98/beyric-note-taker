@@ -502,8 +502,9 @@ verified (see the verification table). Nothing about a real vendor in this secti
 People, times and amounts are the capture run's; amounts are whole minor units (cents, kobo).
 `capture_40h` in the captures is a second plan the capture script inserted so that upgrade and
 downgrade can be shown; the real catalog today is **one plan, `plan_20h`, 20 hours at 18.00 USD**, and one
-pack, `pack_10h` (10 hours, 10.00 USD, valid 12 months). **No naira price exists yet** (a decision
-for Adebayo), so a person billed from Nigeria cannot buy anything yet and the screen must say so (below).
+pack, `pack_10h` (10 hours, 10.00 USD, valid 12 months). **Naira** (decided 2026-11-17): the plan is
+NGN 25,000 a month (`amount_minor` 2500000 kobo); the naira pack (NGN 14,000) is **only a proposal and
+seeded inactive**, so a person billed from Nigeria sees no pack until it is confirmed.
 
 ### What this is, in the person's terms
 
@@ -610,7 +611,8 @@ Response body:
 ```
 
 *Nothing is trimmed. `plan_20h` and `pack_10h` are the real seeded rows; `capture_40h` is the plan only the capture script added.*
-`price` is **null** when a plan has no price in the person's currency (this is what Nigeria gets today):
+Naira (Nigeria), capture 69: the plan is priced in kobo and `packs` is empty (the naira pack is an inactive proposal).
+`price` is **null** when a plan has no price in the person's currency (the capture's extra `capture_40h` plan has no naira price):
 
 `GET /api/billing/plans` (capture 69, status **200**)
 
@@ -627,7 +629,10 @@ Response body:
       "code": "plan_20h",
       "name": "20 hours a month",
       "monthly_seconds": 72000,
-      "price": null
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 2500000
+      }
     },
     {
       "code": "capture_40h",
@@ -688,14 +693,14 @@ A checkout started and not paid yet (capture 19): no subscription, no hours, and
   },
   "subscription": null,
   "pending_payment": {
-    "reference": "bn-1-8e578942a951e7e4",
+    "reference": "bn-1-d7a474060ee87b94",
     "kind": "plan",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 1800,
-    "created_at": "2026-11-17T15:37:38.720374Z",
+    "created_at": "2026-11-17T16:00:04.871227Z",
     "paid_at": null,
-    "pay_url": "https://fake.test/pay/bn-1-8e578942a951e7e4"
+    "pay_url": "https://fake.test/pay/bn-1-d7a474060ee87b94"
   }
 }
 ```
@@ -717,8 +722,8 @@ Active, after the payment was verified (capture 26):
     "plan_name": "20 hours a month",
     "currency": "USD",
     "amount_minor": 1800,
-    "current_period_start": "2026-11-17T15:37:38.784707Z",
-    "current_period_end": "2026-12-17T15:37:38.784707Z",
+    "current_period_start": "2026-11-17T16:00:06.238853Z",
+    "current_period_end": "2026-12-17T16:00:06.238853Z",
     "cancel_at_period_end": false,
     "pending_plan_code": null,
     "grace_ends_at": null,
@@ -760,16 +765,16 @@ Response body:
 ```json
 {
   "payment": {
-    "reference": "bn-1-8e578942a951e7e4",
+    "reference": "bn-1-d7a474060ee87b94",
     "kind": "plan",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 1800,
-    "created_at": "2026-11-17T15:37:38.720374Z",
+    "created_at": "2026-11-17T16:00:04.871227Z",
     "paid_at": null,
-    "pay_url": "https://fake.test/pay/bn-1-8e578942a951e7e4"
+    "pay_url": "https://fake.test/pay/bn-1-d7a474060ee87b94"
   },
-  "checkout_url": "https://fake.test/pay/bn-1-8e578942a951e7e4"
+  "checkout_url": "https://fake.test/pay/bn-1-d7a474060ee87b94"
 }
 ```
 
@@ -778,14 +783,14 @@ by the page they come back to.** The page they return to must poll `GET /payment
 
 ```json
 {
-  "reference": "bn-1-8e578942a951e7e4",
+  "reference": "bn-1-d7a474060ee87b94",
   "kind": "plan",
   "status": "pending",
   "currency": "USD",
   "amount_minor": 1800,
-  "created_at": "2026-11-17T15:37:38.720374Z",
+  "created_at": "2026-11-17T16:00:04.871227Z",
   "paid_at": null,
-  "pay_url": "https://fake.test/pay/bn-1-8e578942a951e7e4"
+  "pay_url": "https://fake.test/pay/bn-1-d7a474060ee87b94"
 }
 ```
 
@@ -801,16 +806,16 @@ its grace may still buy one:
 ```json
 {
   "payment": {
-    "reference": "bn-2-6ce6cfc67bd2c81e",
+    "reference": "bn-2-cc67d00d80d62af7",
     "kind": "pack",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 1000,
-    "created_at": "2026-11-17T15:37:38.914240Z",
+    "created_at": "2026-11-17T16:00:09.657396Z",
     "paid_at": null,
-    "pay_url": "https://fake.test/pay/bn-2-6ce6cfc67bd2c81e"
+    "pay_url": "https://fake.test/pay/bn-2-cc67d00d80d62af7"
   },
-  "checkout_url": "https://fake.test/pay/bn-2-6ce6cfc67bd2c81e"
+  "checkout_url": "https://fake.test/pay/bn-2-cc67d00d80d62af7"
 }
 ```
 
@@ -837,73 +842,73 @@ The caller's own payments, newest first, at most 50 (capture 63); another accoun
 {
   "payments": [
     {
-      "reference": "bn-7-c952b99f437ab0d5",
+      "reference": "bn-7-62a67438d8dd89ad",
       "kind": "renewal",
       "status": "pending",
       "currency": "USD",
       "amount_minor": 3400,
-      "created_at": "2026-11-17T15:37:39.329342Z",
+      "created_at": "2026-11-17T16:00:20.019399Z",
       "paid_at": null,
       "pay_url": "https://fake.test/3ds/open-charge"
     },
     {
-      "reference": "bn-6-b67f10444a8abc5a",
+      "reference": "bn-6-84f6c2d1fd3c4c08",
       "kind": "pack",
       "status": "pending",
       "currency": "USD",
       "amount_minor": 1000,
-      "created_at": "2026-11-17T15:37:39.278938Z",
+      "created_at": "2026-11-17T16:00:18.704206Z",
       "paid_at": null,
-      "pay_url": "https://fake.test/pay/bn-6-b67f10444a8abc5a"
+      "pay_url": "https://fake.test/pay/bn-6-84f6c2d1fd3c4c08"
     },
     {
-      "reference": "bn-5-3d7b934f67285800",
+      "reference": "bn-5-962af41a44110e02",
       "kind": "renewal",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 3400,
-      "created_at": "2026-11-17T15:37:39.252335Z",
-      "paid_at": "2026-11-17T15:37:39.294220Z",
+      "created_at": "2026-11-17T16:00:18.312654Z",
+      "paid_at": "2026-11-17T16:00:19.004582Z",
       "pay_url": null
     },
     {
-      "reference": "bn-4-ad97f155617803e6",
+      "reference": "bn-4-613ab11b848e4137",
       "kind": "renewal",
       "status": "failed",
       "currency": "USD",
       "amount_minor": 3400,
-      "created_at": "2026-11-17T15:37:39.084793Z",
+      "created_at": "2026-11-17T16:00:14.397596Z",
       "paid_at": null,
       "pay_url": null
     },
     {
-      "reference": "bn-3-600e0bbd3bce2f5c",
+      "reference": "bn-3-5680d6f2b157268b",
       "kind": "upgrade",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1599,
-      "created_at": "2026-11-17T15:37:38.997342Z",
-      "paid_at": "2026-11-17T15:37:39.016200Z",
+      "created_at": "2026-11-17T16:00:11.609342Z",
+      "paid_at": "2026-11-17T16:00:12.448161Z",
       "pay_url": null
     },
     {
-      "reference": "bn-2-6ce6cfc67bd2c81e",
+      "reference": "bn-2-cc67d00d80d62af7",
       "kind": "pack",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1000,
-      "created_at": "2026-11-17T15:37:38.914240Z",
-      "paid_at": "2026-11-17T15:37:38.930941Z",
+      "created_at": "2026-11-17T16:00:09.657396Z",
+      "paid_at": "2026-11-17T16:00:09.904633Z",
       "pay_url": null
     },
     {
-      "reference": "bn-1-8e578942a951e7e4",
+      "reference": "bn-1-d7a474060ee87b94",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T15:37:38.720374Z",
-      "paid_at": "2026-11-17T15:37:38.784707Z",
+      "created_at": "2026-11-17T16:00:04.871227Z",
+      "paid_at": "2026-11-17T16:00:06.238853Z",
       "pay_url": null
     }
   ]
@@ -922,8 +927,8 @@ Cancel (capture 36) stops the renewal. The plan and the hours last to `current_p
   "plan_name": "20 hours a month",
   "currency": "USD",
   "amount_minor": 1800,
-  "current_period_start": "2026-11-17T15:37:38.784707Z",
-  "current_period_end": "2026-12-17T15:37:38.784707Z",
+  "current_period_start": "2026-11-17T16:00:06.238853Z",
+  "current_period_end": "2026-12-17T16:00:06.238853Z",
   "cancel_at_period_end": true,
   "pending_plan_code": null,
   "grace_ends_at": null,
@@ -988,8 +993,8 @@ Then the change (capture 42, an upgrade, answers with a checkout):
     "plan_name": "20 hours a month",
     "currency": "USD",
     "amount_minor": 1800,
-    "current_period_start": "2026-11-17T15:37:38.784707Z",
-    "current_period_end": "2026-12-17T15:37:38.784707Z",
+    "current_period_start": "2026-11-17T16:00:06.238853Z",
+    "current_period_end": "2026-12-17T16:00:06.238853Z",
     "cancel_at_period_end": false,
     "pending_plan_code": null,
     "grace_ends_at": null,
@@ -1000,16 +1005,16 @@ Then the change (capture 42, an upgrade, answers with a checkout):
     "can_pay_now": false
   },
   "payment": {
-    "reference": "bn-3-600e0bbd3bce2f5c",
+    "reference": "bn-3-5680d6f2b157268b",
     "kind": "upgrade",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 1599,
-    "created_at": "2026-11-17T15:37:38.997342Z",
+    "created_at": "2026-11-17T16:00:11.609342Z",
     "paid_at": null,
-    "pay_url": "https://fake.test/pay/bn-3-600e0bbd3bce2f5c"
+    "pay_url": "https://fake.test/pay/bn-3-5680d6f2b157268b"
   },
-  "checkout_url": "https://fake.test/pay/bn-3-600e0bbd3bce2f5c"
+  "checkout_url": "https://fake.test/pay/bn-3-5680d6f2b157268b"
 }
 ```
 
@@ -1026,8 +1031,8 @@ and that `amount_minor` is now what the renewal will charge:
     "plan_name": "40 hours a month",
     "currency": "USD",
     "amount_minor": 1800,
-    "current_period_start": "2026-11-17T15:37:38.784707Z",
-    "current_period_end": "2026-12-17T15:37:38.784707Z",
+    "current_period_start": "2026-11-17T16:00:06.238853Z",
+    "current_period_end": "2026-12-17T16:00:06.238853Z",
     "cancel_at_period_end": false,
     "pending_plan_code": "plan_20h",
     "grace_ends_at": null,
@@ -1065,12 +1070,12 @@ attempt: **no new hours were granted** (the plan's grants are only the old ones)
     "plan_name": "40 hours a month",
     "currency": "USD",
     "amount_minor": 3400,
-    "current_period_start": "2026-10-18T14:37:39.081018Z",
-    "current_period_end": "2026-11-17T14:37:39.081018Z",
+    "current_period_start": "2026-10-18T15:00:14.237939Z",
+    "current_period_end": "2026-11-17T15:00:14.237939Z",
     "cancel_at_period_end": false,
     "pending_plan_code": null,
-    "grace_ends_at": "2026-11-20T14:37:39.081018Z",
-    "next_retry_at": "2026-11-18T14:37:39.081018Z",
+    "grace_ends_at": "2026-11-20T15:00:14.237939Z",
+    "next_retry_at": "2026-11-18T15:00:14.237939Z",
     "can_cancel": true,
     "can_resume": false,
     "can_change_plan": false,
@@ -1094,16 +1099,16 @@ Response body:
 ```json
 {
   "payment": {
-    "reference": "bn-5-3d7b934f67285800",
+    "reference": "bn-5-962af41a44110e02",
     "kind": "renewal",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 3400,
-    "created_at": "2026-11-17T15:37:39.252335Z",
+    "created_at": "2026-11-17T16:00:18.312654Z",
     "paid_at": null,
-    "pay_url": "https://fake.test/pay/bn-5-3d7b934f67285800"
+    "pay_url": "https://fake.test/pay/bn-5-962af41a44110e02"
   },
-  "checkout_url": "https://fake.test/pay/bn-5-3d7b934f67285800"
+  "checkout_url": "https://fake.test/pay/bn-5-962af41a44110e02"
 }
 ```
 
@@ -1116,7 +1121,7 @@ Response body:
 **A card that needs the bank's confirmation (3-D Secure).** The saved card's bank may ask the person to confirm.
 The charge then waits for them and its own page is in `pending_payment.pay_url` (capture 57, `kind` `renewal`,
 `status` `pending`). Send them to that address: `POST /subscription/pay-link` returns **exactly the same address**
-(capture 58), never a second checkout, and a second charge is not made while it waits.
+(capture 58), never a second checkout **however old the charge is**: before it would make a new page the server asks the provider about every open charge of the period, and only when the provider says one failed or was abandoned does a new page exist (if the provider cannot be asked the call is 502 `provider_error`, and while a queued charge has no page yet it is 409 `payment_in_progress`). A second charge is not made while it waits.
 
 ```json
 {
@@ -1133,24 +1138,24 @@ The charge then waits for them and its own page is in `pending_payment.pay_url` 
     "plan_name": "40 hours a month",
     "currency": "USD",
     "amount_minor": 3400,
-    "current_period_start": "2026-10-18T14:37:39.327031Z",
-    "current_period_end": "2026-11-17T14:37:39.327031Z",
+    "current_period_start": "2026-10-18T15:00:19.903059Z",
+    "current_period_end": "2026-11-17T15:00:19.903059Z",
     "cancel_at_period_end": false,
     "pending_plan_code": null,
-    "grace_ends_at": "2026-11-20T14:37:39.327031Z",
-    "next_retry_at": "2026-11-18T14:37:39.327031Z",
+    "grace_ends_at": "2026-11-20T15:00:19.903059Z",
+    "next_retry_at": "2026-11-18T15:00:19.903059Z",
     "can_cancel": true,
     "can_resume": false,
     "can_change_plan": false,
     "can_pay_now": true
   },
   "pending_payment": {
-    "reference": "bn-7-c952b99f437ab0d5",
+    "reference": "bn-7-62a67438d8dd89ad",
     "kind": "renewal",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 3400,
-    "created_at": "2026-11-17T15:37:39.329342Z",
+    "created_at": "2026-11-17T16:00:20.019399Z",
     "paid_at": null,
     "pay_url": "https://fake.test/3ds/open-charge"
   }
@@ -1178,8 +1183,8 @@ payment brings a lapsed plan back, from the payment date).
     "plan_name": "40 hours a month",
     "currency": "USD",
     "amount_minor": 3400,
-    "current_period_start": "2026-10-15T07:37:39.377157Z",
-    "current_period_end": "2026-11-14T07:37:39.377157Z",
+    "current_period_start": "2026-10-15T08:00:20.775694Z",
+    "current_period_end": "2026-11-14T08:00:20.775694Z",
     "cancel_at_period_end": false,
     "pending_plan_code": null,
     "grace_ends_at": null,
@@ -1190,12 +1195,12 @@ payment brings a lapsed plan back, from the payment date).
     "can_pay_now": false
   },
   "pending_payment": {
-    "reference": "bn-7-c952b99f437ab0d5",
+    "reference": "bn-7-62a67438d8dd89ad",
     "kind": "renewal",
     "status": "pending",
     "currency": "USD",
     "amount_minor": 3400,
-    "created_at": "2026-11-17T15:37:39.329342Z",
+    "created_at": "2026-11-17T16:00:20.019399Z",
     "paid_at": null,
     "pay_url": "https://fake.test/3ds/open-charge"
   }
@@ -1210,8 +1215,9 @@ payment brings a lapsed plan back, from the payment date).
 | 401 | `not_authenticated` | `Log in first.` | not signed in |
 | 403 | `csrf_rejected` | `Missing or wrong X-CSRF-Token header. Read it from GET /api/session.` | a write without the token |
 | 422 | `billing_country_missing` | `Choose the country you are billed from.` | no billing country chosen |
-| 422 | `price_not_available` | `That plan is not on sale in NGN yet.` | the plan has no price in the person's currency (Nigeria today) |
+| 422 | `price_not_available` | `That plan is not on sale in NGN yet.` (tests only, not captured: no seeded plan lacks a price today) | the plan has no price in the person's currency |
 | 422 | `validation_error` | `Some fields are missing or not valid.` (with `fields`) | a bad body |
+| 404 | `product_not_found` | `That pack is not on sale in your currency.` | a pack that is not on sale in the plan's currency (capture 73: the naira pack is inactive) |
 | 404 | `plan_not_found` | `That plan does not exist.` | |
 | 409 | `plan_required` | `You need a plan to buy extra hours.` | a pack without a live plan |
 | 409 | `already_subscribed` | `You already have a plan.` | |
@@ -1223,7 +1229,7 @@ payment brings a lapsed plan back, from the payment date).
 
 Error codes that exist but were **not** captured (their wording is from the code, listed in `app/billing/subscriptions_api.py`):
 409 `not_an_upgrade`, `period_over`, `period_almost_over` (an upgrade whose price rounds to nothing a moment before the
-period ends: change plan at the renewal instead), 404 `product_not_found`, 502 `provider_error` (the provider's page could
+period ends: change plan at the renewal instead), 409 `payment_in_progress` (a pay link asked while a saved-card charge is queued and has no page yet: wait and check again), 502 `provider_error` (the provider's page could
 not be opened: try again), 503 `provider_unavailable` (no provider is configured for the route).
 
 ### Field-nesting and shape traps
@@ -1266,7 +1272,7 @@ run for real against the capture database (capture 27):
   [ok] the subscription is on the plan that payment bought: plan plan_20h, USD via flutterwave
   [ok] exactly one plan-period grant came from that payment
   [ok] the grant has the plan's hours: 72000 s
-  [ok] the grant ends with the period: ends 2026-12-17T15:37:38.784707+00:00
+  [ok] the grant ends with the period: ends 2026-12-17T16:00:06.238853+00:00
   [ok] saved card for renewals: yes
   state now: active, hours left: 20.00
 ```
@@ -1317,11 +1323,12 @@ capture script at the real time after the stored dates were moved by SQL (it can
 | Checkout, pending payment, the return page's poll, the verified payment granting hours once, a wrong amount granting nothing, a replay granting once, a bad signature (401) | live over HTTP against the real route and settlement rules, **provider scripted, signature header is the fake's** (captures 17 to 26) |
 | A pack, cancel, resume, the upgrade preview and checkout, the downgrade, taking a downgrade back | live over HTTP, provider scripted (captures 33 to 47) |
 | `past_due` after a failed saved-card renewal, no new hours in the grace, change refused, pay link (the same page twice), a pack in the grace, a verified payment renewing from the payment date | live: HTTP plus **one real scheduler pass run by the capture script after the stored dates were moved by SQL**, provider scripted (captures 49 to 56) |
-| A 3-D Secure charge keeps its own page, and the pay link returns the same address | live shape only: the open charge is the scripted provider's (captures 57, 58); **a real bank's answer is not verified** |
+| A 3-D Secure charge keeps its own page, and the pay link returns the same address | live shape only: the open charge is the scripted provider's (captures 57, 58); the pay link asks the provider about the open charge first and keeps its page however old it is (tests); the pay link asks the provider about the open charge first and keeps its page however old it is (tests); **a real bank's answer is not verified** |
 | `lapsed` before and after the scheduler's pass, pay link refused | live: dates moved by SQL (captures 59 to 62) |
 | The billing history route (own payments only, newest first) | live over HTTP (captures 63, 67) |
 | The runbook script's `proof`, `state` and `preflight 1` | run for real against the capture database (captures 27 to 29); **not yet on the real server** |
-| Another person's payment is a 404; Nigeria has no price | live over HTTP (captures 66, 70) |
-| `409 not_an_upgrade`, `period_over`, `period_almost_over`, `product_not_found`, 502 `provider_error`, 503 `provider_unavailable` | tests only (`tests/test_billing_subscriptions.py`, `tests/test_billing_subscriptions_api.py`) |
+| Another person's payment is a 404 | live over HTTP (capture 66) |
+| A naira purchase end to end (seeded NGN 25,000, route `paystack`), the inactive naira pack (404) | live over HTTP, provider scripted (captures 69, 70 to 73) |
+| `409 not_an_upgrade`, `period_over`, `period_almost_over`, `payment_in_progress`, 502 `provider_error`, 503 `provider_unavailable` | tests only (`tests/test_billing_subscriptions.py`, `tests/test_billing_subscriptions_api.py`) |
 | Mail for the notices, and the notices' wording on screen | tests only (bell entries), mail not sent |
 | A real provider's hosted page, return address, saved-card renewal, bank refusal, webhook timing; the raw body through nginx and the proxy | **not verified live**: the runbook in `docs/sop/2026-11-17-billing-subscriptions.md` is the test |
