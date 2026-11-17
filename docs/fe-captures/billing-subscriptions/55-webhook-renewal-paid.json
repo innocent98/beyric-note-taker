@@ -1,5 +1,5 @@
 {
-  "note": "The upgrade's payment verified: the plan changes and the extra hours are granted.",
+  "note": "The overdue payment verified: a NEW period starts from the payment date and its hours are granted.",
   "client": "the provider",
   "request": {
     "method": "POST",
@@ -9,11 +9,11 @@
       "X-Fake-Signature": "<signature>"
     },
     "body": {
-      "id": "evt-charge_succeeded-fake-tx-4",
+      "id": "evt-charge_succeeded-fake-tx-6",
       "kind": "charge_succeeded",
-      "reference": "bn-3-b1878a751b94427b",
-      "tx_id": "fake-tx-4",
-      "amount_minor": 1599,
+      "reference": "bn-5-3d7b934f67285800",
+      "tx_id": "fake-tx-6",
+      "amount_minor": 3400,
       "currency": "USD",
       "payer_email": null,
       "card_token": null

@@ -30,6 +30,9 @@ pass (`renewals.run_due`), the pay link, every error shape.
 - A 3-D Secure charge's own link is the fake's `https://fake.test/3ds/open-charge`.
 """
 
+import contextlib
+import importlib.util
+import io
 import json
 import shutil
 import sys
@@ -52,6 +55,12 @@ from app.main import create_app  # noqa: E402
 from app.models import HourGrant, Payment, Plan, PlanPrice, Subscription, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location(
+    "billing_test_purchase", base.ROOT / "scripts" / "billing_test_purchase.py"
+)
+runbook = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(runbook)
 
 Recorder = base.Recorder
 PASSWORD = "-".join(["capture", "person", "password"])  # a placeholder, scratch database only
@@ -138,6 +147,21 @@ def age(engine, overdue: timedelta) -> None:
             .values(starts_at=HourGrant.starts_at - shift, expires_at=HourGrant.expires_at - shift)
         )
         session.commit()
+
+
+def run_script(engine, name: str, note: str, call) -> None:
+    """Run one of the runbook script's read-only commands in this process, against the scratch
+    database, and save its printed output (no email, key or token is ever printed)."""
+    out = io.StringIO()
+    with Session(engine) as session, contextlib.redirect_stdout(out):
+        session.execute(text("set transaction read only"))
+        result = call(session)
+        session.rollback()
+    base.note_file(
+        name,
+        note,
+        {"exit": 0 if result in (None, True) else 1, "output": out.getvalue().splitlines()},
+    )
 
 
 def clock_pass(engine, settings: Settings) -> None:
@@ -345,6 +369,29 @@ def run(engine, on, off, settings) -> None:
         "/api/billing/subscription",
         note="Active: `hours.seconds_left` is the 20 hours, the period is one month, and the "
         "buttons the screen may show are the `can_*` flags.",
+    )
+    run_script(
+        engine,
+        "script-proof-ok",
+        "**The runbook's proof command, run for real against this scratch database** "
+        "(`scripts/billing_test_purchase.py proof`, here called in process): after the verified "
+        "plan payment it prints every check and `PROOF: OK`.",
+        lambda s_: runbook.proof(s_, settings, ADA),
+    )
+    run_script(
+        engine,
+        "script-state",
+        "`billing_test_purchase.py state`: what this person can do under the modes the server "
+        "runs with (here HOURS_MODE and FEATURE_GATES_MODE are at their defaults, off).",
+        lambda s_: runbook.state(s_, settings, ADA),
+    )
+    run_script(
+        engine,
+        "script-preflight-1-no-keys",
+        "`billing_test_purchase.py preflight 1` on THIS capture server, which has no provider "
+        "keys: it lists exactly what is missing (a key is reported present or missing, never "
+        "printed).",
+        lambda s_: runbook.preflight(s_, settings, 1),
     )
     ada.call(
         "checkout-second-plan",
@@ -591,6 +638,14 @@ def run(engine, on, off, settings) -> None:
         "subscribes again from `/checkout`.",
     )
 
+    ada.call(
+        "payments-list",
+        "GET",
+        "/api/billing/payments",
+        note="The billing history: Ada's own payments, newest first. `pay_url` is set only on a "
+        "pending one.",
+    )
+
     # ---- another person ----
     ben = signed_in(on, "ben billing-on", BEN)
     ben.call(
@@ -598,6 +653,12 @@ def run(engine, on, off, settings) -> None:
         "GET",
         f"/api/billing/payments/{reference}",
         note="Another account cannot see Ada's payment: 404 `not_found`.",
+    )
+    ben.call(
+        "payments-list-empty",
+        "GET",
+        "/api/billing/payments",
+        note="Another account sees none of Ada's payments.",
     )
     ben.call(
         "country-ng",

@@ -768,12 +768,7 @@ def test_buttons_follow_the_clock_when_the_scheduler_has_not_run(session, ada, p
         session.rollback()
     subs.cancel(session, ada, in_grace)  # allowed, and it stops the retries
     session.commit()
+    # cancelled with the period already over: by the clock the plan is ended, nothing to resume
     with pytest.raises(subs.Refused) as resume:
         subs.resume(session, ada, in_grace)
-    assert resume.value.code == "payment_overdue"
-    session.rollback()
-
-    # cancelled, the period over and the scheduler still not run: there is nothing to resume
-    with pytest.raises(subs.Refused) as over:
-        subs.resume(session, ada, due + timedelta(hours=2))
-    assert over.value.code == "no_subscription"
+    assert resume.value.code == "no_subscription"

@@ -1,0 +1,20 @@
+{
+  "note": "`billing_test_purchase.py preflight 1` on THIS capture server, which has no provider keys: it lists exactly what is missing (a key is reported present or missing, never printed).",
+  "content": {
+    "exit": 1,
+    "output": [
+      "  [ok] BILLING_ENABLED is true",
+      "  [ok] BILLING_ALLOWED_EMAILS is not empty: every account",
+      "  [ok] BILLING_LIVE is false (test keys only)",
+      "  [ok] TOKEN_ENC_KEY is set (saved cards are encrypted with it)",
+      "  [FAIL] the Paystack secret key is set",
+      "  [note] the Paystack webhook secret is set: without it the older signature header is used",
+      "  [note] the Flutterwave secret key is set: dollars cannot be bought without it",
+      "  [ok] migration 0052 is applied",
+      "  [ok] an active plan has a price: USD",
+      "  [ok] a price in USD",
+      "  [note] a price in NGN: people billed there get price_not_available",
+      "  [note] the billing clock runs in the scheduler process: recreate it after the change"
+    ]
+  }
+}

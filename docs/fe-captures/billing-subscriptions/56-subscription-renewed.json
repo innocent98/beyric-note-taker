@@ -1,5 +1,5 @@
 {
-  "note": "`hours.seconds_left` is the plan's 20 hours plus the pack's 10.",
+  "note": "Active again: a new period from the payment date; the grace fields are null.",
   "client": "ada billing-on",
   "request": {
     "method": "GET",
@@ -18,19 +18,19 @@
     "body": {
       "state": "active",
       "hours": {
-        "seconds_left": 108000,
-        "holdings_seconds": 108000,
+        "seconds_left": 180000,
+        "holdings_seconds": 180000,
         "warning": null
       },
       "subscription": {
         "id": 1,
         "status": "active",
-        "plan_code": "plan_20h",
-        "plan_name": "20 hours a month",
+        "plan_code": "capture_40h",
+        "plan_name": "40 hours a month",
         "currency": "USD",
-        "amount_minor": 1800,
-        "current_period_start": "2026-11-17T15:19:25.387490Z",
-        "current_period_end": "2026-12-17T15:19:25.387490Z",
+        "amount_minor": 3400,
+        "current_period_start": "2026-11-17T15:37:39.294220Z",
+        "current_period_end": "2026-12-17T15:37:39.294220Z",
         "cancel_at_period_end": false,
         "pending_plan_code": null,
         "grace_ends_at": null,
@@ -40,7 +40,16 @@
         "can_change_plan": true,
         "can_pay_now": false
       },
-      "pending_payment": null
+      "pending_payment": {
+        "reference": "bn-6-b67f10444a8abc5a",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1000,
+        "created_at": "2026-11-17T15:37:39.278938Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-6-b67f10444a8abc5a"
+      }
     }
   }
 }

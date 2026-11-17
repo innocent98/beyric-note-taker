@@ -1,16 +1,13 @@
 {
-  "note": "A smaller plan: `scheduled` for the next renewal, nothing changes now (`pending_plan_code`, and `amount_minor` is what the renewal will charge).",
+  "note": "On the 40-hour plan; `hours.seconds_left` has grown by the prorated extra.",
   "client": "ada billing-on",
   "request": {
-    "method": "POST",
-    "path": "/api/billing/subscription/change-plan",
+    "method": "GET",
+    "path": "/api/billing/subscription",
     "headers": {
-      "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
-    "body": {
-      "plan_code": "plan_20h"
-    }
+    "body": null
   },
   "response": {
     "status": 200,
@@ -19,18 +16,23 @@
       "cache-control": "no-store"
     },
     "body": {
-      "result": "scheduled",
+      "state": "active",
+      "hours": {
+        "seconds_left": 179640,
+        "holdings_seconds": 179640,
+        "warning": null
+      },
       "subscription": {
         "id": 1,
         "status": "active",
         "plan_code": "capture_40h",
         "plan_name": "40 hours a month",
         "currency": "USD",
-        "amount_minor": 1800,
-        "current_period_start": "2026-11-17T15:19:25.387490Z",
-        "current_period_end": "2026-12-17T15:19:25.387490Z",
+        "amount_minor": 3400,
+        "current_period_start": "2026-11-17T15:37:38.784707Z",
+        "current_period_end": "2026-12-17T15:37:38.784707Z",
         "cancel_at_period_end": false,
-        "pending_plan_code": "plan_20h",
+        "pending_plan_code": null,
         "grace_ends_at": null,
         "next_retry_at": null,
         "can_cancel": true,
@@ -38,8 +40,7 @@
         "can_change_plan": true,
         "can_pay_now": false
       },
-      "payment": null,
-      "checkout_url": null
+      "pending_payment": null
     }
   }
 }

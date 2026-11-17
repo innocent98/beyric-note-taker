@@ -78,6 +78,7 @@ def test_with_billing_off_every_route_is_a_404_and_nothing_is_written(engine, se
         for method, url, body in [
             ("get", f"{API}/plans", None),
             ("get", f"{API}/subscription", None),
+            ("get", f"{API}/payments", None),
             ("get", f"{API}/payments/bn-1-x", None),
             ("post", f"{API}/checkout", {"kind": "plan", "code": "p20"}),
             ("post", f"{API}/subscription/cancel", None),
@@ -407,3 +408,19 @@ def test_the_preview_route_reads_and_changes_nothing(session, ada, providers):
     error(ada.get(f"{API}/subscription/change-plan/preview?plan_code=nope"), 404, "plan_not_found")
     error(ada.get(f"{API}/subscription/change-plan/preview"), 422, "validation_error")
     assert rows(session, Payment) == before  # a read
+
+
+def test_the_payment_history_is_the_callers_own_newest_first(session, engine, ada, providers):
+    assert ada.get(f"{API}/payments").json() == {"payments": []}
+    buy(session, ada, providers)
+    ada.post(f"{API}/checkout", {"kind": "pack", "code": "pack10"})  # left unpaid
+    make_user(session, "ben@example.test")
+    with api_client(engine) as client:
+        ben = Buyer(client, "ben@example.test")
+        assert ben.get(f"{API}/payments").json() == {"payments": []}  # nothing of Ada's
+
+    body = ada.get(f"{API}/payments").json()["payments"]
+
+    assert [p["kind"] for p in body] == ["pack", "plan"]  # newest first
+    assert [p["status"] for p in body] == ["pending", "succeeded"]
+    assert body[0]["pay_url"] is not None and body[1]["pay_url"] is None  # only a pending one

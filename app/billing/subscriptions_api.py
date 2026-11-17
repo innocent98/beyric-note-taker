@@ -11,6 +11,7 @@ written: there is no route that takes another person's id.
 | `GET /api/billing/plans` | what the caller can buy, priced on their billing country's route |
 | `GET /api/billing/subscription` | their state, hours, subscription and any payment waiting |
 | `POST /api/billing/checkout` | start a hosted checkout for a plan or a pack |
+| `GET /api/billing/payments` | their payments, newest first (the billing history) |
 | `GET /api/billing/payments/{reference}` | one payment's state (the return page polls it) |
 | `POST /api/billing/subscription/cancel` | stop the renewal; access to the period's end |
 | `POST /api/billing/subscription/resume` | take the cancel back |
@@ -115,6 +116,11 @@ class PaymentOut(BaseModel):
     paid_at: UtcDatetime | None
     # The payer's own page for a payment that waits for them; null once it is paid or failed.
     pay_url: str | None
+
+
+class PaymentsOut(BaseModel):
+    # The caller's own payments, newest first, at most 50. `pay_url` is set only on a pending one.
+    payments: list[PaymentOut]
 
 
 class StateOut(BaseModel):
@@ -331,6 +337,21 @@ def start_checkout(
         db.rollback()
         raise _refused(exc) from None
     return CheckoutOut(payment=_payment_out(started.payment), checkout_url=started.url)
+
+
+@router.get("/payments", responses=_NOT_FOUND)
+def list_payments(
+    db: Session = Depends(get_session),
+    user: User = Depends(billing_user),
+) -> PaymentsOut:
+    """The caller's own payments, newest first (at most 50): the billing history. A read."""
+    rows = db.scalars(
+        select(Payment)
+        .where(Payment.payer_user_id == user.id)
+        .order_by(Payment.id.desc())
+        .limit(50)
+    )
+    return PaymentsOut(payments=[_payment_out(row) for row in rows])
 
 
 @router.get("/payments/{reference}", responses=_NOT_FOUND)

@@ -792,6 +792,7 @@ def test_no_billing_route_takes_a_persons_id(web):
     paths = [p for p in web.app.openapi()["paths"] if p.startswith(API) and "webhooks" not in p]
     assert sorted(paths) == [
         f"{API}/checkout",
+        f"{API}/payments",
         f"{API}/payments/{{reference}}",
         f"{API}/plans",
         f"{API}/profile",

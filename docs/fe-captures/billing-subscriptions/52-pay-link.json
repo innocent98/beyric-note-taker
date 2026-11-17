@@ -1,5 +1,5 @@
 {
-  "note": "The same page again, not a second checkout.",
+  "note": "The provider's page to pay what is overdue: a fresh hosted checkout for the renewal amount.",
   "client": "ada billing-on",
   "request": {
     "method": "POST",
@@ -18,16 +18,16 @@
     },
     "body": {
       "payment": {
-        "reference": "bn-5-d73b47a2bf8ee6e7",
+        "reference": "bn-5-3d7b934f67285800",
         "kind": "renewal",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 3400,
-        "created_at": "2026-11-17T15:19:25.813350Z",
+        "created_at": "2026-11-17T15:37:39.252335Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-5-d73b47a2bf8ee6e7"
+        "pay_url": "https://fake.test/pay/bn-5-3d7b934f67285800"
       },
-      "checkout_url": "https://fake.test/pay/bn-5-d73b47a2bf8ee6e7"
+      "checkout_url": "https://fake.test/pay/bn-5-3d7b934f67285800"
     }
   }
 }

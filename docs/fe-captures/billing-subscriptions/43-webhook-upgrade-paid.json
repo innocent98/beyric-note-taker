@@ -1,5 +1,5 @@
 {
-  "note": "The pack's payment verified: 10 hours granted, valid 12 months.",
+  "note": "The upgrade's payment verified: the plan changes and the extra hours are granted.",
   "client": "the provider",
   "request": {
     "method": "POST",
@@ -9,11 +9,11 @@
       "X-Fake-Signature": "<signature>"
     },
     "body": {
-      "id": "evt-charge_succeeded-fake-tx-3",
+      "id": "evt-charge_succeeded-fake-tx-4",
       "kind": "charge_succeeded",
-      "reference": "bn-2-22d39b702ca50ddb",
-      "tx_id": "fake-tx-3",
-      "amount_minor": 1000,
+      "reference": "bn-3-600e0bbd3bce2f5c",
+      "tx_id": "fake-tx-4",
+      "amount_minor": 1599,
       "currency": "USD",
       "payer_email": null,
       "card_token": null
