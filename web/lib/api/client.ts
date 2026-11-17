@@ -83,6 +83,18 @@ import type {
   Translation,
   TranslationLanguage,
 } from "./types";
+import type {
+  BillingPayment,
+  BillingProfile,
+  BillingState,
+  ChangePreview,
+  ChangeResult,
+  Checkout,
+  CountryResult,
+  Plans,
+  RoutePreview,
+  Subscription,
+} from "@/lib/billing";
 
 // The one error every API call can end in. FastAPI answers every failure under /api/ as
 // {"error": {"code", "message", "fields?"}} (docs/fe-integration-guide-owner-app.md section 4);
@@ -638,6 +650,29 @@ export function createApi(options: ApiOptions = {}) {
           request<LinearState>("PUT", "/api/integrations/linear", { body: { api_key, team_id }, write: true }),
         disconnect: () => request<void>("DELETE", "/api/integrations/linear", { write: true }),
       },
+    },
+    // Billing (docs/fe-integration-guide-billing.md, docs/fe-integration-guide-billing-profile.md). Every route
+    // answers a plain 404 `not_found` while billing is off for this person: the screens treat that as
+    // "not available" and show nothing. Nothing here grants hours; only a verified payment does.
+    billing: {
+      state: () => request<BillingState>("GET", "/api/billing/subscription"),
+      plans: () => request<Plans>("GET", "/api/billing/plans"),
+      payments: async () => (await request<{ payments: BillingPayment[] }>("GET", "/api/billing/payments")).payments,
+      payment: (reference: string) =>
+        request<BillingPayment>("GET", `/api/billing/payments/${encodeURIComponent(reference)}`),
+      checkout: (kind: "plan" | "pack", code: string) =>
+        request<Checkout>("POST", "/api/billing/checkout", { body: { kind, code }, write: true }),
+      cancel: () => request<Subscription>("POST", "/api/billing/subscription/cancel", { write: true }),
+      resume: () => request<Subscription>("POST", "/api/billing/subscription/resume", { write: true }),
+      previewChange: (planCode: string) =>
+        request<ChangePreview>("GET", "/api/billing/subscription/change-plan/preview", { query: { plan_code: planCode } }),
+      changePlan: (planCode: string) =>
+        request<ChangeResult>("POST", "/api/billing/subscription/change-plan", { body: { plan_code: planCode }, write: true }),
+      payLink: () => request<Checkout>("POST", "/api/billing/subscription/pay-link", { write: true }),
+      profile: () => request<BillingProfile>("GET", "/api/billing/profile"),
+      routeFor: (country: string) => request<RoutePreview>("GET", "/api/billing/route", { query: { country } }),
+      setCountry: (billingCountry: string) =>
+        request<CountryResult>("PUT", "/api/billing/profile/country", { body: { billing_country: billingCountry }, write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Field, Icon, SelectField } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
+import { GateText } from "@/components/billing/gate-text";
 import type { Template } from "@/lib/api/types";
 
 // "New meeting": POST /api/meetings, then on to the meeting's page. What the owner typed stays in
@@ -44,7 +45,11 @@ export function NewMeetingForm({ templates, busy }: { templates: Template[]; bus
   return (
     <Card title="New meeting">
       <form className="stack-sm" onSubmit={submit}>
-        {error ? <Alert kind="error">{error}</Alert> : null}
+        {error ? (
+          <Alert kind="error">
+            <GateText message={error} />
+          </Alert>
+        ) : null}
         {busy && !error ? (
           <Alert kind="info">A bot is already on a meeting. Wait for it to finish first.</Alert>
         ) : null}

@@ -10,6 +10,7 @@ import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { SettingsRemovedRecurring } from "@/components/app/settings-removed-recurring";
+import { SettingsBilling } from "@/components/billing/settings-billing";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireTeamOwner, getShellTeams } from "@/lib/api/server";
@@ -79,6 +80,7 @@ export default async function SettingsPage({
         <SettingsYourName initial={yourName} />
         <SettingsBotName initial={botName} />
         <SettingsLanguage initial={language.default_language} />
+        <SettingsBilling />
         <EmailSettingsSection email={email} />
       </div>
     </AppShell>

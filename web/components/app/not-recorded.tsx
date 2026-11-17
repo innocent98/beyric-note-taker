@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { GateText } from "@/components/billing/gate-text";
 import { Button } from "@/components/ui";
 import type { NotRecordedItem } from "@/lib/api/types";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
@@ -85,7 +86,7 @@ function Row({
         <p className="nr-reason">{item.reason_text}</p>
         {error ? (
           <p className="nr-error" role="alert">
-            {error}
+            <GateText message={error} />
           </p>
         ) : null}
       </div>

@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
+import { GateText } from "@/components/billing/gate-text";
 import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember, TeamSummary } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
 import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
@@ -304,8 +305,16 @@ export function MeetingView({
           running again.
         </Alert>
       ) : null}
-      {error ? <Alert kind="error">{error}</Alert> : null}
-      {translation.error ? <Alert kind="error">{translation.error}</Alert> : null}
+      {error ? (
+        <Alert kind="error">
+          <GateText message={error} />
+        </Alert>
+      ) : null}
+      {translation.error ? (
+        <Alert kind="error">
+          <GateText message={translation.error} />
+        </Alert>
+      ) : null}
       {notice ? <Alert kind="info">{notice}</Alert> : null}
 
       {m.status === "bot_sent" && m.join_retry_at !== null ? (

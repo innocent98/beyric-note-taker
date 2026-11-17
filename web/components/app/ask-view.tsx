@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { AppLink, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError } from "@/lib/api/client";
+import { GateText } from "@/components/billing/gate-text";
 import type { AskAnswer, AskScope } from "@/lib/api/types";
 import { ASK_CHIP_FLAG, citeHref, citeLabel } from "@/lib/ask";
 import { plural } from "@/lib/format";
@@ -13,7 +14,8 @@ const MAX_QUESTION = 300;
 
 // What a card shows. `failed` can be asked again (`message` is the API's own words when it sent a
 // retryable one, the per-minute brake `ask_rate`; else "Beyric could not answer that."); `refused`
-// (the daily cap `ask_limit`, a question the API will not take) says its message and offers
+// (the daily cap `ask_limit`, a question the API will not take, and 403 `plan_inactive`: no live plan or
+// trial, which is not transient, so it is never offered "Try again" and its message leads to the plans) says its message and offers
 // nothing to press.
 type Card =
   | { id: number; question: string; state: "loading" }
@@ -43,7 +45,7 @@ export function AskView({ scope, initials }: { scope: AskScope | null; initials:
     try {
       update(id, { id, question, state: "ready", answer: await api.ask.ask(question) });
     } catch (caught) {
-      if (caught instanceof ApiError && (caught.code === "ask_limit" || caught.code === "question_invalid")) {
+      if (caught instanceof ApiError && (caught.code === "ask_limit" || caught.code === "question_invalid" || caught.code === "plan_inactive")) {
         update(id, { id, question, state: "refused", message: caught.message });
       } else if (caught instanceof ApiError && caught.code === "ask_rate") {
         update(id, { id, question, state: "failed", message: caught.message });
@@ -145,7 +147,9 @@ export function AskView({ scope, initials }: { scope: AskScope | null; initials:
               <div className="state-fail" role="alert">
                 <span className="state-fail-text">
                   <Icon name="info" />
-                  {card.message}
+                  <span>
+                    <GateText message={card.message} />
+                  </span>
                 </span>
               </div>
             )}

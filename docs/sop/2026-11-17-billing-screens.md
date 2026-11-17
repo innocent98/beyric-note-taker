@@ -1,0 +1,76 @@
+# SOP: billing stage S8b, the billing screens
+
+**What shipped.** The screens for the money path S8a built: choose a billing country and a plan, pay on the provider's page, come back to a page that waits for the verified payment, see and manage the plan (cancel, resume, change, extra hours, history), and be told on every screen when a payment failed or the plan lapsed. PR from `feature/billing-screens` (built on top of S8a, PR #227, `feature/subscriptions-and-lapse`). Stage S8 of `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`. **No backend change.** Nothing here is on for anyone: every billing route answers 404 until `BILLING_ENABLED` and the allow-list say otherwise, and the screens treat that 404 as "not available" and draw nothing (or say so plainly on the page itself).
+
+## Why
+
+S8a made it possible to buy, but only through the API and a script. S8b is what lets a person do it, and what lets Adebayo run the test-mode purchase of the S8a runbook from a browser. There is **no billing design** in `docs/ui` (the only settings designs are the multi-team ones), so every screen is built from the existing components and Settings patterns and invents no visual language; the designer restyles it later. The words are the product: each consequence the FE guide lists under "What the person must be told" is written where the button is.
+
+## How, and what was decided
+
+| Screen | Where | What it does |
+|---|---|---|
+| **Plans and checkout** (A) | `/billing/plans` | The billing country card (a select of the server's own country list; as it changes it reads `GET /billing/route` and states **"Prices in naira, paid through Paystack."** or **"Prices in US dollars, paid through Flutterwave."** before anything is saved or paid; the rules are said up front: where you are established, not guessed; a wrong first choice fixed once; one change in 30 days; a change between Nigeria and elsewhere with a live plan waits for the month's end and cannot be undone; a card from any country is accepted). Then the plans from `GET /plans` with the API's price (a plan with `price: null` says it is not on sale in that currency and is **listed, never hidden**), the "Before you pay" list (renews by card, cancel keeps the month, no refund of the unused part, no rollover, a price change applies at renewal, hours come when the provider confirms), and **Choose this plan** → `POST /checkout` → the browser leaves for `checkout_url`. A person who already has a plan is sent to Billing; a checkout started and not finished is offered back on its own page |
+| **Return page** (A) | `/billing/return` | Reads **our** reference from `reference`, `trxref` or `tx_ref` (Paystack adds the first two; Flutterwave's names are not verified, so the third is read too) and falls back to the reference this tab stored in `sessionStorage` before leaving. Polls `GET /payments/{reference}` every 2 s for 30 s, then every 10 s to 5 min, stops on any state but `pending`. **"Payment received" is shown only for `succeeded`**; the address is never trusted (a `status=successful` in it changes nothing). Words for: confirming, paid (by kind), did not go through (no hours were added, try again), backed out (provider's `status=cancelled`: no hours, keep the page open, go back to the payment page), still confirming after 5 min (leave, hours appear when confirmed, keep the reference), refunded, no such payment (404), no payment named, billing not available |
+| **Billing page** (B) | `/billing`, from a **Plan and billing** card on `/settings` | Plan card (status badge, renewal date and next charge; **a changed price is said**: "not the $X you paid last time"; cancel asks first and says access to the period's end, no refund of the unused part, extra hours stay, can be taken back; a cancelled plan says it ends and offers **Keep my plan**; the grace says no new hours until paid, the date, the next retry, and offers **Pay now**). Hours card (left and used with the progress bar the Tasks milestones draw; the 80% and 100% sentences follow `hours.warning`, never the bar; what is closed without a plan). **Change plan** (only when `can_change_plan`): "See what changes" calls the preview, an upgrade says **"You pay $15.99 today"** and the extra hours and that the charge is immediate, a downgrade says nothing is charged now and when it starts, a waiting downgrade can be taken back. **Extra hours** (only with a live plan, a plan in its grace counts). Billing country (same card as A). **Payments** with the words Paid, Waiting, Did not go through, Refunded, Partly refunded and a waiting payment's own page |
+| **App-wide notice** (C) | `BillingBanner` in `AppShell`, every owner screen except `/billing*` | `past_due`: "Your plan payment did not go through. No new hours are added until it is paid. Your plan ends on <date> if it stays unpaid. You can still record from the hours you have left." with **Pay now** (`POST /subscription/pay-link`). A charge the bank wants confirmed (`pending_payment.kind` `renewal` with a `pay_url`) shows **Confirm with your bank** that goes to **that charge's own page**; the screen never asks for a second checkout. `lapsed`: what is closed, what stays, **Choose a plan** (and the bank's page if a charge still waits, since paying it late brings the plan back). Reads again every 60 s while shown and on focus |
+| **Gates** (C) | `GateText` in the Ask card, the meeting page (rewrite and translate), the share dialog and page, new meeting, Not recorded | A 403 `plan_inactive` sentence ("... needs an active plan or trial ...") gets **See plans**, an `hours_cap_reached` sentence ("... will not join new meetings ...") gets **Add hours or choose a plan** (Billing). The server's sentence is shown as it comes. A `reserve` refusal is a wait and gets no link. **Ask no longer offers "Try again" on `plan_inactive`** (it is not transient; before, it read as "Beyric could not answer that") |
+
+Decisions and rejected alternatives:
+
+* **Three small pages, not one.** `/billing/plans` (buy), `/billing` (manage), `/billing/return` (wait). A single adaptive page was rejected: the return address is fixed by the server (`/billing/return`), and "choose" and "manage" answer different questions.
+* **The data is read in the browser**, not on the server. A 404 from a billing route means "not available to this person", which must be a plain message, not the not-found page that the server helper `load()` turns every 404 into.
+* **The banner is a client component in the shell**, because `AppShell` is a plain component rendered by about 25 pages (and by `renderToStaticMarkup` in tests): an async server child would break them, and passing a prop through every page was rejected. Cost: one `GET /api/billing/subscription` per page load for an allowed account. For everyone else the 404 is **remembered for the tab** (`sessionStorage`), so while billing is dark it is asked once per tab, not once per page. Not asked at all on the billing pages.
+* **Words for the states the API does not have.** The API's payment statuses are `pending`, `succeeded`, `failed`, `refunded`, `partly_refunded`. "Abandoned" is only the provider's `status=cancelled` in the return address (a hint for the words; the payment is still read from us and a late success still shows). "Mismatch" (a wrong amount, currency or reference: the server refuses it and the payment stays `pending`) cannot be told from a payment still being confirmed, so after 5 minutes it reads "still confirming ... keep the reference and tell us". See **contract gaps**.
+* **No price in code.** Every number comes from `GET /plans`, the subscription, a preview or a payment. `/pricing` is untouched (S11 prints numbers).
+* **Country list** is a copy of the server's `ISO_COUNTRIES` (`web/lib/countries.ts`, a test compares it with `app/billing/countries.py`); names come from `Intl.DisplayNames`, so no name is typed.
+* **Billing routes are not in `docs/openapi.json`**, so their types are written by hand in `web/lib/billing.ts` from the guide's captures (the generated `schema.d.ts` has none).
+
+## What's involved
+
+| Path | What |
+|---|---|
+| `web/app/billing/page.tsx`, `plans/page.tsx`, `return/page.tsx` | the three pages (owner shell; `current="settings"`) |
+| `web/components/billing/` | `plans-view`, `return-view`, `billing-view` (plan card, cancel), `hours-card`, `change-plan`, `packs`, `payment-history`, `billing-country`, `pay-now`, `billing-banner`, `settings-billing`, `gate-text`, `common.ts` (error words) |
+| `web/lib/billing.ts`, `countries.ts`, `navigate.ts` | contract types, words and the poll cadence; the country list; the one place the browser leaves for the provider (stubbed in tests) |
+| `web/lib/api/client.ts` | `api.billing.*` (state, plans, payments, payment, checkout, cancel, resume, previewChange, changePlan, payLink, profile, routeFor, setCountry) |
+| `web/components/app/shell.tsx`, `app/settings/page.tsx` | the banner; the Settings card |
+| `web/components/app/ask-view.tsx`, `meeting-view.tsx`, `share-dialog.tsx`, `new-meeting-form.tsx`, `not-recorded.tsx`, `share/share-flow.tsx` | `GateText` on the refusals; Ask's `plan_inactive` is a refusal, not a retry |
+| `web/lib/routes.ts`, `web/proxy.ts` | `/billing`, `/billing/plans`, `/billing/return` are Next pages (and robots-disallowed) |
+| `web/styles/pages.css` | a short "Billing" block of layout glue (`bill-*`, `billing-banner`) |
+| `scripts/dev_billing_stack.py` | a local copy of the app with billing on, `HOURS_MODE` and `FEATURE_GATES_MODE` on `enforce`, a scripted provider with a browsable "hosted page", and `GET /dev/scenario/<name>` that builds 13 account states (see Verification) |
+| `web/tests/billing-*.test.ts(x)` | the tests below |
+
+nginx needs no change (`location /` already sends every other path to the web container).
+
+## Verification
+
+**Run locally, by me.** `scripts/dev_billing_stack.py` against a scratch Postgres (removed afterwards) plus `next dev`, driven in the in-app browser and in a headless browser: every screen as signed-in people in 13 states (no country, country and no plan, naira with no price, naira with test prices, active, active with a pack, downgrade waiting, grace, grace with a 3-D Secure charge, lapsed, cancelled and ended, 90% used, all used, checkout unfinished) at **1440, 768 and 390 px**, and signed out (the owner pages go to `/login`). Flows exercised end to end through the real checkout route, the real webhook route with the double's signature, the real settlement rules and one real scheduler pass: choose plan → provider page → paid → return → hours added; backed out; card declined (`failed`); provider reports 1 unit short (the payment stays `pending`, the page ends on "still confirming"); Pay now → paid → the banner goes away; the 3-D Secure link; cancel → resume; the upgrade preview; Ask without a plan → "See plans". Screenshots (not in git; the lead holds them for the designer): `/Users/adebayovictor/Library/Application Support/Claude-Work/side-session-notes/local_55273bb6-3eb9-4b3b-a622-89443a33e4e9/billing-screens/` (`README.md` there is the index).
+
+**Tests (vitest, bodies pasted from `docs/fe-captures/`):** `billing-lib` (words, money, hours, reference names, the cadence, the country list equals the server's, the gate sentences are the captured ones), `billing-plans-view` (12), `billing-return-view` (11, fake timers: the cadence, "paid" only for `succeeded`, never trusting the address, every state), `billing-view` (24), `billing-banner` (8), `billing-gates` (4). Lint, type-check and the 29 existing test files that cover a touched file pass locally; CI runs the rest.
+
+**Not verified, and why.** A real provider's hosted page and return address (the dev stack's "hosted page" is a scripted page, and Flutterwave's return names are a guess covered by the `sessionStorage` fallback). The 5-minute "still confirming" wait ran with the browser clock fast-forwarded, not in real time. A card's brand and last four digits are not shown (the API does not carry them). The screens have not been seen by a designer. Nothing is deployed.
+
+## Contract gaps found (S8a's API; none worked around silently)
+
+1. **No distinct state for a refused payment or an abandoned checkout.** A wrong amount, currency or reference leaves the payment `pending` forever, and an abandoned checkout is `pending` too; the screen can only say "still confirming, keep the reference". A `status` (or a `refused` reason) on the payment would let the page say "this payment did not match, you were not credited, we will look at it".
+2. **The card's brand and last four digits** are null (S8a's own follow-up), so the plan card cannot say which card renews.
+3. **Billing routes are missing from `docs/openapi.json`**, so the TypeScript types are hand-written and can drift.
+4. **No way to tell "billing is on for me" without a billing call.** The session has `usage.state` only under `HOURS_MODE=enforce`. A boolean in `GET /api/session` would let the shell skip the banner's request for everyone not allowed.
+5. **No contact address for "tell us".** The return page asks the person to keep the payment reference and "tell us", with no address (the old `hello@` sentence was removed on purpose; `privacy@` is the only confirmed mailbox). Adebayo should name a support address before real money.
+
+## Operate / roll back
+
+Nothing to run: the pages ship with the web container. They are inert until `BILLING_ENABLED` is on for an account. To try them locally: `docker run -d --name bn-s8b-pg -e POSTGRES_PASSWORD=scratch -p 55432:5432 postgres:16-alpine`, `python scripts/dev_billing_stack.py postgresql+psycopg://postgres:scratch@localhost:55432/postgres`, then in `web/`: `FASTAPI_INTERNAL_URL=http://127.0.0.1:8765 npx next dev -p 3100`; sign in as `new@example.test` ... (the script prints the password; `GET /dev/` lists the accounts and `GET /dev/scenario/<name>` builds each state). Roll back: revert the PR; the API is untouched.
+
+## Follow-ups
+
+| Item | Where |
+|---|---|
+| The five contract gaps above | S9 / the lead |
+| A designer's pass on every screen (screenshots are the brief); the `bill-*` CSS is glue only | design |
+| Show the card brand and last four digits on the plan card | S9, with the API |
+| A mail with the pay link inside (S8a follow-up); until then the notices send people to Billing | S9 |
+| Pilot people who hit their hours see a link to Billing that says "not available yet" until billing is on for them; fine once step 4 of the switch-on sequence is done | switch-on |
+| `GateText` finds the two sentences by their words (pinned by a test to the captured ones); a `reason`/`code` on the refusals is already there for `hours_cap_reached`, and `plan_inactive` has none | later |
+| One screen-reader pass (the banner is `role="alert"` and the return page `role="status"`; not tested with a screen reader) | design |
