@@ -1,0 +1,13 @@
+{
+  "note": "The pilot grant now has the end: the start of the day after the last usable day (UTC).",
+  "content": {
+    "grants": [
+      {
+        "kind": "pilot",
+        "seconds": 7200,
+        "starts_at": "2026-08-29T14:56:11.149072+00:00",
+        "expires_at": "2026-11-16T00:00:00+00:00"
+      }
+    ]
+  }
+}

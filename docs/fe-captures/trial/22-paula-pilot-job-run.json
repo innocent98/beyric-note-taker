@@ -1,0 +1,8 @@
+{
+  "note": "`pilot_expiry.run` with the clock three days before the end: the pilot grant is given its end and the one notice is written (the numbers are `(grants changed, people told)`). Running it again tells nobody.",
+  "content": {
+    "changed": 1,
+    "told": 1,
+    "end": "2026-11-16T00:00:00+00:00"
+  }
+}

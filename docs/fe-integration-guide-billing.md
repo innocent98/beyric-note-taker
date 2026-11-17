@@ -168,8 +168,8 @@ plan period's end. 22 hours held (20 plan + 2 pilot).
 
 ### Holds nothing at all (capture 25)
 
-An account created after the hours model arrived and given nothing (today every new sign-up, until the trial
-exists):
+An account created after the hours model arrived and given nothing (a new sign-up while `TRIAL_SECONDS` is
+0; with the trial on, a new account holds a trial instead, see "The trial and the pilot's end" below):
 
 ```json
 {
@@ -353,8 +353,9 @@ HTTP**.
   auto-join). Reading, search, export, tasks, decisions and delete are untouched: say so (the server's message
   already does).
 * **A person who holds nothing is not "out of hours".** `cap_seconds` 0 with `warning` null is a person who has
-  no hours; the call to action differs from `warning: "out"`. Until sign-up gives a trial (stage S10) every new
-  account is in this state under `enforce`.
+  no hours; the call to action differs from `warning: "out"`. With `TRIAL_SECONDS` at 0 every new account is in this
+  state under `enforce`; with the trial on (stage S10) a new account holds a trial from the moment its email
+  is confirmed (section below).
 * **Nothing can be bought yet.** Do not add a Buy button from these fields; the billing screens come with
   later stages.
 * **Pilot people keep their original numbers.** A pilot account's grant holds only what was left of the old
@@ -491,6 +492,104 @@ A `400` (genuine signature, a body that is not an event we can read) is **not ca
 * **The card country.** The payment's `card_country` will be `NG` for a Nigerian card whichever format Flutterwave used (`NIGERIA NG` in the verify answer, `NG` in the webhook) and empty for a bank transfer or mobile money; a mismatch note is the S5 rule.
 * **Other Flutterwave events are ignored.** A webhook for something that is not a payment (a transfer, a subscription cancelled) is answered `200` `{"status":"ignored"}` and stored nowhere, as for Paystack; nothing on a screen changes.
 
+## The trial and the pilot's end (billing stage S10)
+
+Every body below is pasted from `docs/fe-captures/trial/` (made by `scripts/capture_trial.py`: real
+migrations, the real app under uvicorn, real HTTP, a real password sign-up with the mailed link read back
+from the outbox). **No route and no field is new**: the same `usage` object, the same 403. What is new is
+which values a brand-new or a pilot account shows, and when.
+
+**When a person gets the trial.** The moment their email is confirmed for the first time (the password link,
+or Google), a `trial` grant of `TRIAL_SECONDS` (3 hours = 10800 s) is given, ending after 14 days or when the
+hours are used, whichever is first. It is given only while the hours rule is in force and only once per
+person, even if the account is deleted and made again with the same address. **The sign-up and
+verification responses do not change** (trial capture 06 is the same `{"status": "verified"}` as before); read
+`usage` from `GET /api/session` after the person signs in.
+
+A person just after confirming (trial capture 10):
+
+```json
+{
+  "used_seconds": 0,
+  "cap_seconds": 10800,
+  "state": "trial",
+  "seconds_left": 10800,
+  "warning": null,
+  "can_record": true,
+  "unlimited": false,
+  "period_ends_at": null,
+  "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+}
+```
+
+Exactly 3 hours used (trial capture 12), and the refusal when they start a meeting (trial capture 13):
+
+```json
+{
+  "used_seconds": 10800,
+  "cap_seconds": 10800,
+  "state": "none",
+  "seconds_left": 0,
+  "warning": "out",
+  "can_record": false,
+  "unlimited": false,
+  "period_ends_at": null,
+  "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+}
+```
+
+```json
+{"error": {"code": "hours_cap_reached", "message": "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.", "reason": "no_hours"}}
+```
+
+**Field traps:**
+
+* **`trial_ends_at` stays set after the hours are used** (trial capture 12): the trial grant is still in force until its
+  14 days are over, only spent. Do not read "trial over" from `trial_ends_at`; read `state` and
+  `seconds_left`. A used-up trial shows `state: "none"`.
+* **Once the 14 days pass with hours left,** the grant is no longer in force: `state` `none`, `cap_seconds` 0,
+  `trial_ends_at` `null`, and a new recording is refused with `reason` `no_plan` (the shape of trial capture 29
+  below). NOT LIVE as a 14-day wait: the boundary is proved by `tests/test_trial.py` with a fake clock
+  (the last second before day 14 works, day 14 exactly does not).
+* **With `HOURS_MODE` off the sign-up gives nothing** (trial capture 18: no grant) and the session shows the old
+  fields with every new field `null` (trial capture 21), as in S2.
+
+**The pilot accounts' end.** Nothing changes for them until the owner sets `PAID_PLANS_OPEN_ON`. Then, 14 days
+before the end, each person with pilot hours left gets **one** bell entry and **one** mail (trial capture 25 is the
+mail the worker would send, trial capture 28 the bell entry): kind `pilot.expiry`, title `Your pilot hours will
+expire`. The body is the exact text in the SOP (a lawyer item until the owner confirms it). After the end
+(trial capture 29) their hours are no longer in force:
+
+```json
+{
+  "used_seconds": 0,
+  "cap_seconds": 0,
+  "state": "none",
+  "seconds_left": 0,
+  "warning": null,
+  "can_record": false,
+  "unlimited": false,
+  "period_ends_at": null,
+  "trial_ends_at": null
+}
+```
+
+and a new recording is refused (trial capture 30) with `reason` `no_plan`:
+
+```json
+{"error": {"code": "hours_cap_reached", "message": "You do not have any recorded hours at the moment, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.", "reason": "no_plan"}}
+```
+
+**UX consequences to surface:**
+
+* A pilot person whose hours end is **not** told by the session payload (there is no `pilot_ends_at` field yet:
+  see the SOP follow-ups); the bell and the mail carry the date. Do not invent a countdown from other fields.
+* After the end, `warning` is `null` and `cap_seconds` is 0, **not** `out`: this is "holds nothing", the same
+  call to action as a person who never had hours (take a plan), not "you used your hours".
+* The pilot "4 of 5 h" display total ends with the grant: after the end there is no "of 5 h".
+* Ask Beyric, new translations and rewriting notes are closed for these people once the feature gates are
+  on (`FEATURE_GATES_MODE=enforce`); reading, search and export stay.
+
 ## Verification
 
 | Behaviour | Verified |
@@ -505,7 +604,12 @@ A `400` (genuine signature, a body that is not an event we can read) is **not ca
 | The mail for each notice | tests only |
 | Send now and shared-link refusal carry `reason` | not verified live (same function) |
 | Calendar skip reasons `hours_cap` and `no_plan`, one notice for many skipped meetings, the Not recorded sentences | tests only (real join runner, no HTTP capture) |
-| `trial` and `plan_period` states | live shape only: the grants were inserted by SQL because nothing creates them yet |
+| `trial` state and its grant, made by confirming an email through the real sign-up | live (`docs/fe-captures/trial/` 05 to 10: password sign-up, the mailed link, verify, login, session) |
+| The trial's 3 hours used exactly, `no_hours` refusal; flag off gives no grant | live (trial captures 12, 13, 18, 21) |
+| A trial given by Google sign-in (a new Google account, or Google confirming a password account) | tests only (`tests/test_trial.py`); the same function as the password link |
+| The 14th day of a trial, the budget window, deleting an account and signing up again | tests only (fake clock, `tests/test_trial.py`); no account-delete route to capture |
+| The pilot's end: the job, the one mail and bell entry, the session and refusal after the end | live (trial captures 22 to 30; the job ran in the capture process with an injected clock three days before the end, then the app answered with its real clock after it; the mail is the outbox row, not a sent mail) |
+| `plan_period` state | live shape only: the grant was inserted by SQL because nothing creates it yet |
 | 403 `plan_inactive` body for Ask, the free "my tasks" answer, a new translation, a rewrite and a share in French | live (captures 03 to 07, `FEATURE_GATES_MODE=enforce`) |
 | Reading, the Ask scope line, Review and the meeting list stay open for a person with no plan | live (captures 08 to 11) |
 | A person on a trial passes all gates (Ask 200, translation 202, rewrite 200) | live (captures 14 to 18; the trial grant was inserted by SQL; the notes model was a fake client and Ask was shown on a question that finds nothing, so no OpenAI call was made) |

@@ -1,0 +1,29 @@
+{
+  "note": "202: the confirmation link is mailed.",
+  "client": "visitor ben (HOURS_MODE off)",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ben Example",
+      "email": "ben@example.test",
+      "password": "<password>",
+      "accept_terms": true,
+      "accept_recording": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

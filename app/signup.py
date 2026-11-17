@@ -30,7 +30,7 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import accounts, limits, mail, passwords, team_invites, tokens
+from app import accounts, limits, mail, passwords, team_invites, tokens, trial
 from app.config import Settings
 from app.limits import Limit
 from app.models import AppState, AuthToken, User, WaitlistEntry
@@ -455,6 +455,7 @@ def verify_email(
     now: datetime,
     wrong_guesses: Limit | None = None,
     origin_hits: Limit | None = None,
+    settings: Settings | None = None,
 ) -> None:
     """Confirm the email the token was sent to, given the password chosen with that sign-up.
     Commits. The token is used up only when the password is right, so a typo can be fixed, but
@@ -509,6 +510,7 @@ def verify_email(
     tokens.revoke(session, "verify_email", user.id, now)
     if first_time:  # a new account made from a team's invitation joins that team now
         team_invites.accept_confirmed(session, user, now)
+        trial.give_on_confirmation(session, user, now, settings)  # off unless TRIAL_SECONDS is set
     origin = user.signup_origin
     session.commit()
     if origin_hits is not None and origin is not None:

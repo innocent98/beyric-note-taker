@@ -1,0 +1,33 @@
+{
+  "note": "Sign-up open for ten accounts (`max_accounts` is still the brake).",
+  "client": "platform admin",
+  "request": {
+    "method": "PUT",
+    "path": "/api/admin/pilot",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 10,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 10,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true,
+      "slots_taken": 0,
+      "state": "open"
+    }
+  }
+}

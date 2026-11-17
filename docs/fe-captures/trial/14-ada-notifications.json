@@ -1,0 +1,35 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notifications": [
+        {
+          "id": 1,
+          "kind": "usage.hours_out",
+          "severity": "warning",
+          "title": "You are out of recorded hours",
+          "body": "You have used all of your recorded hours, so the note taker will not join new meetings. A meeting that is recording now will finish. Your notes, transcripts and exports stay as they are.",
+          "meeting_id": null,
+          "created_at": "2026-11-17T14:56:11.742422Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}
