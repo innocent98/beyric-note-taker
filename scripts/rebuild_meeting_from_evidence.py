@@ -189,12 +189,16 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     ):
         raise Refused(f"the saved evidence for meeting {meeting_id} is unreadable.")
     by_elimination = get_settings().skribby_name_by_elimination
+    by_timeline = get_settings().name_by_meet_timeline
+    # Meet's own speaking indicator, kept with the evidence (null when none was kept): the same
+    # input the live path gives the timeline naming (docs/sop/2026-11-17-name-by-meet-timeline.md).
+    events = row.events if isinstance(row.events, dict) else None
     # Every name the note taker goes by, as the live path excludes them: the meeting's stored name
     # (null = the server default) and the signed-in account's own name. Not the name Skribby
     # reports in its body: the evidence does not keep that one.
     own_names = bot_names.own_names(get_settings(), meeting.bot_name)
     body = _body(items)
-    segments = skribby._segments(body, own_names, by_elimination)
+    segments = skribby._segments(body, own_names, by_elimination, events, by_timeline)
     found = transcript_source.candidate(segments, skribby._last_segment_end(body))
     why_not = transcript_source.fallback_reason(
         found, meeting.recorded_seconds or 0, pipeline.MIN_WORDS
@@ -208,7 +212,9 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
         meeting,
         evidence=row,
         candidate=found,
-        tags=skribby._resolve_tags(body["transcript"], own_names, by_elimination),
+        tags=skribby._resolve_tags(
+            body["transcript"], own_names, by_elimination, events, by_timeline
+        ),
         segments=len(items),
         kept_until=kept_until,
     )
@@ -422,6 +428,8 @@ def describe(session: Session, plan: Plan) -> list[str]:
         info = plan.tags[tag]
         named = "named" if info.get("name") else "NOT named"
         why = info.get("how", "?") + (f", {info['note']}" if info.get("note") else "")
+        if info.get("timeline"):
+            why += f", timeline: {info['timeline']}"
         lines.append(f"  tag {tag}: {plan.tag_segments.get(tag, 0)} segments, {named} [{why}]")
     saved = plan.evidence.tags if isinstance(plan.evidence.tags, dict) else {}
     lines += [

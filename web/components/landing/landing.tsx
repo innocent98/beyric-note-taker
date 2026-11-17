@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { AppLink, Button, Icon, Logo } from "@/components/ui";
-import { LEGAL_NAME } from "@/lib/site";
+import { AppLink, Button, Icon } from "@/components/ui";
 import {
   CLOSING,
   DEEP_DIVES,
@@ -22,7 +21,8 @@ import {
 // the words cut to what the app does (content.ts). The sign-up buttons ("Get started", "Create your
 // account") go to /signup, which draws the form, or the closed or full screen with the waiting list
 // when the pilot is not open. "See the app" is not drawn: it links to the prototype file, which is not
-// a page. Every mock-up is decorative (aria-hidden, no focusable control) and shows a made-up team.
+// a page. The header and footer are the public shell's (components/site/public-shell.tsx), the same on
+// every public page. Every mock-up is decorative (aria-hidden, no focusable control) and shows a made-up team.
 
 function Glyph({ d, size, stroke = 1.9 }: { d: string; size: number; stroke?: number }) {
   return (
@@ -42,54 +42,6 @@ export function SignupNote({ className = "" }: { className?: string }) {
       <AppLink href="/signup">{SIGNUP_NOTE.link}</AppLink>
       {SIGNUP_NOTE.after}
     </p>
-  );
-}
-
-// `signedIn` is true on /welcome and /pricing for the owner: the logo then leads to /welcome (the page
-// that shows the landing to the owner, since `/` is their Meetings page), and the two sign-up buttons give
-// way to one way back into the app. A visitor's header is the designer's. `page` says which links the
-// header draws: the landing page has the section anchors, the pricing page the designer's two links.
-export function LandingHeader({ signedIn = false, page = "landing" }: { signedIn?: boolean; page?: "landing" | "pricing" }) {
-  const home = signedIn ? "/welcome" : "/";
-  return (
-    <header className="ld-header">
-      <div className="ld-header-in">
-        <Logo size="lg" href={home} />
-        <nav className="ld-nav" aria-label="Main">
-          {page === "landing" ? (
-            <>
-              <a href="#product">Product</a>
-              <a href="#teams">Who it&apos;s for</a>
-              <AppLink href="/pricing">Pricing</AppLink>
-              <a href="#security">Security</a>
-            </>
-          ) : (
-            <>
-              <AppLink href={home}>Product</AppLink>
-              <AppLink href="/pricing" aria-current="page">
-                Pricing
-              </AppLink>
-            </>
-          )}
-        </nav>
-        <div className="ld-header-actions">
-          {signedIn ? (
-            <AppLink className="ld-get-started" href="/">
-              Open the app
-            </AppLink>
-          ) : (
-            <>
-              <AppLink className="ld-signin" href="/login">
-                Sign in
-              </AppLink>
-              <AppLink className="ld-get-started" href="/signup">
-                Get started
-              </AppLink>
-            </>
-          )}
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -526,57 +478,8 @@ function Closing() {
   );
 }
 
-export function LandingFooter({ signedIn = false }: { signedIn?: boolean }) {
-  return (
-    <footer className="ld-footer">
-      <div className="ld-footer-in">
-        <div className="ld-footer-cols">
-          <div className="ld-footer-brand">
-            <Logo size="sm" href={signedIn ? "/welcome" : "/"} />
-            <p>Meeting notes, decisions and tasks for teams, from {LEGAL_NAME}.</p>
-          </div>
-          <div className="ld-footer-col">
-            <span>Product</span>
-            <a href="#product">Product</a>
-            <a href="#features">Features</a>
-            <AppLink href="/pricing">Pricing</AppLink>
-            <a href="#security">Security</a>
-          </div>
-          <div className="ld-footer-col">
-            <span>Company</span>
-            <AppLink href="/privacy">Privacy</AppLink>
-            <AppLink href="/terms">Terms</AppLink>
-            <AppLink href="mailto:privacy@beyrictech.com">Contact</AppLink>
-          </div>
-        </div>
-        <div className="ld-footer-base">
-          <span>&copy; 2026 {LEGAL_NAME}</span>
-          <span>notes.beyrictech.com</span>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-// The designer's pricing footer: one line, the entity and four links.
-export function PricingFooter({ signedIn = false }: { signedIn?: boolean }) {
-  return (
-    <footer className="ld-pfooter">
-      <div className="ld-pfooter-in">
-        <span>&copy; 2026 {LEGAL_NAME}</span>
-        <span className="ld-pfooter-links">
-          <AppLink href={signedIn ? "/welcome" : "/"}>Product</AppLink>
-          <AppLink href="/privacy">Privacy</AppLink>
-          <AppLink href="/terms">Terms</AppLink>
-          <AppLink href="mailto:privacy@beyrictech.com">Contact</AppLink>
-        </span>
-      </div>
-    </footer>
-  );
-}
-
 // A visitor who is not logged in sees this page at `/` (app/page.tsx shows the owner Meetings there);
-// everyone, the owner included, sees it at `/welcome` (app/welcome/page.tsx).
+// everyone, the owner included, sees it at `/welcome` (app/(public)/welcome/page.tsx).
 export function Landing() {
   return (
     <>

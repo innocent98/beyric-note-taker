@@ -56,7 +56,7 @@ from app.billing import plans, routing, settle, states, subscriptions
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
-from app.billing.types import ProviderError, RetryLater
+from app.billing.types import OutcomeUnknown, ProviderError, RetryLater
 from app.config import Settings
 from app.models import (
     BillingEvent,
@@ -260,9 +260,11 @@ def _attempt(
 
     try:
         tx = adapter.charge_saved_method(token, amount, currency, reference, payer_email=email)
-    except ProviderError:
-        # Unknown outcome: the money may have moved. Ask by our reference; if even that fails the
-        # payment stays pending and the next pass settles it before anything is charged again.
+    except (OutcomeUnknown, ProviderError):
+        # Unknown outcome: the money may have moved (Flutterwave says so with `OutcomeUnknown`;
+        # Paystack's adapter says it with a plain `ProviderError`, so both are treated alike). Ask
+        # by our reference; if even that fails the payment stays pending and the next pass
+        # settles it before anything is charged again.
         try:
             tx = lookup_by_reference(adapter, reference)
         except ProviderError:

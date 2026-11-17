@@ -1,5 +1,5 @@
 import { AppLink } from "@/components/ui";
-import { FaqList, LandingHeader, PricingFooter, SignupNote } from "@/components/landing/landing";
+import { FaqList, SignupNote } from "@/components/landing/landing";
 import {
   CLOSING_TITLE,
   FAQS,
@@ -107,21 +107,5 @@ export function Pricing() {
         </div>
       </section>
     </>
-  );
-}
-
-// The whole pricing page, header and footer included. `signedIn` is the same as on the landing page.
-export function PricingPage({ signedIn = false }: { signedIn?: boolean }) {
-  return (
-    <div className="ld">
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
-      <LandingHeader signedIn={signedIn} page="pricing" />
-      <main id="main">
-        <Pricing />
-      </main>
-      <PricingFooter signedIn={signedIn} />
-    </div>
   );
 }

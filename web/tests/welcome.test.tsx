@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HomePage, { generateMetadata as homeMetadata } from "@/app/page";
-import WelcomePage, { metadata as welcomeMetadata } from "@/app/welcome/page";
-import PrivacyPage from "@/app/privacy/page";
-import TermsPage from "@/app/terms/page";
+import WelcomePage, { metadata as welcomeMetadata } from "@/app/(public)/welcome/page";
+import PrivacyPage from "@/app/(public)/privacy/page";
+import TermsPage from "@/app/(public)/terms/page";
 import { PublicShell } from "@/components/site/public-shell";
+import { renderInPublicLayout, renderPublic } from "./public-render";
 import { filesUnder, read, rel, WEB } from "./helpers";
 import { join } from "node:path";
 
@@ -35,16 +36,16 @@ beforeEach(() => {
 describe("/welcome", () => {
   it("shows the landing page to a signed-in owner, with no redirect, and the same words as `/`", async () => {
     session.value = owner;
-    const welcome = renderToStaticMarkup(await WelcomePage());
+    const welcome = await renderInPublicLayout(WelcomePage());
     session.value = null;
-    const visitor = renderToStaticMarkup(await HomePage());
+    const visitor = await renderPublic(await HomePage());
     expect(welcome).toContain("Your meetings, turned into finished work.");
     const body = (html: string) => html.slice(html.indexOf('<main id="main">'), html.indexOf("</main>"));
     expect(body(welcome)).toBe(body(visitor));
   });
 
   it("shows it to a visitor too, header unchanged", async () => {
-    const html = renderToStaticMarkup(await WelcomePage());
+    const html = await renderInPublicLayout(WelcomePage());
     expect(html).toContain("Your meetings, turned into finished work.");
     expect(hrefs(html)).toEqual(expect.arrayContaining(["/login", "/signup"]));
     expect(logoHref(html)).toBe("/");
@@ -52,7 +53,7 @@ describe("/welcome", () => {
 
   it("leads an owner's logo to /welcome and gives the header one way back into the app, not Sign in", async () => {
     session.value = owner;
-    const html = renderToStaticMarkup(await WelcomePage());
+    const html = await renderInPublicLayout(WelcomePage());
     expect(logoHref(html)).toBe("/welcome");
     const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
     expect(header).toContain("Open the app");
@@ -65,7 +66,7 @@ describe("/welcome", () => {
   });
 
   it("leaves `/` as it was for a visitor: the landing page with the logo to `/`", async () => {
-    const html = renderToStaticMarkup(await HomePage());
+    const html = await renderPublic(await HomePage());
     expect(logoHref(html)).toBe("/");
     expect(html).toContain("Sign in");
     expect(html).not.toContain("Open the app");
@@ -89,7 +90,7 @@ describe("/welcome", () => {
   });
 
   it("is a page of its own under app/ (routes.test.ts keeps the proxy matcher equal to the list)", () => {
-    expect(filesUnder("app", ["page.tsx"]).map(rel)).toContain("app/welcome/page.tsx");
+    expect(filesUnder("app", ["page.tsx"]).map(rel)).toContain("app/(public)/welcome/page.tsx");
   });
 });
 
@@ -97,11 +98,9 @@ describe("the public pages' way home", () => {
   it("privacy and terms: a visitor's logo goes to `/`, an owner's to /welcome", async () => {
     for (const page of [PrivacyPage, TermsPage]) {
       session.value = null;
-      const element = page() as { type: (props: unknown) => Promise<React.ReactElement>; props: unknown };
-      expect(logoHref(renderToStaticMarkup(await element.type(element.props)))).toBe("/");
+      expect(logoHref(await renderInPublicLayout(page()))).toBe("/");
       session.value = owner;
-      const again = page() as { type: (props: unknown) => Promise<React.ReactElement>; props: unknown };
-      expect(logoHref(renderToStaticMarkup(await again.type(again.props)))).toBe("/welcome");
+      expect(logoHref(await renderInPublicLayout(page()))).toBe("/welcome");
     }
   });
 
@@ -117,7 +116,7 @@ describe("the public pages' way home", () => {
   });
 });
 
-describe("the sticky public headers", () => {
+describe("the sticky public header", () => {
   const css = read(join(WEB, "styles/public.css"));
   const rule = (selector: string) => {
     const match = new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`).exec(css);
@@ -125,20 +124,18 @@ describe("the sticky public headers", () => {
     return match![1];
   };
 
-  it("keep the headers sticky at the top with an existing background token", () => {
-    for (const selector of [".ld-header", ".lg-header"]) {
-      const body = rule(selector);
-      expect(body).toMatch(/position: sticky/);
-      expect(body).toMatch(/top: 0/);
-      expect(body).toMatch(/background: var\(--[a-z-]+\)/);
-    }
+  it("keep the header sticky at the top with an existing background token", () => {
+    const body = rule(".ld-header");
+    expect(body).toMatch(/position: sticky/);
+    expect(body).toMatch(/top: 0/);
+    expect(body).toMatch(/background: var\(--[a-z-]+\)/);
   });
 
-  it("keep them under every dialog, drawer and toast", () => {
+  it("keeps it under every dialog, drawer and toast", () => {
     const z = (selector: string) => Number(/z-index: (\d+)/.exec(rule(selector))![1]);
     const components = read(join(WEB, "styles/components.css")) + read(join(WEB, "styles/pages.css"));
     const dialogs = [...components.matchAll(/z-index: (\d+)/g)].map((m) => Number(m[1])).filter((n) => n >= 40);
-    expect(Math.max(z(".ld-header"), z(".lg-header"))).toBeLessThan(Math.min(...dialogs));
+    expect(z(".ld-header")).toBeLessThan(Math.min(...dialogs));
   });
 
   it("do not sit inside a scroll container: a landing wrapper with overflow-x: hidden alone stops `sticky` working", () => {
@@ -146,12 +143,11 @@ describe("the sticky public headers", () => {
     expect(body).toMatch(/overflow-x: clip/);
     // `hidden` may stay only as the line a browser without `clip` falls back to, before it.
     expect(body.indexOf("overflow-x: hidden")).toBeLessThan(body.indexOf("overflow-x: clip"));
-    for (const selector of [".lg", ".ld-header", ".lg-header"]) expect(rule(selector)).not.toMatch(/overflow(-x|-y)?: (hidden|auto|scroll)/);
+    for (const selector of [".ld-header"]) expect(rule(selector)).not.toMatch(/overflow(-x|-y)?: (hidden|auto|scroll)/);
   });
 
   it("leave the target of Skip to content and of every section link below them", () => {
     expect(rule(".ld #main")).toMatch(/scroll-margin-top: 69px/); // 68px header + 1px border
-    expect(rule(".lg #main")).toMatch(/scroll-margin-top: 65px/); // 64px header + 1px border
     for (const selector of [".ld-section", ".ld-night", ".ld-faq"]) {
       expect(Number(/scroll-margin-top: (\d+)px/.exec(rule(selector))![1])).toBeGreaterThanOrEqual(69);
     }

@@ -1,12 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { metadata } from "@/app/layout";
 import { fullStopNoneNoted, wrapSections } from "@/components/app/notes-html";
-import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
+import { Landing } from "@/components/landing/landing";
 import { PrivacyContent } from "@/components/legal/privacy-content";
 import { TermsContent } from "@/components/legal/terms-content";
 import { PRIVACY_TOC, TERMS_TOC } from "@/components/legal/toc";
+import { PublicShell } from "@/components/site/public-shell";
 import { Logo } from "@/components/ui";
+import { renderPublic } from "./public-render";
+
+vi.mock("@/lib/api/server", () => ({ getSession: async () => ({ authenticated: false }) }));
 
 // Checks that keep the pages on the designer's structure (docs/ui/parity-report.md).
 
@@ -93,20 +97,20 @@ describe("logo", () => {
   });
 });
 
+const landingHtml = await renderPublic(
+  <PublicShell>
+    <Landing />
+  </PublicShell>,
+);
+
 describe("landing page", () => {
-  const html = renderToStaticMarkup(
-    <>
-      <LandingHeader />
-      <Landing />
-      <LandingFooter />
-    </>,
-  );
+  const html = landingHtml;
 
   it("has the designer's sections, the anchors in its header, and six questions", () => {
     for (const id of ["product", "teams", "security", "features", "faq"]) {
       expect(html).toContain(`id="${id}"`);
     }
-    for (const id of ["product", "teams", "security"]) expect(html).toContain(`href="#${id}"`);
+    for (const id of ["product", "teams", "security"]) expect(html).toContain(`href="/#${id}"`);
     expect(html).toContain('href="/pricing"');
     expect(html.match(/<details/g)).toHaveLength(6);
     expect(html).toContain("Your meetings, turned into finished work.");

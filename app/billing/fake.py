@@ -22,6 +22,7 @@ from collections.abc import Mapping
 from app.billing.types import (
     BadEvent,
     Checkout,
+    OutcomeUnknown,
     ProviderError,
     ProviderEvent,
     ProviderTransaction,
@@ -174,6 +175,8 @@ class FakeProvider:
         self.charges.append((token, amount_minor, currency, reference))
         if self.charge_outcome == "error":
             raise ProviderError("the charge call got no answer")
+        if self.charge_outcome == "unknown":  # the newer contract: a money call with no answer
+            raise OutcomeUnknown("the charge call got no answer")
         if self.charge_outcome == "pending":  # the card's bank wants the payer: a link, no id yet
             tx = ProviderTransaction(
                 provider_tx_id=reference,

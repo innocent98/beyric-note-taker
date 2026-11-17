@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 
 from app import skribby, transcript_source
 from app.config import Settings
@@ -1012,3 +1013,86 @@ def test_a_meeting_with_no_recorded_seconds_is_still_rebuilt(
     keep_evidence(session, row)
     code, _, _ = go([str(row.id), "--apply"], backups, capsys=capsys)
     assert code == 0 and stored(session, row).transcript_source == "skribby-rebuilt"
+
+
+# ---- naming from Meet's own speaking indicator (docs/sop/2026-11-17-name-by-meet-timeline.md) ----
+
+
+def meeting_39_evidence(session, meeting):
+    """Evidence in the shape of meeting 39 (numbers only, made-up names): nine tags, three named by
+    the earlier rules, four more nameable from the saved speaker events, two too weak."""
+    from tests.test_meet_timeline_naming import TABLE, events_record, layout
+
+    items, spans = layout(TABLE)
+    flat = [
+        {
+            "speaker": i["speaker"],
+            "speaker_name": i["speaker_name"],
+            "potential_speaker_names": [n["name"] for n in i["potential_speaker_names"]],
+            "start": i["start"],
+            "end": i["end"],
+            "text": i["transcript"],
+        }
+        for i in items
+    ]
+    return keep_evidence(session, meeting, flat, events=events_record(spans))
+
+
+def test_a_rebuild_names_the_split_tags_from_the_saved_events(
+    session, owner, template, backups, capsys
+):
+    meeting = make_meeting(
+        session, owner, template, recorded_seconds=3000, transcript_source="skribby"
+    )
+    meeting_39_evidence(session, meeting)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)  # the dry run first
+    assert code == 0
+    assert "meet_timeline" in out and "timeline: too_little" in out
+    assert "Ada Example" not in out and "Di Example" not in out  # no names, as ever
+    assert "speakers incomplete: before yes, after no" in out
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code == 0
+    row = stored(session, meeting)
+    assert row.speakers_incomplete is False  # 2.5% of the words are still unnamed: not a notice
+    text = row.speaker_transcript
+    assert "[Ada Example]: " in text and "[Di Example]: " in text
+    assert "[Unknown speaker]: " in text  # the two weak tags stay unknown
+    assert row.transcript_source == "skribby-rebuilt"
+
+
+def test_with_the_switch_off_a_rebuild_does_not_use_the_events(
+    session, owner, template, backups, capsys, monkeypatch
+):
+    off = Settings(
+        audio_dir=str(backups.parent / "audio"),
+        skribby_name_by_elimination=True,
+        name_by_meet_timeline=False,
+    )
+    monkeypatch.setattr(rebuild, "get_settings", lambda: off)
+    meeting = make_meeting(
+        session, owner, template, recorded_seconds=3000, transcript_source="skribby"
+    )
+    meeting_39_evidence(session, meeting)
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code == 0
+    row = stored(session, meeting)
+    assert "[Ada Example]" not in row.speaker_transcript
+    assert row.speakers_incomplete is True  # most of the words are unnamed: the notice stays on
+
+
+def test_a_rebuild_of_evidence_with_no_events_is_what_it_was(
+    session, owner, template, backups, capsys
+):
+    meeting = make_meeting(
+        session, owner, template, recorded_seconds=3000, transcript_source="skribby"
+    )
+    meeting_39_evidence(session, meeting)
+    session.execute(
+        sa_update(SkribbySegmentEvidence)
+        .where(SkribbySegmentEvidence.meeting_id == meeting.id)
+        .values(events=None)
+    )
+    session.commit()
+    code, _, _ = apply(session, meeting, backups, capsys)
+    assert code == 0
+    assert "[Ada Example]" not in stored(session, meeting).speaker_transcript

@@ -4,14 +4,15 @@
 //   * set a plan's `price` (for example "$15") and `hours` (for example "20 hours"); a `null` prints
 //     TO_BE_ANNOUNCED, and the card and the comparison table both read the same two fields;
 //   * edit `names` and `taglines` if the working names change.
-// The structure is his decision: a one-time trial, then a paid Team plan (about 20 meeting hours a month),
-// then a larger plan (about 40), the hours shared across the whole team, and extra-hour packs. Those
-// numbers ("about 20", "about 40") are his guess and are deliberately NOT printed. No "free" wording, no
+// The structure is his decision: a one-time trial, then monthly plans, extra-hour packs, and meeting hours
+// that belong to the PERSON, not to a team (decided 2026-11-16: a team is only a place to share; teammates
+// read shared notes without paying). Any number of hours he has floated is a guess and is deliberately NOT
+// printed; nothing publishes a price or an hour count until payment works. No "free" wording, no
 // "unlimited", no Business plan, and no feature is held back from a plan: every feature exists for every
 // account today (docs/superpowers/specs/2026-11-14-public-pages-audit.md, section 3).
 // Cut from the designer's Pricing file: HubSpot sync, Jira and Asana, "Custom retention period" and
 // "Priority support" (not built), "Data used to train models: Never" (not worded as our promise), the
-// "Most teams pick this" badge, per-person prices and the seat FAQ (no seat model), and the cancel,
+// "Most teams pick this" badge, per-person prices and the seat FAQ, and the cancel,
 // downgrade and discount answers (billing is not built). See docs/sop/2026-11-14-landing-v2-and-pricing.md.
 
 export const TO_BE_ANNOUNCED = "To be announced";
@@ -26,7 +27,7 @@ export type Plan = {
   priceUnit: string;
   // Meeting hours ("20 hours"), or null while it is not decided.
   hours: string | null;
-  // How the hours are given: once, or each month and shared by the team.
+  // How the hours are given: once, or each month, for you.
   hoursUnit: string;
   // The card's button. Every plan starts at the sign-up page, because no paid plan is on sale yet.
   cta: string;
@@ -62,10 +63,10 @@ export const PLANS: ReadonlyArray<Plan> = [
     price: null,
     priceUnit: "per month",
     hours: null,
-    hoursUnit: "each month, shared by the whole team",
+    hoursUnit: "each month, for you",
     cta: "Start with the trial",
     main: true,
-    includes: ["Extra-hour packs when the team needs more", "Every feature in the table below"],
+    includes: ["Extra-hour packs when you need more", "Every feature in the table below"],
   },
   {
     id: "team-plus",
@@ -74,10 +75,10 @@ export const PLANS: ReadonlyArray<Plan> = [
     price: null,
     priceUnit: "per month",
     hours: null,
-    hoursUnit: "each month, shared by the whole team",
+    hoursUnit: "each month, for you",
     cta: "Start with the trial",
     main: false,
-    includes: ["Extra-hour packs when the team needs more", "Every feature in the table below"],
+    includes: ["Extra-hour packs when you need more", "Every feature in the table below"],
   },
 ];
 
@@ -102,7 +103,7 @@ export function tableRows(plans: ReadonlyArray<Plan>): ReadonlyArray<readonly [s
   const [trial, team, plus] = plans;
   return [
     ["Meeting hours", `${hoursOf(trial)}, ${trial.hoursUnit}`, `${hoursOf(team)} a month`, `${hoursOf(plus)} a month`],
-    ["Hours shared across the team", TO_BE_ANNOUNCED, YES, YES],
+    ["Hours belong to the person", YES, YES, YES],
     ["Extra-hour packs", TO_BE_ANNOUNCED, YES, YES],
     ["Notes, decisions, action items", ...ALL_YES],
     ["Transcript with speaker names", ...ALL_YES],
@@ -125,7 +126,7 @@ export const FAQS: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "How are meeting hours counted?",
-    a: "Plans are counted in hours of recorded meetings, not in seats. On a paid plan the hours are shared by the whole team, and extra-hour packs can add more. How many hours each plan includes is to be announced.",
+    a: "Plans are counted in hours of recorded meetings. On a monthly plan the hours belong to the person who has the plan, not to a team: a team is only a place to share notes, and teammates read shared notes without a plan of their own. Extra-hour packs can add more. How many hours each plan includes is to be announced.",
   },
   {
     q: "What does the trial include?",

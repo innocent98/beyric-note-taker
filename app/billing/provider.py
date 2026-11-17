@@ -2,13 +2,15 @@
 
 Same pattern as `app/bot_provider.py`: a `Protocol`, a table of factories, a fake for tests. Nothing
 outside `app/billing/` knows a vendor's name or field names. Real adapters register themselves in
-`PROVIDER_FACTORIES` when they are built (Paystack S6, Flutterwave S7); until then the table is
-empty, so no webhook is accepted for any provider name, and the fake is never reachable in
-production.
+`PROVIDER_FACTORIES` when their module is imported (`app/billing/__init__.py` imports each one). A
+provider name nobody registered is not accepted by the webhook route, and the fake is
+never registered by the app, so it is never reachable in production.
 
 Errors: `verify_webhook` raises `WebhookRejected`, `parse_event` raises `BadEvent` (or
 `IgnoredEvent`, a genuine event we do not act on), and every call that talks to the vendor raises
-`ProviderError` (retryable).
+`ProviderError` (retryable: nothing it describes moved money). A call that moves money and got no
+answer (`charge_saved_method`, `refund`) may raise `OutcomeUnknown`, which is NOT a `ProviderError`:
+look the payment up, never retry blind.
 """
 
 from collections.abc import Callable, Mapping
@@ -51,10 +53,16 @@ class PaymentProvider(Protocol):
         payer_email: str | None = None,
     ) -> ProviderTransaction:
         """Charge a saved card token (a renewal). Returns the transaction as the provider reports
-        it; a charge that needs the payer is a failed or pending transaction, never an exception.
+        it; a refused charge is a `failed` result and a charge that needs the payer is a `pending`
+        one (with `payer_action_url`, the payer's own link: never open a second checkout for it),
+        never an exception. A call that got no answer may raise `OutcomeUnknown`.
+
+        **This answer never grants hours.** It is the provider's reply to a charge, not a verified
+        payment: only `settle`, after `fetch_transaction`, marks a payment paid.
         `payer_email` is the email the provider saw on the first payment (`email_at_provider`):
-        Paystack charges a saved card only with the email that created it, so an adapter that
-        needs it raises `ProviderError` when it is missing; one that does not need it ignores it."""
+        Paystack and Flutterwave charge a saved card only with the email that created it, so an
+        adapter that needs it raises `ProviderError` when it is missing; one that does not need it
+        ignores it."""
         ...
 
     def refund(
@@ -62,7 +70,9 @@ class PaymentProvider(Protocol):
     ) -> str:
         """Refund `amount_minor` of a payment; returns the provider's refund id. `reference` is
         our own idempotency key for this refund (made from the refund row): a provider that takes
-        one refuses a retry with the same key instead of refunding twice. A caller must pass one."""
+        one refuses a retry with the same key instead of refunding twice. A caller must pass one.
+        No answer may raise `OutcomeUnknown`: never retry it blind, a second refund can pay twice
+        wherever the provider has no idempotency key (Flutterwave v3 has none)."""
         ...
 
 

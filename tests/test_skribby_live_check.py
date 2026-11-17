@@ -11,8 +11,13 @@ import pytest
 
 from scripts import skribby_live_check as check
 
+# A finished Skribby bot is looked at twice (the second asks for the speaker events the timeline
+# naming reads, `NAME_BY_MEET_TIMELINE`); these tests answer one body and do not care about the
+# second request, which falls back to naming without the timeline.
 pytestmark = pytest.mark.httpx_mock(
-    assert_all_responses_were_requested=False, can_send_already_matched_responses=True
+    assert_all_responses_were_requested=False,
+    assert_all_requests_were_expected=False,
+    can_send_already_matched_responses=True,
 )
 
 KEY = "skr-live-0123456789abcdef"

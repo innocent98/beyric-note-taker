@@ -475,11 +475,12 @@ def test_a_late_payment_beside_a_new_plan_the_person_bought_since_grants_nothing
 # ---- an outcome nobody knows ------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("silence", ["error", "unknown"])  # ProviderError, OutcomeUnknown
 def test_a_charge_with_no_answer_is_resolved_by_reference_never_charged_again(
-    session, ada, providers, bought
+    session, ada, providers, bought, silence
 ):
     due = bought
-    providers.usd.charge_outcome = "error"
+    providers.usd.charge_outcome = silence
 
     tick(session, due + timedelta(seconds=7))
 

@@ -383,7 +383,7 @@ def test_a_meet_clock_that_is_out_of_step_is_noticed_and_an_offset_fixes_it():
     assert "no shift of up to 30 s" in fixed and "Ada Example -> ok" in fixed
 
 
-def test_a_participant_who_never_stopped_ends_at_the_last_time_seen():
+def test_a_participant_who_never_stopped_is_not_counted_as_speaking_to_the_end():
     spans = _script().speaking_intervals(
         {
             "participants": [
@@ -397,7 +397,8 @@ def test_a_participant_who_never_stopped_ends_at_the_last_time_seen():
             ]
         }
     )
-    assert spans == {"Ada": [(REC_MS / 1000 + 5, REC_MS / 1000 + 9)]}
+    # never closed: dropped, not run to the end of the record (docs/sop/2026-11-17)
+    assert spans == {"Ada": []}
 
 
 def test_absent_or_unreadable_events_are_one_plain_line():
