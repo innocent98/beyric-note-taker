@@ -41,10 +41,17 @@ class PaymentProvider(Protocol):
         ...
 
     def charge_saved_method(
-        self, token: str, amount_minor: int, currency: str, reference: str
+        self,
+        token: str,
+        amount_minor: int,
+        currency: str,
+        reference: str,
+        payer_email: str | None = None,
     ) -> ProviderTransaction:
         """Charge a saved card token (a renewal). Returns the transaction as the provider reports
-        it; a charge that needs the payer is a failed or pending transaction, never an exception."""
+        it; a charge that needs the payer is a failed or pending transaction, never an exception.
+        `payer_email` is the email the card was saved under: Flutterwave ties a token to it and
+        refuses the charge without it (`payment_methods.email_at_provider`)."""
         ...
 
     def refund(self, provider_tx_id: str, amount_minor: int) -> str:
@@ -60,3 +67,7 @@ def provider_named(name: str, settings: Settings) -> PaymentProvider | None:
     """The provider registered under `name`, or None for a name nobody registered."""
     factory = PROVIDER_FACTORIES.get(name)
     return factory(settings) if factory else None
+
+
+# Real adapters register themselves in `PROVIDER_FACTORIES` when their module is imported.
+from app.billing import flutterwave  # noqa: E402,F401  (registers "flutterwave")

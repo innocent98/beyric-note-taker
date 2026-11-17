@@ -104,7 +104,12 @@ class FakeProvider:
         return tx
 
     def charge_saved_method(
-        self, token: str, amount_minor: int, currency: str, reference: str
+        self,
+        token: str,
+        amount_minor: int,
+        currency: str,
+        reference: str,
+        payer_email: str | None = None,
     ) -> ProviderTransaction:
         self.charges.append((token, amount_minor, currency, reference))
         return self.add_transaction(

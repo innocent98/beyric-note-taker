@@ -1,0 +1,118 @@
+# SOP: billing stage S7, the Flutterwave adapter (US dollars)
+
+**What shipped.** `app/billing/flutterwave.py`: the `PaymentProvider` for Flutterwave, dollars only. Hosted checkout, the payment re-read by transaction id, the `verif-hash` webhook check, a saved-card charge, a refund, and the three rules from the #212 review for provider answers. It registers itself under the name `flutterwave`, which is what `routing.provider_for` already returns for every country except Nigeria. **Dark:** `BILLING_LIVE` (new, default `false`) and the keys (new, default empty) mean no byte leaves the process until the owner sets them; with `BILLING_ENABLED=false` the webhook route is still a 404. No migration. Plus `scripts/flutterwave_test_run.py`, the guarded script for the test-mode run. Stage S7 of `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md` (sections 5.1, 5.3 to 5.6, 7, 8). PR: see the branch `feature/flutterwave-adapter`. **No new FE payload** (see the FE guide's S7 section).
+
+**Everything below was built from documents and a fake Flutterwave. Nothing was run against Flutterwave: no key was available.** "Not verified live" marks every claim that needs the test-mode run at the end.
+
+## Why
+
+Foreign customers pay in dollars through Flutterwave (spec 5.2). S4 wrote the money rule once against a fake; S7 only translates Flutterwave's shapes into the neutral types and must not change what "paid" means. Flutterwave's webhook check is a static secret, not a signature (spec 5.4), so this adapter is the place where "never trust the webhook alone" is easiest to get wrong.
+
+## What the Flutterwave pages say (read 2026-11-17 by me, not relayed)
+
+I fetched each page as text (`curl`, the `.md` version of each docs page) and the vendor's machine-readable API file `https://developer.flutterwave.com/api/v3/openapi.json` (its own description of every v3 call). Pages read:
+
+| Page (all under `https://developer.flutterwave.com/`) | What I took from it |
+|---|---|
+| `docs/webhooks` (v3) and `v4/docs/webhooks` | the `verif-hash` header carries the secret hash set in the dashboard; missing or different means discard; answer 200; 60-second timeout; 3 retries 30 minutes apart; the `charge.completed` sample (`data.id`, `tx_ref`, `status`, `amount`, `currency`, `customer.email`, `card.country` = `NG`, `card.token`) |
+| `docs/transaction-verification` | what to check (reference, `successful`, currency, amount at least what you expect); `GET /v3/transactions/:id/verify`; the sample (`card.country` = `NIGERIA NG`, `card.token`, `amount_settled`, no `card` for non-card payments) |
+| `docs/collections-inflow/flutterwave-standard` and `api/charge/standard` | hosted checkout: `POST /v3/payments` with `tx_ref`, `amount`, `currency`, `redirect_url`, `customer.email`; answer `data.link`; the redirect carries `status`, `tx_ref`, `transaction_id`; a failed attempt keeps the page open so the payer can try again |
+| `docs/recurring-payments/card-tokenization` | **a saved-card charge exists**: `POST /v3/tokenized-charges` with `token`, `currency`, `amount`, `email`, `tx_ref`. The token is tied to the email used on the first charge; tokens last one year; **by default each charge is authenticated with 3D Secure, so the payer must complete a step** (answer `pending`, `auth_model` `VBVSECURECODE`, a `redirect_url`); charging without that step ("NOAUTH") needs a request to Flutterwave support |
+| `docs/payment-operations/refunds` | `POST /v3/transactions/:id/refund` with `amount` (and `comments`); answer `data.id`, `status` `completed`; card refunds finish in 3 to 15 days; the stated minimum is NGN 100 and KES 10 (**no USD minimum is stated**); refund notices arrive on a separate webhook with no `event` field and no `tx_ref` |
+| `docs/testing` | the test cards, OTPs and failure cards (copied into the runbook); test checkout from `localhost`, not `127.0.0.1` |
+| `docs/authentication` | bearer secret key; **test keys contain `_TEST`**; test and live modes are separate toggles |
+| `docs/error-timeouts` | a timeout (HTTP 503 after about 28 seconds) can mean "still processing": query the transaction before retrying a payment |
+| `docs/payment-operations/settlements` | only approved accounts are settled; one settlement holds one currency; **no statement about settling dollars in dollars** |
+
+**Findings that change the spec's wording:**
+
+1. **The saved-card call is documented** (spec 5.3 said unconfirmed: the two addresses it tried were wrong). So it is implemented, not replaced by the pay link. **Not verified live.** Two documented facts matter to S8: the call needs the payer's email (so `charge_saved_method` got a `payer_email` argument; it comes from `payment_methods.email_at_provider`), and by default it answers `pending` (3DS), which S8 must treat exactly like a refusal: send the pay link.
+2. **`flutterwave-signature` exists, but only on the v4 webhook.** The v3 pages (and the v4 docs page `v4/docs/webhooks`) describe only `verif-hash`. The full-docs file (`llms-full.txt`) has a separate v4 webhook section where the secret hash is used to compute a base64 HMAC-SHA256 of the body, sent as `flutterwave-signature`, with a different body shape (`type`, `id: wbk_...`). The refunds page also says the dashboard has a "Switch to V3 webhook" switch. **This adapter reads the v3 webhook only**; the runbook has the owner set the dashboard webhook to V3. A v4 webhook would be refused as an unreadable event (400) unless it also carried `verif-hash`. Follow-up below.
+3. `verif-hash` is a shared secret and not tied to the body, so a request the proxy changed still verifies. The body is therefore never trusted: only `data.id` and `tx_ref` are used, and the payment is re-read (`settle`).
+
+## How, and what was decided
+
+| Piece | What it does |
+|---|---|
+| `start_checkout` | `POST /v3/payments`: `tx_ref` = our reference, `currency` `USD`, `redirect_url`, `customer.email` (and name), the amount. A **plan, renewal or upgrade** checkout sets `payment_options: "card"` (only a card leaves a reusable token); a **pack** does not restrict. The link must be an `https://` string. A non-USD payment or a non-positive amount is refused before any request |
+| `verify_webhook` | the `verif-hash` header (any letter case) against `FLUTTERWAVE_SECRET_HASH`, `hmac.compare_digest` on bytes. No configured hash refuses everything; a missing, empty, wrong or non-ASCII header is `WebhookRejected`. The body is not read |
+| `parse_event` | `charge.completed` becomes `charge_succeeded`, or `charge_failed` when the claimed status is `failed`; any other claimed status is passed on as a success *claim* for `settle` to check. `event_id` = `charge.completed:<data.id>:<status>` (a retry repeats it; a failed attempt and a later success differ). A refund notice (no `event` field, has `TransactionId` and `AmountRefunded`) becomes a `refund` event with the placeholder reference `flw-tx-<id>` (it has no `tx_ref`; `settle` stores refunds without a lookup, S9). Any other event (transfers, subscriptions) is a `BadEvent`, a 400 |
+| `fetch_transaction` | `GET /v3/transactions/<id>/verify`; the id must be 1 to 20 digits (it shapes a URL) |
+| `charge_saved_method` | `POST /v3/tokenized-charges`; `payer_email` required; a token that is not `[A-Za-z0-9_-]{8,200}` is refused. A timeout, lost connection or 5xx is looked up with `verify_by_reference`; if that fails too, `OutcomeUnknown`. A declined charge (answer status `failed`) or a 3DS one (`pending`) is a returned transaction, never an exception |
+| `refund` | `POST /v3/transactions/<id>/refund` with the amount; returns `data.id`. No answer is `OutcomeUnknown` and is **never retried here**: v3 documents no idempotency key and a second try could refund twice |
+| `_request` | the one place a call leaves the process. `BILLING_LIVE` false or no key: `ProviderError` before any `httpx.Client` is built. Timeouts: 10 s for a read (the webhook route holds a row lock across `fetch_transaction`, S4 follow-up), 35 s for a charge or refund (the vendor itself waits about 28 s). No proxy from the environment, no redirects. An error names the cause (type, HTTP code, the vendor's message cut at 200 characters), never the key, the URL or a payer's data |
+
+**Money.** JSON from Flutterwave is parsed with `parse_float=Decimal` (and NaN or Infinity refused); a dollar amount becomes cents only by exact decimal arithmetic. The amount we send is written as a JSON number straight from the integer cents (`1800` goes out as `18`, `999` as `9.99`), by a marker swap in the JSON text, because Python's JSON writer cannot emit an exact decimal. Tests include `1.15` and `18.15`, which a float turns into 114.99999999999999 and 1814.9999999999998 cents.
+
+**The #212 review items.** (a) A float amount, a text amount, a third decimal place (`17.999`), a negative, a boolean or `null` reaches `settle` as a non-`int` and is refused as `malformed provider report`, recorded, answered 200. A negative whole number of dollars returns as a `Decimal`, so it cannot pass for cents. (b) A lowercase or unknown currency (`usd`, `EUR`) is never normalised and is refused as malformed. (c) `settle` judges "malformed" before "pending" (a `pending` status with a lowercase currency is a recorded refusal, not a 503 loop); `settle.py` already did this, and tests now prove it for Flutterwave-shaped answers. **I did not change `settle.py`.** (d) An unknown status word is **not** refused for good: it raises `ProviderError` (503, the vendor resends, a sweeper can retry), because it could be money in flight.
+
+**Decisions:**
+
+* **`BILLING_LIVE` means "may a call leave the process", not "real money".** With it `false` or no key set, nothing leaves, even with a test key in the file. With it `true`, Flutterwave's test keys (`_TEST`) give test mode and its live keys real money. The spec's start-up check "BILLING_LIVE matches the keys" is **not** built: it would forbid the test-mode run. The script refuses anything but a test key; **S11 must add a check before a live key is used** (follow-up).
+* **`charge_saved_method` gained `payer_email: str | None = None`** (Protocol and `FakeProvider`, additive). Flutterwave needs it; Paystack's `charge_authorization` also takes an email, so S6 will probably want it too.
+* **Card-only checkout for plan, renewal and upgrade payments**, none for packs: my reading of "only cards can be tokenized" and of spec 5.3 (the clock is ours, and the renewal charges the token). S8 may want a different rule; it is one constant (`TOKEN_KINDS`). The dashboard setting "Disable preferred payment methods" can make the field a no-op (checkout page).
+* **The amount compared is `data.amount`**, as the vendor's own sample does, not `charged_amount` (which may include fees). Which of the two a dollar payment fills is **not verified live**.
+* **Refund events are stored, not acted on** (S9), with a placeholder reference. A chargeback or dispute webhook has no documented shape on the pages I read, so `dispute` is never produced.
+* **Rejected:** verifying `flutterwave-signature` as an alternative to `verif-hash` (useless without a v4 body parser, and a second way in); a checksum (`payload_hash`) on the checkout (the vendor presents it for client-side checkout; our link is made on the server); re-fetching after a charge (the charge answer is the vendor's own and `settle` re-reads on the webhook anyway).
+
+## What's involved
+
+| File | Change |
+|---|---|
+| `app/billing/flutterwave.py` | new: the adapter and `build`, registered in `PROVIDER_FACTORIES["flutterwave"]` |
+| `app/billing/provider.py` | the Protocol's `charge_saved_method` gets `payer_email`; one import line at the bottom registers the adapter |
+| `app/billing/fake.py` | the same optional argument |
+| `app/config.py` | `billing_live`, `flutterwave_secret_key`, `flutterwave_public_key` (never read), `flutterwave_secret_hash`; all `repr=False`, defaults dark and empty |
+| `.env.example`, `deploy/README.md` | names only, with what each does |
+| `scripts/flutterwave_test_run.py` | `checkout`, `status`, `raw`, `charge`, `refund`; refuses unless `BILLING_LIVE` is true and the key contains `_TEST` |
+| `tests/test_billing_flutterwave.py`, `tests/test_billing_flutterwave_script.py` | new, 213 tests, no network, no keys |
+| `docs/fe-integration-guide-billing.md`, `docs/checklist/master-checklist.md` | the S7 section and lines |
+
+## Verification
+
+* **Run locally** (lint, format and the touched tests only; CI runs the rest): `ruff check .` and `ruff format --check .` with the project's pinned ruff 0.17.3; `tests/test_billing_flutterwave.py` and `tests/test_billing_flutterwave_script.py` (213 tests); the S4 to S5 billing tests that exercise the shared code I touched (`test_billing_inbox`, `test_billing_payments`, `test_billing_routing`, `test_billing_mismatch`: 155 tests, all pass). On a scratch Postgres 17 container, removed afterwards. Not run: the full suite (CI).
+* **What the tests prove.** The hash: right, wrong (several kinds), missing, empty, letter case, no configured hash, constant-time compare, non-ASCII. Money: cents round trip exactly for `18.00`, `9.99`, `0.30`, `1.15`, `18.15`, never a float; odd amounts compared exactly through the real route (`9.98` for a `9.99` charge is refused, `18.15` for `18.15` is paid, `0.009` is refused). Through the real webhook route with this adapter: paid only after the answer confirms it; replay grants once and asks the vendor once; wrong amount, wrong currency, wrong reference, failed status all refused with the claim saying the right thing; malformed answers (three decimals, text, null, boolean, negative, `1e400`, lowercase currency) refused and recorded, answered 200, before a pending status can make them wait; pending waits and a retry settles; vendor 500, 503, timeout and junk give 503 with the payment unchanged; an unknown status waits; **with `BILLING_LIVE` false a genuine webhook cannot be settled and nothing leaves**; `NIGERIA NG`, `NG` and a payment with no card give `NG`, `NG`, nothing; the stored webhook body has the card token removed. Failures are explicit for every HTTP and transport error on checkout, verify, charge and refund; a timeout on a charge is looked up first; a timeout on a refund is `OutcomeUnknown` with one request sent. The flag-off test fails if an `httpx.Client` is even built.
+* **Mutation checks** (each caught by a test): `BILLING_LIVE` check removed, constant-time compare replaced by `==`, the amount type check removed, `parse_float=Decimal` removed, `OutcomeUnknown` replaced by `ProviderError`, the USD check on a charge removed, the negative-int guard removed. **One mutant survives and is equivalent:** removing the "no secret hash configured" check changes nothing, because an empty header is also refused; it stays as a second line of defence.
+* **Every Flutterwave body in the tests is a documented sample, not a capture.** The keys and the hash are made-up strings.
+* **Not verified live (needs the test-mode run below):** that Flutterwave accepts a USD payment from our account at all, what the payer sees, and in which currency and amount it settles (**spec 5.6 stays unproven; see below**); that the hosted link, the verify answer and the webhook look as the documented samples; that decimal dollar amounts (`9.99`) are accepted (the checkout page types `amount` as an integer, the tokenized-charge page's example is `24000`; no page shows a fractional dollar amount); the card country for a foreign-issued card; whether `amount` or `charged_amount` carries our price; the saved-card charge (3DS answer, NOAUTH, a refused charge's body); a refund (the USD minimum, the answer); that a real webhook reaches the route through nginx and the Next.js proxy with the `verif-hash` header intact and the body in under 256 KB; that the retry timings are as documented; that the V3 webhook is what the dashboard sends once V3 is chosen; that the test keys contain `_TEST` as documented.
+
+### Dollar pricing and settlement (spec 5.6): **unproven**
+
+What the pages say: the reference for the card charge call lists `USD` among the currencies a charge can be made in ("`NGN`, `GHS`, `KES`, `UGX`, `TZS`, `USD` etc."); the Checkout page says only that `currency` defaults to `NGN`; a settlement holds one currency, only approved accounts settle, and the settlement destination is chosen between a wallet and a bank account. The spec's own reading of the pricing page is that international cards are charged and settled in the local currency by default. **No page I read says that a Nigerian merchant's USD charge is settled in USD, in which wallet, or at what rate.** Without keys I could not ask.
+
+What would prove it, in test mode and then live: run the `checkout` and `raw` steps below and write down (1) whether Flutterwave creates the checkout in USD without an error and what the payer sees; (2) `currency`, `amount`, `charged_amount` and `amount_settled` from `raw`; (3) in the dashboard, the currency of the transaction in Transactions and of the settlement or wallet in Settlements and Balances; (4) with the live account after KYC, a small real payment (needs his explicit yes, S11) and which balance receives it. Until then **do not promise dollar settlement**.
+
+## The test-mode run (needs Adebayo's Flutterwave TEST keys; nothing here has been run)
+
+**Purpose:** show the adapter works against the real Flutterwave in test mode, with no money moving. **Do not paste a key into chat or git.**
+
+1. **In the Flutterwave dashboard**, switch to **Test mode** (the toggle in the sidebar). Settings, API Keys: copy the **secret key**; it must contain `_TEST`. Settings, Webhooks: choose the **V3 webhook**, enter the URL (below), type a long random **secret hash** (keep a copy), tick all the boxes, and **enable retries**.
+2. **A local env file** (ignored by git: `.gitignore` covers `.env.*`), say `.env.flutterwave-test`, next to the project, with: `BILLING_ENABLED=true`, `BILLING_LIVE=true`, `BILLING_ALLOWED_EMAILS=<your own account email>`, `FLUTTERWAVE_SECRET_KEY=<the test secret key>`, `FLUTTERWAVE_SECRET_HASH=<the hash from step 1>`, plus the app's usual `DATABASE_URL` and `SESSION_SECRET`. Start the app with that file. Flutterwave must reach it: use a tunnel to your machine (the webhook URL is `https://<tunnel host>/api/billing/webhooks/flutterwave`), or run the test on the server in a copy of the stack that is not the pilot's (the server `.env` is **not** the place for a test key while pilot users are on it). Open pages from `http://localhost:<port>`, never `127.0.0.1` (the testing page).
+3. **Make a test payment:** `python scripts/flutterwave_test_run.py checkout --email <your account email>` (default 18.00 USD). It prints a reference and a link. Open the link and pay with the **PIN Mastercard `5531886652142950`, expiry `09/32`, CVV `564`, PIN `3310`, OTP `12345`** (testing page).
+4. `python scripts/flutterwave_test_run.py status --reference <the reference>`. **Proves:** the webhook arrived, `verif-hash` matched, the verify answer was read, the payment is `succeeded` with its transaction id and card country, the event is `decided`.
+5. `python scripts/flutterwave_test_run.py raw --transaction-id <the id from step 4>`. **Proves (or disproves) spec 5.6:** record `currency`, `amount`, `charged_amount`, `amount_settled`, `card.country` exactly. Add the dashboard's view of the transaction and of Settlements.
+6. **Cases, each followed by `status`:** a failed card (insufficient funds `5258585922666506`, `09/31`, CVV `883`, OTP `12345`, PIN `3310`) gives a `failed` payment, and paying the same link again with the PIN card then gives `succeeded` (one grant); a **second checkout at `--amount-cents 999`** (a decimal amount: does the checkout accept 9.99, and is it paid and matched exactly); the **special OTP `6648`** (insufficient funds) and **`5548`** (wrong OTP) in the card modal, if it shows one; **replay:** resend the webhook from the dashboard (or `POST /v3/transactions/:id/resend-hook`) and confirm there is still one event row and one `succeeded` payment; **wrong hash:** `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'verif-hash: wrong' -d '{}' <the webhook URL>` must print `401` and `status` must show nothing new.
+7. **Saved card:** `raw --transaction-id <id> --show-token` prints a TEST token; then `charge --email <your account email> --token <that token>`. Expected: `status=pending` (3D Secure), which S8 turns into the pay link. If Flutterwave support enables NOAUTH on the account, the NoAuth Verve test card `5061460166976054667` (`10/29`, CVV `564`, PIN `3310`) is the one to try. Record the exact answer.
+8. **Refund:** `refund --transaction-id <id> --amount-cents 500`; record the answer and the error for a small amount if the USD minimum rejects it.
+9. **Through the real path** (only if the webhook went through the production proxy, not a tunnel): after step 4, confirm `status` shows the event decided; then check in nginx's log that the webhook path is not rate-limited and that `verif-hash` reached the app. If a payment stays unsettled with `WAITING` events, read the app log line `billing webhook for flutterwave refused`.
+10. Write the results (statuses, currencies, amounts, error texts; **never keys, tokens, emails**) into this SOP's verification table, tick the "not verified live" lines that passed, and remove the test keys from the env file.
+
+## Operate / roll back
+
+1. Deploy: nothing changes for anyone. `BILLING_ENABLED` and `BILLING_LIVE` default to `false`; with the keys empty no call is made.
+2. To use it, set the three variables in the server `.env` and recreate web, worker and scheduler (only after the test-mode run, and a live key only at S11).
+3. To stop it at once: set `BILLING_LIVE=false` (calls stop, webhooks still verify and store, then answer 503 so Flutterwave resends) or `BILLING_ENABLED=false` (the route is a 404).
+4. Roll back the code: revert the PR. There is no migration. `charge_saved_method`'s new argument is optional, so nothing else changes.
+
+## Follow-ups
+
+| Item | Where |
+|---|---|
+| **Run the test-mode run above and record the results**; spec 5.6 (dollar settlement) stays unproven until then | the owner provides test keys; then this SOP |
+| **A start-up check before a LIVE key is used** (the key must not contain `_TEST`, the flag must be true, and the account must be KYC-approved): the spec's "keys match the flag" rule, deliberately left out here | S11 |
+| **A sweeper for `billing_events` with `processed_at` null**: Flutterwave retries only 3 times, 30 minutes apart, and an unknown status or a vendor outage now waits | S8 (S4 follow-up, now more pressing) |
+| S8 must treat a `pending` saved-card answer as "send the pay link", pass `payer_email` from `payment_methods.email_at_provider`, never retry a charge after `OutcomeUnknown` without `fetch_by_reference`, and re-tokenize before the token's one-year expiry | S8 |
+| A v4 webhook (`flutterwave-signature`, HMAC-SHA256 of the body, base64) is not read; decide if the dashboard must stay on V3 or whether to add v4 | owner, S11 |
+| Unhandled events (transfers, subscription cancelled) answer 400 and Flutterwave retries them 3 times: an "ignored, 200" answer needs a change to `api.py` | S8 or later |
+| Chargeback and dispute notices: no documented shape was read; `dispute` events are never produced | S9 |
+| Webhook payload retention and the Privacy wording (S4 follow-up) | decision |

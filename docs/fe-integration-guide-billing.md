@@ -442,6 +442,19 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 * **Sending notes in French or Spanish is a translation.** The share dialog can get this 403 for a person with no plan; English sharing still works for them.
 * **Rewriting is also a button on the old page**: `POST /meetings/{id}/regenerate` (a form post, not JSON) is gated the same way and shows the same sentence on the page with status 403.
 
+## Flutterwave checkout (billing stage S7): no new payload, and what to expect
+
+**Nothing the frontend reads changed in S7.** The adapter adds no endpoint and changes no body: there is still no route that starts a payment (that is stage S8), and the only route S7 serves is the webhook that Flutterwave calls (`POST /api/billing/webhooks/flutterwave`, answers 404, 401, 400, 503 or 200, see the provider-layer SOP), which a screen never calls. So there is **no capture** for this section: a captured body here would be Flutterwave's, and none has been captured (no key). What follows is what the vendor's pages say and what the stage-S8 screens will have to do about it. **Every statement below is documented, not verified live** (the test-mode run is in `docs/sop/2026-11-17-billing-flutterwave-adapter.md`).
+
+* **Where the payer goes.** S8 will give the screen a link on `checkout.flutterwave.com` (a hosted page) and send the payer there; after paying or cancelling Flutterwave redirects to our `redirect_url` with `status`, `tx_ref` and `transaction_id` in the query string. **Those query values grant nothing and must not be trusted:** the screen on return only reads the payment's state from our API (`pending`, `paid`, `failed`) and polls it; only the server's re-read of the payment moves it to `paid`.
+* **A failed attempt does not end the checkout.** The hosted page stays open for another try until the payer pays or cancels; our payment stays `pending`/`failed` and can still become `paid` later. Show "not paid yet", never "payment lost".
+* **Dollars only, and the payer's card must be able to pay in dollars.** A person billed outside Nigeria pays in US dollars. Tell them to use a card their bank lets spend in dollars (spec 5.2, item 5), or to change the billing country if they bill from Nigeria. Whether a Nigerian-issued card paying in dollars works is **not verified live**.
+* **Plans and renewals ask for a card only**; a pack may offer other methods the account allows. The checkout page may ignore this if the dashboard setting "Disable preferred payment methods" is on.
+* **A renewal by saved card can need the payer.** By default Flutterwave asks the payer to complete a 3D Secure step for every saved-card charge. The screen must expect that a renewal is `pending`, and S8 will answer it with a pay link by email. Surface it as "Your renewal needs one confirmation" with the link, **not** as a failure. (Whether this account is allowed to skip the step is a request to Flutterwave support; not verified.)
+* **Refunds are slow.** A card refund is accepted at once but finishes in 3 to 15 days; show "refund started", never "refunded", until S9 says so.
+* **A settlement in dollars is not promised.** Do not write "paid out in dollars" anywhere (spec 5.6).
+* **The card country.** The payment's `card_country` will be `NG` for a Nigerian card whichever format Flutterwave used (`NIGERIA NG` in the verify answer, `NG` in the webhook) and empty for a bank transfer or mobile money; a mismatch note is the S5 rule.
+
 ## Verification
 
 | Behaviour | Verified |
@@ -467,3 +480,7 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 | `past_due` and `lapsed` states against the gates | tests only (the states arrive with subscriptions in stage S8) |
 | Export, decisions and the Review spelling step stay open | export and decisions: tests only (`tests/test_feature_gates.py`); Review list: live (capture 11); the spelling step: tests only. Search: not exercised in this stage (its code is untouched) |
 | A `features` signal in the session payload | not built (see "What the frontend must do") |
+| S7: the Flutterwave adapter: hosted checkout, verify, the `verif-hash` check, saved-card charge, refund | tests only, against a scripted fake Flutterwave built from the vendor's documented samples (`tests/test_billing_flutterwave.py`); **not verified live**: no Flutterwave key was available |
+| S7: a USD payment is accepted by our Flutterwave account, and the currency and amounts it is settled in | **not verified (spec 5.6 stays unproven)**; the steps are in the S7 SOP |
+| S7: decimal dollar amounts (9.99), `amount` against `charged_amount`, the card country of a foreign card, the 3D Secure answer of a saved-card charge, the refund answer | not verified live (documented only) |
+| S7: the webhook reaching the route with `verif-hash` intact through nginx and the Next.js proxy | not verified live |

@@ -315,6 +315,19 @@ class Settings(BaseSettings):
     # "for allow-listed accounts only"); `*` in the list means every account. An account not allowed
     # gets the same 404 as billing being off. The pilot of the pay screens is this list.
     billing_allowed_emails: str = ""
+    # May a payment provider make a real network call? (billing spec 5.7, stages S6 and S7.) `false`
+    # (default): no call to any provider leaves the process: checkout, verify, saved-card charge and
+    # refund all stop with an explicit error before touching the network. `true`: the adapters call
+    # their vendor with whatever keys are set (a vendor's test keys give its test mode, its live
+    # keys real money; the Flutterwave key's `_TEST` marker tells them apart).
+    billing_live: bool = False
+    # Flutterwave (stage S7), from the server `.env` only. Empty by default: nothing is sent.
+    # The secret key signs our calls; the secret hash is the value set in the Flutterwave dashboard
+    # that comes back in the `verif-hash` header of every webhook; the public key is kept for the
+    # day a page needs it (the adapter does not read it).
+    flutterwave_secret_key: str = Field(default="", repr=False)
+    flutterwave_public_key: str = Field(default="", repr=False)
+    flutterwave_secret_hash: str = Field(default="", repr=False)
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved
