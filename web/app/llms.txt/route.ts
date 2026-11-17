@@ -1,4 +1,4 @@
-import { HOURS, PACK, PLAN, TRIAL } from "@/components/pricing/content";
+import { SUMMARY } from "@/components/pricing/content";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, LEGAL_NAME } from "@/lib/site";
 
 // A plain-text summary for language-model crawlers (llmstxt.org). Same rule as the JSON-LD:
@@ -23,7 +23,7 @@ ${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a pilot with a li
 
 ## Pages
 
-- [Pricing](${SITE_URL}/pricing): a one-time trial of ${HOURS(TRIAL.hours)} valid ${TRIAL.days} days, then one monthly plan of ${HOURS(PLAN.hours)} at ${PLAN.usd} or ${PLAN.ngn} a month, and a ${PACK.hours}-hour pack at ${PACK.usd} or ${PACK.ngn} valid ${PACK.months} months. Naira is paid through Paystack in Nigeria; US dollars through Flutterwave everywhere else. Hours belong to the person, not the team.
+- [Pricing](${SITE_URL}/pricing): ${SUMMARY}. Naira is paid through Paystack in Nigeria; US dollars through Flutterwave everywhere else. Hours belong to the person, not the team.
 - [Privacy Policy](${SITE_URL}/privacy): what is collected, how Google user data is handled, retention, your rights.
 - [Terms of Service](${SITE_URL}/terms): rules for use, including your duty to tell participants about recording.
 

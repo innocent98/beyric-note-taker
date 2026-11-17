@@ -37,9 +37,15 @@ describe("llms.txt and the structured data", () => {
     expect(text).not.toMatch(OVERCLAIM);
   });
 
-  it("the JSON-LD publishes no price and no 'free', and names the legal entity", () => {
+  it("the JSON-LD publishes the real prices (the plan and the pack, in both currencies), no 'free', and names the legal entity", () => {
     const software = softwareJsonLd();
-    expect(software).not.toHaveProperty("offers");
+    // The seeded prices of migration 0052; web/tests/pricing-real.test.tsx pins the same entries to the migration.
+    expect(software.offers.map((o) => [o.name, o.priceCurrency, o.price])).toEqual([
+      ["20 hours a month", "USD", "18"],
+      ["20 hours a month", "NGN", "25000"],
+      ["10 extra hours", "USD", "10"],
+      ["10 extra hours", "NGN", "15000"],
+    ]);
     expect(JSON.stringify([organizationJsonLd(), software])).not.toMatch(/private pilot|coming soon|free/i);
     expect(organizationJsonLd().name).toBe("Beyrichq LTD");
   });
