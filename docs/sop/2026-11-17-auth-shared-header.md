@@ -1,6 +1,6 @@
 # SOP: sign-in and account screens wear the shared public header and footer
 
-**What shipped.** Every screen drawn through `AuthShell` (sign-in, sign-up, forgot and reset password, confirm email, accept invite, stop emails, pilot full, and the signed-in "Set up your workspace" step) now sits inside `PublicShell`: the same header and footer as the landing page, `/pricing`, `/privacy`, `/terms` and the 404 page. Branch `feature/auth-shared-header`; PR: see the report (number added once opened).
+**What shipped.** Every screen drawn through `AuthShell` (sign-in, sign-up, forgot and reset password, confirm email, accept invite, stop emails, pilot full, and the signed-in "Set up your workspace" step) now sits inside `PublicShell`: the same header and footer as the landing page, `/pricing`, `/privacy`, `/terms` and the 404 page. Branch `feature/auth-shared-header`; PR #230.
 
 ## Why
 
