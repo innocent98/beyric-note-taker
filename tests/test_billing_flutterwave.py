@@ -40,7 +40,7 @@ from app.main import create_app
 from app.models import BillingEvent, Payment
 from tests.test_web import make_settings, make_user
 
-SECRET_KEY = "FLWSECK_TEST-made-up-key-for-tests"  # not a real key
+SECRET_KEY = "made_up_TEST_key_for_tests"  # not a real key
 SECRET_HASH = "made-up-secret-hash-for-tests"  # not a real hash
 HOOK_URL = "/api/billing/webhooks/flutterwave"
 REF = "bn-7-abcdef0123456789"
@@ -96,7 +96,7 @@ def verify_text(
     tx_ref=REF,
     tx_id=285959875,
     card='{"first_6digits":"553188","last_4digits":"2950","issuer":" CREDIT",'
-    '"country":"NIGERIA NG","type":"MASTERCARD","token":"flw-t1nf-made-up-token-m03k",'
+    '"country":"NIGERIA NG","type":"MASTERCARD","token":"tok_made_up_token_for_tests",'
     '"expiry":"09/32"}',
 ) -> str:
     """Transaction Verification page, "Success Response": `amount` stays a decimal number in the
@@ -123,7 +123,7 @@ def hook_text(*, amount="18.00", currency="USD", status="successful", tx_ref=REF
         '"payment_type":"card","customer":{"id":1,"name":"Pat Payer",'
         '"email":"payer@example.test"},"card":{"first_6digits":"123456","last_4digits":"7889",'
         '"issuer":"VERVE","country":"NG","type":"VERVE","expiry":"02/23",'
-        '"token":"flw-t1nf-made-up-token-m03k"}}}'
+        '"token":"tok_made_up_token_for_tests"}}}'
     )
 
 
@@ -132,7 +132,7 @@ CHARGE_OK = (
     '{"status":"success","message":"Charge successful","data":{"id":1163077,'
     f'"tx_ref":"{REF}","amount":18,"currency":"USD","status":"successful",'
     '"payment_type":"card","customer":{"email":"payer@example.test"},'
-    '"card":{"country":"NG","token":"flw-t0-made-up-token-m03k"}}}'
+    '"card":{"country":"NG","token":"tok_made_up_other_token_for_tests"}}}'
 )
 CHARGE_3DS = CHARGE_OK.replace('"status":"successful"', '"status":"pending"')
 REFUND_OK = (
@@ -283,7 +283,7 @@ def test_the_verify_sample_is_read_into_the_neutral_transaction():
     assert (tx.provider_tx_id, tx.reference, tx.status) == ("285959875", REF, "successful")
     assert (tx.amount_minor, tx.currency) == (1800, "USD")
     assert tx.payer_email == "payer@example.test"
-    assert tx.card_token == "flw-t1nf-made-up-token-m03k"
+    assert tx.card_token == "tok_made_up_token_for_tests"
     assert tx.card_country == "NG"  # from "NIGERIA NG"
 
 
@@ -347,8 +347,8 @@ def test_the_charge_sample_becomes_a_neutral_event():
     assert (event.reference, event.provider_tx_id) == (REF, "285959875")
     assert (event.amount_minor, event.currency) == (1800, "USD")
     assert event.payer_email == "payer@example.test"
-    assert event.card_token == "flw-t1nf-made-up-token-m03k"
-    assert "flw-t1nf" not in repr(event)  # the token never reaches a log line
+    assert event.card_token == "tok_made_up_token_for_tests"
+    assert "tok_made_up" not in repr(event)  # the token never reaches a log line
 
 
 def test_the_same_delivery_has_the_same_id_and_a_different_attempt_a_different_one():
@@ -552,12 +552,12 @@ def test_a_read_that_times_out_is_not_an_unknown_outcome():
 def test_a_saved_card_is_charged_with_its_token_email_and_our_reference():
     wire = Wire(reply(CHARGE_OK))
     tx = wire.provider().charge_saved_method(
-        "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+        "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
     )
     assert wire.sent == [("POST", "/v3/tokenized-charges")]
     body = wire.body()
     assert body == {
-        "token": "flw-t1nf-made-up-token-m03k",
+        "token": "tok_made_up_token_for_tests",
         "currency": "USD",
         "email": "payer@example.test",
         "tx_ref": REF,
@@ -577,7 +577,7 @@ def test_the_default_3ds_answer_is_pending_so_the_caller_sends_the_pay_link():
         Wire(reply(CHARGE_3DS))
         .provider()
         .charge_saved_method(
-            "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         )
     )
     assert tx.status == "pending"
@@ -589,7 +589,7 @@ def test_a_declined_charge_is_a_failed_transaction_not_an_exception_and_not_a_su
         Wire(reply(declined))
         .provider()
         .charge_saved_method(
-            "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         )
     )
     assert tx.status == "failed"
@@ -598,7 +598,7 @@ def test_a_declined_charge_is_a_failed_transaction_not_an_exception_and_not_a_su
 def test_a_charge_the_vendor_rejects_is_an_error_never_paid():
     with pytest.raises(ProviderError) as caught:
         Wire(reply(ERROR_400, 400)).provider().charge_saved_method(
-            "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         )
     assert not isinstance(caught.value, OutcomeUnknown)
 
@@ -606,7 +606,7 @@ def test_a_charge_the_vendor_rejects_is_an_error_never_paid():
 def test_a_charge_sends_cents_as_the_exact_decimal():
     wire = Wire(reply(CHARGE_OK))
     wire.provider().charge_saved_method(
-        "flw-t1nf-made-up-token-m03k", 999, "USD", REF, payer_email="payer@example.test"
+        "tok_made_up_token_for_tests", 999, "USD", REF, payer_email="payer@example.test"
     )
     assert b'"amount": 9.99' in wire.requests[0].content
 
@@ -626,7 +626,7 @@ def test_a_charge_sends_cents_as_the_exact_decimal():
 )
 def test_a_charge_that_cannot_be_made_properly_sends_nothing(kwargs):
     values = dict(
-        token="flw-t1nf-made-up-token-m03k",
+        token="tok_made_up_token_for_tests",
         amount_minor=1800,
         currency="USD",
         reference=REF,
@@ -642,7 +642,7 @@ def test_a_charge_that_cannot_be_made_properly_sends_nothing(kwargs):
 def test_a_charge_that_times_out_is_looked_up_by_reference_before_anything_else(lost):
     wire = Wire(lost, reply(verify_text(tx_ref=REF)))
     tx = wire.provider().charge_saved_method(
-        "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+        "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
     )
     assert wire.sent == [
         ("POST", "/v3/tokenized-charges"),
@@ -656,7 +656,7 @@ def test_a_charge_that_times_out_and_cannot_be_found_is_an_unknown_outcome():
     wire = Wire(httpx.ReadTimeout("slow"), reply('{"status":"error","message":"nf"}', 404))
     with pytest.raises(OutcomeUnknown, match="may or may not"):
         wire.provider().charge_saved_method(
-            "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         )
 
 
@@ -719,7 +719,7 @@ def calls_of(provider):
         lambda: provider.fetch_transaction("285959875"),
         lambda: provider.fetch_by_reference(REF),
         lambda: provider.charge_saved_method(
-            "flw-t1nf-made-up-token-m03k", 1800, "USD", REF, payer_email="payer@example.test"
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         ),
         lambda: provider.refund("285959875", 500),
     ]
@@ -877,7 +877,7 @@ def test_a_flutterwave_payment_is_paid_only_after_the_provider_confirms_it(
     assert row.error is None and row.processed_at is not None
     assert row.dedupe_key == "charge.completed:285959875:successful"
     assert row.payload["data"]["card"]["token"] == "[removed]"  # the token is never stored readable
-    assert "flw-t1nf" not in json.dumps(row.payload)
+    assert "tok_made_up" not in json.dumps(row.payload)
 
 
 def test_a_replay_of_the_same_webhook_grants_once_and_asks_the_provider_once(

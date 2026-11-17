@@ -26,7 +26,7 @@ def test_a_run_without_billing_live_is_refused():
         script.guard(settings(billing_live=False))
 
 
-@pytest.mark.parametrize("key", ["", "FLWSECK-looks-like-a-live-key-X", "sk_live_nothing"])
+@pytest.mark.parametrize("key", ["", "looks-like-a-live-key-X", "sk_live_nothing"])
 def test_a_run_with_anything_but_a_test_key_is_refused(key):
     with pytest.raises(SystemExit, match="TEST key"):
         script.guard(settings(flutterwave_secret_key=key))
@@ -79,7 +79,7 @@ def test_raw_prints_only_the_money_fields_never_the_token_or_email(capsys):
         "card.country: NIGERIA NG",
     ):
         assert line in out
-    assert "flw-t1nf" not in out and "payer@example.test" not in out
+    assert "tok_made_up" not in out and "payer@example.test" not in out
 
 
 def test_raw_shows_the_token_only_when_asked(capsys):
@@ -87,7 +87,7 @@ def test_raw_shows_the_token_only_when_asked(capsys):
         settings(), transport=httpx.MockTransport(Wire(reply(verify_text())))
     )
     script.raw(provider, "285959875", show_token=True)
-    assert "card.token: flw-t1nf-made-up-token-m03k" in capsys.readouterr().out
+    assert "card.token: tok_made_up_token_for_tests" in capsys.readouterr().out
 
 
 def test_charge_makes_a_pending_renewal_payment_and_prints_what_flutterwave_says(session, capsys):
@@ -98,7 +98,7 @@ def test_charge_makes_a_pending_renewal_payment_and_prints_what_flutterwave_says
     wire = Wire(reply(CHARGE_3DS))
     provider = FlutterwaveProvider(settings(), transport=httpx.MockTransport(wire))
 
-    script.charge(session, provider, "payer@example.test", "flw-t1nf-made-up-token-m03k", 999)
+    script.charge(session, provider, "payer@example.test", "tok_made_up_token_for_tests", 999)
 
     assert "status=pending" in capsys.readouterr().out
     assert (
