@@ -230,6 +230,18 @@ export function nextPollDelay(elapsedMs: number): number | null {
 export const BILLING_PLANS_HREF = "/billing/plans";
 export const BILLING_HREF = "/billing";
 
+// A person who holds a plan period in force (`active`, or `past_due` in its 3 days of grace) manages it on
+// Billing; everyone else (no plan, a trial, a lapsed or ended plan) is sent to choose one.
+export function hasLivePlan(state: Pick<BillingState, "subscription">): boolean {
+  const status = state.subscription?.status;
+  return status === "active" || status === "past_due";
+}
+
+// Where every "your hours / your plan" entry point of the app leads for this person.
+export function billingEntryHref(state: Pick<BillingState, "subscription">): string {
+  return hasLivePlan(state) ? BILLING_HREF : BILLING_PLANS_HREF;
+}
+
 // The three gated features answer 403 `plan_inactive`; it is not transient, so it is never retried and
 // always leads to the plans screen.
 // The words that tell the two refusals with a way forward apart (see components/billing/gate-text.tsx). Both are
@@ -279,7 +291,14 @@ export function rememberBillingHealthy(now: number = Date.now()): void {
     // see above
   }
 }
+// Counts the times the tab forgot (a sign-in or sign-out here): an answer kept in memory for a few seconds is
+// only good in the epoch it was read in.
+let tabEpoch = 0;
+export function billingTabEpoch(): number {
+  return tabEpoch;
+}
 export function forgetBillingTabState(): void {
+  tabEpoch += 1;
   try {
     window.sessionStorage.removeItem(UNAVAILABLE_KEY);
     window.sessionStorage.removeItem(HEALTHY_KEY);

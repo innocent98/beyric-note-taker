@@ -1,36 +1,65 @@
-// Everything the pricing page says about plans, in one file: plan names, prices, hours, the rows of the
-// comparison table and the questions. NOTHING here is decided: Adebayo has not set a price or a number of
-// hours for any plan (2026-11-14). When he does, the whole change is in this file:
-//   * set a plan's `price` (for example "$15") and `hours` (for example "20 hours"); a `null` prints
-//     TO_BE_ANNOUNCED, and the card and the comparison table both read the same two fields;
-//   * edit `names` and `taglines` if the working names change.
-// The structure is his decision: a one-time trial, then monthly plans, extra-hour packs, and meeting hours
-// that belong to the PERSON, not to a team (decided 2026-11-16: a team is only a place to share; teammates
-// read shared notes without paying). Any number of hours he has floated is a guess and is deliberately NOT
-// printed; nothing publishes a price or an hour count until payment works. No "free" wording, no
-// "unlimited", no Business plan, and no feature is held back from a plan: every feature exists for every
-// account today (docs/superpowers/specs/2026-11-14-public-pages-audit.md, section 3).
-// Cut from the designer's Pricing file: HubSpot sync, Jira and Asana, "Custom retention period" and
-// "Priority support" (not built), "Data used to train models: Never" (not worded as our promise), the
-// "Most teams pick this" badge, per-person prices and the seat FAQ, and the cancel,
-// downgrade and discount answers (billing is not built). See docs/sop/2026-11-14-landing-v2-and-pricing.md.
+// Everything the pricing page says about plans, in one file: names, prices, hours, the rows of the comparison
+// table and the questions. Every number and rule here is DECIDED (Adebayo, 2026-11-14 to 2026-11-17) and is
+// pinned to its source by web/tests/pricing-real.test.tsx, which fails when a price or an hour count printed here
+// differs from the seed of alembic/versions/0052_subscriptions.py:
+//   * a one-time TRIAL of 3 hours, valid 14 days, no card (spec 3.8);
+//   * ONE monthly plan, `plan_20h`, named "20 hours a month" in the seed: 20 hours a month, USD 18 or NGN 25,000 a
+//     month. A person in Nigeria pays in naira through Paystack, everyone else in US dollars through Flutterwave
+//     (spec 5.2: the BILLING country decides, so a public page that cannot know the visitor's country says who pays
+//     in which currency instead of choosing for them);
+//   * a PACK, `pack_10h`, named "10 extra hours": 10 hours, USD 10 or NGN 15,000, valid 12 months, bought only
+//     with a live plan (spec 4.3);
+//   * hours belong to the PERSON, not to a team (a team is only a place to share); unused plan hours do not roll
+//     over (spec 3.3).
+// The page is public and unsigned, so it cannot ask GET /api/billing/plans (that answer is for one signed-in
+// person's billing country). One typed copy, one test against the seed, is the single source of truth; the SOP
+// (docs/sop/2026-11-17-pricing-real-and-billing-nav.md) says what to do when a price changes.
+// Left out on purpose, because the lawyer has not read them (spec 3.4 and 3.5 are flagged "the lawyer reads them
+// before launch"): refund windows, what happens after a failed payment, what happens when payments stop, and
+// any "we will tell you" promise. No "free" wording, no "unlimited", no Business plan, no Team Plus.
+// Cut from the designer's Pricing file: HubSpot sync, Jira and Asana, "Custom retention period" and "Priority
+// support" (not built), "Data used to train models: Never" (not worded as our promise), the "Most teams pick this"
+// badge and the seat FAQ. See docs/sop/2026-11-14-landing-v2-and-pricing.md.
 
-export const TO_BE_ANNOUNCED = "To be announced";
+// The numbers, as the seed holds them: one place, read by the cards, the table, the questions and the tests.
+export const TRIAL = { hours: 3, days: 14 } as const;
+// Whole dollars and whole naira, as the seed's minor units divided by 100 (1800 cents, 2,500,000 kobo).
+const usd = (major: number): string => `$${major}`;
+const ngn = (major: number): string => `₦${major.toLocaleString("en-US")}`;
+
+export const PLAN = {
+  code: "plan_20h",
+  name: "20 hours a month",
+  hours: 20,
+  usdMajor: 18,
+  ngnMajor: 25_000,
+  usd: usd(18),
+  ngn: ngn(25_000),
+} as const;
+export const PACK = {
+  code: "pack_10h",
+  name: "10 extra hours",
+  hours: 10,
+  months: 12,
+  usdMajor: 10,
+  ngnMajor: 15_000,
+  usd: usd(10),
+  ngn: ngn(15_000),
+} as const;
+
+export const HOURS = (n: number): string => `${n} hours`;
 
 export type Plan = {
-  id: "trial" | "team" | "team-plus";
+  id: "trial" | "plan" | "pack";
   name: string;
   tagline: string;
-  // The price as it should read ("$15"), or null while it is not decided.
-  price: string | null;
-  // What the price is for ("per month"), shown under it.
-  priceUnit: string;
-  // Meeting hours ("20 hours"), or null while it is not decided.
-  hours: string | null;
-  // How the hours are given: once, or each month, for you.
-  hoursUnit: string;
-  // The card's button. Every plan starts at the sign-up page, because no paid plan is on sale yet.
-  cta: string;
+  // The big line of the card ("$18", "3 hours") and what it is for.
+  amount: string;
+  unit: string;
+  // The price in naira under the dollar one, with what it is for; null where there is no price (the trial).
+  alt: string | null;
+  // The first line of the list: the meeting hours.
+  hoursLine: string;
   // The plan the page draws with the teal frame (the designer's middle card).
   main: boolean;
   // The list under the button, after the hours line.
@@ -42,11 +71,10 @@ export const PLANS: ReadonlyArray<Plan> = [
     id: "trial",
     name: "Trial",
     tagline: "For trying it on your own calls.",
-    price: null,
-    priceUnit: "one-time trial",
-    hours: null,
-    hoursUnit: "one time",
-    cta: "Get started",
+    amount: HOURS(TRIAL.hours),
+    unit: `one-time, valid ${TRIAL.days} days, no card`,
+    alt: null,
+    hoursLine: `Meeting hours: ${HOURS(TRIAL.hours)}, once, within ${TRIAL.days} days`,
     main: false,
     includes: [
       "Summary, decisions and action items",
@@ -57,80 +85,101 @@ export const PLANS: ReadonlyArray<Plan> = [
     ],
   },
   {
-    id: "team",
-    name: "Team",
-    tagline: "For teams that want meetings to turn into work.",
-    price: null,
-    priceUnit: "per month",
-    hours: null,
-    hoursUnit: "each month, for you",
-    cta: "Start with the trial",
+    id: "plan",
+    name: PLAN.name,
+    tagline: "For people whose meetings turn into work.",
+    amount: PLAN.usd,
+    unit: "a month, in US dollars",
+    alt: `${PLAN.ngn} a month, in naira`,
+    hoursLine: `Meeting hours: ${HOURS(PLAN.hours)} a month, for you`,
     main: true,
-    includes: ["Extra-hour packs when you need more", "Every feature in the table below"],
+    includes: [
+      "Unused plan hours do not roll over to the next month",
+      "Cancel any time: the plan keeps working until the period you paid for ends",
+      "Extra-hour packs when you need more",
+      "Every feature in the table below",
+    ],
   },
   {
-    id: "team-plus",
-    name: "Team Plus",
-    tagline: "For teams that meet more.",
-    price: null,
-    priceUnit: "per month",
-    hours: null,
-    hoursUnit: "each month, for you",
-    cta: "Start with the trial",
+    id: "pack",
+    name: PACK.name,
+    tagline: "For a month that runs over.",
+    amount: PACK.usd,
+    unit: `once, in US dollars, valid ${PACK.months} months`,
+    alt: `${PACK.ngn} once, in naira`,
+    hoursLine: `Meeting hours: ${HOURS(PACK.hours)}, for you`,
     main: false,
-    includes: ["Extra-hour packs when you need more", "Every feature in the table below"],
+    includes: ["Bought only with a live plan", "The hours are yours, not your team's"],
   },
 ];
 
-export const priceOf = (plan: Plan): string => plan.price ?? TO_BE_ANNOUNCED;
-export const hoursOf = (plan: Plan): string => plan.hours ?? TO_BE_ANNOUNCED;
-export const hoursLine = (plan: Plan): string => `Meeting hours: ${hoursOf(plan)}, ${plan.hoursUnit}`;
+// The two plans the comparison table sets side by side; the pack is an addition to a plan, not a third column.
+export const COMPARED: ReadonlyArray<Plan> = PLANS.filter((p) => p.id !== "pack");
+
+export const CURRENCY_NOTE =
+  "People in Nigeria pay in naira through Paystack. Everywhere else pays in US dollars through Flutterwave. The two are separate prices, not a conversion of each other.";
 
 export const HERO = {
   eyebrow: "PRICING",
   title: "Pay when your team runs on it.",
-  body: "Every plan includes notes, decisions and action items on Google Meet, Microsoft Teams and Zoom. No plan is on sale yet, and every price and number of hours below is still to be announced.",
+  body: `Notes, decisions and action items on Google Meet, Microsoft Teams and Zoom. Start with a one-time trial of ${HOURS(TRIAL.hours)}, no card. Then one monthly plan of ${HOURS(PLAN.hours)}: ${PLAN.usd} or ${PLAN.ngn} a month, with ${PACK.hours}-hour packs when you need more.`,
 } as const;
 
-export const TABLE_TITLE = "Compare plans";
+export const TABLE_TITLE = "Compare";
 export const TABLE_NOTE = "Outlook calendar support is new and still being tested.";
 
 const YES = "Yes";
-const ALL_YES: [string, string, string] = [YES, YES, YES];
 
-// One row per line of the comparison table: [label, trial, team, team plus].
-export function tableRows(plans: ReadonlyArray<Plan>): ReadonlyArray<readonly [string, string, string, string]> {
-  const [trial, team, plus] = plans;
+// One row per line of the comparison table: [label, trial, plan].
+export function tableRows(): ReadonlyArray<readonly [string, string, string]> {
   return [
-    ["Meeting hours", `${hoursOf(trial)}, ${trial.hoursUnit}`, `${hoursOf(team)} a month`, `${hoursOf(plus)} a month`],
-    ["Hours belong to the person", YES, YES, YES],
-    ["Extra-hour packs", TO_BE_ANNOUNCED, YES, YES],
-    ["Notes, decisions, action items", ...ALL_YES],
-    ["Transcript with speaker names", ...ALL_YES],
-    ["PDF and Word export", ...ALL_YES],
-    ["Calendar auto-join", ...ALL_YES],
-    ["Tasks, projects, sprints and milestones", ...ALL_YES],
-    ["Decisions log", ...ALL_YES],
-    ["Recurring meeting memory", ...ALL_YES],
-    ["Ask your meetings", ...ALL_YES],
-    ["Templates and vocabulary", ...ALL_YES],
-    ["Slack updates", ...ALL_YES],
-    ["Tasks sent to Linear", ...ALL_YES],
+    ["Price", "No card needed", `${PLAN.usd} or ${PLAN.ngn} a month`],
+    ["Meeting hours", `${HOURS(TRIAL.hours)}, once`, `${HOURS(PLAN.hours)} a month`],
+    ["How long the hours last", `${TRIAL.days} days from sign-up`, "The month; unused hours do not roll over"],
+    ["Hours belong to the person", YES, YES],
+    [`Extra-hour packs (${PACK.hours} hours, ${PACK.usd} or ${PACK.ngn})`, "No", "Yes"],
+    ["Notes, decisions, action items", YES, YES],
+    ["Transcript with speaker names", YES, YES],
+    ["PDF and Word export", YES, YES],
+    ["Calendar auto-join", YES, YES],
+    ["Tasks, projects, sprints and milestones", YES, YES],
+    ["Decisions log", YES, YES],
+    ["Recurring meeting memory", YES, YES],
+    ["Ask your meetings", YES, YES],
+    ["Templates and vocabulary", YES, YES],
+    ["Slack updates", YES, YES],
+    ["Tasks sent to Linear", YES, YES],
   ];
 }
 
 export const FAQS: ReadonlyArray<{ q: string; a: string }> = [
   {
-    q: "Can I buy a plan today?",
-    a: "Not yet. Beyric is invite-only for now and no paid plan is on sale. This page shows the plans we expect to offer. Every price and number of hours is marked to be announced until it is decided.",
+    q: "What does the trial include?",
+    a: `Every feature in Beyric, with ${HOURS(TRIAL.hours)} of meetings to record, once. It needs no card. It ends when the ${TRIAL.hours} hours are used or ${TRIAL.days} days after you sign up, whichever comes first.`,
+  },
+  {
+    q: "What does the monthly plan cost, and in which currency?",
+    a: `${PLAN.usd} a month, or ${PLAN.ngn} a month in naira. People in Nigeria pay in naira through Paystack; everywhere else pays in US dollars through Flutterwave. It includes ${HOURS(PLAN.hours)} of meetings each month.`,
   },
   {
     q: "How are meeting hours counted?",
-    a: "Plans are counted in hours of recorded meetings. On a monthly plan the hours belong to the person who has the plan, not to a team: a team is only a place to share notes, and teammates read shared notes without a plan of their own. Extra-hour packs can add more. How many hours each plan includes is to be announced.",
+    a: "Hours are counted in recorded meetings, and they belong to the person who has the plan, not to a team. A team is only a place to share notes. Unused plan hours do not roll over to the next month.",
   },
   {
-    q: "What does the trial include?",
-    a: "Every feature in Beyric. What is limited is the number of meeting hours, which is to be announced. The trial's hours are given once, not each month.",
+    q: "Can my teammates read my meetings without a plan?",
+    a: "Yes. They read what you share, search it and export it. They need a plan or trial of their own for Ask Beyric, translating and rewriting notes, and for their own note taker to join meetings.",
+  },
+  {
+    q: "What if I need more hours?",
+    a: `Buy a pack: ${PACK.hours} hours for ${PACK.usd} or ${PACK.ngn}, valid ${PACK.months} months. A pack can be bought only with a live plan.`,
+  },
+  {
+    q: "What happens when my hours run out?",
+    a: "A meeting that is already being recorded finishes and is counted. New recordings, including meetings your note taker would join from your calendar, wait until you add a pack or your plan renews. Ask Beyric, translating and rewriting notes keep working on a plan.",
+  },
+  {
+    q: "Can I cancel?",
+    a: "Yes, any time. Your plan keeps working until the end of the period you paid for, and then does not renew. The unused part of the period is not refunded.",
   },
 ];
 

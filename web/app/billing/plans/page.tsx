@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Choose a plan", robots: { index: fal
 export default async function PlansPage() {
   await requireOwner();
   return (
-    <AppShell current="settings" reviewOpen={await getReviewOpen()}
+    <AppShell current="billing" reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()} timeZone={await getTimeZone()}>
       <PlansView />
     </AppShell>

@@ -269,6 +269,8 @@
 .ld-plan-amount { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.2; }
 .ld-plan-amount-set { font-size: 48px; letter-spacing: -0.04em; line-height: 1; }
 .ld-plan-unit { color: var(--text-2); font-size: var(--text-md); }
+.ld-plan-alt { color: var(--text); font-size: var(--text-md); font-weight: 600; }
+.ld-plans-note { max-width: 720px; margin: -48px auto 0; padding: 0 var(--space-6) 88px; color: var(--text-3); font-size: var(--text-sm); text-align: center; }
 .ld-plan-main .ld-plan-unit { color: var(--ink-3); }
 .ld-plan-cta { display: flex; align-items: center; justify-content: center; height: 46px; border: 1px solid var(--separator); border-radius: var(--radius-md); color: var(--text); font-size: var(--text-md); font-weight: 600; }
 .ld-plan-cta:hover { background: var(--bg); color: var(--text); text-decoration: none; }
@@ -283,6 +285,7 @@
 .ld-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); }
 .ld-table { min-width: 620px; font-size: var(--text-md); }
 .ld-table [role="row"] { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border-softer); }
+.ld-table-2 [role="row"] { grid-template-columns: 1.5fr 1fr 1.3fr; }
 .ld-table [role="row"]:last-child { border-bottom: 0; }
 .ld-table-head { border-bottom: 1px solid var(--border) !important; }
 .ld-table [role="columnheader"], .ld-table [role="rowheader"], .ld-table [role="cell"] { padding: 14px var(--space-5); }

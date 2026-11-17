@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { GateText } from "@/components/billing/gate-text";
+import { HoursReasonLink } from "@/components/billing/hours-reason-link";
 import { Button } from "@/components/ui";
 import type { NotRecordedItem } from "@/lib/api/types";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
@@ -83,7 +84,10 @@ function Row({
           <span>{item.platform_label}</span>
           {duration ? <span>{duration}</span> : null}
         </p>
-        <p className="nr-reason">{item.reason_text}</p>
+        <p className="nr-reason">
+          {item.reason_text}
+          <HoursReasonLink reason={item.reason_text} />
+        </p>
         {error ? (
           <p className="nr-error" role="alert">
             <GateText message={error} />
