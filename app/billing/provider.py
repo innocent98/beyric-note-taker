@@ -57,8 +57,12 @@ class PaymentProvider(Protocol):
         needs it raises `ProviderError` when it is missing; one that does not need it ignores it."""
         ...
 
-    def refund(self, provider_tx_id: str, amount_minor: int) -> str:
-        """Refund `amount_minor` of a payment; returns the provider's refund id."""
+    def refund(
+        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
+    ) -> str:
+        """Refund `amount_minor` of a payment; returns the provider's refund id. `reference` is
+        our own idempotency key for this refund (made from the refund row): a provider that takes
+        one refuses a retry with the same key instead of refunding twice. A caller must pass one."""
         ...
 
 

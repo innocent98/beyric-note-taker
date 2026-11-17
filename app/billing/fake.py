@@ -123,6 +123,8 @@ class FakeProvider:
             )
         )
 
-    def refund(self, provider_tx_id: str, amount_minor: int) -> str:
+    def refund(
+        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
+    ) -> str:
         self.refunds.append((provider_tx_id, amount_minor))
         return f"fake-refund-{len(self.refunds)}"

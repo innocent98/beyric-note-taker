@@ -76,6 +76,7 @@ _TIMESTAMP = re.compile(r"[0-9]{1,12}")
 _TRANSACTION_ID = re.compile(r"[0-9]{1,20}")  # Paystack: an unsigned 64-bit integer
 _REFERENCE = re.compile(r"[A-Za-z0-9.=\-]{1,64}")  # Paystack: only -, ., = and alphanumerics
 _CURRENCY = re.compile(r"[A-Z]{3}")
+_REFUND_REFERENCE = re.compile(r"[A-Za-z0-9_\-]{8,64}")  # Paystack: 8 to 64 letters, digits, _, -
 
 # Paystack's documented transaction statuses (docs: "Verify Payments") to the neutral ones. A state
 # that is not final is `pending` (never `failed`: a failed payment can no longer be paid);
@@ -109,6 +110,35 @@ def _u64(value: object) -> bool:
 
 def _text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _digest(raw_body: bytes) -> str:
+    """A stable stand-in id for an event that carries none: the same bytes give the same value."""
+    return hashlib.sha256(raw_body).hexdigest()[:32]
+
+
+def _fit(value: object, limit: int, fallback: str) -> str:
+    """`value` if it is non-empty text that fits `limit` characters, else `fallback`."""
+    return value if isinstance(value, str) and 0 < len(value) <= limit else fallback
+
+
+def _event_currency(value: object) -> str:
+    """A refund or dispute event's currency claim (never read): as sent if it is a currency code,
+    else naira, the only currency this adapter takes."""
+    return value if isinstance(value, str) and _CURRENCY.fullmatch(value) else "NGN"
+
+
+def _checkout_url(value: object) -> str:
+    """An address Paystack sends the payer to: https, on paystack.com or a subdomain of it."""
+    parsed = urlparse(value) if isinstance(value, str) else None
+    host = (parsed.hostname or "") if parsed else ""
+    if (
+        parsed is None
+        or parsed.scheme != "https"
+        or not (host == "paystack.com" or host.endswith(".paystack.com"))
+    ):
+        raise ProviderError("Paystack gave no usable checkout address")
+    return value  # type: ignore[return-value]
 
 
 def _dig(value: object, *keys: str) -> object:
@@ -202,9 +232,9 @@ class PaystackProvider:
         if name == "charge.success":
             return self._charge_event(name, data)
         if name in _REFUND_EVENTS:
-            return self._refund_event(name, data)
+            return self._refund_event(name, data, raw_body)
         if name in _DISPUTE_EVENTS:
-            return self._dispute_event(name, data)
+            return self._dispute_event(name, data, raw_body)
         raise IgnoredEvent("an event we do not act on")
 
     def _charge_event(self, name: str, data: object) -> ProviderEvent:
@@ -218,6 +248,10 @@ class PaystackProvider:
             and _CURRENCY.fullmatch(currency)
         ):
             raise BadEvent("malformed charge event")
+        if not _REFERENCE.fullmatch(reference):
+            # Not a reference we could have made (ours are short, `bn-<id>-<hex>`): another product
+            # on the same Paystack account. Answer 200 rather than have Paystack resend it for days.
+            raise IgnoredEvent("a payment that is not ours")
         return ProviderEvent(
             event_id=f"{name}:{tx_id}",
             kind="charge_succeeded",
@@ -229,51 +263,47 @@ class PaystackProvider:
             card_token=_reusable_token(_dig(data, "authorization")),
         )
 
-    def _refund_event(self, name: str, data: object) -> ProviderEvent:
-        refund_reference = _text(_dig(data, "refund_reference"))
-        reference = _text(_dig(data, "transaction_reference"))
-        amount, currency = _dig(data, "amount"), _dig(data, "currency")
+    # Refund and dispute events are stored and left for the refund stage (S9): nothing here is read
+    # to move money, so a field Paystack leaves null (the processor's refund reference on a
+    # `refund.pending`, a dispute's refund amount) must never turn a genuine event into a 400 that
+    # is resent for 72 hours and lost. Only a body that is not an object is unreadable. The claims
+    # that are missing are filled with a placeholder; the stored payload keeps what Paystack sent.
+
+    def _refund_event(self, name: str, data: object, raw_body: bytes) -> ProviderEvent:
+        if not isinstance(data, dict):
+            raise BadEvent("malformed refund event")
+        refund_reference = _text(data.get("refund_reference"))
+        reference = _text(data.get("transaction_reference"))
+        amount = data.get("amount")
         if isinstance(amount, str) and re.fullmatch(r"[0-9]{1,15}", amount):
             amount = int(amount)  # Paystack's refund events carry the amount as text
-        if not (
-            refund_reference
-            and reference
-            and _whole_number(amount)
-            and isinstance(currency, str)
-            and _CURRENCY.fullmatch(currency)
-        ):
-            raise BadEvent("malformed refund event")
+        key = refund_reference or reference or _digest(raw_body)
         return ProviderEvent(
-            event_id=f"{name}:{refund_reference}",
+            event_id=_fit(f"{name}:{key}", 200, f"{name}:{_digest(raw_body)}"),
             kind="refund",
-            reference=reference,
-            provider_tx_id=refund_reference,  # the refund's own id: this event is about it
-            amount_minor=amount,
-            currency=currency,
+            reference=_fit(reference, 64, "unknown"),
+            provider_tx_id=_fit(refund_reference or reference, 128, _digest(raw_body)),
+            amount_minor=amount if _whole_number(amount) else 0,
+            currency=_event_currency(data.get("currency")),
             payer_email=_text(_dig(data, "customer", "email")),
         )
 
-    def _dispute_event(self, name: str, data: object) -> ProviderEvent:
-        dispute_id = _dig(data, "id")
-        reference = _text(_dig(data, "transaction", "reference"))
-        tx_id = _dig(data, "transaction", "id")
-        amount, currency = _dig(data, "refund_amount"), _dig(data, "currency")
-        if not (
-            _u64(dispute_id)
-            and _u64(tx_id)
-            and reference
-            and _whole_number(amount)
-            and isinstance(currency, str)
-            and _CURRENCY.fullmatch(currency)
-        ):
+    def _dispute_event(self, name: str, data: object, raw_body: bytes) -> ProviderEvent:
+        if not isinstance(data, dict):
             raise BadEvent("malformed dispute event")
+        dispute_id, tx_id = data.get("id"), _dig(data, "transaction", "id")
+        reference = _text(_dig(data, "transaction", "reference")) or _text(
+            data.get("transaction_reference")
+        )
+        amount = data.get("refund_amount")
+        key = str(dispute_id) if _u64(dispute_id) else _digest(raw_body)
         return ProviderEvent(
-            event_id=f"{name}:{dispute_id}",
+            event_id=f"{name}:{key}",
             kind="dispute",
-            reference=reference,
-            provider_tx_id=str(tx_id),
-            amount_minor=amount,
-            currency=currency,
+            reference=_fit(reference, 64, "unknown"),
+            provider_tx_id=str(tx_id) if _u64(tx_id) else key,
+            amount_minor=amount if _whole_number(amount) else 0,
+            currency=_event_currency(data.get("currency")),
             payer_email=_text(_dig(data, "customer", "email")),
         )
 
@@ -298,15 +328,8 @@ class PaystackProvider:
                 "callback_url": return_url,
             },
         )
-        url, reference = data.get("authorization_url"), data.get("reference")
-        parsed = urlparse(url) if isinstance(url, str) else None
-        if (
-            parsed is None
-            or parsed.scheme != "https"
-            or not (parsed.hostname or "").endswith("paystack.com")
-        ):
-            raise ProviderError("Paystack gave no usable checkout address")
-        if reference != payment.reference:
+        url = _checkout_url(data.get("authorization_url"))
+        if data.get("reference") != payment.reference:
             raise ProviderError("Paystack answered for a different reference")
         return Checkout(url=url, reference=payment.reference)
 
@@ -335,10 +358,14 @@ class PaystackProvider:
     ) -> ProviderTransaction:
         """`POST /transaction/charge_authorization`: charge a reusable card token. Paystack answers
         200 whether the card paid or not, so a decline is a `failed` transaction. A card that must
-        be challenged again (`paused`) is `pending`: the payer must be sent to Paystack. A timeout
-        or an error leaves the outcome unknown; the reference is ours and unique, so the caller
-        resolves it with `verify_reference` before charging again (a repeat is refused as a
-        duplicate reference)."""
+        be challenged again (`paused`) is `pending` and carries `payer_action_url`, where the payer
+        must be sent (its `provider_tx_id` is our reference, not a Paystack id: Paystack gives none
+        yet, so do not pass it to `fetch_transaction`). The answer is checked against the request:
+        another reference, another currency or a lower amount is a `ProviderError`, never a
+        result, because the outcome is then unknown. A timeout or an error is unknown too; the
+        reference is ours and unique, so the caller resolves it with `verify_reference` before
+        charging again (a repeat is refused as a duplicate reference). A caller must still settle
+        the result through `settle`'s rules before it grants anything."""
         if currency not in self.currencies:
             raise ProviderError("Paystack takes naira only")
         if not _whole_number(amount_minor) or amount_minor <= 0:
@@ -368,24 +395,39 @@ class PaystackProvider:
                 amount_minor=amount_minor,
                 currency=currency,
                 payer_email=payer_email,
+                payer_action_url=_checkout_url(data.get("authorization_url")),
             )
-        return _transaction(data)
+        tx = _transaction(data)
+        if tx.reference != reference or tx.currency != currency or tx.amount_minor < amount_minor:
+            raise ProviderError("Paystack's answer does not match the charge we asked for")
+        return tx
 
-    def refund(self, provider_tx_id: str, amount_minor: int) -> str:
+    def refund(
+        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
+    ) -> str:
         """`POST /refund`: refund `amount_minor` kobo; returns Paystack's refund id. The refund is
-        queued, not done: `refund.processed` arrives later as an event."""
+        queued, not done: `refund.processed` arrives later as an event. `reference` is OUR key for
+        this refund (Paystack: unique, 8 to 64 letters, digits, `_` and `-`): a retry after a
+        timeout with the same reference is refused by Paystack as a conflict (HTTP 409) instead of
+        refunding twice, so the caller (S9) must pass one made from its own refund row. Without it
+        a retried partial refund can refund twice."""
         if not isinstance(provider_tx_id, str) or not _TRANSACTION_ID.fullmatch(provider_tx_id):
             raise ProviderError("that is not a Paystack transaction id")
         if not _whole_number(amount_minor) or amount_minor <= 0:
             raise ProviderError("the amount must be a positive whole number of kobo")
-        data = self._call(
-            "POST", "/refund", {"transaction": provider_tx_id, "amount": amount_minor}
-        )
+        body: dict = {"transaction": provider_tx_id, "amount": amount_minor}
+        if reference is not None:
+            if not isinstance(reference, str) or not _REFUND_REFERENCE.fullmatch(reference):
+                raise ProviderError("a refund reference is 8 to 64 letters, digits, _ and -")
+            body["reference"] = reference
+        data = self._call("POST", "/refund", body)
         refund_id = data.get("id")
         if not _u64(refund_id):
             raise ProviderError("Paystack gave no refund id")
         if data.get("status") == "failed":
             raise ProviderError("Paystack reports the refund as failed")
+        if data.get("amount") != amount_minor:  # a different amount was refunded: say so loudly
+            raise ProviderError("Paystack's refund is not for the amount we asked")
         return str(refund_id)
 
     def _call(self, method: str, path: str, body: dict | None = None) -> dict:
@@ -396,7 +438,7 @@ class PaystackProvider:
         wanted = "sk_live_" if self._live else "sk_test_"
         if not self._secret_key:
             raise NotConfigured("Paystack is not configured: PAYSTACK_SECRET_KEY is not set")
-        if not self._secret_key.startswith(wanted):
+        if not self._secret_key.isascii() or not self._secret_key.startswith(wanted):
             raise NotConfigured(
                 f"PAYSTACK_SECRET_KEY is not a {wanted[3:-1]}-mode key while BILLING_LIVE is "
                 f"{str(self._live).lower()}"

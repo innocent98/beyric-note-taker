@@ -515,3 +515,82 @@ def test_the_test_run_script_stops_before_any_call_without_a_test_key(session, p
         script_module.make_checkout(
             session, live_key_in_test_mode, "payer@example.test", 50, "https://x/"
         )
+
+
+def test_a_refund_event_with_no_refund_reference_is_stored_not_lost(
+    client, monkeypatch, session, payment
+):
+    serve(monkeypatch, verified(payment))
+    body = sample("refund_processed_event.json")
+    body["data"].update(refund_reference=None, amount=None, status="pending")
+    raw_body = json.dumps(body, indent=2).encode()
+
+    first = post(client, raw_body)
+    second = post(client, raw_body)  # Paystack's resend: the same key, one row
+
+    assert (first.status_code, second.status_code) == (200, 200)
+    [row] = events(session)
+    assert row.type == "refund" and "waiting for the refund stage" in row.error
+    assert row.dedupe_key == "refund.processed:T2154954_412829_3be32076_6lcg3"
+
+
+def test_a_dispute_event_with_no_refund_amount_is_stored_not_lost(
+    client, monkeypatch, session, payment
+):
+    serve(monkeypatch, verified(payment))
+    body = sample("dispute_create_event.json")
+    body["data"]["refund_amount"] = None
+    assert post(client, json.dumps(body).encode()).status_code == 200
+    [row] = events(session)
+    assert (row.type, row.dedupe_key) == ("dispute", "charge.dispute.create:358950")
+
+
+def test_a_charge_that_is_not_ours_is_answered_200_and_stored_nowhere(
+    client, monkeypatch, session, payment
+):
+    """Another product on the same Paystack account: a reference we could never have made."""
+    script = serve(monkeypatch, verified(payment))
+    assert post(client, event_body(payment, reference="x" * 80)).status_code == 200
+    assert events(session) == [] and script.requests == []
+
+
+def test_the_test_run_script_does_nothing_when_billing_is_live(monkeypatch, session, payment):
+    from scripts import paystack_test_run as script_module
+
+    live = make_settings(billing_live=True, paystack_secret_key="sk_live_" + "x" * 20)
+    monkeypatch.setattr("app.config.get_settings", lambda: live)
+    for command in (
+        ["checkout", "payer@example.test", "--naira", "50"],
+        ["status", "x"],
+        ["verify", "x"],
+    ):
+        with pytest.raises(SystemExit, match="BILLING_LIVE is true"):
+            script_module.main(command)
+    session.expire_all()
+    assert session.scalars(select(Payment)).all() == [payment]  # nothing was written
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [(500, {"status": False, "message": "boom"}), httpx.ConnectError("down"), (200, b"not json")],
+)
+def test_a_failed_checkout_leaves_no_pending_row_behind(session, payment, answer):
+    from scripts import paystack_test_run as script_module
+
+    provider = PaystackProvider(
+        secret_key=KEY, webhook_secret=WEBHOOK_SECRET, transport=Paystack(answer).transport
+    )
+    with pytest.raises(SystemExit):
+        script_module.make_checkout(session, provider, "payer@example.test", 50, "https://x/")
+    session.expire_all()
+    assert session.scalars(select(Payment)).all() == [payment]  # only the fixture's own row
+
+
+def test_no_key_leaves_no_pending_row_either(session, payment):
+    from scripts import paystack_test_run as script_module
+
+    provider = PaystackProvider(secret_key="", webhook_secret="")
+    with pytest.raises(SystemExit):
+        script_module.make_checkout(session, provider, "payer@example.test", 50, "https://x/")
+    session.expire_all()
+    assert session.scalars(select(Payment)).all() == [payment]

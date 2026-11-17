@@ -216,6 +216,14 @@ class Settings(BaseSettings):
                     f"{setting.upper()} is not a {mode}-mode key (it must start with "
                     f"{prefix}_{mode}_) while BILLING_LIVE is {str(self.billing_live).lower()}"
                 )
+        secret, webhook = self.paystack_secret_key.strip(), self.paystack_webhook_secret
+        if webhook and not webhook.strip():
+            raise ValueError("PAYSTACK_WEBHOOK_SECRET is blank; remove the line or set the secret")
+        if webhook.strip() and not secret:
+            raise ValueError(
+                "PAYSTACK_WEBHOOK_SECRET is set but PAYSTACK_SECRET_KEY is not: a webhook could be "
+                "checked and then never settled"
+            )
         return self
 
     @model_validator(mode="after")

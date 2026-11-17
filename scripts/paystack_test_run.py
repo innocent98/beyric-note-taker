@@ -13,8 +13,9 @@ the webhook. `status` prints what the app wrote (the payment and its webhook eve
 Paystack about the payment and prints what it says (read-only: it changes nothing here).
 
 It sends nothing without a TEST secret key: with no key, or a live key, or `BILLING_LIVE=true`, it
-stops before any call. It prints no key, no token and no email. No hours are granted (the grant
-handlers arrive with stage S8): a paid payment only becomes `succeeded`.
+stops before any call (and before it touches the database). A failed run leaves no payment row.
+It prints no key, no token and no email. No hours are granted (the grant handlers arrive with
+stage S8): a paid payment only becomes `succeeded`.
 """
 
 import argparse
@@ -50,11 +51,15 @@ def make_checkout(db: Session, provider: PaystackProvider, email: str, naira: in
         currency="NGN",
         amount_minor=naira * 100,
     )
-    db.commit()
+    # The payment is flushed (it has its reference) but NOT committed until Paystack has given a
+    # checkout: a failed run rolls it back and leaves no orphan row. The payer cannot pay before the
+    # link is printed, which is after the commit, so a webhook cannot arrive first.
     try:
         checkout = provider.start_checkout(payment, payer, return_url)
     except ProviderError as exc:
+        db.rollback()
         raise SystemExit(f"Paystack was not asked or did not give a checkout: {exc}") from None
+    db.commit()
     return payment, checkout
 
 
@@ -121,9 +126,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from app.billing.paystack import from_settings
     from app.config import get_settings
-    from app.db import SessionLocal
 
     settings = get_settings()
+    if settings.billing_live:
+        raise SystemExit("test mode only: BILLING_LIVE is true, so this script does nothing")
+    from app.db import SessionLocal
+
     provider = from_settings(settings)
     with SessionLocal() as db:
         if args.command == "checkout":

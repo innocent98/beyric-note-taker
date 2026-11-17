@@ -67,6 +67,9 @@ class ProviderTransaction:
     payer_email: str | None = None
     card_token: str | None = field(default=None, repr=False)
     card_country: str | None = None
+    # Set only on a saved-card charge the card's bank wants the payer to authorize again: where to
+    # send them. Such a transaction is `pending` and its `provider_tx_id` is our own reference.
+    payer_action_url: str | None = None
 
 
 @dataclass(frozen=True)

@@ -380,19 +380,55 @@ def test_a_body_that_is_not_an_event_is_unreadable(body):
         make()[0].parse_event(body)
 
 
-def test_malformed_refund_and_dispute_events_are_unreadable():
+def test_a_refund_or_dispute_event_with_null_fields_is_still_an_event_never_a_lost_one():
+    """A `refund.pending` may carry no processor reference yet, a dispute no refund amount: stored
+    for the refund stage, never a 400 that Paystack resends for 72 hours and then drops."""
     provider, _ = make()
     refund = sample("refund_processed_event.json")
-    refund["data"]["amount"] = "50.00"
-    with pytest.raises(BadEvent):
-        provider.parse_event(json.dumps(refund).encode())
-    refund["data"]["amount"] = 5000.5
-    with pytest.raises(BadEvent):
-        provider.parse_event(json.dumps(refund).encode())
+    refund["data"].update(refund_reference=None, status="pending")
+    event = provider.parse_event(json.dumps(refund).encode())
+    assert event.kind == "refund" and event.reference == "T2154954_412829_3be32076_6lcg3"
+    assert event.event_id == "refund.processed:T2154954_412829_3be32076_6lcg3"
+    assert event.provider_tx_id == "T2154954_412829_3be32076_6lcg3"
+
+    for amount in ("50.00", 5000.5, None, "x"):
+        refund["data"]["amount"] = amount
+        assert provider.parse_event(json.dumps(refund).encode()).amount_minor == 0
+
+    refund["data"].update(refund_reference=None, transaction_reference=None, currency="ngn")
+    body = json.dumps(refund).encode()
+    nothing = provider.parse_event(body)
+    assert nothing.reference == "unknown" and nothing.currency == "NGN"
+    assert nothing.event_id == provider.parse_event(body).event_id  # stable for a redelivery
+    assert nothing.event_id.startswith("refund.processed:") and len(nothing.event_id) < 200
+
     dispute = sample("dispute_create_event.json")
-    dispute["data"]["transaction"] = None
+    dispute["data"].update(refund_amount=None, currency=None)
+    event = provider.parse_event(json.dumps(dispute).encode())
+    assert (event.kind, event.amount_minor, event.currency) == ("dispute", 0, "NGN")
+    assert event.reference == "v3mjfgbnc19v97x" and event.provider_tx_id == "896467688"
+
+    dispute["data"].update(id=None, transaction=None, transaction_reference="v3mjfgbnc19v97x")
+    event = provider.parse_event(json.dumps(dispute).encode())
+    assert event.reference == "v3mjfgbnc19v97x" and event.event_id.startswith("charge.dispute.")
+
+    refund["data"]["transaction_reference"] = "x" * 100  # over the column: a placeholder, not a 400
+    assert provider.parse_event(json.dumps(refund).encode()).reference == "unknown"
+
+
+@pytest.mark.parametrize("name", ["refund.processed", "charge.dispute.create"])
+@pytest.mark.parametrize("data", [None, [], "x", 5])
+def test_a_refund_or_dispute_event_whose_data_is_not_an_object_is_unreadable(name, data):
     with pytest.raises(BadEvent):
-        provider.parse_event(json.dumps(dispute).encode())
+        make()[0].parse_event(json.dumps({"event": name, "data": data}).encode())
+
+
+@pytest.mark.parametrize("reference", ["x" * 65, "has space", "a/b", "é"])
+def test_a_charge_that_is_not_ours_is_ignored_not_resent_for_days(reference):
+    body = json.loads(EVENT_BODY)
+    body["data"]["reference"] = reference
+    with pytest.raises(IgnoredEvent):
+        make()[0].parse_event(json.dumps(body).encode())
 
 
 # ---- hosted checkout ----
@@ -641,6 +677,44 @@ def test_a_card_that_must_be_challenged_again_is_pending_never_an_exception():
     tx = charge(provider, reference="jvx2o36ghlvrgtt")
     assert (tx.status, tx.reference) == ("pending", "jvx2o36ghlvrgtt")
     assert tx.amount_minor == 35247 and tx.currency == "NGN"
+    assert tx.payer_action_url == "https://checkout.paystack.com/resume/0744ub5o065nwyz"
+    assert tx.provider_tx_id == "jvx2o36ghlvrgtt"  # our reference, not a Paystack id
+
+
+@pytest.mark.parametrize(
+    "url", [None, "http://checkout.paystack.com/x", "https://evilpaystack.com/x", "https://x.test/"]
+)
+def test_a_paused_answer_without_a_usable_address_is_an_error(url):
+    body = sample("charge_authorization_paused_response.json")
+    body["data"]["authorization_url"] = url
+    provider, _ = make((200, body))
+    with pytest.raises(ProviderError, match="checkout address"):
+        charge(provider, reference="jvx2o36ghlvrgtt")
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"reference": "someone-elses-reference"},
+        {"currency": "USD"},
+        {"amount": 35246},
+        {"amount": 1},
+    ],
+)
+def test_a_charge_answer_that_does_not_match_the_request_is_an_error_not_a_result(over):
+    """The outcome is unknown then (money may have moved): the caller verifies by reference."""
+    provider, _ = make(
+        ok("charge_authorization_response.json", **{"reference": "bn-9-fedcba9876543210", **over})
+    )
+    with pytest.raises(ProviderError, match="does not match"):
+        charge(provider)
+
+
+def test_a_charge_answer_with_a_higher_amount_is_accepted():
+    provider, _ = make(
+        ok("charge_authorization_response.json", reference="bn-9-fedcba9876543210", amount=40000)
+    )
+    assert charge(provider).amount_minor == 40000
 
 
 def test_a_paused_answer_for_another_reference_is_an_error():
@@ -689,6 +763,37 @@ def test_a_refund_sends_whole_kobo_and_returns_paystacks_refund_id():
     assert str(script.requests[0].url) == f"{API_BASE}/refund"
     assert script.sent() == {"transaction": "1004723697", "amount": 10000}
     assert b"10000}" in script.requests[0].content  # an integer, not "10000.0"
+
+
+def test_a_refund_sends_our_reference_so_a_retry_cannot_refund_twice():
+    provider, script = make(ok("refund_response.json"))
+    provider.refund("1004723697", 10000, reference="refund-17-attempt")
+    assert script.sent() == {
+        "transaction": "1004723697",
+        "amount": 10000,
+        "reference": "refund-17-attempt",
+    }
+
+
+def test_a_retried_refund_that_paystack_refuses_as_a_conflict_is_an_error_not_a_second_refund():
+    provider, script = make((409, {"status": False, "message": "Duplicate refund reference"}))
+    with pytest.raises(ProviderError, match=r"\(409\): Duplicate refund reference"):
+        provider.refund("1004723697", 10000, reference="refund-17-attempt")
+    assert len(script.requests) == 1
+
+
+@pytest.mark.parametrize("reference", ["short", "x" * 65, "has space", "a/b/c/d/e/f", "", 5])
+def test_a_refund_reference_paystack_would_refuse_is_refused_before_any_call(reference):
+    provider, script = make(ok("refund_response.json"))
+    with pytest.raises(ProviderError):
+        provider.refund("1004723697", 10000, reference=reference)
+    assert script.requests == []
+
+
+def test_a_refund_for_another_amount_than_asked_is_an_error():
+    provider, _ = make(ok("refund_response.json", amount=5000))
+    with pytest.raises(ProviderError, match="amount we asked"):
+        provider.refund("1004723697", 10000)
 
 
 def test_a_refund_paystack_reports_as_failed_is_an_error():
@@ -795,6 +900,7 @@ def test_a_redirect_is_not_followed():
         ("pk_test_" + "x" * 20, False),  # a public key is not a secret key
         ("whsec_" + "x" * 20, False),
         ("x" * 20, False),
+        ("sk_test_é" + "x" * 20, False),  # not even sendable in a header
     ],
 )
 def test_no_call_leaves_the_process_without_a_key_of_the_right_kind(call, key, live):
@@ -878,3 +984,15 @@ def test_matching_keys_load_and_stay_out_of_the_settings_repr():
     for settings in (test_mode, live_mode):
         assert not any(part * 12 in repr(settings) for part in "abc")
     assert make_settings().paystack_secret_key == ""  # the defaults are empty
+
+
+@pytest.mark.parametrize(
+    "overrides, text",
+    [
+        ({"paystack_webhook_secret": "   "}, "PAYSTACK_WEBHOOK_SECRET is blank"),
+        ({"paystack_webhook_secret": "whsec_" + "c" * 12}, "PAYSTACK_SECRET_KEY is not"),
+    ],
+)
+def test_a_webhook_secret_that_is_blank_or_has_no_secret_key_stops_the_process(overrides, text):
+    with pytest.raises(ValueError, match=text):
+        make_settings(**overrides)

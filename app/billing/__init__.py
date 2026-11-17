@@ -16,4 +16,4 @@ keys in the environment to make any call; `fake.FakeProvider` is for tests.
 """
 
 # Importing an adapter registers it in `provider.PROVIDER_FACTORIES`; one line per adapter.
-from app.billing import paystack  # noqa: E402, F401
+from app.billing import paystack  # noqa: F401
