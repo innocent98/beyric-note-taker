@@ -25,7 +25,7 @@ text contains `_TEST`, authentication page), so a live key can never start a pay
   `charge` needs; the app saves no token in this stage.
 - `charge`: makes a `pending` USD renewal payment and charges the saved TEST card token under the
   account's email (Flutterwave ties a token to the email it was saved under). Expect `pending`
-  (3D Secure) unless Flutterwave support enabled NOAUTH on the account.
+  (3D Secure, with the payer's own link) unless Flutterwave support enabled NOAUTH.
 - `refund`: refunds part of a test transaction and prints the refund id.
 """
 
@@ -132,7 +132,11 @@ def charge(db, provider: FlutterwaveProvider, email: str, token: str, amount_cen
     )
     print(f"reference: {payment.reference}")
     print(f"flutterwave says: status={tx.status} amount={tx.amount_minor} {tx.currency}")
-    print("pending means the payer must complete 3D Secure: that is the pay-link case.")
+    if tx.status == "pending":
+        print("pending: the charge is open until the payer completes 3D Secure.")
+        print(f"payer link (that charge's own, not a new checkout): {tx.action_url}")
+    if tx.failure_reason:
+        print(f"refused: {tx.failure_reason}")
 
 
 def main(argv=None) -> None:

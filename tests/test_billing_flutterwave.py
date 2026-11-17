@@ -34,7 +34,7 @@ from app.billing.flutterwave import (
 from app.billing.payments import new_payment
 from app.billing.provider import PROVIDER_FACTORIES, provider_named
 from app.billing.routing import provider_for
-from app.billing.types import BadEvent, ProviderError, WebhookRejected
+from app.billing.types import BadEvent, BillingError, ProviderError, WebhookRejected
 from app.db import get_session
 from app.main import create_app
 from app.models import BillingEvent, Payment
@@ -134,7 +134,12 @@ CHARGE_OK = (
     '"payment_type":"card","customer":{"email":"payer@example.test"},'
     '"card":{"country":"NG","token":"tok_made_up_other_token_for_tests"}}}'
 )
-CHARGE_3DS = CHARGE_OK.replace('"status":"successful"', '"status":"pending"')
+PAYER_LINK = "https://3ds.example.test/pay-made-up"
+# Card Tokenization page, the 3D Secure sample: `pending`, with the payer's link in
+# `data.meta.authorization.redirect`.
+CHARGE_3DS = CHARGE_OK.replace('"status":"successful"', '"status":"pending"')[:-2] + (
+    f',"meta":{{"authorization":{{"mode":"redirect","redirect":"{PAYER_LINK}"}}}}}}}}'
+)
 REFUND_OK = (
     '{"status":"success","message":"Transaction refund initiated","data":{"id":8612,'
     '"tx_id":285959875,"amount_refunded":5,"status":"completed","destination":"payment_source"}}'
@@ -309,11 +314,12 @@ def test_a_failed_and_a_pending_status_are_read_as_they_are():
         assert flutterwave._transaction_from(data).status == status
 
 
-def test_an_unknown_status_is_an_error_not_a_refusal():
-    """A word we do not know could be money in flight: the event waits, it is not closed."""
+def test_an_unknown_status_is_passed_on_so_settle_records_it_for_a_human_look():
+    """Not a 503 loop: the word reaches `settle._malformed`, which refuses and records it."""
     data = flutterwave._loads(verify_text(status="new-thing"))["data"]
-    with pytest.raises(ProviderError):
-        flutterwave._transaction_from(data)
+    tx = flutterwave._transaction_from(data)
+    assert tx.status == "new-thing"
+    assert "unknown status" in settle._malformed(tx)
 
 
 @pytest.mark.parametrize("bad", ["", "null", "[]", "3", '{"status":"success"}', '{"data":{}}'])
@@ -571,8 +577,9 @@ def test_a_saved_card_is_charged_with_its_token_email_and_our_reference():
     )
 
 
-def test_the_default_3ds_answer_is_pending_so_the_caller_sends_the_pay_link():
-    """card-tokenization page: a charge is authenticated with 3DS unless NOAUTH is enabled."""
+def test_the_default_3ds_answer_is_pending_with_the_payers_own_link():
+    """card-tokenization page: a charge is authenticated with 3DS unless NOAUTH is enabled. The
+    charge stays open; the caller sends THIS link and opens no second checkout."""
     tx = (
         Wire(reply(CHARGE_3DS))
         .provider()
@@ -581,6 +588,42 @@ def test_the_default_3ds_answer_is_pending_so_the_caller_sends_the_pay_link():
         )
     )
     assert tx.status == "pending"
+    assert tx.action_url == PAYER_LINK
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [
+        "",
+        ',"meta":{}',
+        ',"meta":{"authorization":{"mode":"redirect"}}',
+        ',"meta":{"authorization":{"mode":"redirect","redirect":"http://insecure.test/x"}}',
+        ',"meta":{"authorization":{"mode":"redirect","redirect":42}}',
+        ',"meta":"text"',
+    ],
+)
+def test_no_https_payer_link_means_none(meta):
+    answer = CHARGE_3DS.split(',"meta"')[0] + meta + "}}"
+    tx = (
+        Wire(reply(answer))
+        .provider()
+        .charge_saved_method(
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    )
+    assert tx.status == "pending" and tx.action_url is None
+
+
+def test_a_charge_answer_with_an_unknown_status_is_passed_on_never_called_successful():
+    answer = CHARGE_OK.replace('"status":"successful"', '"status":"cancelled"')
+    tx = (
+        Wire(reply(answer))
+        .provider()
+        .charge_saved_method(
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    )
+    assert tx.status == "cancelled"
 
 
 def test_a_declined_charge_is_a_failed_transaction_not_an_exception_and_not_a_success():
@@ -595,12 +638,59 @@ def test_a_declined_charge_is_a_failed_transaction_not_an_exception_and_not_a_su
     assert tx.status == "failed"
 
 
-def test_a_charge_the_vendor_rejects_is_an_error_never_paid():
+@pytest.mark.parametrize("code", [400, 404, 422])
+def test_a_charge_the_vendor_refuses_is_a_failed_result_with_its_reason_never_paid(code):
+    """card-tokenization page: HTTP 400 `Wrong token or email passed`. Nothing was charged and a
+    dead token keeps failing, so it is a result the caller can read, not a retryable exception."""
+    body = '{"status":"error","message":"Wrong token or email passed","data":null}'
+    tx = (
+        Wire(reply(body, code))
+        .provider()
+        .charge_saved_method(
+            "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    )
+    assert (tx.status, tx.reference, tx.amount_minor, tx.currency) == ("failed", REF, 1800, "USD")
+    assert tx.failure_reason == "Wrong token or email passed"
+    assert tx.provider_tx_id == f"refused-{REF}" and not tx.provider_tx_id.isdigit()
+    assert tx.action_url is None
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [reply("{}", 401), reply("{}", 403), reply("{}", 429), reply("x", 418), reply("not json")],
+)
+def test_a_charge_that_failed_for_another_reason_is_still_an_error(answer):
+    """A bad key or a rate limit is not a declined card: it stays a retryable `ProviderError`."""
     with pytest.raises(ProviderError) as caught:
-        Wire(reply(ERROR_400, 400)).provider().charge_saved_method(
+        Wire(answer).provider().charge_saved_method(
             "tok_made_up_token_for_tests", 1800, "USD", REF, payer_email="payer@example.test"
         )
     assert not isinstance(caught.value, OutcomeUnknown)
+
+
+def test_an_unknown_outcome_is_not_a_provider_error():
+    """A caller that retries on `ProviderError` must never catch a lost refund or charge."""
+    assert issubclass(OutcomeUnknown, BillingError)
+    assert not issubclass(OutcomeUnknown, ProviderError)
+    for lost in (httpx.ReadTimeout("slow"), reply("busy", 503)):
+        with pytest.raises(OutcomeUnknown) as caught:
+            Wire(lost).provider().refund("285959875", 500)
+        assert not isinstance(caught.value, ProviderError)
+
+
+def test_payer_email_cannot_be_passed_by_position():
+    with pytest.raises(TypeError):
+        Wire(reply(CHARGE_OK)).provider().charge_saved_method(
+            "tok_made_up_token_for_tests", 1800, "USD", REF, "payer@example.test"
+        )
+
+
+def test_a_failed_call_carries_no_context_that_holds_the_key():
+    """The httpx exception holds the request, and the request holds the Authorization header."""
+    with pytest.raises(ProviderError) as caught:
+        Wire(httpx.ReadTimeout("slow")).provider().fetch_transaction("1")
+    assert caught.value.__context__ is None and caught.value.__cause__ is None
 
 
 def test_a_charge_sends_cents_as_the_exact_decimal():
@@ -1041,10 +1131,19 @@ def test_a_provider_that_does_not_answer_gives_503_and_a_payment_unchanged(
     assert reload(session, payment).status == "pending" and grants == []
 
 
-def test_an_unknown_status_waits_instead_of_being_closed(client, wire, grants, session, payment):
+def test_an_unknown_status_is_recorded_for_a_human_look_not_looped(
+    client, wire, grants, session, payment
+):
+    """No 503 loop until Flutterwave's three retries run out: a recorded row, answered 200. A later
+    webhook for the same payment (the vendor sends one per state change) still settles it."""
     wire.answers = [verify_for(payment, status="mystery")]
-    assert post_hook(client, payment).status_code == 503
-    assert reload(session, payment).status == "pending"
+    assert post_hook(client, payment).status_code == 200
+    assert reload(session, payment).status == "pending" and grants == []
+    assert "unknown status" in stored_events(session)[-1].error
+
+    wire.answers = [verify_for(payment)]
+    assert post_hook(client, payment, status="mystery2").status_code == 200
+    assert reload(session, payment).status == "succeeded" and grants == [payment.id]
 
 
 def test_with_the_flag_off_a_genuine_webhook_cannot_be_settled_and_nothing_leaves(

@@ -27,7 +27,15 @@ class BadEvent(BillingError):
 
 
 class ProviderError(BillingError):
-    """A call to the provider failed or gave no usable answer. Retryable."""
+    """A call to the provider failed or gave no usable answer. Retryable: nothing it describes can
+    have moved money. (A money call that got no answer is `OutcomeUnknown`, never this.)"""
+
+
+class OutcomeUnknown(BillingError):
+    """A call that moves money (a charge, a refund) got no answer: it may or may not have happened.
+    Deliberately NOT a `ProviderError`: a handler that retries on `ProviderError` must not catch
+    this one, because a repeated refund or charge can pay twice (no idempotency key is documented
+    for a Flutterwave v3 refund). The caller looks the payment up first and never retries blind."""
 
 
 @dataclass(frozen=True)
@@ -61,6 +69,12 @@ class ProviderTransaction:
     payer_email: str | None = None
     card_token: str | None = field(default=None, repr=False)
     card_country: str | None = None
+    # Where the payer must go to finish this payment (a `pending` saved-card charge waiting for the
+    # payer's 3D Secure step). The charge stays open at the provider and can still succeed: send
+    # this link, never a second checkout for the same period.
+    action_url: str | None = None
+    # Why a `failed` result came back without any transaction (the provider refused the call).
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True)

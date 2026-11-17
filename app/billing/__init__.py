@@ -1,8 +1,9 @@
 """Payments behind one provider layer (billing spec sections 5 and 7, stage S4).
 
 Everything here is dark: `BILLING_ENABLED` defaults to false, the webhook route answers 404 while it
-is off, and nothing outside this package reads or writes the billing tables. No real provider exists
-yet (Paystack is stage S6, Flutterwave S7); the only provider is `fake.FakeProvider`, used by tests.
+is off, and nothing outside this package reads or writes the billing tables. The real adapters
+(`flutterwave`, stage S7; Paystack is stage S6) are dark too: they make no call while `BILLING_LIVE`
+is false, and tests only ever use `fake.FakeProvider`.
 
 - `types`: the neutral event, transaction and error types every provider speaks.
 - `provider`: the `PaymentProvider` protocol and the table real adapters will register in.

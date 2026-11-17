@@ -49,7 +49,9 @@ from app.billing.mismatch import normalize_card_country
 from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
+    BillingError,
     Checkout,
+    OutcomeUnknown,
     ProviderError,
     ProviderEvent,
     ProviderTransaction,
@@ -82,9 +84,14 @@ _TOKEN = re.compile(r"[A-Za-z0-9_\-]{8,200}")
 _STATUSES = {"successful": "successful", "failed": "failed", "pending": "pending"}
 
 
-class OutcomeUnknown(ProviderError):
-    """A call that moves money did not answer (timeout, connection lost, 5xx): it may or may not
-    have happened. Look the payment up before doing anything else; never retry blindly."""
+class RequestRefused(ProviderError):
+    """Flutterwave answered HTTP 400, 404 or 422: it understood the call and said no (the one
+    documented body is `Wrong token or email passed`). `message` is its own words, cut to 200
+    characters. A saved-card charge turns this into a `failed` result; other calls raise it."""
+
+    def __init__(self, message: str, vendor_message: str = "") -> None:
+        super().__init__(message)
+        self.vendor_message = vendor_message
 
 
 # ---------------------------------------------------------------- money, exactly
@@ -150,26 +157,31 @@ def _text(value: object) -> str | None:
 def _transaction_from(data: object) -> ProviderTransaction:
     """The neutral transaction in a Flutterwave `data` object (verify, tokenized charge).
 
-    Raises `ProviderError` when there is no transaction id or the status is not one of
-    `_STATUSES`: an unknown word could be money in flight, so the event stays waiting (503, the
-    vendor resends) instead of being refused for good. Everything else is passed on as given for
-    `settle._malformed` and the comparisons to judge: the reference, the currency (never
-    normalised) and the amount (`_minor`)."""
+    Raises `ProviderError` when there is no transaction id. A status that is not one of
+    `_STATUSES` is passed on as it is: `settle._malformed` refuses it as an unknown status and
+    records the refusal (an explicit "needs a human look" row, answered 200), instead of the event
+    looping on 503 until Flutterwave's three retries run out. Flutterwave sends another webhook
+    when a payment changes state, so a later `successful` one is still settled. Everything else is
+    passed on as given for `settle._malformed` and the comparisons to judge: the reference, the
+    currency (never normalised) and the amount (`_minor`)."""
     if not isinstance(data, dict):
         raise ProviderError("Flutterwave answered without a transaction")
     tx_id = data.get("id")
     if isinstance(tx_id, bool) or not isinstance(tx_id, (int, str)) or tx_id == "":
         raise ProviderError("Flutterwave answered without a transaction id")
     status = data.get("status")
-    mapped = _STATUSES.get(status) if isinstance(status, str) else None
-    if mapped is None:
-        raise ProviderError("Flutterwave reported a status we do not know")
+    mapped = _STATUSES[status] if isinstance(status, str) and status in _STATUSES else status
+    # `meta.authorization.redirect`: where the payer finishes a 3D Secure step (card-tokenization
+    # page, the `pending` sample). Only an https link is passed on.
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    auth = meta.get("authorization") if isinstance(meta.get("authorization"), dict) else {}
+    link = auth.get("redirect")
     card = data.get("card") if isinstance(data.get("card"), dict) else {}
     customer = data.get("customer") if isinstance(data.get("customer"), dict) else {}
     return ProviderTransaction(
         provider_tx_id=str(tx_id),
         reference=data.get("tx_ref"),  # type: ignore[arg-type]  # judged by settle
-        status=mapped,
+        status=mapped,  # type: ignore[arg-type]  # judged by settle
         amount_minor=_minor(data.get("amount")),  # type: ignore[arg-type]  # judged by settle
         currency=data.get("currency"),  # type: ignore[arg-type]  # judged by settle
         payer_email=_text(customer.get("email")),
@@ -177,6 +189,7 @@ def _transaction_from(data: object) -> ProviderTransaction:
         # `NIGERIA NG` (verify) and `NG` (webhook) both give `NG`; no card (a bank transfer, mobile
         # money) gives nothing.
         card_country=normalize_card_country(card.get("country")),
+        action_url=link if isinstance(link, str) and link.startswith("https://") else None,
     )
 
 
@@ -225,6 +238,7 @@ class FlutterwaveProvider:
         if body is not None:
             headers["Content-Type"] = "application/json"
             content = _encode(body, amount_text)
+        failure = None
         try:
             with httpx.Client(
                 base_url=API_BASE,
@@ -237,11 +251,15 @@ class FlutterwaveProvider:
                     method, path, headers=headers, content=content, params=params
                 )
         except httpx.HTTPError as exc:  # the text can hold the URL; only the type is kept
-            raise lost(f"Flutterwave did not answer ({type(exc).__name__})") from None
+            failure = type(exc).__name__
+        if failure is not None:
+            # Raised outside the `except`, so the error carries no `__context__`: the httpx
+            # exception holds the request, and the request holds the Authorization header.
+            raise lost(f"Flutterwave did not answer ({failure})")
         return self._answer(response, lost)
 
     @staticmethod
-    def _answer(response: httpx.Response, lost: type[ProviderError]) -> dict:
+    def _answer(response: httpx.Response, lost: type[BillingError]) -> dict:
         code = response.status_code
         try:
             parsed = _loads(response.content)
@@ -255,6 +273,10 @@ class FlutterwaveProvider:
             raise ProviderError(f"Flutterwave refused the secret key (HTTP {code})")
         if code == 429:
             raise ProviderError("Flutterwave rate limit (HTTP 429)")
+        if code in (400, 404, 422):
+            raise RequestRefused(
+                f"Flutterwave refused the request (HTTP {code}): {message[:200]}", message[:200]
+            )
         if code != 200:
             raise ProviderError(f"Flutterwave refused the request (HTTP {code}): {message[:200]}")
         if parsed is None or not isinstance(parsed, dict):
@@ -401,18 +423,32 @@ class FlutterwaveProvider:
         amount_minor: int,
         currency: str,
         reference: str,
+        *,
         payer_email: str | None = None,
     ) -> ProviderTransaction:
         """Charge a saved card token: `POST /v3/tokenized-charges` (token, currency, amount, email,
         tx_ref). **Documented, not verified live.** Two facts from the vendor's page shape this:
         the token is tied to the email it was saved under, so `payer_email` is required; and a
-        charge is authenticated with 3D Secure by default, so the payer must complete a step and the
-        answer is `pending`, not `successful`, unless Flutterwave support has enabled NOAUTH on the
-        account. A `pending` answer here means "send the payer the pay link", exactly like a
-        `failed` one. A declined or refused call is never reported as paid.
+        charge is authenticated with 3D Secure by default, so the payer must complete a step.
+
+        What comes back (the caller treats anything but `successful` as "not paid yet"):
+
+        * `pending` + `action_url`: the charge is **open at Flutterwave, waiting for the payer's
+          3D Secure step** (`data.meta.authorization.redirect`), and it can still succeed and settle
+          by webhook. Send the payer THAT link. **Never open a second checkout for the same period
+          while it is open**: the payer could complete both and pay twice. (NOAUTH, which skips the
+          step, needs Flutterwave support to enable it on the account.)
+        * `failed` with `failure_reason` and a `refused-...` id: Flutterwave said no to the call
+          (HTTP 400, for example `Wrong token or email passed`); nothing was charged; a dead token
+          will keep failing, so do not retry it every cycle. `failed` with a real id: a declined
+          charge.
+        * any other status word: passed on unchanged; treat it as "not paid, look at it".
+
+        **This answer never grants hours**: it is the vendor's reply to the charge, not a verified
+        payment (only `settle`, after `fetch_transaction`, marks one paid).
 
         If the call times out, the charge may still be happening: it is looked up by our reference
-        and its state returned; if that fails too, `OutcomeUnknown`."""
+        and its state returned; if that fails too, `OutcomeUnknown` (not a `ProviderError`)."""
         if currency != CURRENCY:
             raise ProviderError(f"Flutterwave takes {CURRENCY} here, not {currency}")
         amount_text = _major_text(amount_minor)
@@ -431,6 +467,16 @@ class FlutterwaveProvider:
         try:
             answer = self._request(
                 "POST", "/v3/tokenized-charges", body=body, amount_text=amount_text, money=True
+            )
+        except RequestRefused as exc:
+            return ProviderTransaction(
+                provider_tx_id=f"refused-{reference}"[:128],  # not a vendor id: no transaction
+                reference=reference,
+                status="failed",
+                amount_minor=amount_minor,
+                currency=CURRENCY,
+                payer_email=payer_email,
+                failure_reason=exc.vendor_message or "Flutterwave refused the charge",
             )
         except OutcomeUnknown:
             try:
