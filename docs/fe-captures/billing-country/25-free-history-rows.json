@@ -1,0 +1,25 @@
+{
+  "note": "The `billing_country_changes` rows (read from the database): every change is written, free or not.",
+  "content": {
+    "rows": [
+      {
+        "user": "free@example.test",
+        "old_country": null,
+        "new_country": "ET",
+        "effective_at": "2026-11-17T19:32:26.431957+00:00"
+      },
+      {
+        "user": "free@example.test",
+        "old_country": "ET",
+        "new_country": "NG",
+        "effective_at": "2026-11-17T19:32:26.440729+00:00"
+      },
+      {
+        "user": "free@example.test",
+        "old_country": "NG",
+        "new_country": "US",
+        "effective_at": "2026-11-17T19:32:26.450007+00:00"
+      }
+    ]
+  }
+}

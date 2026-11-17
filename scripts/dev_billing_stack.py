@@ -72,6 +72,7 @@ from app.models import (  # noqa: E402
     Subscription,
     Template,
     User,
+    UserSettings,
 )
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
@@ -84,8 +85,10 @@ API = f"http://127.0.0.1:{API_PORT}"
 PASSWORD = "-".join(["dev", "screens", "password"])  # a placeholder, scratch database only
 PEOPLE = [
     "new", "us", "ng", "active", "cancel", "downgrade", "pastdue", "threeds", "lapsed", "canceled",
-    "low", "out", "pending", "ngactive",
+    "low", "out", "pending", "ngactive", "lagos", "addis",
 ]  # fmt: skip
+# A saved time zone and no billing country: the plans screen suggests the zone's country.
+TIME_ZONES = {"lagos": "Africa/Lagos", "addis": "Africa/Addis_Ababa"}
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
 
@@ -222,6 +225,8 @@ SCENARIOS = {
     "out": "an active plan, every hour used",
     "pending": "a plan checkout started and not finished",
     "ngactive": "billed from Nigeria: an active plan in naira with an extra-hours pack",
+    "lagos": "time zone Africa/Lagos, no billing country: Nigeria is suggested",
+    "addis": "time zone Africa/Addis_Ababa, no billing country: Ethiopia is suggested",
 }
 
 
@@ -406,6 +411,9 @@ def main() -> None:
                     email_verified_at=datetime.now(UTC),
                 )
             )
+        session.flush()
+        for name, zone in TIME_ZONES.items():
+            session.add(UserSettings(user_id=user_for(session, name).id, time_zone=zone))
         session.add(
             Plan(code="capture_40h", name="40 hours a month", monthly_seconds=144000, sort_order=2)
         )

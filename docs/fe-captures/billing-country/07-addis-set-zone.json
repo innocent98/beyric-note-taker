@@ -1,0 +1,26 @@
+{
+  "note": "Another zone.",
+  "client": "addis",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "time_zone": "Africa/Addis_Ababa"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "time_zone": "Africa/Addis_Ababa",
+      "is_set": true
+    }
+  }
+}

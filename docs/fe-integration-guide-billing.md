@@ -1423,6 +1423,308 @@ The screens exist now (`web/app/billing`, `docs/sop/2026-11-17-billing-screens.m
 * **The brand and last four digits of the card** are still null, so no screen names the card.
 * The billing routes are **not in `docs/openapi.json`**; the screens' types (`web/lib/billing.ts`) are written from this guide's captures.
 
+## Billing country flow (2026-11-17): suggest, confirm, free until the first payment
+
+Branch `feature/billing-country-flow`. Every body below is pasted from `docs/fe-captures/billing-country/`, made by
+`scripts/capture_billing_country.py`: real migrations, the real app under uvicorn, real HTTP, a real checkout and
+webhook with the **scripted provider** (`app.billing.fake.FakeProvider`; a real Paystack or Flutterwave is not involved).
+The people are placeholders. The shapes of the older profile routes are in `docs/fe-integration-guide-billing-profile.md`.
+
+### What changed, in the person's terms
+
+The first live user (2026-11-17) was made to pick a country from a long list, picked Ethiopia by mistake and was locked
+out of fixing it for 30 days. Now:
+
+1. **The country is suggested, not asked cold.** While no country is saved, the profile carries `suggested_country`
+   (from the person's saved time zone) and its route. The screen shows it as one confirmable line ("Nigeria. Prices in
+   naira, paid through Paystack. Not Nigeria? Change"). With no time zone the screen uses the browser's language region
+   (`en-NG` gives `NG`; a bare `en` gives nothing) and asks `GET /route?country=XX` what it pays with; with neither it
+   shows the picker (Nigeria first, common countries on top, searchable). **A guess is never saved by itself.**
+2. **Until the first payment the country changes instantly, any number of times.** Each change still writes its history
+   row. `country_locked` is `false` and `country_change_allowed_at` is `null` the whole time.
+3. **From the first successful payment (or a live plan) on, the old rule applies:** one change per 30 days, and a change
+   that crosses Nigeria and elsewhere while a plan is live waits for the end of the paid period. Only changes made
+   **since the first payment** count towards the 30 days, so the changes made while it was free do not lock anyone out.
+
+### The profile has three new keys (twelve in all)
+
+| Key | Meaning |
+|---|---|
+| `country_locked` | `false` until the person has a successful payment (a refunded one counts) or a live plan; then `true`, and it stays `true` even after the plan ends |
+| `suggested_country` | only while no country is saved; `null` otherwise (and when there is no zone, or the zone has no country, or that country cannot be routed) |
+| `suggested_route` | `{currency, provider}` of the suggestion; `null` when `suggested_country` is |
+
+Field-nesting trap: `suggested_route` is nested like `route`; `route` stays `null` until a country is **saved**, even when a
+suggestion exists, so never read `route` for the suggestion.
+
+A person whose time zone is `Africa/Lagos`:
+
+```
+GET /api/billing/profile
+```
+
+```json
+// 200  (capture billing-country/04-lagos-profile-suggests-nigeria.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": "NG",
+  "suggested_route": {
+    "currency": "NGN",
+    "provider": "paystack"
+  }
+}
+```
+
+Another zone (`Africa/Addis_Ababa`), the dollar route:
+
+```json
+// 200  (capture billing-country/08-addis-profile-suggests-ethiopia.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": "ET",
+  "suggested_route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  }
+}
+```
+
+No saved time zone (nothing to suggest; the screen falls back to the browser's language, then the picker):
+
+```json
+// 200  (capture billing-country/11-nozone-profile-no-suggestion.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+### Prices for a country that is not saved yet: `GET /api/billing/plans?country=XX`
+
+Without `country`, a person with no saved country gets `route: null` and no plans (unchanged). With `country=NG` they get
+the prices on that country's route **as a preview; nothing is saved**. It is ignored for a person who has a live plan
+(they always see the route they bought on). A value that is not a country is 422, as on `GET /route`.
+
+```json
+// 200  (capture billing-country/13-lagos-plans-preview-ng.json, packs trimmed)
+{
+  "route": {
+    "currency": "NGN",
+    "provider": "paystack"
+  },
+  "plans": [
+    {
+      "code": "plan_20h",
+      "name": "20 hours a month",
+      "monthly_seconds": 72000,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 2500000
+      }
+    }
+  ],
+  "packs": "<1 pack(s) trimmed>"
+}
+```
+
+```json
+// 422  (capture billing-country/15-lagos-plans-preview-bad.json)
+{
+  "error": {
+    "code": "billing_country_invalid",
+    "message": "That is not a country code we know. Pick one from the list."
+  }
+}
+```
+
+**The checkout always uses the saved country.** So the plans screen saves the country it is showing
+(`PUT /profile/country`, free before the first payment) and only then calls `POST /checkout`; pressing "Choose this
+plan" is the confirmation. If that save is refused, do not start the checkout; show the message.
+
+### Free changes before the first payment
+
+One person picks Ethiopia, then Nigeria, then the United States (captures 21 to 23, all 200 `applied`). After them:
+
+```json
+// 200  (capture billing-country/24-free-profile.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": "US",
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  },
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+The history rows are written for every change (capture `25-free-history-rows.json`, read from the database).
+
+### After the first payment
+
+The paid person chose US, changed to GB while it was free, then paid (captures 28 to 31). The lock is now on, but the free
+changes do not count:
+
+```json
+// 200  (capture billing-country/32-paid-profile-after-payment.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": "GB",
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  },
+  "country_change_allowed_at": null,
+  "country_locked": true,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+One change is allowed (here GB to FR, the same dollar route, so `applied`); it starts the 30 days:
+
+```json
+// 200  (capture billing-country/33-paid-country-one-change.json)
+{
+  "result": "applied",
+  "profile": {
+    "name_or_company": null,
+    "address": null,
+    "tax_id": null,
+    "billing_email": null,
+    "billing_country": "FR",
+    "pending_billing_country": null,
+    "pending_effective_at": null,
+    "route": {
+      "currency": "USD",
+      "provider": "flutterwave"
+    },
+    "country_change_allowed_at": "2026-12-17T19:32:26.611431Z",
+    "country_locked": true,
+    "suggested_country": null,
+    "suggested_route": null
+  }
+}
+```
+
+The next one is refused. **The message carries the date in UTC in plain words; show the server's sentence as it comes**, and
+use `country_change_allowed_at` for the date in the person's time zone:
+
+```json
+// 409  (capture billing-country/34-paid-country-too-soon.json)
+{
+  "error": {
+    "code": "country_change_too_soon",
+    "message": "Since your first payment your billing country can be changed once every 30 days. You can change it again on 17 December 2026."
+  }
+}
+```
+
+### A change that crosses routes while a plan is live
+
+A person on the dollar route with a live plan asks for Nigeria: `scheduled`, for the end of the paid period (captures 35
+to 42):
+
+```json
+// 200  (capture billing-country/40-cross-country-scheduled.json)
+{
+  "result": "scheduled",
+  "profile": {
+    "name_or_company": null,
+    "address": null,
+    "tax_id": null,
+    "billing_email": null,
+    "billing_country": "US",
+    "pending_billing_country": "NG",
+    "pending_effective_at": "2026-12-17T19:32:26.730497Z",
+    "route": {
+      "currency": "USD",
+      "provider": "flutterwave"
+    },
+    "country_change_allowed_at": "2026-12-17T19:32:26.747944Z",
+    "country_locked": true,
+    "suggested_country": null,
+    "suggested_route": null
+  }
+}
+```
+
+```json
+// 409  (capture billing-country/42-cross-country-pending-refused.json)
+{
+  "error": {
+    "code": "country_change_pending",
+    "message": "A change of billing country is already waiting for the end of your paid period (17 December 2026). It cannot be changed again until then."
+  }
+}
+```
+
+### What the FE must surface
+
+* **Always say what the country means, from the server's words:** "Prices in US dollars, paid through Flutterwave." Read
+  `route` (saved) or `suggested_route` / `GET /route` (not saved yet); never hard-code the table.
+* **Never save a suggestion silently.** Save it on the person's "Use X" button or when they go on to pay for a plan.
+* **Before the first payment, say the country can be changed any time.** After it, say "once every 30 days", and when
+  `country_change_allowed_at` is set, disable the control and show the date.
+* **A scheduled change says when and why** (the plan was bought on that route; a saved card cannot move) and offers no undo.
+* **A refusal says the date.** Both 409 messages above contain it; show them unchanged.
+
+### Verification (billing country flow)
+
+| Behaviour | Verified |
+|---|---|
+| Suggestion from a saved zone (`Africa/Lagos` to `NG`, `Africa/Addis_Ababa` to `ET`), none without a zone, none once a country is saved | live over HTTP (billing-country captures 04, 08, 11, 18) |
+| The suggestion saves nothing | live (captures 16, 18) and `tests/test_billing_country_flow.py` |
+| `GET /plans?country=` preview for NG and another country, 422 for a name | live (captures 13, 14, 15) |
+| Three changes in a row before paying all `applied`, no date, history rows written | live (captures 21 to 25) |
+| After a payment: one change `applied`, the next 409 `country_change_too_soon` with the date, the free changes not counted | live, payment through the real checkout and webhook with the scripted provider (captures 28 to 34) |
+| A live plan plus a route-crossing change `scheduled`, then 409 `country_change_pending` with the date | live, same provider caveat (captures 35 to 42) |
+| Browser-language fallback and the picker (Nigeria first, search) | browser run against a local app (`scripts/dev_billing_stack.py`) at 1440 and 390 px, and vitest; the browser language is read in the browser, so there is no HTTP capture |
+| Zones with no country (`UTC`, `Etc/GMT+1`) suggest nothing; a country with no route is not suggested | tests only (`tests/test_billing_country_flow.py`) |
+| A refunded or partly refunded payment locks the country; a pending or failed one does not | tests only |
+| A real Paystack or Flutterwave | not involved |
+
 ## Verification
 
 | Behaviour | Verified |

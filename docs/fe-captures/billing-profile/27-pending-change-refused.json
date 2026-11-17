@@ -21,7 +21,7 @@
     "body": {
       "error": {
         "code": "country_change_pending",
-        "message": "A change of billing country is already waiting for the end of your paid period."
+        "message": "A change of billing country is already waiting for the end of your paid period (29 November 2026). It cannot be changed again until then."
       }
     }
   }
