@@ -343,6 +343,10 @@ class Settings(BaseSettings):
     # (`sk_live_...`). A key of the other kind stops the process at startup naming the setting; the
     # key itself is never printed. Switch on only at go-live (S11).
     billing_live: bool = False
+    # Where a provider sends the payer back after the hosted checkout (stage S8). Empty: the
+    # app's own `/billing/return` page (`PUBLIC_BASE_URL` + `/billing/return`). The page only shows
+    # the payment's state; nothing is granted there, so a wrong address costs nothing.
+    billing_return_url: str = ""
     # Paystack, naira (stage S6). All three stay empty until Adebayo puts them in the server's
     # `.env`: with no secret key set, every call the adapter could make raises before it leaves the
     # process. `repr=False` keeps them out of the settings' own repr; no log line or error ever

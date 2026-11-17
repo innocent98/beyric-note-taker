@@ -24,7 +24,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.billing import inbox, settle
+from app.billing import inbox, settle, subscriptions  # noqa: F401  (registers the handlers)
 from app.billing.provider import PaymentProvider, provider_named
 from app.billing.types import BadEvent, IgnoredEvent, RetryLater, WebhookRejected
 from app.db import get_session

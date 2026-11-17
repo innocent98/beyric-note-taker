@@ -1,0 +1,63 @@
+{
+  "note": "**The clock was moved by SQL (NOT LIVE time).** The period ended an hour ago and one pass of the scheduler (`renewals.run_due`) ran: the saved card was charged, the provider said it failed, so the subscription is `past_due` and the grace has started. The rows afterwards:",
+  "content": {
+    "subscriptions": [
+      {
+        "plan": "capture_40h",
+        "status": "past_due",
+        "currency": "USD",
+        "provider": "flutterwave",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "retry_count": 1
+      }
+    ],
+    "hour_grants": [
+      {
+        "kind": "plan_period",
+        "seconds": 72000,
+        "source_payment_id": 1
+      },
+      {
+        "kind": "pack",
+        "seconds": 36000,
+        "source_payment_id": 2
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 71640,
+        "source_payment_id": 3
+      }
+    ],
+    "payments": [
+      {
+        "kind": "plan",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1800,
+        "currency": "USD"
+      },
+      {
+        "kind": "pack",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1000,
+        "currency": "USD"
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1599,
+        "currency": "USD"
+      },
+      {
+        "kind": "renewal",
+        "status": "failed",
+        "attempt": 0,
+        "amount_minor": 3400,
+        "currency": "USD"
+      }
+    ]
+  }
+}

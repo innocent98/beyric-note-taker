@@ -1,0 +1,28 @@
+{
+  "note": "Not in the grace: 409 `payment_overdue`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/change-plan",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "plan_code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "payment_overdue",
+        "message": "A plan cannot be changed while a payment is overdue."
+      }
+    }
+  }
+}

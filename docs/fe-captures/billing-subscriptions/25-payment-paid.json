@@ -1,0 +1,29 @@
+{
+  "note": "The payment is now `succeeded`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments/bn-1-8fe41c8302408cc4",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "reference": "bn-1-8fe41c8302408cc4",
+      "kind": "plan",
+      "status": "succeeded",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "created_at": "2026-11-17T15:19:25.303373Z",
+      "paid_at": "2026-11-17T15:19:25.387490Z",
+      "pay_url": null
+    }
+  }
+}

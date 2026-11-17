@@ -1,0 +1,615 @@
+"""Our own billing clock: renewals, retries, grace and lapse, the sweeper and the pay link
+(billing spec 3.3 and 5.3; stage S8a).
+
+**One pass** (`run`, a job of the leader-elected scheduler process, on its sync loop every 60
+seconds while `BILLING_ENABLED` is on) does two things, each on its own so one failing never
+stops the other:
+
+1. `run_due`: for every live subscription with something due, ask `states.due_action` what time
+   asks of it and do exactly that, one subscription per transaction, under its row lock
+   (`FOR UPDATE SKIP LOCKED`, so two workers never take the same one).
+2. `sweep`: settle what the providers' webhooks did not (below).
+
+**An attempt** (`_attempt`) is the saved-card charge of the due moment, then day 1 and day 2. The
+order matters, and money is only ever moved by a row we made first:
+
+1. An earlier renewal payment for this period that is still `pending` is settled first, by asking
+   the provider about OUR reference (`provider.lookup_by_reference`). A charge whose answer was
+   lost is therefore resolved before another is made, never repeated blind. One that is open with
+   the payer's own link (a 3-D Secure charge) is NOT charged again: the slot is spent and the
+   person is sent to that link.
+2. The attempt payment row (kind `renewal`, `attempt` n, `cycle_end` = this period's end) is made
+   and committed: the unique index on (subscription, cycle_end, attempt) lets exactly one worker
+   hold the slot.
+3. `charge_saved_method` is called with no lock held. **Its answer grants nothing**: a
+   `successful` answer is re-read from the provider (`fetch_transaction`) and judged by the same
+   rules a webhook gets (`settle.settle_transaction`: our reference, our currency, at least our
+   amount). Only then do the hours come, through the grant handler.
+4. A failure moves the status machine (`states.TABLE`) under the lock: the first one opens the 72
+   hours of grace (the period's leftover hours stay usable until its end, no new hours), each
+   failure schedules the next attempt, the last one sends the last-day notice.
+
+A subscription with no usable saved card, or whose billing country now routes elsewhere, makes no
+charge: its attempt is a recorded failure, and the person pays through `pay_link` (the provider's
+own page, on the route they are on now). The grace and the lapse run on the clock either way.
+
+**The sweeper** covers the providers' retries running out: webhook events stored but never decided
+(`billing_events.processed_at` null) are decided again, and a `pending` payment older than two
+minutes is looked up by its reference and settled if the provider says it succeeded. It is also
+what lets a test-mode purchase finish when the provider cannot reach this server.
+
+**The pay link** (`pay_link`): for a subscription in its grace, the provider's page to pay what is
+due. If a charge is already open for this period with its own link (3-D Secure), that same link;
+otherwise a fresh hosted checkout for the renewal amount.
+"""
+
+import json
+import logging
+from datetime import datetime, timedelta
+
+from sqlalchemy import and_, or_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app import alerts
+from app.billing import plans, routing, settle, states, subscriptions
+from app.billing import profile as profiles
+from app.billing.payments import new_payment
+from app.billing.provider import lookup_by_reference, provider_named
+from app.billing.types import ProviderError, RetryLater
+from app.config import Settings
+from app.models import (
+    BillingEvent,
+    HourGrant,
+    Payment,
+    Subscription,
+    User,
+)
+
+logger = logging.getLogger(__name__)
+
+BATCH = 50
+SWEEP_AFTER = timedelta(
+    minutes=2
+)  # a payment or event younger than this is the webhook's to settle
+SWEEP_LOOKBACK = timedelta(days=3)  # older unpaid checkouts are left alone
+MIN_RETRY_GAP = timedelta(hours=1)  # a late pass never fires two attempts back to back
+OPEN_LINK_REUSE = timedelta(days=1)
+UNRESOLVED_AFTER = timedelta(hours=6)
+
+
+def run(session: Session, now: datetime, settings: Settings) -> None:
+    """One pass of the clock and the sweeper. Each part is caught on its own: whatever it throws is
+    logged by type (an exception can hold an address) and never reaches the scheduler's loop."""
+    for name, job in (
+        ("due", lambda: run_due(session, now, settings)),
+        ("sweep", lambda: sweep(session, now, settings)),
+    ):
+        try:
+            job()
+        except Exception as exc:
+            session.rollback()
+            logger.error("billing %s pass failed: %s", name, type(exc).__name__)
+
+
+# ---- the clock ----
+
+
+def run_due(session: Session, now: datetime, settings: Settings) -> int:
+    """Handle every live subscription with something due. Returns how many were looked at."""
+    due = or_(
+        and_(Subscription.status == states.ACTIVE, Subscription.current_period_end <= now),
+        and_(
+            Subscription.status == states.PAST_DUE,
+            or_(
+                Subscription.grace_ends_at <= now,
+                Subscription.grace_ends_at.is_(None),
+                and_(Subscription.next_charge_at.is_not(None), Subscription.next_charge_at <= now),
+            ),
+        ),
+    )
+    ids = session.scalars(
+        select(Subscription.id).where(due).order_by(Subscription.current_period_end).limit(BATCH)
+    ).all()
+    for sub_id in ids:
+        try:
+            process_one(session, sub_id, now, settings)
+        except Exception as exc:
+            session.rollback()
+            logger.error("subscription %s pass failed: %s", sub_id, type(exc).__name__)
+    return len(ids)
+
+
+def process_one(session: Session, sub_id: int, now: datetime, settings: Settings) -> None:
+    """What time asks of one subscription now. Takes its row lock (skipping one another worker
+    holds) and ends the transaction either way."""
+    sub = session.scalars(
+        select(Subscription)
+        .where(Subscription.id == sub_id)
+        .with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+    if sub is None:
+        session.rollback()
+        return
+    due = states.due_action(subscriptions.snapshot(sub), now)
+    if due.kind == states.NONE:
+        session.rollback()
+    elif due.kind in (states.LAPSE, states.END_CANCELED):
+        _close(session, sub, due.kind, now)
+    else:
+        _attempt(session, sub, due.attempt, now, settings)
+
+
+def _notify(
+    session: Session, sub: Subscription, kind: str, title: str, body: str, cycle: datetime
+) -> None:
+    """A bell entry and a plain mail, once per subscription and period. The mail carries no link
+    (the alert mail never does): the body sends the person to Billing, which has a pay button."""
+    if sub.user_id is None:
+        return
+    alerts.notify_user(
+        session,
+        sub.user_id,
+        kind=kind,
+        severity="warning",
+        title=title,
+        body=body,
+        dedupe_key=f"{kind}:{sub.id}:{int(cycle.timestamp())}",
+        email_template=alerts.ALERT_TEMPLATE,
+    )
+
+
+FAILED_BODY = (
+    "We could not renew your plan. We will try your card again tomorrow and the day after. "
+    "Your hours from this period stay usable for 3 days, but no new hours are added until a "
+    "payment goes through. Open Billing in Beyric to pay now. Your notes, transcripts and "
+    "exports are not affected."
+)
+LAST_DAY_BODY = (
+    "Today is the last day to pay for your plan. If the payment does not go through, new "
+    "recordings, Ask Beyric, translation and rewriting notes stop. Open Billing in Beyric to pay "
+    "now. Your notes, transcripts and exports stay as they are."
+)
+LAPSED_BODY = (
+    "Your plan has ended because the payment did not go through. Recordings, Ask Beyric, "
+    "translation and rewriting notes have stopped; any pack hours you bought still work for "
+    "recordings. Your notes, transcripts and exports stay as they are. You can subscribe again "
+    "in Billing."
+)
+ENDED_BODY = (
+    "Your plan has ended, as you asked. Your notes, transcripts and exports stay as they are. "
+    "You can subscribe again in Billing."
+)
+
+
+def _close(session: Session, sub: Subscription, kind: str, now: datetime) -> None:
+    """The grace ended unpaid (`lapsed`), or a period the person cancelled ended (`canceled`)."""
+    if kind == states.LAPSE:
+        event = states.GRACE_ENDED
+    elif sub.status == states.PAST_DUE:
+        event = states.GRACE_ENDED_CANCELED
+    else:
+        event = states.PERIOD_ENDED_CANCELED
+    transition = states.apply(sub.status, event)
+    cycle = sub.current_period_end
+    sub.status = transition.status
+    sub.next_charge_at = None
+    sub.updated_at = now
+    if states.EXPIRE_LEFTOVER in transition.effects:
+        grace_end = sub.grace_ends_at or states.grace_end(cycle)
+        subscriptions.end_leftover(session, sub, min(now, grace_end))
+    if states.NOTIFY_LAPSED in transition.effects:
+        _notify(session, sub, "billing.lapsed", "Your plan has ended", LAPSED_BODY, cycle)
+    elif transition.status == states.CANCELED:
+        _notify(session, sub, "billing.ended", "Your plan has ended", ENDED_BODY, cycle)
+    session.commit()
+
+
+# ---- an attempt ----
+
+
+def _attempt(
+    session: Session, sub: Subscription, n: int, now: datetime, settings: Settings
+) -> None:
+    """Attempt number `n` of this period's renewal (see the module note for the order)."""
+    cycle = sub.current_period_end
+    user = session.get(User, sub.user_id) if sub.user_id else None
+    outcome = _settle_open_payments(session, sub, now, settings)
+    if outcome == "paid":
+        return
+    if outcome == "wait":
+        session.commit()  # nothing changed, except perhaps an admin alert that must be kept
+        return
+    if outcome == "open_link":  # a charge is waiting for the payer: its slot counts, no new charge
+        return _fail(session, sub.id, cycle, n, now)
+
+    price = plans.renewal_price(session, sub, now)
+    adapter = provider_named(sub.provider, settings)
+    card = subscriptions.saved_card(session, user.id, sub.provider) if user else None
+    if user is None or user.status != "active":
+        card = None
+    route_moved = _route_moved(session, sub, user, settings, now) if user else False
+    if price is None or adapter is None or card is None or route_moved:
+        _record_failed_attempt(session, sub, user, price, n, cycle, now)
+        return _fail(session, sub.id, cycle, n, now)
+
+    try:
+        with session.begin_nested():
+            payment = new_payment(
+                session,
+                payer=user,
+                provider=sub.provider,
+                kind="renewal",
+                currency=sub.currency,
+                amount_minor=price.amount_minor,
+                subscription_id=sub.id,
+            )
+            payment.plan_price_id = price.id
+            payment.cycle_end = cycle
+            payment.attempt = n
+            payment.created_at = now
+            session.flush()
+    except IntegrityError:  # another worker holds this slot
+        session.rollback()
+        return
+    payment_id, reference, amount = payment.id, payment.reference, price.amount_minor
+    token, email = card
+    sub_id, currency = sub.id, sub.currency
+    session.commit()  # the payment row exists before the provider is asked, and no lock is held
+
+    try:
+        tx = adapter.charge_saved_method(token, amount, currency, reference, payer_email=email)
+    except ProviderError:
+        # Unknown outcome: the money may have moved. Ask by our reference; if even that fails the
+        # payment stays pending and the next pass settles it before anything is charged again.
+        try:
+            tx = lookup_by_reference(adapter, reference)
+        except ProviderError:
+            logger.warning("renewal payment %s: outcome unknown, left pending", payment_id)
+            return
+
+    if tx.status == "successful":
+        verdict = _settle_charge(session, adapter, payment_id, tx, now)
+        if verdict in ("paid", "unknown"):
+            # paid: the grant handler renewed the subscription. Unknown: the provider could not
+            # confirm it just now, the money may have moved, so this is NOT a failed attempt: the
+            # payment stays pending and the next pass settles it by reference.
+            return
+    elif tx.status == "failed":
+        settle.settle_transaction(session, adapter, payment_id, tx, now)
+        session.commit()
+    elif tx.status == "pending" and tx.payer_action_url:
+        row = session.get(Payment, payment_id)
+        row.pay_url = tx.payer_action_url  # THIS charge's own link: never a second checkout
+        session.commit()
+    _fail(session, sub_id, cycle, n, now)
+
+
+def _settle_charge(session: Session, adapter, payment_id: int, tx, now: datetime) -> str:
+    """The charge answered `successful`. The answer is a claim: re-read the payment from the
+    provider and apply the settlement rules. Returns `paid` (the payment is now `succeeded`),
+    `refused` (the rules refused what the provider reports: a failed attempt, and the admins are
+    told) or `unknown` (the provider could not confirm it just now)."""
+    try:
+        seen = adapter.fetch_transaction(tx.provider_tx_id)
+    except ProviderError:
+        return "unknown"
+    try:
+        refusal = settle.settle_transaction(session, adapter, payment_id, seen, now)
+        session.commit()
+    except RetryLater:
+        session.rollback()
+        return "unknown"
+    except Exception:
+        session.rollback()
+        raise
+    if refusal:
+        subscriptions._tell_admins(
+            session,
+            f"admin.billing_payment_refused:{payment_id}",
+            "A renewal charge was refused by the settlement rules",
+            f"Renewal payment {payment_id}: {refusal}. The provider may have taken money; "
+            "look at it.",
+        )
+        session.commit()
+        return "refused"
+    return "paid" if session.get(Payment, payment_id).status == "succeeded" else "unknown"
+
+
+def _settle_open_payments(
+    session: Session, sub: Subscription, now: datetime, settings: Settings
+) -> str:
+    """Resolve renewal payments of this period that are still `pending`. Returns `paid` (one
+    settled: the subscription moved on), `open_link` (a charge waits for the payer's own link),
+    `wait` (the provider could not be asked, or a charge is in flight: try again next pass) or
+    `none`."""
+    pending = session.scalars(
+        select(Payment)
+        .where(
+            Payment.subscription_id == sub.id,
+            Payment.kind == "renewal",
+            Payment.cycle_end == sub.current_period_end,
+            Payment.status == "pending",
+        )
+        .order_by(Payment.id)
+    ).all()
+    result = "none"
+    for payment in pending:
+        # A hosted checkout made for the payer (`attempt` is null: the pay link) is not a charge in
+        # flight: it is settled if the provider says it was paid, and otherwise ignored.
+        in_flight = payment.attempt is not None
+        adapter = provider_named(payment.provider, settings)
+        if adapter is None:
+            result = "wait" if in_flight else result
+            continue
+        try:
+            tx = lookup_by_reference(adapter, payment.reference)
+        except ProviderError:
+            # No answer. "The provider is down" and "the charge call never left, so the provider
+            # has nothing under our reference" look the same, so we cannot tell and we wait; a
+            # human is told once it has been unresolved for six hours.
+            if not in_flight:
+                continue
+            result = "wait"
+            if payment.created_at <= now - UNRESOLVED_AFTER:
+                subscriptions._tell_admins(
+                    session,
+                    f"admin.billing_unresolved_charge:{payment.id}",
+                    "A renewal charge has no known outcome",
+                    f"Renewal payment {payment.id} was sent to the provider more than six hours "
+                    "ago and the provider cannot say what became of it. Look it up by reference "
+                    "in the provider's dashboard.",
+                )
+            continue
+        if tx.status == "successful":
+            try:
+                refusal = settle.settle_transaction(session, adapter, payment.id, tx, now)
+                session.commit()
+            except RetryLater:
+                session.rollback()
+                result = "wait"
+                continue
+            if refusal is None and session.get(Payment, payment.id).status == "succeeded":
+                return "paid"
+            result = "wait"
+        elif tx.status == "failed":
+            settle.settle_transaction(session, adapter, payment.id, tx, now)
+            session.commit()
+        elif not in_flight:
+            continue
+        elif payment.pay_url and result != "wait":
+            result = "open_link"
+        else:
+            result = "wait"
+    return result
+
+
+def _route_moved(
+    session: Session, sub: Subscription, user: User, settings: Settings, now: datetime
+) -> bool:
+    """A billing-country change that crossed routes has taken effect: the saved card belongs to
+    the old provider and cannot be moved, so this renewal is a fresh checkout (spec 5.2)."""
+    try:
+        view = profiles.settle_due_country(session, user, now)
+        current = routing.provider_for(view.billing_country, settings.billing_country_routes)
+    except routing.RoutingError:
+        return False
+    return current != subscriptions.sold_route(sub)
+
+
+def _record_failed_attempt(
+    session: Session, sub: Subscription, user, price, n: int, cycle: datetime, now: datetime
+) -> None:
+    """An attempt that made no charge (no card, no price, the route moved): still written to the
+    payments table as a failed attempt, so the history shows it (spec 3.3)."""
+    if user is None or price is None:
+        return
+    try:
+        with session.begin_nested():
+            payment = new_payment(
+                session,
+                payer=user,
+                provider=sub.provider,
+                kind="renewal",
+                currency=sub.currency,
+                amount_minor=price.amount_minor,
+                subscription_id=sub.id,
+            )
+            payment.plan_price_id = price.id
+            payment.cycle_end = cycle
+            payment.attempt = n
+            payment.status = "failed"
+            payment.created_at = now
+            session.flush()
+    except IntegrityError:
+        pass  # the slot already has its row
+
+
+def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime) -> None:
+    """Attempt `n` did not pay: move the status machine under the lock. Applied once (a second
+    worker, or a second pass, finds the attempt already counted), and not at all when the
+    subscription has moved on in the meantime (a webhook settled the period)."""
+    sub = session.scalars(
+        select(Subscription)
+        .where(Subscription.id == sub_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+    if (
+        sub is None
+        or sub.status not in states.LIVE
+        or sub.current_period_end != cycle
+        or sub.retry_count != n
+    ):
+        session.rollback()
+        return
+    transition = states.apply(sub.status, states.failed_event(n))
+    if transition is None:
+        session.rollback()
+        return
+    sub.retry_count = n + 1
+    sub.status = transition.status
+    sub.updated_at = now
+    if states.OPEN_GRACE in transition.effects:
+        sub.grace_ends_at = states.grace_end(cycle)
+        # The period's leftover hours stay usable until the grace ends (spec 3.3). They ended at
+        # the due moment; the grace gives them back, and nothing new is ever added here.
+        session.execute(
+            update(HourGrant)
+            .where(
+                HourGrant.subscription_id == sub.id,
+                HourGrant.kind == "plan_period",
+                HourGrant.expires_at == cycle,
+            )
+            .values(expires_at=sub.grace_ends_at)
+        )
+    if states.SCHEDULE_NEXT_ATTEMPT in transition.effects:
+        sub.next_charge_at = max(states.attempt_time(cycle, n + 1), now + MIN_RETRY_GAP)
+    if states.STOP_ATTEMPTS in transition.effects:
+        sub.next_charge_at = None
+    if states.NOTIFY_FAILED in transition.effects:
+        _notify(
+            session, sub, "billing.failed", "Your payment did not go through", FAILED_BODY, cycle
+        )
+    if states.NOTIFY_LAST_DAY in transition.effects:
+        _notify(
+            session, sub, "billing.last_day", "Last day to pay for your plan", LAST_DAY_BODY, cycle
+        )
+    session.commit()
+
+
+# ---- the sweeper ----
+
+
+def sweep(session: Session, now: datetime, settings: Settings) -> None:
+    _sweep_events(session, now, settings)
+    _sweep_payments(session, now, settings)
+
+
+def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
+    """Stored webhook events nobody decided (the provider's retries ran out, or a step failed):
+    decide them again. The signature was checked when they arrived; the body is the stored one
+    with tokens removed, which is all the decision needs (it re-reads the payment itself)."""
+    rows = session.scalars(
+        select(BillingEvent)
+        .where(
+            BillingEvent.processed_at.is_(None),
+            BillingEvent.received_at <= now - SWEEP_AFTER,
+            BillingEvent.type.in_(("charge_succeeded", "charge_failed")),
+        )
+        .order_by(BillingEvent.received_at)
+        .limit(BATCH)
+    ).all()
+    for row in rows:
+        adapter = provider_named(row.provider, settings)
+        if adapter is None:
+            continue
+        try:
+            event = adapter.parse_event(json.dumps(row.payload).encode())
+            settle.process(session, adapter, row, event, now)
+        except RetryLater:
+            continue  # parked by `process`; the next pass tries again
+        except Exception as exc:
+            session.rollback()
+            logger.error("sweeping event %s failed: %s", row.id, type(exc).__name__)
+
+
+def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None:
+    """A payment still `pending` after two minutes: ask the provider by our reference, and settle
+    it only if the provider says it succeeded (an unpaid or abandoned checkout is left alone: the
+    payer may still finish it)."""
+    rows = session.scalars(
+        select(Payment)
+        .where(
+            Payment.status == "pending",
+            Payment.created_at <= now - SWEEP_AFTER,
+            Payment.created_at > now - SWEEP_LOOKBACK,
+        )
+        .order_by(Payment.created_at)
+        .limit(BATCH)
+    ).all()
+    for payment in rows:
+        adapter = provider_named(payment.provider, settings)
+        if adapter is None:
+            continue
+        payment_id = payment.id
+        try:
+            tx = lookup_by_reference(adapter, payment.reference)
+            if tx.status != "successful":
+                continue
+            settle.settle_transaction(session, adapter, payment_id, tx, now)
+            session.commit()
+        except (ProviderError, RetryLater):
+            session.rollback()
+        except Exception as exc:
+            session.rollback()
+            logger.error("sweeping payment %s failed: %s", payment_id, type(exc).__name__)
+
+
+# ---- the pay link ----
+
+
+def pay_link(
+    session: Session, user: User, settings: Settings, now: datetime
+) -> subscriptions.Started:
+    """The page to pay what is overdue (a plan in its grace). The same link as a charge that is
+    already open for this period (3-D Secure), else a fresh hosted checkout for the renewal amount
+    on the route the person is on now. Commits."""
+    sub = subscriptions.live_row(session, user.id, lock=True)
+    if sub is None:
+        raise subscriptions.Refused(409, "no_subscription", "You do not have a plan.")
+    if states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
+        session.rollback()
+        raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
+    open_payment = session.scalars(
+        select(Payment)
+        .where(
+            Payment.subscription_id == sub.id,
+            Payment.kind == "renewal",
+            Payment.cycle_end == sub.current_period_end,
+            Payment.status == "pending",
+            Payment.pay_url.is_not(None),
+            Payment.created_at > now - OPEN_LINK_REUSE,
+        )
+        .order_by(Payment.id.desc())
+    ).first()
+    if open_payment is not None:
+        started = subscriptions.Started(open_payment, open_payment.pay_url)
+        session.rollback()
+        return started
+
+    sold = subscriptions.sold_route(sub)
+    route = sold
+    try:
+        view = profiles.settle_due_country(session, user, now)
+        current = routing.provider_for(view.billing_country, settings.billing_country_routes)
+        route = current
+    except routing.RoutingError:
+        pass
+    price = (
+        plans.renewal_price(session, sub, now)
+        if route == sold
+        else plans.current_price(
+            session, sub.pending_plan_code or sub.plan_code, route.currency, now
+        )
+    )
+    if price is None:
+        session.rollback()
+        raise subscriptions.Refused(
+            422, "price_not_available", f"Your plan is not on sale in {route.currency} yet."
+        )
+    adapter = subscriptions._adapter(route.provider, settings)
+    payment = new_payment(
+        session,
+        payer=user,
+        provider=route.provider,
+        kind="renewal",
+        currency=route.currency,
+        amount_minor=price.amount_minor,
+        subscription_id=sub.id,
+    )
+    payment.plan_price_id = price.id
+    payment.cycle_end = sub.current_period_end
+    payment.created_at = now
+    return subscriptions.send_to_provider(session, adapter, payment, user, settings)

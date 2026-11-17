@@ -1,0 +1,40 @@
+{
+  "note": "**The naira price list is not decided yet** (Adebayo's open fact), so no naira price is seeded: `price` is null and `packs` is empty.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": {
+        "currency": "NGN",
+        "provider": "paystack"
+      },
+      "plans": [
+        {
+          "code": "plan_20h",
+          "name": "20 hours a month",
+          "monthly_seconds": 72000,
+          "price": null
+        },
+        {
+          "code": "capture_40h",
+          "name": "40 hours a month",
+          "monthly_seconds": 144000,
+          "price": null
+        }
+      ],
+      "packs": []
+    }
+  }
+}

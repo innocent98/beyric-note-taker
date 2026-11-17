@@ -1,0 +1,46 @@
+{
+  "note": "`hours.seconds_left` is the plan's 20 hours plus the pack's 10.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 108000,
+        "holdings_seconds": 108000,
+        "warning": null
+      },
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_20h",
+        "plan_name": "20 hours a month",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "current_period_start": "2026-11-17T15:19:25.387490Z",
+        "current_period_end": "2026-12-17T15:19:25.387490Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": null
+    }
+  }
+}

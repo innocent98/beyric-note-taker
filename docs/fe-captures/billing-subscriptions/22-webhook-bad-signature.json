@@ -1,0 +1,30 @@
+{
+  "note": "A webhook with a missing signature: 401, nothing stored.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-1",
+      "kind": "charge_succeeded",
+      "reference": "bn-1-8fe41c8302408cc4",
+      "tx_id": "fake-tx-1",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "The signature is not valid."
+      }
+    }
+  }
+}

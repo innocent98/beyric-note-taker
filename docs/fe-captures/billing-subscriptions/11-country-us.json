@@ -1,0 +1,39 @@
+{
+  "note": "The S5 route; dollars through the provider named `flutterwave`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "US"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "result": "applied",
+      "profile": {
+        "name_or_company": null,
+        "address": null,
+        "tax_id": null,
+        "billing_email": null,
+        "billing_country": "US",
+        "pending_billing_country": null,
+        "pending_effective_at": null,
+        "route": {
+          "currency": "USD",
+          "provider": "flutterwave"
+        },
+        "country_change_allowed_at": null
+      }
+    }
+  }
+}

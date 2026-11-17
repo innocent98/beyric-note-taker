@@ -46,6 +46,11 @@ HOUR_GRANT_KINDS = ("trial", "pilot", "plan_period", "pack", "admin_gift")
 PAYMENT_KINDS = ("plan", "renewal", "upgrade", "pack")
 PAYMENT_STATUSES = ("pending", "succeeded", "failed", "refunded", "partly_refunded")
 BILLING_CURRENCIES = ("NGN", "USD")
+# Subscriptions (billing spec 3 and 7, stage S8): `active` and `past_due` are the live ones;
+# `lapsed` (grace ended unpaid), `canceled` (the person stopped it) and `ended` (anything else,
+# such as a deleted account) are history.
+SUBSCRIPTION_STATUSES = ("active", "past_due", "lapsed", "canceled", "ended")
+LIVE_SUBSCRIPTION_STATUSES = ("active", "past_due")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
 CONNECTION_PROVIDERS = ("google", "ics", "microsoft")
@@ -848,7 +853,7 @@ class HourGrant(Base):
     hours. `starts_at` / `expires_at` bound when it can be spent (null expiry = never). A pilot
     grant is made by migration 0049 from the person's old cap minus what they had used; its
     `starts_at` is the moment of that migration. `source_payment_id` and `subscription_id` have no
-    foreign key yet: the tables they point at arrive with stages S4 and S8."""
+    foreign key until migration 0052 (stage S8) added them."""
 
     __tablename__ = "hour_grants"
     __table_args__ = (
@@ -867,8 +872,12 @@ class HourGrant(Base):
     seconds: Mapped[int] = mapped_column(Integer)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    source_payment_id: Mapped[int | None] = mapped_column(BigInteger)
-    subscription_id: Mapped[int | None] = mapped_column(BigInteger)
+    source_payment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("payments.id", ondelete="SET NULL")
+    )
+    subscription_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("subscriptions.id", ondelete="SET NULL")
+    )
     reason: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
@@ -906,7 +915,14 @@ class Payment(Base):
     and `currency` are what we asked for: a payment is only marked `succeeded` when the provider,
     asked directly, reports this reference, this currency and at least this amount
     (`app/billing/settle.py`). Money records outlive the person, so `payer_user_id` is set null on
-    account deletion. `subscription_id` has no foreign key yet: the table arrives with stage S8."""
+    account deletion.
+
+    Stage S8 (migration 0052) added what a payment needs to be applied without guessing: what was
+    bought (`plan_price_id` for a plan, a renewal or an upgrade; `product_id` for a pack), the
+    subscription period it pays for (`cycle_end`: the subscription's `current_period_end` when the
+    payment was made, so a second payment for the same period is recognised as a duplicate), the
+    retry slot of a saved-card renewal (`attempt`; one slot holds one payment) and `pay_url`, the
+    payer's own link for a charge that needs them."""
 
     __tablename__ = "payments"
     __table_args__ = (
@@ -914,14 +930,30 @@ class Payment(Base):
         CheckConstraint(_in("status", PAYMENT_STATUSES), name="ck_payments_status"),
         CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_payments_currency"),
         CheckConstraint("amount_minor > 0", name="ck_payments_amount"),
+        CheckConstraint("attempt is null or attempt >= 0", name="ck_payments_attempt"),
         UniqueConstraint("provider", "provider_tx_id", name="uq_payments_provider_tx"),
+        Index(
+            "uq_payments_renewal_slot",
+            "subscription_id",
+            "cycle_end",
+            "attempt",
+            unique=True,
+            postgresql_where=sa.text("kind = 'renewal' and attempt is not null"),
+        ),
+        Index(
+            "ix_payments_pending",
+            "created_at",
+            postgresql_where=sa.text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     payer_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
-    subscription_id: Mapped[int | None] = mapped_column(BigInteger)
+    subscription_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("subscriptions.id", ondelete="SET NULL"), index=True
+    )
     provider: Mapped[str] = mapped_column(String(16))
     provider_tx_id: Mapped[str | None] = mapped_column(String(128))
     reference: Mapped[str] = mapped_column(String(64), unique=True)
@@ -934,6 +966,15 @@ class Payment(Base):
     country_mismatch: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()
     )
+    plan_price_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("plan_prices.id", ondelete="RESTRICT")
+    )
+    product_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("products.id", ondelete="RESTRICT")
+    )
+    cycle_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt: Mapped[int | None] = mapped_column(Integer)
+    pay_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -970,6 +1011,12 @@ class BillingEvent(Base):
     __table_args__ = (
         CheckConstraint(_in("type", BILLING_EVENT_KINDS), name="ck_billing_events_type"),
         UniqueConstraint("provider", "dedupe_key", name="uq_billing_events_dedupe"),
+        # Stage S8: the sweeper's question, which stored events are still waiting to be decided.
+        Index(
+            "ix_billing_events_waiting",
+            "received_at",
+            postgresql_where=sa.text("processed_at is null"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -983,6 +1030,142 @@ class BillingEvent(Base):
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class Plan(Base):
+    """What can be bought each month (billing spec section 7, stage S8): a row of data, not code.
+    `monthly_seconds` is the hours of one period. `is_public` says whether a public page may list
+    it (nothing does yet: the first plan is decided but its price is not printed); `active` says
+    whether it can be bought now. Prices are `PlanPrice` rows."""
+
+    __tablename__ = "plans"
+    __table_args__ = (CheckConstraint("monthly_seconds > 0", name="ck_plans_seconds"),)
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    monthly_seconds: Mapped[int] = mapped_column(Integer)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlanPrice(Base):
+    """One price of one plan in one currency, valid from `active_from` until `active_until` (null =
+    until replaced). A change of price is a new row; a subscription points at the row it was sold
+    at (`Subscription.price_id`) and moves to the current row only at its next renewal."""
+
+    __tablename__ = "plan_prices"
+    __table_args__ = (
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_plan_prices_currency"),
+        CheckConstraint("interval = 'month'", name="ck_plan_prices_interval"),
+        CheckConstraint("amount_minor > 0", name="ck_plan_prices_amount"),
+        CheckConstraint(
+            "active_until is null or active_until > active_from", name="ck_plan_prices_window"
+        ),
+        UniqueConstraint("plan_code", "currency", "active_from", name="uq_plan_prices_start"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_code: Mapped[str] = mapped_column(
+        String(32), ForeignKey("plans.code", ondelete="RESTRICT"), index=True
+    )
+    currency: Mapped[str] = mapped_column(String(3))
+    interval: Mapped[str] = mapped_column(String(8), default="month", server_default="month")
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    active_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    active_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Product(Base):
+    """A pack of hours, one row per (`code`, `currency`): `seconds` of hours for `amount_minor`,
+    valid `valid_months` months after the payment (billing spec 4.3)."""
+
+    __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_products_currency"),
+        CheckConstraint("seconds > 0", name="ck_products_seconds"),
+        CheckConstraint("amount_minor > 0", name="ck_products_amount"),
+        CheckConstraint("valid_months > 0", name="ck_products_months"),
+        UniqueConstraint("code", "currency", name="uq_products_code_currency"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(80))
+    currency: Mapped[str] = mapped_column(String(3))
+    seconds: Mapped[int] = mapped_column(Integer)
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    valid_months: Mapped[int] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Subscription(Base):
+    """A person's plan (billing spec sections 3 and 7, stage S8). `user_id` is who it is FOR (every
+    gate and every grant reads it); `payer_user_id` is who pays (the same person today).
+
+    `currency` and `provider` are the route it was SOLD on: renewals, retries and pay links use
+    them, never today's country table, until a billing-country change that crossed routes takes
+    effect (then the next renewal is a fresh checkout on the new route and the payment moves them).
+    `price_id` is the price row it was sold at. The status machine is `app/billing/states.py`;
+    `grace_ends_at`, `next_charge_at` and `retry_count` are its dunning clock (set when a renewal
+    fails, cleared when one succeeds). One live (`active` or `past_due`) row per person, by a
+    partial unique index."""
+
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        CheckConstraint(_in("status", SUBSCRIPTION_STATUSES), name="ck_subscriptions_status"),
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_subscriptions_currency"),
+        CheckConstraint(
+            "current_period_end > current_period_start", name="ck_subscriptions_period"
+        ),
+        CheckConstraint("retry_count >= 0", name="ck_subscriptions_retry"),
+        Index(
+            "uq_subscriptions_one_live",
+            "user_id",
+            unique=True,
+            postgresql_where=sa.text(_in("status", LIVE_SUBSCRIPTION_STATUSES)),
+        ),
+        Index(
+            "ix_subscriptions_live_due",
+            "current_period_end",
+            postgresql_where=sa.text(_in("status", LIVE_SUBSCRIPTION_STATUSES)),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    payer_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    plan_code: Mapped[str] = mapped_column(
+        String(32), ForeignKey("plans.code", ondelete="RESTRICT")
+    )
+    price_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("plan_prices.id", ondelete="RESTRICT")
+    )
+    status: Mapped[str] = mapped_column(String(10))
+    currency: Mapped[str] = mapped_column(String(3))
+    provider: Mapped[str] = mapped_column(String(16))
+    current_period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    current_period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pending_plan_code: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("plans.code", ondelete="RESTRICT")
+    )
+    grace_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_charge_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BillingProfile(Base):

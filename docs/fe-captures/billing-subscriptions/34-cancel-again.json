@@ -1,0 +1,38 @@
+{
+  "note": "Idempotent: the same answer.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "status": "active",
+      "plan_code": "plan_20h",
+      "plan_name": "20 hours a month",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "current_period_start": "2026-11-17T15:19:25.387490Z",
+      "current_period_end": "2026-12-17T15:19:25.387490Z",
+      "cancel_at_period_end": true,
+      "pending_plan_code": null,
+      "grace_ends_at": null,
+      "next_retry_at": null,
+      "can_cancel": false,
+      "can_resume": true,
+      "can_change_plan": true,
+      "can_pay_now": false
+    }
+  }
+}

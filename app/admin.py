@@ -150,7 +150,13 @@ def schedule_deletion(session: Session, user: User) -> None:
             "This account owns a team that still has other members. Hand the team to one of "
             "them first (scripts/transfer_team_owner.py), then delete the account.",
         )
-    user.status, user.deleted_at = "deleted", datetime.now(UTC)
+    now = datetime.now(UTC)
+    user.status, user.deleted_at = "deleted", now
+    # A live plan ends with the account (no refund of the paid period, spec 3.7), and the saved
+    # cards go. Local import: the billing package reads models and alerts, which read this module.
+    from app.billing import subscriptions
+
+    subscriptions.end_for_deleted_account(session, user, now)
     session.commit()
 
 

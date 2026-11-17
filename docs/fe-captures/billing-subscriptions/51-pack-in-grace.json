@@ -1,0 +1,36 @@
+{
+  "note": "A pack may still be bought in the grace (a payment that succeeds).",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "pack",
+      "code": "pack_10h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-6-3647c31ef42e69c1",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1000,
+        "created_at": "2026-11-17T15:19:25.839755Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-6-3647c31ef42e69c1"
+      },
+      "checkout_url": "https://fake.test/pay/bn-6-3647c31ef42e69c1"
+    }
+  }
+}

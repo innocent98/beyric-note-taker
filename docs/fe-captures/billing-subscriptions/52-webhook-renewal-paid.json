@@ -1,0 +1,28 @@
+{
+  "note": "The overdue payment verified: a NEW period starts from the payment date and its hours are granted.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-6",
+      "kind": "charge_succeeded",
+      "reference": "bn-5-d73b47a2bf8ee6e7",
+      "tx_id": "fake-tx-6",
+      "amount_minor": 3400,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "note": "A pack needs a live plan: 409 `plan_required`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "pack",
+      "code": "pack_10h"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "plan_required",
+        "message": "You need a plan to buy extra hours."
+      }
+    }
+  }
+}
