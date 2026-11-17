@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { AppLink } from "@/components/ui";
 import { FaqList, SignupNote } from "@/components/landing/landing";
 import { BILLING_PLANS_HREF } from "@/lib/billing";
@@ -52,7 +51,7 @@ function Table() {
       <div className="ld-compare-in">
         <h2 className="ld-h2-table">{TABLE_TITLE}</h2>
         <div className="ld-table-wrap">
-          <div className="ld-table ld-table-2" role="table" aria-label="Plan comparison" style={{ "--plans": COMPARED.length } as CSSProperties}>
+          <div className={`ld-table ld-table-${COMPARED.length}`} role="table" aria-label="Plan comparison">
             <div className="ld-table-head" role="row">
               <span role="columnheader">Feature</span>
               {COMPARED.map((plan) => (

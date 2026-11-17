@@ -285,11 +285,15 @@
 .ld-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); }
 .ld-table { min-width: 620px; font-size: var(--text-md); }
 .ld-table [role="row"] { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border-softer); }
-.ld-table-2 { min-width: 0; }
-.ld-table-2 [role="row"] { grid-template-columns: 1.5fr repeat(var(--plans, 2), minmax(0, 1fr)); }
+/* The table's columns: the feature, then the trial and one per plan. A class per count (no inline style). */
+.ld-table-2, .ld-table-3, .ld-table-4, .ld-table-5 { min-width: 0; }
+.ld-table-2 [role="row"] { grid-template-columns: 1.5fr repeat(2, minmax(0, 1fr)); }
+.ld-table-3 [role="row"] { grid-template-columns: 1.5fr repeat(3, minmax(0, 1fr)); }
+.ld-table-4 [role="row"] { grid-template-columns: 1.5fr repeat(4, minmax(0, 1fr)); }
+.ld-table-5 [role="row"] { grid-template-columns: 1.5fr repeat(5, minmax(0, 1fr)); }
 @media (max-width: 640px) {
-  .ld-table-2 { font-size: var(--text-sm); }
-  .ld-table-2 [role="columnheader"], .ld-table-2 [role="rowheader"], .ld-table-2 [role="cell"] { padding: 12px 10px; overflow-wrap: anywhere; }
+  .ld-table-2, .ld-table-3, .ld-table-4, .ld-table-5 { font-size: var(--text-sm); }
+  :is(.ld-table-2, .ld-table-3, .ld-table-4, .ld-table-5) :is([role="columnheader"], [role="rowheader"], [role="cell"]) { padding: 12px 10px; overflow-wrap: anywhere; }
 }
 .ld-table [role="row"]:last-child { border-bottom: 0; }
 .ld-table-head { border-bottom: 1px solid var(--border) !important; }
