@@ -520,7 +520,6 @@ A `400` (genuine signature, a body that is not an event we can read) is **not ca
 | A `400` for a genuine but unreadable event | tests only |
 | The checkout request and answer shape, saved-card charge, refund, verify | documented samples and unit tests only: **not verified live** (no Paystack test keys yet) |
 | A real Paystack test-mode payment, the raw body through nginx and the Next.js proxy, what a foreign card returns in `country_code`, that real events match the documented samples | **not verified live**: the runbook in `docs/sop/2026-11-17-billing-paystack-adapter.md` |
-
 | S7: the Flutterwave adapter: hosted checkout, verify, the `verif-hash` check, saved-card charge, refund | tests only, against a scripted fake Flutterwave built from the vendor's documented samples (`tests/test_billing_flutterwave.py`); **not verified live**: no Flutterwave key was available |
 | S7: a USD payment is accepted by our Flutterwave account, and the currency and amounts it is settled in | **not verified (spec 5.6 stays unproven)**; the steps are in the S7 SOP |
 | S7: decimal dollar amounts (9.99), `amount` against `charged_amount`, the card country of a foreign card, the 3D Secure answer of a saved-card charge, the refund answer | not verified live (documented only) |

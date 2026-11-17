@@ -285,10 +285,12 @@ class FlutterwaveProvider:
             )
         if code != 200:
             raise ProviderError(f"Flutterwave refused the request (HTTP {code}): {message[:200]}")
+        # An HTTP 200 whose body we cannot use: on a call that moves money the vendor may already
+        # have acted, so it is `OutcomeUnknown` there (`lost`), a plain error for a read.
         if parsed is None or not isinstance(parsed, dict):
-            raise ProviderError("Flutterwave answered with something that is not a JSON object")
+            raise lost("Flutterwave answered with something that is not a JSON object")
         if answer.get("status") != "success":
-            raise ProviderError(f"Flutterwave did not report success: {message[:200]}")
+            raise lost(f"Flutterwave did not report success: {message[:200]}")
         return answer
 
     # ---- the PaymentProvider interface ----
@@ -487,14 +489,22 @@ class FlutterwaveProvider:
                 failure_reason=exc.vendor_message or "Flutterwave refused the charge",
             )
         except OutcomeUnknown:
-            try:
-                return self.fetch_by_reference(reference)
-            except ProviderError:
-                raise OutcomeUnknown(
-                    "the charge may or may not have gone through: check Flutterwave for "
-                    "this reference before charging again"
-                ) from None
-        return _transaction_from(answer.get("data"))
+            return self._look_up_lost_charge(reference)
+        try:
+            return _transaction_from(answer.get("data"))
+        except ProviderError:  # a 200 with no usable transaction: the charge may have happened
+            return self._look_up_lost_charge(reference)
+
+    def _look_up_lost_charge(self, reference: str) -> ProviderTransaction:
+        """After a charge whose answer is lost or unusable: ask Flutterwave about our reference
+        and return what it says; if that fails too, `OutcomeUnknown`."""
+        try:
+            return self.fetch_by_reference(reference)
+        except ProviderError:
+            raise OutcomeUnknown(
+                "the charge may or may not have gone through: check Flutterwave for "
+                "this reference before charging again"
+            ) from None
 
     def refund(
         self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
@@ -524,7 +534,11 @@ class FlutterwaveProvider:
         data = answer.get("data")
         refund_id = data.get("id") if isinstance(data, dict) else None
         if isinstance(refund_id, bool) or not isinstance(refund_id, (int, str)) or refund_id == "":
-            raise ProviderError("Flutterwave accepted the refund but gave no refund id")
+            # Accepted, but we cannot tell which refund it is: it may well exist.
+            raise OutcomeUnknown(
+                "Flutterwave answered the refund without a refund id: it may have been made, "
+                "check the dashboard before asking again"
+            )
         return str(refund_id)
 
 

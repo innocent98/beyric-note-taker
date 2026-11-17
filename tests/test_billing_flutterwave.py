@@ -659,7 +659,7 @@ def test_a_charge_the_vendor_refuses_is_a_failed_result_with_its_reason_never_pa
 
 @pytest.mark.parametrize(
     "answer",
-    [reply("{}", 401), reply("{}", 403), reply("{}", 429), reply("x", 418), reply("not json")],
+    [reply("{}", 401), reply("{}", 403), reply("{}", 429), reply("x", 418)],
 )
 def test_a_charge_that_failed_for_another_reason_is_still_an_error(answer):
     """A bad key or a rate limit is not a declined card: it stays a retryable `ProviderError`."""
@@ -787,9 +787,8 @@ def test_a_refund_of_cents_is_sent_exactly():
     "answer",
     [
         reply('{"status":"error","message":"Amount should be above NGN100","data":null}', 400),
-        reply('{"status":"success","message":"x","data":{}}'),
-        reply('{"status":"success","message":"x","data":null}'),
-        reply("nope"),
+        reply('{"status":"error","message":"Not allowed"}', 422),
+        reply("{}", 401),
     ],
 )
 def test_a_refund_the_vendor_does_not_accept_is_an_error(answer):
@@ -1280,3 +1279,67 @@ def test_the_billing_package_and_the_models_import_in_any_order_in_a_fresh_inter
         [sys.executable, "-c", statement], capture_output=True, text=True, timeout=60
     )
     assert done.returncode == 0, done.stderr[-400:]
+
+
+# ---------------------------------------------------------- a 200 we cannot use after money moved
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        reply("<html>gateway</html>"),
+        reply("[]"),
+        reply('{"status":"error","message":"odd","data":null}'),
+        reply('{"message":"no status at all"}'),
+    ],
+)
+def test_a_refund_answered_200_with_an_unusable_body_is_an_unknown_outcome(answer):
+    """The vendor may already have refunded: never a retryable `ProviderError`."""
+    wire = Wire(answer)
+    with pytest.raises(OutcomeUnknown) as caught:
+        wire.provider().refund("285959875", 500)
+    assert not isinstance(caught.value, ProviderError) and len(wire.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        reply('{"status":"success","message":"x","data":{}}'),
+        reply('{"status":"success","message":"x","data":null}'),
+        reply('{"status":"success","message":"x","data":{"id":true}}'),
+    ],
+)
+def test_a_refund_accepted_without_a_refund_id_is_an_unknown_outcome(answer):
+    with pytest.raises(OutcomeUnknown, match="may have been made"):
+        Wire(answer).provider().refund("285959875", 500)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [reply("<html>gateway</html>"), reply('{"status":"error","message":"odd"}'), reply("[]")],
+)
+def test_a_charge_answered_200_with_an_unusable_body_is_looked_up_then_unknown(answer):
+    wire = Wire(answer, reply('{"status":"error","message":"no such transaction"}', 404))
+    with pytest.raises(OutcomeUnknown, match="may or may not"):
+        wire.provider().charge_saved_method(
+            "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    assert wire.sent == [
+        ("POST", "/v3/tokenized-charges"),
+        ("GET", "/v3/transactions/verify_by_reference"),
+    ]
+
+
+def test_a_charge_answered_200_without_a_transaction_is_found_by_its_reference():
+    wire = Wire(reply('{"status":"success","message":"x","data":{}}'), reply(verify_text()))
+    tx = wire.provider().charge_saved_method(
+        "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
+    )
+    assert tx.status == "successful" and tx.reference == REF
+
+
+def test_a_read_answered_200_with_an_unusable_body_is_still_a_plain_error():
+    """Reading moves no money: the same body is retryable there."""
+    with pytest.raises(ProviderError) as caught:
+        Wire(reply("<html>gateway</html>")).provider().fetch_transaction("1")
+    assert not isinstance(caught.value, OutcomeUnknown)

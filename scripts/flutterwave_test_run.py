@@ -39,7 +39,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app.billing.flutterwave import FlutterwaveProvider  # noqa: E402
 from app.billing.payments import new_payment  # noqa: E402
-from app.billing.types import ProviderError  # noqa: E402
+from app.billing.types import OutcomeUnknown, ProviderError  # noqa: E402
 from app.config import Settings, get_settings  # noqa: E402
 from app.models import BillingEvent, Payment, User  # noqa: E402
 
@@ -177,6 +177,11 @@ def main(argv=None) -> None:
                 charge(db, provider, args.email, args.token, args.amount_cents)
             else:
                 print(f"refund id: {provider.refund(args.transaction_id, args.amount_cents)}")
+    except OutcomeUnknown as exc:
+        raise SystemExit(
+            f"Flutterwave gave no usable answer ({exc}). The payment may exist: look in the "
+            "dashboard before running this again."
+        ) from None
     except ProviderError as exc:
         raise SystemExit(f"Flutterwave call failed: {exc}") from None
 
