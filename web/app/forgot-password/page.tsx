@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Reset your password", robots: { inde
 export default async function ForgotPasswordPage() {
   if ((await getSession())?.authenticated) redirect("/");
   return (
-    <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
+    <AuthShell>
       <ForgotPasswordFlow />
     </AuthShell>
   );

@@ -15,7 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const code = Array.isArray(error) ? error[0] : error;
   const pilot = await getPilot();
   return (
-    <AuthShell action={{ text: "New to Beyric?", label: "Create account", href: "/signup" }}>
+    <AuthShell>
       <LoginForm
         google={pilot?.google_signin === true}
         redirectError={loginErrorMessage(code)}

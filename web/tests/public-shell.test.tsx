@@ -7,6 +7,14 @@ import PricingPage from "@/app/(public)/pricing/page";
 import PrivacyPage from "@/app/(public)/privacy/page";
 import TermsPage from "@/app/(public)/terms/page";
 import WelcomePage from "@/app/(public)/welcome/page";
+import LoginPage from "@/app/login/page";
+import SignupPage from "@/app/signup/page";
+import ForgotPasswordPage from "@/app/forgot-password/page";
+import ResetPasswordPage from "@/app/reset-password/page";
+import VerifyEmailPage from "@/app/verify-email/page";
+import AcceptInvitePage from "@/app/accept-invite/page";
+import UnsubscribePage from "@/app/unsubscribe/page";
+import PilotFullPage from "@/app/pilot-full/page";
 import PublicLayout from "@/app/(public)/layout";
 import { PublicShell } from "@/components/site/public-shell";
 import { filesUnder, read, rel, WEB } from "./helpers";
@@ -19,6 +27,7 @@ import { between, footer, header, hrefs, renderInPublicLayout, renderPublic } fr
 const state = vi.hoisted(() => ({ session: null as null | { authenticated: boolean }, pathname: "/" }));
 vi.mock("@/lib/api/server", () => ({
   getSession: async () => state.session,
+  getPilot: async () => null,
   getReviewOpen: async () => null,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
@@ -47,6 +56,20 @@ const PAGES: ReadonlyArray<{ name: string; path: string; render: () => Promise<s
   { name: "/privacy", path: "/privacy", render: () => renderInPublicLayout(PrivacyPage()) },
   { name: "/terms", path: "/terms", render: () => renderInPublicLayout(TermsPage()) },
   { name: "the 404 page", path: "/no-such-page", render: () => renderPublic(NotFound() as ReactElement) },
+];
+
+// The sign-in and account screens (AuthShell) sit inside the same shell (Adebayo, 2026-11-17). They are
+// for visitors: each redirects a signed-in owner, so they are checked as a visitor only.
+const EMPTY_QUERY = { searchParams: Promise.resolve({}) };
+const AUTH_PAGES: ReadonlyArray<{ name: string; path: string; render: () => Promise<string> }> = [
+  { name: "/login", path: "/login", render: async () => renderPublic((await LoginPage(EMPTY_QUERY)) as ReactElement) },
+  { name: "/signup", path: "/signup", render: async () => renderPublic((await SignupPage(EMPTY_QUERY)) as ReactElement) },
+  { name: "/forgot-password", path: "/forgot-password", render: async () => renderPublic((await ForgotPasswordPage()) as ReactElement) },
+  { name: "/reset-password", path: "/reset-password", render: async () => renderPublic(ResetPasswordPage() as ReactElement) },
+  { name: "/verify-email", path: "/verify-email", render: async () => renderPublic(VerifyEmailPage() as ReactElement) },
+  { name: "/accept-invite", path: "/accept-invite", render: async () => renderPublic(AcceptInvitePage() as ReactElement) },
+  { name: "/unsubscribe", path: "/unsubscribe", render: async () => renderPublic(UnsubscribePage() as ReactElement) },
+  { name: "/pilot-full", path: "/pilot-full", render: async () => renderPublic((await PilotFullPage()) as ReactElement) },
 ];
 
 // The shell alone, for the same visitor: what every page's header and footer must equal.
@@ -154,6 +177,31 @@ describe("the public header and footer", () => {
   });
 });
 
+describe("the sign-in and account screens", () => {
+  it.each(AUTH_PAGES)("$name has exactly the shared header and footer, one main landmark and no second bar", async ({ render, path }) => {
+    state.pathname = path;
+    const html = await render();
+    const shell = await reference();
+    expect(unmarked(header(html))).toBe(unmarked(header(shell)));
+    expect(unmarked(footer(html))).toBe(unmarked(footer(shell)));
+    expect(html.match(/<header/g)).toHaveLength(1);
+    expect(html.match(/<footer/g)).toHaveLength(1);
+    expect(html.match(/<main[ >]/g)).toHaveLength(1);
+    expect(html).toContain('<a class="skip-link" href="#main">Skip to content</a>');
+    expect(html.indexOf("skip-link")).toBeLessThan(html.indexOf("<header"));
+    // The screen's own form is still there, inside the one `main`, and the old top row and footer are gone.
+    const main = between(html, '<main id="main"', "</main>");
+    expect(main).toContain("auth-box");
+    expect(main).toMatch(/class="auth-box"><[^>]*auth-form|class="auth-box"><form/);
+    expect(html).not.toMatch(/auth-bar|auth-foot/);
+  });
+
+  it("keeps the left-hand Sign in and Create account links reachable from the header", async () => {
+    const html = await AUTH_PAGES[0].render();
+    expect(hrefs(header(html))).toEqual(expect.arrayContaining(["/login", "/signup"]));
+  });
+});
+
 describe("the pinned markup", () => {
   it("is exactly the landing page's header and footer for a visitor", async () => {
     const html = await reference();
@@ -215,6 +263,13 @@ describe("one implementation, wired once", () => {
 
   it("wraps the two public pages that cannot be in the group (`/` and the 404 page) in the same shell", () => {
     for (const file of ["app/page.tsx", "app/not-found.tsx"]) expect(read(join(WEB, file)), file).toContain("<PublicShell>");
+  });
+
+  it("wraps every screen drawn through AuthShell in the same shell, in one place", () => {
+    expect(read(join(WEB, "components/site/auth-shell.tsx"))).toContain("<PublicShell>");
+    const users = filesUnder("app", [".tsx"]).filter((file) => read(file).includes("<AuthShell"));
+    expect(users.map(rel).sort()).toEqual(AUTH_PAGES.map((page) => `app${page.path}/page.tsx`).concat("app/setup/page.tsx").sort());
+    for (const file of users) expect(read(file), rel(file)).not.toMatch(/PublicShell|<header|<footer/);
   });
 
   it("has no second header or footer left: no legal, landing or pricing variants in code or styles", () => {
