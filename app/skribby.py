@@ -136,6 +136,8 @@ MAX_CANDIDATES = 20
 MIN_SOLE_CANDIDATE_SEGMENTS = 3
 # Names kept per item in the saved evidence (a real list holds a few).
 MAX_EVIDENCE_NAMES = 50
+# Finished bots whose speaker events the provider keeps in memory (`_events_for_naming`).
+EVENTS_KEPT = 32
 # The most the saved speaker events may take (as JSON text). Over it, only the speaking events are
 # kept; still over, the events are dropped and the names and presence are kept (`_cap_events`).
 MAX_SPEAKER_EVENTS_BYTES = 400_000
@@ -322,6 +324,17 @@ def _resolve_tags(
     `elimination_off` for a tag it would have named, and `would_be` holds the name it would have
     taken, so a saved record shows what the switch changed. With the timeline rule on and a tag
     left unnamed, `timeline` says why the speaking indicator did not name it."""
+    result, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination)
+    if by_timeline and events:
+        _name_by_timeline(result, value, events, bot, listed, chosen)
+    return result
+
+
+def _earlier_rules(value: list[dict], own_names: tuple[str, ...], by_elimination: bool):
+    """Skribby's own name, elimination and the sole candidate: `(result, chosen, listed, bot)`,
+    `result` as `_resolve_tags` describes it, `chosen` the name each of those rules picked for a
+    tag (also for a tag left unnamed by a shared claim or by the elimination switch), `listed` each
+    tag's candidates and `bot` the bot's own names as comparison keys."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -396,9 +409,7 @@ def _resolve_tags(
             result[tag] = {"name": "", "how": "unknown", "note": "no_candidates"}
         else:
             result[tag] = {"name": "", "how": "unknown", "note": "unresolved"}
-    if by_timeline and events:
-        _name_by_timeline(result, value, events, bot, listed)
-    return result
+    return result, chosen, listed, bot
 
 
 # What the timeline rule may name: a tag the other rules left unnamed because they could not tell
@@ -414,6 +425,7 @@ def _name_by_timeline(
     events: dict | None,
     bot: set[str],
     listed: dict[str, dict[str, str] | None],
+    chosen: dict[str, str],
 ) -> None:
     """Name tags still unnamed after Skribby's name, elimination and the sole candidate, after the
     participant who was speaking most over their segments, by Meet's own speaking indicator
@@ -426,9 +438,11 @@ def _name_by_timeline(
     * the timeline agrees with the names the other rules gave: at least one named tag's top
       speaker is that person (so the Meet names and the clock are the transcript's), and none
       has a different person clearly on top (`contradicted`: the signal or the clock is wrong);
-    per tag: the winner has at least `MIN_SECONDS` and `MIN_RATIO` times the runner-up, is not the
-    bot, is on the tag's own candidate list when it has one, and is the name the tag was claimed
-    for when it was a `shared_claim` or `elimination_off` tag. Several tags may take one name:
+    per tag: the winner has at least `MIN_SECONDS`, `MIN_SHARE` of the tag's own seconds and
+    `MIN_RATIO` times the runner-up, is not the bot, is on the tag's own candidate list when it
+    has one, and is the name the earlier rules had picked for the tag (`chosen`) when they picked
+    one but could not give it (a `shared_claim` or `elimination_off` tag). Names are compared
+    exactly after cleaning ("Ada" is never "Ada Obi"). Several tags may take one name:
     that is how the model's over-splitting of one person is put right. Participants listed under
     one name (a rejoin) are one person."""
 
@@ -449,10 +463,12 @@ def _name_by_timeline(
         return
     agreeing = 0
     for tag, info in named.items():
-        key, why = meet_timeline.verdict(reading.cells.get(tag, {}), set())
+        key, why = meet_timeline.verdict(
+            reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0)
+        )
         if key is None:
             continue  # the timeline has no clear say about this tag: no vote either way
-        if meet_timeline.same_person(key, _same(info["name"])):
+        if key == _same(info["name"]):
             agreeing += 1
         else:
             for other in open_tags:
@@ -467,44 +483,38 @@ def _name_by_timeline(
         if info["note"] not in _TIMELINE_MAY_NAME:
             info["timeline"] = "not_eligible"
             continue
-        key, why = meet_timeline.verdict(reading.cells.get(tag, {}), bot)
+        key, why = meet_timeline.verdict(
+            reading.cells.get(tag, {}), bot, reading.totals.get(tag, 0.0)
+        )
         if key is None:
             info["timeline"] = why
             continue
-        claimed = info.get("would_be") or ""
+        picked = _same(chosen[tag]) if tag in chosen else ""
         candidates = listed.get(tag) or {}
-        if (claimed and not meet_timeline.same_person(key, _same(claimed))) or (
-            candidates and not any(meet_timeline.same_person(key, other) for other in candidates)
-        ):
+        if (picked and key != picked) or (candidates and key not in candidates):
             info["timeline"] = "disagrees"
             continue
         result[tag] = {"name": reading.shown[key], "how": "meet_timeline", "note": ""}
 
 
 def apply_timeline(
-    tags: dict[str, dict[str, str]], value: list[dict], events: dict | None, own_names=()
+    tags: dict[str, dict[str, str]],
+    value: list[dict],
+    events: dict | None,
+    own_names: tuple[str, ...] = (),
+    by_elimination: bool = True,
 ) -> dict[str, dict[str, str]]:
     """A copy of `tags` (what `_resolve_tags` kept with the evidence) after the timeline step, so
     `scripts/skribby_segments_report.py` can say what the rule would do to a meeting saved before
-    it existed, without re-running the earlier rules. `value` is the transcript items (Skribby's
-    own shape or the evidence's: `speaker`, `start`, `end`, `potential_speaker_names` as
-    `{"name"}` dicts)."""
+    it existed. The candidates and the earlier rules' picks are read again from `value` (the
+    transcript items, Skribby's own shape or the evidence's: `speaker`, `start`, `end`,
+    `potential_speaker_names` as `{"name"}` dicts) with the same bot names the live path uses
+    (`own_names`), so the report and the live path cannot disagree about the bot or a claim."""
     result = {tag: dict(info) for tag, info in tags.items()}
     if not events:
         return result
-    listed: dict[str, dict[str, str] | None] = {}
-    for item in value:
-        tag = _tag(item.get("speaker"))
-        if tag is None:
-            continue
-        candidates = _candidate_names(item)
-        if candidates is None or listed.get(tag, {}) is None:
-            listed[tag] = None
-        else:
-            for key, name in candidates.items():
-                listed.setdefault(tag, {}).setdefault(key, name)
-    bot = {_same(name) for name in map(_clean_name, own_names) if name}
-    _name_by_timeline(result, value, events, bot, listed)
+    _, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination)
+    _name_by_timeline(result, value, events, bot, listed, chosen)
     return result
 
 
@@ -1400,6 +1410,8 @@ class SkribbyProvider:
         self._ledger: BotLedger = ledger or DbLedger()
         self._clock = clock or _utcnow
         self._guard = threading.Lock()
+        self._events_lock = threading.Lock()
+        self._events_kept: OrderedDict[str, dict] = OrderedDict()
         # Bots sent by this process, per `(platform, code)`, oldest first: the window between the
         # send and the meeting row's commit, which our own table cannot see.
         # Bounded: `SENT_CODES_KEPT` codes, each entry for `SENT_KEPT_FOR` seconds.
@@ -1557,15 +1569,23 @@ class SkribbyProvider:
         because the plain one carries none. None for any other bot (one request per poll is
         enough while it is live), when the setting is off, or when the request fails or answers in
         a shape that is not the documented one: then the tags are named without the timeline, as
-        before. Never raises; logged by exception class only (a message could hold a name)."""
+        before. Never raises; logged by exception class only (a message could hold a name).
+
+        A finished bot is looked at more than once (the status poll, then the transcript step),
+        so a good answer is kept in this process (the last `EVENTS_KEPT` bots, as the sent codes
+        are): one extra request per meeting and process, not per look. A failure is not kept, so
+        the next look asks again. The events of a finished meeting do not change."""
         if (
             body.get("status") != "finished"
             or not get_settings().name_by_meet_timeline
             or not isinstance(body.get("transcript"), list)
         ):
             return None
+        with self._events_lock:
+            if bot_id in self._events_kept:
+                return self._events_kept[bot_id]
         try:
-            return speaker_events_record(
+            record = speaker_events_record(
                 self._client.get_bot(
                     bot_id, timeout=timeout, params={"with-speaker-events": "true"}
                 )
@@ -1573,6 +1593,12 @@ class SkribbyProvider:
         except Exception as exc:
             logger.warning("skribby: no speaker events for naming (%s)", type(exc).__name__)
             return None
+        if record is not None:
+            with self._events_lock:
+                self._events_kept[bot_id] = record
+                while len(self._events_kept) > EVENTS_KEPT:
+                    self._events_kept.popitem(last=False)
+        return record
 
     # ---- the BotProvider interface ----
 

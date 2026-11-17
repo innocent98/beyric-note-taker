@@ -84,11 +84,13 @@ report and the app cannot read the timeline two ways.
 | No contradiction (`contradicted`) | if a tag the earlier rules named has a *different* person clearly on top, nothing is named | the two signals disagree: one of them (or the clock) is wrong, and we do not know which. The earlier name is never touched |
 | Only unnamed tags in a "could not tell" state (`not_eligible` otherwise) | `unresolved`, `shared_claim`, `no_candidates`, `elimination_off` | a tag with two names of its own (`several_names`) already holds two people: a third name would be one of them |
 | Overlap of the winner at least **30 s** (`too_little`) | | see thresholds |
+| Winner at least **20%** of the tag's own seconds (`small_share`) | | added after review: a tag whose real speaker has no usable Meet entry (a dial-in, events cut by the size cap) must not be named after whoever talked over it for 35 s of a 1,000 s tag. Meeting 39's right winners hold 39% to 61% of their tags, so 20% blocks none of them |
 | Winner at least **3.0x** the runner-up (`not_clear`) | ties are therefore never named | see thresholds |
 | The bot (`bot`) | the bot takes part in the ranking; if it ranks first the tag is not named. It is never skipped to the person below | otherwise a quiet tag would be named after whoever came second |
-| On the tag's own candidate list (`disagrees`) | when Skribby listed candidates for the tag (and the list is readable), the winner must be one of them (words compared: `Ada` is not `Adam`) | two independent signals must not contradict. **This is the one guard that can block a real name if Skribby's list for a tag lacks the right person; the dry run says `disagrees` when it does** |
-| For `shared_claim` and `elimination_off` tags, the winner must be the name earlier rules had chosen | otherwise `disagrees` | same reason |
-| Repeated names are one person | participants with the same name after the app's cleaning (brackets, whitespace, case, invisible characters) are read together: their speaking intervals are merged (a **union**, so a rejoin never counts twice) and the first spelling is shown | meeting 39: Meet listed two people three and two times |
+| On the tag's own candidate list (`disagrees`) | when Skribby listed candidates for the tag (and the list is readable), the winner must be one of them. Names are compared **exactly** after cleaning (case, spaces, brackets, invisible characters): "Ada" is never "Ada Obi". The price: if Meet shows a shorter or longer spelling than Skribby used, the rule refuses (a mismatch with a name an earlier rule gave even reads as a contradiction and stops the whole meeting), which is the safe direction | two independent signals must not contradict. **This is the one guard that can block a real name if Skribby's list for a tag lacks the right person; the dry run says `disagrees` when it does** |
+| For `shared_claim` and `elimination_off` tags, the winner must be the name the earlier rules had picked for the tag (`chosen` in `_earlier_rules`; a shared claim carries no `would_be` in the saved evidence, so the pick is passed in, not read from the tag) | otherwise `disagrees` | two signals must not contradict. It can refuse a real over-split (a tag claimed for A that Meet shows is B, whose other tag is named): that is deliberate, the dry run says `disagrees` |
+| Repeated names are one person | participants with the same name after the app's cleaning (brackets, whitespace, case, invisible characters) are read together: their speaking intervals are merged (a **union**, so a rejoin never counts twice) and the first spelling is shown. **Two real people with the same display name are merged into one too**: their speech adds up and the tag takes that shared name (the label is not wrong text, since both show under that name, but the tag is one name for two people) |
+| A speaking interval that never closes is dropped (`app/meet_timeline.py`) | a `started-speaking` with no `stopped-speaking` or `left` is **dropped, not run to the end of the record**; so is one longer than 600 s (a missing stop) | added after review. Run to the end, a connection that dropped at minute 20 would have that person "speaking" over every later tag, could win weak tags, and would flatten the clock check. The bot leaving while someone talks leaves one such interval in an ordinary meeting, so refusing the whole meeting would be fragile; dropping costs that one interval. Whether Skribby always sends a `left` on a dropped connection is not proven live. The 600 s is a guess (Meet's indicator flickers with every pause); the meeting-39 numbers in the table above were not recomputed with it, so check the dry run | meeting 39: Meet listed two people three and two times |
 | Several tags may share a name | | the model over-split one person (tags 0, 2, 5 are one person); `candidate()` merges consecutive lines of one name |
 | Never overrides | a tag with any name from `given`, `elimination` or `sole_candidate` is left as it is, whatever the timeline says | |
 
@@ -96,11 +98,21 @@ report and the app cannot read the timeline two ways.
 that were right and clear had 75.9 s to 449 s of overlap and 3.55x to 31x over the runner-up; the two weak tags
 had 11.5 s and 10.9 s and 2.45x and 1.45x. Any minimum between 11.5 and 75.9 s fits those numbers; I chose 30 s as
 "a few real turns, not a cough". The ratio is the line with the least room: 2.45 (not named) against 3.55 (named).
-**These come from one meeting** and tag 6 passes at 3.55x with little to spare; they were set conservatively
+The share floor (`MIN_SHARE = 0.2`) was added after review and sits below every right winner of meeting 39 (47%, 39%, 44%, 49% for the four named tags). **These come from one meeting** and tag 6 passes at 3.55x with little to spare; they were set conservatively
 (a wrong name is worse than "Unknown speaker": it moves who said what in the notes, and nothing flags it), not
 fitted to be loose. Tag 7 really is Meet's top person for 11.5 s against 4.7 s, and it may well be right; at 35 s
 of speech it is not worth the risk and it stays unknown. If more meetings show the weak side is also reliable, lower
 the constants; if a wrong name ever appears, raise them or turn the switch off.
+
+### The two switches are independent
+
+`NAME_BY_MEET_TIMELINE` does **not** follow `SKRIBBY_NAME_BY_ELIMINATION`. With elimination off, a tag elimination would
+have named is left `elimination_off`, and the timeline **may still name it, but only with the name elimination would
+have given** (otherwise `disagrees`). An operator who turned elimination off because it once named someone not in the
+call therefore still gets those names back when Meet's speaking indicator agrees. I kept it independent because the
+timeline is a different, independent signal and the agreement makes it stronger than either alone; to stop all derived
+names, turn **both** switches off. (Alternative, rejected: make the timeline obey the elimination switch, which would tie
+a new rule to the reason an old one was switched off.)
 
 ### Default on, and why
 
@@ -117,11 +129,14 @@ server steps for nothing, since the dry run changes nothing. **Say so if you dis
 The plain Skribby bot read carries no speaker events; they come from a second request
 (`?with-speaker-events=true`, the same one `SkribbyProvider.get_speaker_events` already makes for the evidence).
 `SkribbyProvider._events_for_naming` makes it **only** for a bot whose status is `finished` with a transcript and
-only when the switch is on, so a live bot polled every few seconds still costs one request per poll. If it fails (or
+only when the switch is on, so a live bot polled every few seconds still costs one request per poll. A finished bot is looked at more than
+once (the status poll, then the transcript step), so a good answer is **kept in the process** (the last 32 bots): **one
+extra request per meeting and process**, not per look; a failure is not kept, so the next look asks again. The events of a
+finished meeting do not change; another process (worker versus web) or a restart asks once more. If it fails (or
 answers in a shape that is not the documented one) it is None, logged by exception class only, and the tags are
 named without the timeline, exactly as before: **it can never fail a meeting**. `map_bot` takes the record as
 `speaker_events` and gives it to `_segments` and `_safe_evidence`, so the stored transcript and the saved
-evidence name the tags the same way. The pipeline's own events fetch for the evidence is unchanged (a third request,
+evidence name the tags the same way. The pipeline's own events fetch for the evidence is unchanged (another request,
 harmless).
 
 ### What the label says
@@ -129,7 +144,7 @@ harmless).
 The existing code does **not** mark derived names in the label: a turn is `[Name]: text` whether the name was
 Skribby's, eliminated or a sole candidate; only the saved evidence says why (`how`). The timeline name is the same:
 the label shows the name plainly, and `how: meet_timeline` is in `skribby_segment_evidence.tags` and in the report
-header. A tag the rule looked at and left unnamed gets a `timeline` key in the evidence (`too_little`, `not_clear`,
+header. A tag the rule looked at and left unnamed gets a `timeline` key in the evidence (`too_little`, `small_share`, `not_clear`,
 `bot`, `disagrees`, `clock_shifted`, `uncorroborated`, `contradicted`, `not_eligible`, `no_overlap`, `no_events`,
 `clock_unplaced`, `no_times`) so the report says **why** a tag stayed unknown. I did not add a visible
 "(from Meet's timeline)" marker: nothing else is marked, and a new UI convention is not mine to invent.
@@ -141,8 +156,12 @@ header. A tag the rule looked at and left unnamed gets a `timeline` key in the e
 * **Fit a clock offset and use it** (rejected: a shifted clock is a reason to distrust the signal; the report still
   offers `--offset` for a human to look).
 * **Trust the timeline over Skribby's own names** (rejected: it is not proof, see below; an own name always wins).
-* **A share-of-tag-total threshold** (rejected: Meet's indicator covers only 40-50% of a tag's time even for the
-  right person in meeting 39, so it carries no information at the margin).
+* **A high share-of-tag threshold** (rejected: Meet's indicator covers only 40-50% of a tag's time even for the
+  right person in meeting 39, so a high floor would refuse right names). A **low** floor (20%) is kept: it only
+  blocks a winner that holds a sliver of the tag (first version of this SOP wrongly rejected both).
+* **Extend a never-closed interval to the end, or refuse the meeting for one** (rejected: the first names the
+  wrong person, the second throws away the whole meeting for the ordinary end-of-call open interval).
+* **Loose (word-subset) name matching** (rejected after review: "Ada" vs "Ada Obi" are two people).
 * **A new column or a new evidence field for the switch** (rejected: the tag's `how` says it; no migration).
 
 ## What's involved
@@ -155,7 +174,7 @@ header. A tag the rule looked at and left unnamed gets a `timeline` key in the e
 | `app/transcript_source.py` | `Candidate.unnamed_words`, `complete` = named and under `MAX_UNNAMED_SHARE` unnamed |
 | `scripts/rebuild_meeting_from_evidence.py` | passes the saved events (`row.events`) and the switch to the same functions; the dry run prints `timeline: <reason>` after a tag that stayed unknown |
 | `scripts/skribby_segments_report.py` | imports the timeline arithmetic from `app/meet_timeline.py`; a last section "What naming from Meet's timeline would do to the unnamed tags" |
-| `tests/test_meet_timeline_naming.py` (new, 34), `tests/test_transcript_source.py`, `tests/test_rebuild_meeting_from_evidence.py` (+3), `tests/test_bot_name.py`, `tests/test_provider_contract.py`, `tests/test_skribby_live_check.py` | tests; the last three only tolerate the second request of a finished bot |
+| `tests/test_meet_timeline_naming.py` (new, 42), `tests/test_transcript_source.py`, `tests/test_rebuild_meeting_from_evidence.py` (+3), `tests/test_skribby_evidence.py` (the never-closed interval), `tests/test_bot_name.py`, `tests/test_provider_contract.py`, `tests/test_skribby_live_check.py` | tests; the last three only tolerate the second request of a finished bot |
 
 ## Verification
 
@@ -165,12 +184,14 @@ header. A tag the rule looked at and left unnamed gets a `timeline` key in the e
   (`too_little`), tags 1, 3, 4 unchanged (`sole_candidate`, `sole_candidate`, `given`). A separate test recomputes the
   overlaps from the laid-out times and checks they equal the table. The labelled transcript of the fixture: unnamed
   words 72% before, 2.5% after; the old rule (`complete` = someone is named) would have said true for both
-  (the bug), the new one says false for the 72% case and true for the 2.5% case.
+  (the bug; true by inspection, no test asserts the old rule), the new one says false for the 72% case and true for the 2.5% case.
 * **Meetings 37 and 38 shapes** (three people all named by earlier rules; four people with one by elimination) give
-  identical tags with and without events (`==` on the whole dict).
+  identical tags with and without events (`==` on the whole dict). They cannot change **by construction**: every tag is
+  named, so there is no unnamed tag for the rule to look at (the timeline only ever visits unnamed tags). The tests pin
+  that.
 * **Guards, each with a test that fails without it** (undone by hand, then restored): minimum seconds (3 tests fail),
   ratio (1), clock check (1), contradiction stop (1), corroboration (1), bot first-rank (1), the tag's own candidate list (3),
-  the earlier choice for a shared claim / elimination-off tag (1), the eligibility list (1). Also tested: ties and
+  the earlier choice for a shared claim / elimination-off tag (2), the share floor (2), the never-closed interval (2), the 600 s cap (1), the eligibility list (1). Also tested: ties and
   2.5x/2.94x/3.33x margins, 29 s and 30 s, nobody speaking, the bot, rejoin entries (three entries each with a third of
   Ada's speech name her; the union equals 449.0 s), one person under two spellings, a clock 8 s late (nothing named,
   tags say `clock_shifted`) and 1 s late (named), no/unreadable events, Unix times with no `recording` time, no segment

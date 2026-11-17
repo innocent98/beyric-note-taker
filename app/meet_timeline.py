@@ -28,6 +28,16 @@ MIN_SECONDS = 30.0
 # speaker", so the line sits just above the weak ones (one meeting's data: say so, do not trust it
 # further than that).
 MIN_RATIO = 3.0
+# The winner must also have been speaking over at least this share of the tag's own seconds.
+# Meeting 39's right winners held 39% to 61% of their tags (Meet's indicator lights for only
+# about half of a person's speech), so 20% never blocks them; what it blocks is a tag whose real
+# speaker has no usable Meet entry (a dial-in, events cut by the size cap) and which a talker-over
+# would otherwise name: 35 s over a 1,000 s tag is 3.5%.
+MIN_SHARE = 0.2
+# A speaking interval longer than this is not read: Meet's indicator flickers with every pause,
+# so one lit stretch of ten minutes means a `stopped-speaking` went missing, and what lies between
+# is not known.
+MAX_SPAN_SECONDS = 600.0
 # How far either way the clock fit looks (seconds), and how much better a shift must be (a share)
 # before the Meet clock is called out of step with the transcript's.
 SEARCH_SECONDS = 30
@@ -75,14 +85,17 @@ def speaking_intervals(
 ) -> dict[str, list[tuple[float, float]]] | None:
     """`{participant name: speaking intervals, seconds}` from the saved events, or None when the
     record is not in the shape this reads. A `started-speaking` opens an interval and
-    `stopped-speaking` or `left` closes it; one never closed ends at the last time seen anywhere in
-    the record. `group` says which names are one person (a participant who left and rejoined is
-    listed once per visit under one name): their events are read together, the first spelling is
-    the name shown. A name `group` gives an empty key is skipped."""
+    `stopped-speaking` or `left` closes it. An interval that never closes is **dropped**, not
+    extended: a connection that dropped mid-sentence sends no `stopped-speaking`, and an interval
+    run to the end of the record would have that person "speaking" over every later tag (the bot
+    leaving while someone talks leaves one open interval in an ordinary meeting, so this is not
+    rare, and one short interval is all it costs). An interval longer than `MAX_SPAN_SECONDS` is
+    dropped for the same reason. `group` says which names are one person (a participant who left
+    and rejoined is listed once per visit under one name): their events are read together, the
+    first spelling is the name shown. A name `group` gives an empty key is skipped."""
     people = record.get("participants") if isinstance(record, dict) else None
     if not isinstance(people, list):
         return None
-    seen: list[float] = []
     named: dict[str, tuple[str, list]] = {}
     for person in people:
         if not isinstance(person, dict) or not isinstance(person.get("name"), str):
@@ -94,11 +107,9 @@ def speaking_intervals(
         stamped = sorted(
             (t, e.get("type")) for e in events if (t := seconds(e.get("timestamp"))) is not None
         )
-        seen += [t for t, _ in stamped]
         named.setdefault(key, (shown, []))[1].extend(stamped)
     if not named:
         return None
-    last = max(seen) if seen else 0.0
     result: dict[str, list[tuple[float, float]]] = {}
     for shown, stamped in named.values():
         opened, spans = None, []
@@ -106,10 +117,9 @@ def speaking_intervals(
             if kind == "started-speaking" and opened is None:
                 opened = t
             elif kind in ("stopped-speaking", "left") and opened is not None:
-                spans.append((opened, t))
+                if t - opened <= MAX_SPAN_SECONDS:
+                    spans.append((opened, t))
                 opened = None
-        if opened is not None:
-            spans.append((opened, last))
         result[shown] = merge(spans)
     return result
 
@@ -170,6 +180,7 @@ class Reading:
     it. `refused` is why nothing may be named from it (None when it may be)."""
 
     cells: dict = field(default_factory=dict)
+    totals: dict = field(default_factory=dict)  # tag -> seconds its segments cover
     shown: dict[str, str] = field(default_factory=dict)
     refused: str | None = None
 
@@ -197,7 +208,8 @@ def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
         tag: {keys[n]: sum(overlap(spans[n], a, b) for a, b in merge(intervals)) for n in spans}
         for tag, intervals in heard.items()
     }
-    reading = Reading(cells=cells, shown={keys[n]: n for n in spans})
+    totals = {tag: sum(b - a for a, b in merge(intervals)) for tag, intervals in heard.items()}
+    reading = Reading(cells=cells, totals=totals, shown={keys[n]: n for n in spans})
     if not clock_is_fine(*clock_fit(spans, heard)):
         reading.refused = "clock_shifted"
     return reading
@@ -206,14 +218,17 @@ def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
 def verdict(
     cells: dict[str, float],
     bot: set[str],
+    total: float,
     min_seconds: float = MIN_SECONDS,
     ratio: float = MIN_RATIO,
+    share: float = MIN_SHARE,
 ) -> tuple[str | None, str]:
-    """`(key, "named")` for the participant who may name a tag whose overlaps are `cells`, or
-    `(None, why)`: `no_overlap` (nobody was speaking over it), `too_little` (the winner has under
-    `min_seconds`), `not_clear` (under `ratio` times the runner-up), `bot` (the winner is the note
-    taker itself). The bot takes part in the ranking: if it ranks first the tag is not named, it
-    is never skipped to the person below."""
+    """`(key, "named")` for the participant who may name a tag whose overlaps are `cells` and
+    whose segments cover `total` seconds, or `(None, why)`: `no_overlap` (nobody was speaking over
+    it), `bot` (the winner is the note taker itself), `too_little` (the winner has under
+    `min_seconds`), `small_share` (under `share` of the tag's seconds: crosstalk, not the tag's
+    speaker) or `not_clear` (under `ratio` times the runner-up). The bot takes part in the
+    ranking: if it ranks first the tag is not named, it is never skipped to the person below."""
     ranked = sorted(cells.items(), key=lambda kv: kv[1], reverse=True)
     if not ranked or ranked[0][1] <= 0:
         return None, "no_overlap"
@@ -222,15 +237,9 @@ def verdict(
         return None, "bot"
     if top_seconds < min_seconds:
         return None, "too_little"
+    if top_seconds < share * total:
+        return None, "small_share"
     second = ranked[1][1] if len(ranked) > 1 else 0.0
     if top_seconds < ratio * second:
         return None, "not_clear"
     return top, "named"
-
-
-def same_person(a: str, b: str) -> bool:
-    """Whether two comparison keys (already cleaned and case-folded) can be one person: equal, or
-    the words of one are all words of the other (Meet may show a shorter or longer spelling than
-    what Skribby listed; "ada" is not "adam", since whole words are compared)."""
-    one, other = set(a.split()), set(b.split())
-    return bool(one) and bool(other) and (one <= other or other <= one)

@@ -189,7 +189,8 @@ def test_the_segments_are_labelled_with_the_new_names_and_the_meeting_reads_comp
     assert {s["speaker"] for s in new} == {ADA, BO, CY, DI, FLO, ""}
     found_old = transcript_source.candidate(old)
     found_new = transcript_source.candidate(new)
-    # Before: tags 0, 2, 5, 6, 7, 8 are 72% of the words and the meeting reads complete (the bug).
+    # Before: tags 0, 2, 5, 6, 7, 8 are 72% of the words. (The old rule, "someone is named",
+    # would have called this complete: true by inspection, it was the whole rule.)
     assert found_old.unnamed_words / found_old.words > 0.7
     assert found_old.complete is False
     # After: tags 7 and 8 (69.2 of 2,771 s, 2.5%) are all that is left.
@@ -348,6 +349,26 @@ def test_a_shared_claim_for_someone_else_is_a_disagreement_not_an_override():
     assert after["2"]["name"] == ADA and after["5"]["name"] == ADA
 
 
+def test_a_shared_claim_is_checked_against_the_name_the_earlier_rules_picked():
+    # Tags 0 and 2 both claim Ada by the earlier rules (tag 0 listed Ada and Di, Di is held by tag
+    # 10, so elimination left Ada; tag 2 lists Ada alone on three or more segments). Meet says Di
+    # spoke over tag 0. Di IS on tag 0's list, so the list alone would let Di through: the
+    # claimed name is what refuses it.
+    table = {
+        "0": ([0, 0, 0, 200.0, 0, 0], 220.0),
+        "2": ([100.0, 1.0, 1.0, 0, 0, 0], 130.0),
+        "4": ([0, 0, 0, 0, 0, 150.0], 160.0),
+        "10": ([0, 0, 0, 120.0, 0, 0], 130.0),
+    }
+    listed = {"0": [ADA, DI], "2": [ADA]}
+    items, spans = layout(table, listed, {"4": FLO, "10": DI})
+    before = resolve(items, None)
+    assert before["0"]["note"] == "shared_claim" and before["2"]["note"] == "shared_claim"
+    after = resolve(items, events_record(spans))
+    assert after["0"]["name"] == "" and after["0"]["timeline"] == "disagrees"
+    assert after["2"]["name"] == ADA  # the claim and the timeline agree
+
+
 def test_with_elimination_off_the_timeline_names_only_what_elimination_would_have_said():
     items, spans = layout(TABLE)
     events = events_record(spans)
@@ -361,6 +382,84 @@ def test_with_elimination_off_the_timeline_names_only_what_elimination_would_hav
     off = resolve(items, events_record(spans), elimination=False)
     assert off["6"]["name"] == "" and off["6"]["timeline"] == "disagrees"
     assert off["6"]["would_be"] == DI
+
+
+# ---- a share of the tag, not only seconds ----
+
+
+def test_crosstalk_alone_cannot_name_a_big_tag():
+    # A 1,000 s tag whose real speaker has no usable Meet entry; one person talked over it for
+    # 35 s and nobody else for more than 10: seconds and ratio pass, the share (3.5%) does not.
+    table = {k: TABLE[k] for k in ("1", "3", "4")}
+    table["9"] = ([35.0, 10.0, 0, 0, 0, 0], 1000.0)
+    items, spans = layout(table, {"1": [CY], "3": [BO]})
+    got = resolve(items, events_record(spans))["9"]
+    assert got["name"] == "" and got["timeline"] == "small_share"
+
+
+def test_the_share_floor_is_a_fifth_of_the_tags_seconds():
+    def tag(ada, total):
+        table = {k: TABLE[k] for k in ("1", "3", "4")} | {"9": ([ada, 0, 0, 0, 0, 0], total)}
+        items, spans = layout(table, {"1": [CY], "3": [BO]})
+        return resolve(items, events_record(spans))["9"]
+
+    assert tag(39.0, 200.0)["timeline"] == "small_share"  # 19.5%
+    assert tag(41.0, 200.0)["name"] == ADA  # 20.5%
+
+
+# ---- a speaking interval that never closes ----
+
+
+def start_ms():
+    return int(START.timestamp() * 1000)
+
+
+def test_a_started_speaking_with_no_stop_names_no_later_tag():
+    # Gus's connection dropped at the start: one `started-speaking`, no stop, no `left`. Run to
+    # the end of the record he would "speak" over every later tag, tag 9 included.
+    table = {"9": ([0] * 6, 100.0), **{k: TABLE[k] for k in ("1", "3", "4")}}
+    items, spans = layout(table, {"1": [CY], "3": [BO]})
+    events = events_record(spans)
+    events["participants"].append(
+        {"name": "Gus Example", "events": [{"type": "started-speaking", "timestamp": start_ms()}]}
+    )
+    got = resolve(items, events)
+    assert got["9"]["name"] == "" and got["9"]["timeline"] == "no_overlap"
+    assert names(got)["1"] == CY  # nor does he disturb the tags that were named
+
+
+def test_an_interval_that_never_closes_is_dropped_and_so_is_an_absurdly_long_one():
+    def spans_of(*stamps):
+        record = {
+            "participants": [
+                {"name": "Gus", "events": [{"type": k, "timestamp": t} for k, t in stamps]}
+            ]
+        }
+        return meet_timeline.speaking_intervals(record)
+
+    assert spans_of(("started-speaking", 10), ("muted", 5000)) == {"Gus": []}
+    assert spans_of(("started-speaking", 10), ("stopped-speaking", 70)) == {"Gus": [(10, 70)]}
+    limit = meet_timeline.MAX_SPAN_SECONDS
+    assert spans_of(("started-speaking", 10), ("stopped-speaking", 10 + limit)) != {"Gus": []}
+    assert spans_of(("started-speaking", 10), ("stopped-speaking", 11 + limit)) == {"Gus": []}
+
+
+# ---- names are compared exactly ----
+
+
+def test_a_shorter_spelling_of_a_name_is_not_the_same_person():
+    # Meet shows "Bo" where Skribby named "Bo Example": we cannot tell it is the same person, so
+    # the timeline does not corroborate and in fact contradicts: nothing is named.
+    items, spans = layout(TABLE)
+    spans["Bo"] = spans.pop(BO)
+    after = resolve(items, events_record(spans))
+    assert after["0"]["name"] == "" and after["0"]["timeline"] == "contradicted"
+    # and a winner "Ada" is not a tag's only candidate "Ada Example":
+    table = {k: TABLE[k] for k in ("1", "3", "4")} | {"9": ([100.0, 0, 0, 0, 0, 0], 150.0)}
+    items, spans = layout(table, {"1": [CY], "3": [BO], "9": [ADA]})
+    spans["Ada"] = spans.pop(ADA)
+    got = resolve(items, events_record(spans))["9"]
+    assert got["name"] == "" and got["timeline"] == "disagrees"
 
 
 # ---- participants listed more than once, the clock, the events ----
@@ -502,6 +601,10 @@ def test_the_report_says_what_the_rule_would_do_without_printing_it_as_done():
     assert "tag 7: stays unknown (too_little)" in text and "tag 8: stays unknown" in text
     assert "tag 1:" not in text  # already named
     assert "No speaker events" in "\n".join(script.naming_section(flat, saved, None))
+    # With the bot's names given (as the live path and the rebuild give them) the report agrees
+    # with them: a tag whose top person is the bot is not named.
+    as_bot = "\n".join(script.naming_section(flat, saved, events_record(spans), (ADA,), True))
+    assert "tag 0: stays unknown (bot)" in as_bot
 
 
 # ---- the extra request the live path makes ----
@@ -576,3 +679,25 @@ def test_a_failed_events_request_leaves_the_tags_named_as_before(case_39):
     info = provider._look("3c09b2aa-6708-42c1-8145-aa55ee223613", own_names=(BOT,))
     assert len(calls) == 2
     assert names_of(info)["5"] == "" and names_of(info)["1"] == CY
+
+
+def test_a_finished_bot_looked_at_again_does_not_ask_for_the_events_again(case_39):
+    items, events = case_39
+    bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    finished = {"id": bot_id, "service": "gmeet", "status": "finished", "transcript": items}
+    with_events = finished | {"participants": events["participants"]}
+    provider, calls = provider_with([finished, with_events, finished, finished])
+    provider._look(bot_id, own_names=(BOT,))
+    provider._look(bot_id, own_names=(BOT,))
+    provider._look(bot_id, own_names=(BOT,))
+    # three plain looks, one request for the events
+    assert calls == [None, {"with-speaker-events": "true"}, None, None]
+
+
+def test_a_failed_events_request_is_not_kept_so_the_next_look_asks_again(case_39):
+    items, _ = case_39
+    finished = {"id": "x", "service": "gmeet", "status": "finished", "transcript": items}
+    provider, calls = provider_with([finished, skribby.SkribbyError("HTTP 500"), finished])
+    provider._look("3c09b2aa-6708-42c1-8145-aa55ee223613")
+    provider._look("3c09b2aa-6708-42c1-8145-aa55ee223613")
+    assert calls.count({"with-speaker-events": "true"}) == 2

@@ -38,8 +38,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import meet_timeline, skribby  # noqa: E402
-from app.models import SkribbySegmentEvidence  # noqa: E402
+from app import bot_names, meet_timeline, skribby  # noqa: E402
+from app.config import get_settings  # noqa: E402
+from app.models import Meeting, SkribbySegmentEvidence  # noqa: E402
 
 NO_TAG = "(no tag)"
 
@@ -129,7 +130,13 @@ def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0)
     return out
 
 
-def naming_section(items: list[dict], tags: dict, record) -> list[str]:
+def naming_section(
+    items: list[dict],
+    tags: dict,
+    record,
+    own_names: tuple[str, ...] = (),
+    by_elimination: bool = True,
+) -> list[str]:
     """What the timeline naming rule (`NAME_BY_MEET_TIMELINE`, `app/skribby.py::_name_by_timeline`)
     would do to the tags this meeting left unnamed, run on the saved tags and the saved events at
     offset 0 (the rule never uses `--offset`: a shifted clock is a reason to name nothing)."""
@@ -145,7 +152,7 @@ def naming_section(items: list[dict], tags: dict, record) -> list[str]:
         }
         for i in items
     ]
-    after = skribby.apply_timeline(tags, value, record)
+    after = skribby.apply_timeline(tags, value, record, own_names, by_elimination)
     out = []
     for tag in sorted(after, key=str):
         if tags.get(tag, {}).get("name"):
@@ -197,7 +204,9 @@ def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
             )
             lines.append(f"      {item.get('text', '')}")
     lines += timeline_section(items, tags, row.events, offset)
-    lines += naming_section(items, tags, row.events)
+    meeting = session.get(Meeting, meeting_id)
+    own = bot_names.own_names(get_settings(), meeting.bot_name if meeting else None)
+    lines += naming_section(items, tags, row.events, own, bool(row.by_elimination))
     return "\n".join(lines) + "\n"
 
 
