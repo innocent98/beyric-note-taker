@@ -9,9 +9,8 @@ money half. New tables nothing from before reads, plus additive columns on `paym
   1 USD is about 1500 NGN, "round figure of 25k"; 2,500,000 kobo), not public (`is_public` false,
   so nothing prints it on /pricing). No second tier is seeded: it is an open fact.
 - `products`: packs, one row per (code, currency). One pack of 10 hours, valid 12 months, at 10 USD
-  (the spec says "about 10 USD": confirm the number) and at NGN 14,000 (1,400,000 kobo): **the naira
-  pack price is only a PROPOSAL, not confirmed by Adebayo, so that row is seeded INACTIVE** and is
-  not sold until `update products set active = true where code = 'pack_10h' and currency = 'NGN'`.
+  (the spec says "about 10 USD": confirm the number) and at NGN 15,000 (1,500,000 kobo). Adebayo
+  decided both naira prices on 2026-11-17 (the plan NGN 25,000, the 10-hour pack NGN 15,000).
 - `subscriptions`: one row per subscription with the route it was SOLD on (`currency` and
   `provider`), so a later edit of the country-to-provider table cannot change what an existing
   subscription is. A partial unique index allows one LIVE row (`active` or `past_due`) per person.
@@ -260,7 +259,7 @@ def upgrade() -> None:
         postgresql_where=sa.text("processed_at is null"),
     )
 
-    # ---- what is for sale: decided facts (and one inactive proposal)
+    # ---- what is for sale: decided facts
     now = datetime.now(UTC)
     op.bulk_insert(
         plans,
@@ -306,14 +305,14 @@ def upgrade() -> None:
                 "valid_months": 12,
                 "active": True,
             },
-            {  # a PROPOSAL (10 of 18 USD, scaled), not confirmed: inactive until he says so
+            {  # decided 2026-11-17: NGN 15,000 for the 10-hour pack (kobo)
                 "code": "pack_10h",
                 "name": "10 extra hours",
                 "currency": "NGN",
                 "seconds": 10 * 3600,
-                "amount_minor": 1_400_000,
+                "amount_minor": 1_500_000,
                 "valid_months": 12,
-                "active": False,
+                "active": True,
             },
         ],
     )

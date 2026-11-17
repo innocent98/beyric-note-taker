@@ -1,0 +1,28 @@
+{
+  "note": "The naira pack verified: 10 hours granted.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/paystack",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-2",
+      "kind": "charge_succeeded",
+      "reference": "bn-9-7fcd9cd9d125c5af",
+      "tx_id": "fake-tx-2",
+      "amount_minor": 1500000,
+      "currency": "NGN",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

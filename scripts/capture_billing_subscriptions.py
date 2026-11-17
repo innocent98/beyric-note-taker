@@ -27,7 +27,7 @@ pass (`renewals.run_due`), the pay link, every error shape.
   upgrade and downgrade need a second, so this script inserts `capture_40h` (40 hours, 34 USD).
   It is not a decided plan; the real second tier is Adebayo's open fact (so it has no naira price
   either). The seeded naira plan price (NGN 25,000, decided 2026-11-17) is real; the naira pack
-  (NGN 14,000) is only a proposal and is seeded inactive.
+  (NGN 15,000) is decided too (2026-11-17).
 - A 3-D Secure charge's own link is the fake's `https://fake.test/3ds/open-charge`.
 """
 
@@ -673,8 +673,7 @@ def run(engine, on, off, settings) -> None:
         "GET",
         "/api/billing/plans",
         note="The seeded naira list (decided 2026-11-17: NGN 25,000 a month, `amount_minor` is "
-        "kobo). **The naira pack is only a proposal (NGN 14,000), seeded inactive**, so `packs` "
-        "is empty until he confirms it.",
+        "kobo), and the naira 10-hour pack (NGN 15,000, 1,500,000 kobo, decided the same day).",
     )
     ng = ben.call(
         "checkout-ng",
@@ -702,12 +701,22 @@ def run(engine, on, off, settings) -> None:
         "/api/billing/subscription",
         note="Active in naira: `amount_minor` 2500000 kobo is the next renewal.",
     )
-    ben.call(
+    pack_ng = ben.call(
         "checkout-pack-ng",
         "POST",
         "/api/billing/checkout",
         body={"kind": "pack", "code": "pack_10h"},
-        note="The naira pack is an unconfirmed proposal and inactive: 404 `product_not_found`.",
+        note="The naira pack, with a naira plan: paid on the plan's route.",
+    ).json()
+    pack_ng_tx = NGN.complete(payment_by_reference(engine, pack_ng["payment"]["reference"]))
+    webhook(
+        on, "webhook-ng-pack-paid", NGN, pack_ng_tx, "The naira pack verified: 10 hours granted."
+    )
+    ben.call(
+        "subscription-ng-with-pack",
+        "GET",
+        "/api/billing/subscription",
+        note="`hours.seconds_left` 108000: the plan's 20 hours plus the pack's 10.",
     )
     base.note_file("rows-at-the-end", "The rows at the end of the run.", rows(engine))
 

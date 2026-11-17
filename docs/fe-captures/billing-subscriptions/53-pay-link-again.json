@@ -18,16 +18,16 @@
     },
     "body": {
       "payment": {
-        "reference": "bn-5-962af41a44110e02",
+        "reference": "bn-5-cc0a7f73fee1b704",
         "kind": "renewal",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 3400,
-        "created_at": "2026-11-17T16:00:18.312654Z",
+        "created_at": "2026-11-17T16:27:31.741046Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-5-962af41a44110e02"
+        "pay_url": "https://fake.test/pay/bn-5-cc0a7f73fee1b704"
       },
-      "checkout_url": "https://fake.test/pay/bn-5-962af41a44110e02"
+      "checkout_url": "https://fake.test/pay/bn-5-cc0a7f73fee1b704"
     }
   }
 }

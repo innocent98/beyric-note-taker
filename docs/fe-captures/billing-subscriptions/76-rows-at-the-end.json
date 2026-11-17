@@ -46,6 +46,11 @@
         "kind": "plan_period",
         "seconds": 72000,
         "source_payment_id": 8
+      },
+      {
+        "kind": "pack",
+        "seconds": 36000,
+        "source_payment_id": 9
       }
     ],
     "payments": [
@@ -103,6 +108,13 @@
         "status": "succeeded",
         "attempt": null,
         "amount_minor": 2500000,
+        "currency": "NGN"
+      },
+      {
+        "kind": "pack",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1500000,
         "currency": "NGN"
       }
     ]

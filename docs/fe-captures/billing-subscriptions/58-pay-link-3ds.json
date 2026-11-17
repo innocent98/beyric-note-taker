@@ -18,12 +18,12 @@
     },
     "body": {
       "payment": {
-        "reference": "bn-7-62a67438d8dd89ad",
+        "reference": "bn-7-206192995e94f44b",
         "kind": "renewal",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 3400,
-        "created_at": "2026-11-17T16:00:20.019399Z",
+        "created_at": "2026-11-17T16:27:31.967339Z",
         "paid_at": null,
         "pay_url": "https://fake.test/3ds/open-charge"
       },

@@ -1,5 +1,5 @@
 {
-  "note": "The naira pack is an unconfirmed proposal and inactive: 404 `product_not_found`.",
+  "note": "The naira pack, with a naira plan: paid on the plan's route.",
   "client": "ben billing-on",
   "request": {
     "method": "POST",
@@ -14,16 +14,23 @@
     }
   },
   "response": {
-    "status": 404,
+    "status": 200,
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store"
     },
     "body": {
-      "error": {
-        "code": "product_not_found",
-        "message": "That pack is not on sale in your currency."
-      }
+      "payment": {
+        "reference": "bn-9-7fcd9cd9d125c5af",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "NGN",
+        "amount_minor": 1500000,
+        "created_at": "2026-11-17T16:27:34.990008Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-9-7fcd9cd9d125c5af"
+      },
+      "checkout_url": "https://fake.test/pay/bn-9-7fcd9cd9d125c5af"
     }
   }
 }

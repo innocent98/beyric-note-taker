@@ -68,7 +68,7 @@ def test_the_round_trip_and_the_seed_of_decided_facts_only(scratch_url):
             )
         ).all()
     # what is decided: 20 hours at 18.00 USD and NGN 25,000.00 (kobo), not public; a 10-hour pack
-    # at 10.00 USD for 12 months, and NGN 14,000.00 which is only a PROPOSAL, so INACTIVE. No
+    # at 10.00 USD for 12 months, and NGN 15,000.00 (both naira prices decided 2026-11-17). No
     # second tier (an open fact).
     assert plan == [("plan_20h", 72000, False, True)]
     assert prices == [
@@ -77,7 +77,7 @@ def test_the_round_trip_and_the_seed_of_decided_facts_only(scratch_url):
     ]
     assert packs == [
         ("pack_10h", "USD", 36000, 1000, 12, True),
-        ("pack_10h", "NGN", 36000, 1_400_000, 12, False),
+        ("pack_10h", "NGN", 36000, 1_500_000, 12, True),
     ]
     command.downgrade(cfg, "0051")
     assert not TABLES & set(inspect(engine).get_table_names())
