@@ -1,5 +1,5 @@
 {
-  "note": "A person who has just confirmed their email: `state` `trial`, 3 hours held and left, `trial_ends_at` 14 days out, `can_record` true. The same `usage` shape as before; only the values are new for a brand-new account.",
+  "note": "`HOURS_MODE=shadow`: the old cap rule decides; the two old fields come from the old cap and every new field is null, exactly as before.",
   "client": "ada",
   "request": {
     "method": "GET",
@@ -17,7 +17,7 @@
     },
     "body": {
       "authenticated": true,
-      "csrf_token": "<csrf-E>",
+      "csrf_token": "<csrf-F>",
       "user": {
         "email": "ada@example.test",
         "name": "Ada Example",
@@ -28,14 +28,14 @@
       },
       "usage": {
         "used_seconds": 0,
-        "cap_seconds": 10800,
-        "state": "trial",
-        "seconds_left": 10800,
+        "cap_seconds": 18000,
+        "state": null,
+        "seconds_left": null,
         "warning": null,
-        "can_record": true,
-        "unlimited": false,
+        "can_record": null,
+        "unlimited": null,
         "period_ends_at": null,
-        "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+        "trial_ends_at": null
       },
       "unread_notifications": 0,
       "badges": {

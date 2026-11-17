@@ -1,5 +1,5 @@
 {
-  "note": "After a 2-hour recording was counted: 1 hour left, `warning` `low` (2 of 3 hours is past 80%).",
+  "note": "2.4 of the 3 hours used: exactly 80%, `warning` `low`, 0.6 hour left.",
   "client": "ada",
   "request": {
     "method": "GET",
@@ -17,7 +17,7 @@
     },
     "body": {
       "authenticated": true,
-      "csrf_token": "<csrf-E>",
+      "csrf_token": "<csrf-H>",
       "user": {
         "email": "ada@example.test",
         "name": "Ada Example",
@@ -27,17 +27,17 @@
         "recording_acknowledged": true
       },
       "usage": {
-        "used_seconds": 7200,
+        "used_seconds": 8640,
         "cap_seconds": 10800,
         "state": "trial",
-        "seconds_left": 3600,
-        "warning": null,
+        "seconds_left": 2160,
+        "warning": "low",
         "can_record": true,
         "unlimited": false,
         "period_ends_at": null,
-        "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+        "trial_ends_at": "2026-12-01T15:20:29.890001Z"
       },
-      "unread_notifications": 0,
+      "unread_notifications": 1,
       "badges": {
         "review_open": 0,
         "tasks_new": 0

@@ -1,6 +1,6 @@
 {
   "note": "",
-  "client": "ben",
+  "client": "ada",
   "request": {
     "method": "GET",
     "path": "/api/session",

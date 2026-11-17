@@ -38,7 +38,7 @@ def build(session: Session, settings: Settings, now: datetime) -> list[str]:
     lines.append(
         f"The hours rule is {'in force' if rule else 'NOT in force'} "
         f"(HOURS_MODE={settings.hours_mode}, FEATURE_GATES_MODE={settings.feature_gates_mode}); "
-        "nothing below runs until it is."
+        "the trial does not depend on it, the pilot expiry acts only when it is."
     )
     lines += ["", "TRIAL"]
     if settings.trial_seconds <= 0:

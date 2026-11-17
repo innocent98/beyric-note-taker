@@ -1,11 +1,11 @@
 {
-  "note": "202: the confirmation link is mailed.",
+  "note": "202: the confirmation link is mailed (the scheduler's console mailer prints it).",
   "client": "visitor ada",
   "request": {
     "method": "POST",
     "path": "/api/signup",
     "headers": {
-      "X-CSRF-Token": "<csrf-C>",
+      "X-CSRF-Token": "<csrf-D>",
       "Cookie": "session=<cookie>"
     },
     "body": {

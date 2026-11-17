@@ -37,11 +37,11 @@
       "usage": {
         "used_seconds": 0,
         "cap_seconds": null,
-        "state": "none",
+        "state": null,
         "seconds_left": null,
         "warning": null,
-        "can_record": true,
-        "unlimited": true,
+        "can_record": null,
+        "unlimited": null,
         "period_ends_at": null,
         "trial_ends_at": null
       },

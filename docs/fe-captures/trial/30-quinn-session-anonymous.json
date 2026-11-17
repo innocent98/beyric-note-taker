@@ -1,6 +1,6 @@
 {
   "note": "",
-  "client": "ada",
+  "client": "quinn",
   "request": {
     "method": "GET",
     "path": "/api/session",
@@ -16,7 +16,7 @@
     },
     "body": {
       "authenticated": false,
-      "csrf_token": "<csrf-D>",
+      "csrf_token": "<csrf-M>",
       "user": null,
       "usage": null,
       "unread_notifications": null,

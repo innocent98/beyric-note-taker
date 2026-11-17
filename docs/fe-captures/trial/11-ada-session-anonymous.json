@@ -1,6 +1,6 @@
 {
   "note": "",
-  "client": "visitor ben (HOURS_MODE off)",
+  "client": "ada",
   "request": {
     "method": "GET",
     "path": "/api/session",
@@ -16,7 +16,7 @@
     },
     "body": {
       "authenticated": false,
-      "csrf_token": "<csrf-F>",
+      "csrf_token": "<csrf-E>",
       "user": null,
       "usage": null,
       "unread_notifications": null,

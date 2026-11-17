@@ -1,0 +1,14 @@
+PASS  TRIAL_SECONDS unset: a new account holds no grant
+PASS  the scheduler's sweep gave the account made before the switch-on its 3 hours
+PASS  the scheduler logged the sweep
+PASS  a fresh sign-up got the trial when it confirmed
+PASS  enforce: the trial holds 1 hour (3 h minus the 2 h recorded in shadow)
+PASS  the 3 hours used: a new meeting is refused 403 no_hours
+PASS  the 80% and 100% notices are in the bell
+PASS  the 80% mail was sent (printed by the scheduler's mailer)
+PASS  the sweep's trial holds the full 3 hours under enforce
+PASS  the scheduler sent the pilot mail
+PASS  the pilot grant was given its end
+PASS  exactly one pilot notice in the bell
+PASS  one notice per pilot person (paula and quinn), none repeated by later runs
+PASS  after the pilot end a new meeting is refused 403 no_plan

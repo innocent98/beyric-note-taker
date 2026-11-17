@@ -6,11 +6,13 @@ notices, `no_hours` at exactly the grant's size, `none` once it has ended) is th
 `app/entitlements.py` and `app/hours.py`; nothing here decides a join. This module only decides
 whether to **give** one:
 
-- **Off by default.** `TRIAL_SECONDS=0` gives nothing. It is also only given while the hours rule is
-  in force (`HOURS_MODE=enforce`, or `FEATURE_GATES_MODE=enforce`, which also reads grants). Under
-  `off` and `shadow` the old cap rule decides and nobody's recordings are split across grants, so a
-  trial given then would be spent without ever being counted against it; with the flags off the
-  whole module does nothing and no row is written.
+- **Off by default.** `TRIAL_SECONDS=0` gives nothing and writes nothing. Set, it is given in any
+  mode (`HOURS_MODE` off, shadow or enforce), so a person who confirms before `enforce` already
+  holds their hours when it comes on. Recordings are only split across grants under `enforce`;
+  what a trial holder recorded before that has no allocation, and
+  `entitlements.unallocated_seconds` (the same backlog rule as for pilot grants, `BACKLOG_KINDS`)
+  takes it off the trial, so nobody gets those hours twice.
+  `scripts/hours_reconcile_backlog.py` settles it into allocations.
 - **Once per person.** Not given to an admin, to anyone who has held a `trial` or a `pilot` grant
   (a pilot account has its own hours, even when they are all used), or whose email fingerprint has:
   grants are found by user id or by the fingerprint (`entitlements.mine`), and a deleted account's
@@ -55,12 +57,14 @@ REASON = "trial: given once to a person when their email was first confirmed"
 
 def hours_rule_in_force(settings: Settings) -> bool:
     """Whether grants decide anything: the hours rule or the feature gates is `enforce`. The pilot
-    expiry (`app/pilot_expiry.py`) asks the same question."""
+    expiry (`app/pilot_expiry.py`) acts only then: its mail promises what only `enforce` does."""
     return settings.hours_mode == "enforce" or settings.feature_gates_mode == "enforce"
 
 
 def enabled(settings: Settings) -> bool:
-    return settings.trial_seconds > 0 and hours_rule_in_force(settings)
+    """The trial is given whenever `TRIAL_SECONDS` is set, in any mode: a person who signs up
+    before `HOURS_MODE=enforce` already holds their 3 hours when it comes on."""
+    return settings.trial_seconds > 0
 
 
 def had_one(session: Session, user: User) -> bool:

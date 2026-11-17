@@ -1,34 +1,26 @@
 {
-  "note": "",
-  "client": "ben",
+  "note": "The account the sweep gave a trial to: 3 hours, `trial`.",
+  "client": "gap",
   "request": {
-    "method": "POST",
+    "method": "GET",
     "path": "/api/session",
     "headers": {
-      "X-CSRF-Token": "<csrf-G>",
       "Cookie": "session=<cookie>"
     },
-    "body": {
-      "email": "ben@example.test",
-      "password": "<password>"
-    }
+    "body": null
   },
   "response": {
     "status": 200,
     "headers": {
       "content-type": "application/json",
-      "cache-control": "no-store",
-      "set-cookie": [
-        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax",
-        "device=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
-      ]
+      "cache-control": "no-store"
     },
     "body": {
       "authenticated": true,
-      "csrf_token": "<csrf-H>",
+      "csrf_token": "<csrf-J>",
       "user": {
-        "email": "ben@example.test",
-        "name": "Ben Example",
+        "email": "gap@example.test",
+        "name": "Gap Example",
         "is_admin": false,
         "email_verified": true,
         "time_zone": null,
@@ -36,14 +28,14 @@
       },
       "usage": {
         "used_seconds": 0,
-        "cap_seconds": 18000,
-        "state": null,
-        "seconds_left": null,
+        "cap_seconds": 10800,
+        "state": "trial",
+        "seconds_left": 10800,
         "warning": null,
-        "can_record": null,
-        "unlimited": null,
+        "can_record": true,
+        "unlimited": false,
         "period_ends_at": null,
-        "trial_ends_at": null
+        "trial_ends_at": "2026-12-01T15:20:27.527815Z"
       },
       "unread_notifications": 0,
       "badges": {

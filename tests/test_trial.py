@@ -60,20 +60,43 @@ def test_trial_seconds_zero_gives_nothing(session):
     assert grants_of(session) == []
 
 
-@pytest.mark.parametrize("mode", ["off", "shadow"])
-def test_with_the_hours_rule_not_in_force_nothing_is_written(session, mode):
+@pytest.mark.parametrize("mode", ["off", "shadow", "enforce"])
+def test_the_trial_is_given_in_every_mode(session, mode):
     ada = person(session, "ada")
     settings = make_settings(hours_mode=mode, trial_seconds=TRIAL)
-    assert trial.enabled(settings) is False
-    assert trial.give(session, ada, NOW, settings) is None
-    assert trial.sweep(session, NOW, settings) == 0
-    assert grants_of(session) == []
-
-
-def test_feature_gates_enforce_alone_also_puts_grants_in_force(session):
-    ada = person(session, "ada")
-    settings = make_settings(feature_gates_mode="enforce", trial_seconds=TRIAL)
+    assert trial.enabled(settings) is True
     assert trial.give(session, ada, NOW, settings) is not None
+
+
+def test_what_a_trial_holder_recorded_before_enforce_comes_off_their_three_hours(session):
+    """Recordings are only allocated to grants under `enforce`. A person who recorded 2 h while the
+    flag was off or shadow must hold 1 h when it comes on, not a second 3 h."""
+    ada = person(session, "ada")
+    trial.give(session, ada, NOW, make_settings(hours_mode="off", trial_seconds=TRIAL))
+    entry = UsageEntry(user_id=ada.id, email_hash=email_hash(ada.email), seconds=2 * HOUR)
+    entry.counted_at = NOW + timedelta(hours=1)
+    session.add(entry)
+    session.commit()
+    later = NOW + DAY
+    assert entitlements.status(session, ada, later).seconds_left == HOUR
+    # settling it into allocations changes nothing about what is left
+    from app import hours
+
+    assert hours.reconcile_backlog(session, ada, later) == 2 * HOUR
+    session.commit()
+    assert entitlements.status(session, ada, later).seconds_left == HOUR
+    assert hours.reconcile_backlog(session, ada, later) == 0  # idempotent
+
+
+def test_usage_from_before_the_trial_was_given_never_comes_off_it(session):
+    ada = person(session, "ada")
+    old = UsageEntry(user_id=ada.id, email_hash=email_hash(ada.email), seconds=5 * HOUR)
+    old.counted_at = NOW - 3 * DAY
+    session.add(old)
+    session.commit()
+    trial.give(session, ada, NOW, on())
+    session.commit()
+    assert entitlements.status(session, ada, NOW + timedelta(hours=1)).seconds_left == TRIAL
 
 
 # ---- what a trial is ----

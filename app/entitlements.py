@@ -53,6 +53,10 @@ RESERVE = "reserve"
 SPEND_RANK = {"trial": 0, "pilot": 0, "plan_period": 1, "admin_gift": 2, "pack": 2}
 # The state a grant shows. A pack or a gift alone is not a plan: it shows `none`.
 GRANT_STATE = {"trial": "trial", "pilot": "pilot", "plan_period": "active"}
+# The grants whose start marks where "counted but never allocated" usage begins: a pilot grant
+# (made by migration 0049) and a trial (S10: given in any mode, while only `enforce` allocates, so
+# what the person recorded before `enforce` must still come off their 3 hours).
+BACKLOG_KINDS = ("pilot", "trial")
 LOW_PERCENT = 80  # the warning moment: used reaches this share of what the person holds
 LOW = "low"
 OUT = "out"
@@ -122,8 +126,9 @@ def grants_in_force(session: Session, user: User, now: datetime) -> list[list]:
 
 
 def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | None = None) -> int:
-    """Usage counted since the person's pilot grant began that has no allocation at all: what was
-    counted between migration 0049 and the first allocation. `hours.reconcile_backlog` settles it.
+    """Usage counted since the person's pilot or trial grant began that has no allocation at all:
+    what was counted between migration 0049 (or the trial) and the first allocation.
+    `hours.reconcile_backlog` settles it.
     An entry with any allocation is settled, so `hours.allocate` always leaves a row on an entry it
     could not cover in full (the shortfall is written off, never counted again). Usage after the
     pilot grant's expiry (set in S10) is never part of it: it was counted under S2."""
@@ -132,9 +137,12 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
             func.min(HourGrant.starts_at),
             func.max(HourGrant.expires_at),
             func.count().filter(HourGrant.expires_at.is_(None)),
-        ).where(mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot")
+        ).where(
+            mine(user, HourGrant.user_id, HourGrant.email_hash),
+            HourGrant.kind.in_(BACKLOG_KINDS),
+        )
     ).one()
-    if open_ended:  # one pilot grant never expires, so nothing is past its end
+    if open_ended:  # one such grant never expires, so nothing is past its end
         until = None
     if since is None:
         return 0

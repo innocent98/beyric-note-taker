@@ -119,12 +119,12 @@ def reconcile_backlog(session: Session, user: User, now: datetime) -> int:
             func.count().filter(HourGrant.expires_at.is_(None)),
         ).where(
             entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
-            HourGrant.kind == "pilot",
+            HourGrant.kind.in_(entitlements.BACKLOG_KINDS),
         )
     ).one()
     if since is None:
         return 0
-    if open_ended:  # one pilot grant never expires, so nothing is past its end
+    if open_ended:  # one such grant never expires, so nothing is past its end
         until = None
     _lock_person(session, user)
     held = entitlements.grants_in_force(session, user, now)

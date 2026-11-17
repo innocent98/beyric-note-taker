@@ -509,8 +509,7 @@ class Settings(BaseSettings):
     # The one-time trial (billing stage S10, spec 3.8). `TRIAL_SECONDS` is the size of the trial
     # grant: 0 (default) turns the trial off, 10800 is 3 hours. A person gets it once, at the first
     # confirmed sign-in, and it ends at the hours used or `TRIAL_DAYS` days after it is given,
-    # whichever comes first. It is only given while the hours rule is in force
-    # (`HOURS_MODE=enforce` or `FEATURE_GATES_MODE=enforce`; `app/trial.py`). `TRIAL_DAILY_BUDGET_
+    # whichever comes first, in any `HOURS_MODE` (`app/trial.py`). `TRIAL_DAILY_BUDGET_
     # SECONDS` caps the trial seconds given in any 24 hours (0 = no cap): the brake on how many
     # trials start while sign-up is open; people past it wait and get theirs when the window frees.
     trial_seconds: int = Field(default=0, ge=0, le=100 * 3600)

@@ -1,6 +1,6 @@
 {
-  "note": "Exactly 3 hours used: `state` `none` (a used-up trial shows `none`), `seconds_left` 0, `warning` `out`, `can_record` false.",
-  "client": "ada",
+  "note": "Before the end nothing about the pilot account changes: `state` `pilot`, 2 hours.",
+  "client": "paula",
   "request": {
     "method": "GET",
     "path": "/api/session",
@@ -17,25 +17,25 @@
     },
     "body": {
       "authenticated": true,
-      "csrf_token": "<csrf-E>",
+      "csrf_token": "<csrf-L>",
       "user": {
-        "email": "ada@example.test",
-        "name": "Ada Example",
+        "email": "paula@example.test",
+        "name": null,
         "is_admin": false,
         "email_verified": true,
         "time_zone": null,
-        "recording_acknowledged": true
+        "recording_acknowledged": false
       },
       "usage": {
-        "used_seconds": 10800,
-        "cap_seconds": 10800,
-        "state": "none",
-        "seconds_left": 0,
-        "warning": "out",
-        "can_record": false,
+        "used_seconds": 0,
+        "cap_seconds": 7200,
+        "state": "pilot",
+        "seconds_left": 7200,
+        "warning": null,
+        "can_record": true,
         "unlimited": false,
         "period_ends_at": null,
-        "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+        "trial_ends_at": null
       },
       "unread_notifications": 1,
       "badges": {

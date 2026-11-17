@@ -1,16 +1,16 @@
 {
-  "note": "403 `hours_cap_reached` with `reason` `no_hours`: the 3 hours are used.",
-  "client": "ada",
+  "note": "403 `hours_cap_reached` with `reason` `no_plan`: no grant is in force.",
+  "client": "quinn",
   "request": {
     "method": "POST",
     "path": "/api/meetings",
     "headers": {
-      "X-CSRF-Token": "<csrf-E>",
+      "X-CSRF-Token": "<csrf-N>",
       "Cookie": "session=<cookie>"
     },
     "body": {
       "url": "https://meet.google.com/abc-defg-hij",
-      "template_id": 5
+      "template_id": 14
     }
   },
   "response": {
@@ -22,8 +22,8 @@
     "body": {
       "error": {
         "code": "hours_cap_reached",
-        "message": "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.",
-        "reason": "no_hours"
+        "message": "You do not have any recorded hours at the moment, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.",
+        "reason": "no_plan"
       }
     }
   }

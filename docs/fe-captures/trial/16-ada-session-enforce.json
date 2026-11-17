@@ -1,0 +1,48 @@
+{
+  "note": "`HOURS_MODE=enforce` after 2 hours were recorded in shadow: the trial holds only the 1 hour left (the shadow recordings were settled, not forgotten); 2 of 3 hours is past 80% so `warning` is `low`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-H>",
+      "user": {
+        "email": "ada@example.test",
+        "name": "Ada Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": true
+      },
+      "usage": {
+        "used_seconds": 7200,
+        "cap_seconds": 10800,
+        "state": "trial",
+        "seconds_left": 3600,
+        "warning": null,
+        "can_record": true,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": "2026-12-01T15:20:29.890001Z"
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

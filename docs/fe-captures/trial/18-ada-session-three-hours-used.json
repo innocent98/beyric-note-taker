@@ -1,6 +1,6 @@
 {
-  "note": "HOURS_MODE off: the old cap rule only. The two old fields from the old cap, every new field null, exactly as before this stage.",
-  "client": "ben",
+  "note": "Exactly 3 hours used: `state` `none` (a used-up trial shows `none`), `seconds_left` 0, `warning` `out`, `can_record` false; `trial_ends_at` is still set.",
+  "client": "ada",
   "request": {
     "method": "GET",
     "path": "/api/session",
@@ -19,25 +19,25 @@
       "authenticated": true,
       "csrf_token": "<csrf-H>",
       "user": {
-        "email": "ben@example.test",
-        "name": "Ben Example",
+        "email": "ada@example.test",
+        "name": "Ada Example",
         "is_admin": false,
         "email_verified": true,
         "time_zone": null,
         "recording_acknowledged": true
       },
       "usage": {
-        "used_seconds": 0,
-        "cap_seconds": 18000,
-        "state": null,
-        "seconds_left": null,
-        "warning": null,
-        "can_record": null,
-        "unlimited": null,
+        "used_seconds": 10800,
+        "cap_seconds": 10800,
+        "state": "none",
+        "seconds_left": 0,
+        "warning": "out",
+        "can_record": false,
+        "unlimited": false,
         "period_ends_at": null,
-        "trial_ends_at": null
+        "trial_ends_at": "2026-12-01T15:20:29.890001Z"
       },
-      "unread_notifications": 0,
+      "unread_notifications": 2,
       "badges": {
         "review_open": 0,
         "tasks_new": 0

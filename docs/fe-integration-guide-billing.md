@@ -494,19 +494,23 @@ A `400` (genuine signature, a body that is not an event we can read) is **not ca
 
 ## The trial and the pilot's end (billing stage S10)
 
-Every body below is pasted from `docs/fe-captures/trial/` (made by `scripts/capture_trial.py`: real
-migrations, the real app under uvicorn, real HTTP, a real password sign-up with the mailed link read back
-from the outbox). **No route and no field is new**: the same `usage` object, the same 403. What is new is
-which values a brand-new or a pilot account shows, and when.
+Every body below is pasted from `docs/fe-captures/trial/`, made by `scripts/local_trial_e2e.py`: a scratch
+database with the real migrations, the **real web server and the real scheduler as separate processes**, the
+console mailer as the mail sink (`mail-sink.txt` is every mail the scheduler printed), and real HTTP, in the
+order the features are switched on. `checks.txt` lists the 14 checks that script makes; `switch-on-proof.txt`
+is the output of the dry-run and reconcile commands. **No route and no field is new**: the same `usage`
+object, the same 403. What is new is which values a brand-new or a pilot account shows, and when.
 
 **When a person gets the trial.** The moment their email is confirmed for the first time (the password link,
 or Google), a `trial` grant of `TRIAL_SECONDS` (3 hours = 10800 s) is given, ending after 14 days or when the
-hours are used, whichever is first. It is given only while the hours rule is in force and only once per
-person, even if the account is deleted and made again with the same address. **The sign-up and
-verification responses do not change** (trial capture 06 is the same `{"status": "verified"}` as before); read
-`usage` from `GET /api/session` after the person signs in.
+hours are used, whichever is first. It is given in any `HOURS_MODE` (so a person who signs up before
+`enforce` already holds their hours when it comes on), once per person, even if the account is deleted and
+made again with the same address. Accounts that already existed when `TRIAL_SECONDS` was switched on get
+theirs from the scheduler within a minute. **The sign-up and verification responses do not change** (trial
+capture 09 is the same `{"status": "verified"}` as before); read `usage` from `GET /api/session` after the
+person signs in.
 
-A person just after confirming (trial capture 10):
+A person whose trial was just given (trial capture 23, an account the scheduler's sweep gave one to):
 
 ```json
 {
@@ -518,11 +522,15 @@ A person just after confirming (trial capture 10):
   "can_record": true,
   "unlimited": false,
   "period_ends_at": null,
-  "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+  "trial_ends_at": "2026-12-01T15:20:27.527815Z"
 }
 ```
 
-Exactly 3 hours used (trial capture 12), and the refusal when they start a meeting (trial capture 13):
+The grant a real sign-up made (trial capture 10, read from the database): `{"kind": "trial", "seconds": 10800,
+"starts_at": "2026-11-17T15:20:29.890001+00:00", "expires_at": "2026-12-01T15:20:29.890001+00:00"}`.
+
+At exactly 80% (trial capture 17: 2.4 of 3 hours), `warning` is `"low"`, `seconds_left` 2160. Exactly 3 hours used
+(trial capture 18), then the refusal when they start a meeting (trial capture 19):
 
 ```json
 {
@@ -534,7 +542,7 @@ Exactly 3 hours used (trial capture 12), and the refusal when they start a meeti
   "can_record": false,
   "unlimited": false,
   "period_ends_at": null,
-  "trial_ends_at": "2026-12-01T14:56:11.509779Z"
+  "trial_ends_at": "2026-12-01T15:20:29.890001Z"
 }
 ```
 
@@ -542,23 +550,30 @@ Exactly 3 hours used (trial capture 12), and the refusal when they start a meeti
 {"error": {"code": "hours_cap_reached", "message": "You have used all of your recorded hours, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.", "reason": "no_hours"}}
 ```
 
+The two notices (80% and 100%) are in the bell (trial capture 20) and were mailed (`mail-sink.txt`: "Most of your
+recorded hours are used", "You are out of recorded hours").
+
 **Field traps:**
 
-* **`trial_ends_at` stays set after the hours are used** (trial capture 12): the trial grant is still in force until its
-  14 days are over, only spent. Do not read "trial over" from `trial_ends_at`; read `state` and
+* **`trial_ends_at` stays set after the hours are used** (trial capture 18): the trial grant is still in force
+  until its 14 days are over, only spent. Do not read "trial over" from `trial_ends_at`; read `state` and
   `seconds_left`. A used-up trial shows `state: "none"`.
 * **Once the 14 days pass with hours left,** the grant is no longer in force: `state` `none`, `cap_seconds` 0,
-  `trial_ends_at` `null`, and a new recording is refused with `reason` `no_plan` (the shape of trial capture 29
-  below). NOT LIVE as a 14-day wait: the boundary is proved by `tests/test_trial.py` with a fake clock
-  (the last second before day 14 works, day 14 exactly does not).
-* **With `HOURS_MODE` off the sign-up gives nothing** (trial capture 18: no grant) and the session shows the old
-  fields with every new field `null` (trial capture 21), as in S2.
+  `trial_ends_at` `null`, and a new recording is refused with `reason` `no_plan` (the shape of trial capture 33
+  below). NOT LIVE as a 14-day wait: the boundary is proved by `tests/test_trial.py` with a fake clock (the last
+  second before day 14 works, day 14 exactly does not).
+* **Before `HOURS_MODE=enforce` the new `usage` fields are `null` even for a person who holds a trial** (trial
+  capture 13: `HOURS_MODE=shadow`, the old cap decides, `cap_seconds` 18000). The trial's hours show up when
+  `enforce` is switched on, and **what the person recorded before that is already taken off them**: trial
+  capture 16 is the same person right after, 2 hours recorded in shadow, so `seconds_left` is 3600, not 10800.
+  `used_seconds` 7200 of `cap_seconds` 10800.
 
 **The pilot accounts' end.** Nothing changes for them until the owner sets `PAID_PLANS_OPEN_ON`. Then, 14 days
-before the end, each person with pilot hours left gets **one** bell entry and **one** mail (trial capture 25 is the
-mail the worker would send, trial capture 28 the bell entry): kind `pilot.expiry`, title `Your pilot hours will
-expire`. The body is the exact text in the SOP (a lawyer item until the owner confirms it). After the end
-(trial capture 29) their hours are no longer in force:
+before the end, each person with pilot hours left gets **one** bell entry and **one** mail (trial capture 27 is the
+bell entry, `mail-sink.txt` the mail the scheduler sent): kind `pilot.expiry`, title `Your pilot hours will
+expire`. The body is the exact text in the SOP (a lawyer item until the owner confirms it). Before the end
+nothing in the session changes (trial capture 28: still `state` `pilot`). After the end (trial capture 32) their
+hours are no longer in force:
 
 ```json
 {
@@ -574,7 +589,7 @@ expire`. The body is the exact text in the SOP (a lawyer item until the owner co
 }
 ```
 
-and a new recording is refused (trial capture 30) with `reason` `no_plan`:
+and a new recording is refused (trial capture 33) with `reason` `no_plan`:
 
 ```json
 {"error": {"code": "hours_cap_reached", "message": "You do not have any recorded hours at the moment, so the note taker will not join new meetings. Your notes, transcripts and exports stay as they are.", "reason": "no_plan"}}
@@ -604,11 +619,13 @@ and a new recording is refused (trial capture 30) with `reason` `no_plan`:
 | The mail for each notice | tests only |
 | Send now and shared-link refusal carry `reason` | not verified live (same function) |
 | Calendar skip reasons `hours_cap` and `no_plan`, one notice for many skipped meetings, the Not recorded sentences | tests only (real join runner, no HTTP capture) |
-| `trial` state and its grant, made by confirming an email through the real sign-up | live (`docs/fe-captures/trial/` 05 to 10: password sign-up, the mailed link, verify, login, session) |
-| The trial's 3 hours used exactly, `no_hours` refusal; flag off gives no grant | live (trial captures 12, 13, 18, 21) |
+| `trial` state and its grant, made by confirming an email through the real sign-up (real web and scheduler processes) | live (`docs/fe-captures/trial/` 08 to 10, 16, 23) |
+| The scheduler's sweep giving an account made before the switch-on its trial; the 80% and 100% bell entries and mails; one pilot notice per person and no repeat | live (trial captures 20, 23, 27 and `mail-sink.txt`; `checks.txt`) |
+| Exactly 3 hours used, `no_hours` refusal; shadow keeps the new fields null; recordings made in shadow come off the trial at `enforce` | live (trial captures 13, 16, 17, 18, 19) |
 | A trial given by Google sign-in (a new Google account, or Google confirming a password account) | tests only (`tests/test_trial.py`); the same function as the password link |
 | The 14th day of a trial, the budget window, deleting an account and signing up again | tests only (fake clock, `tests/test_trial.py`); no account-delete route to capture |
-| The pilot's end: the job, the one mail and bell entry, the session and refusal after the end | live (trial captures 22 to 30; the job ran in the capture process with an injected clock three days before the end, then the app answered with its real clock after it; the mail is the outbox row, not a sent mail) |
+| The pilot's end: the job, the one mail and bell entry, the grant given its end | live (trial captures 24, 27; the scheduler's own job on a real clock with the notice window open) |
+| The session and refusal after the pilot end | live shape: the job ran in the capture process with an injected clock, then the app answered with its real clock after the end (trial captures 29, 32, 33) |
 | `plan_period` state | live shape only: the grant was inserted by SQL because nothing creates it yet |
 | 403 `plan_inactive` body for Ask, the free "my tasks" answer, a new translation, a rewrite and a share in French | live (captures 03 to 07, `FEATURE_GATES_MODE=enforce`) |
 | Reading, the Ask scope line, Review and the meeting list stay open for a person with no plan | live (captures 08 to 11) |

@@ -1,6 +1,0 @@
-{
-  "note": "The same sign-up on an app with TRIAL_SECONDS set but HOURS_MODE off: no grant is written.",
-  "content": {
-    "grants": []
-  }
-}
