@@ -27,7 +27,15 @@ class BadEvent(BillingError):
 
 
 class ProviderError(BillingError):
-    """A call to the provider failed or gave no usable answer. Retryable."""
+    """A call to the provider failed or gave no usable answer. Retryable: nothing it describes can
+    have moved money. (A money call that got no answer is `OutcomeUnknown`, never this.)"""
+
+
+class OutcomeUnknown(BillingError):
+    """A call that moves money (a charge, a refund) got no answer: it may or may not have happened.
+    Deliberately NOT a `ProviderError`: a handler that retries on `ProviderError` must not catch
+    this one, because a repeated refund or charge can pay twice (no idempotency key is documented
+    for a Flutterwave v3 refund). The caller looks the payment up first and never retries blind."""
 
 
 class IgnoredEvent(BillingError):
@@ -68,8 +76,12 @@ class ProviderTransaction:
     card_token: str | None = field(default=None, repr=False)
     card_country: str | None = None
     # Set only on a saved-card charge the card's bank wants the payer to authorize again: where to
-    # send them. Such a transaction is `pending` and its `provider_tx_id` is our own reference.
+    # send them. Such a transaction is `pending`. Send THIS link, never a second checkout for the
+    # same period: the charge stays open at the provider and can still succeed (Paystack makes its
+    # `provider_tx_id` our own reference; Flutterwave gives the real transaction id).
     payer_action_url: str | None = None
+    # Why a `failed` result came back without any transaction (the provider refused the call).
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True)
