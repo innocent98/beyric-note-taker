@@ -1,0 +1,42 @@
+ Invoice
+ BN-2026-000003
+ Issued 17 November 2026
+
+
+
+
+   TEST INVOICE: paid with test keys, no real money moved. Not a tax document.
+
+
+ FROM                                            BILLED TO
+ Beyrichq LTD                                    Country NG
+ PLACEHOLDER ADDRESS (not real), Lagos,          ben@example.test
+ Nigeria
+ Registration no. RC-PLACEHOLDER-NOT-REAL
+ Tax ID TIN-PLACEHOLDER-NOT-REAL
+ billing-placeholder@example.test
+
+
+ DESCRIPTION                                                            AMOUNT
+
+
+ 20 hours a month                                                                     NGN 23,255.81
+ 17 November 2026 to 17 December 2026
+
+
+                                                 Subtotal                             NGN 23,255.81
+
+                                                 VAT 7.5% (included in the price)       NGN 1,744.19
+
+                                                 Total paid (NGN)                   NGN 25,000.00
+
+
+ Payment reference: bn-3-a6c1cb2ff62e3413
+
+ Paid 17 November 2026
+
+
+
+
+Beyrichq LTD - invoice BN-2026-000003                                                             1/1
+

@@ -1,0 +1,28 @@
+{
+  "note": "Eight days after the payment: 409 `window_over`. Nothing was sent to the provider.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/11/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "window_over",
+        "message": "The refund window (7 days from the payment) is over."
+      }
+    }
+  }
+}

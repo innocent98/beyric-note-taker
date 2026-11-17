@@ -1,0 +1,28 @@
+{
+  "note": "The pack verified: 10 hours granted, a second invoice issued.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-2",
+      "kind": "charge_succeeded",
+      "reference": "bn-2-d592b81d2ca126ab",
+      "tx_id": "fake-tx-2",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

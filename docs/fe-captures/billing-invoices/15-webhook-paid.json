@@ -1,0 +1,28 @@
+{
+  "note": "The provider's signed webhook; the payment is re-read and verified, the hours are granted and the invoice is issued in the same step.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-1",
+      "kind": "charge_succeeded",
+      "reference": "bn-1-3887f2fcfd75521a",
+      "tx_id": "fake-tx-1",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

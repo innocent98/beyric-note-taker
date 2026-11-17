@@ -55,7 +55,93 @@ export type BillingPayment = {
   paid_at: string | null;
   // The payer's own page for a payment that is waiting for them; null once it is paid or failed.
   pay_url: string | null;
+  // The invoice made for this payment once it succeeded (`BN-2026-000123`): the number to download it
+  // with. null while it is waiting, failed, or when nothing could use the payment. Absent on old captures.
+  invoice_number?: string | null;
 };
+
+// GET /api/billing/invoices (docs/fe-integration-guide-billing.md, "Invoices, receipts and refunds").
+export type BillingInvoice = {
+  number: string;
+  issued_at: string;
+  currency: string;
+  subtotal_minor: number;
+  vat_rate_bp: number;
+  vat_minor: number;
+  total_minor: number;
+  description: string;
+  payment_reference: string;
+  payment_status: PaymentStatus;
+  refunded_at: string | null;
+  // Paid with test keys: not a tax document.
+  test_mode: boolean;
+};
+
+// ---- the admin's refund screen (GET/POST /api/admin/billing/...) ----
+
+export type RefundReason = "double_charge" | "first_plan_7d" | "pack_14d";
+export type RefundStatus = "pending" | "submitted" | "unknown" | "failed";
+export type AdminPayment = {
+  id: number;
+  reference: string;
+  payer_email: string | null;
+  provider: string;
+  kind: PaymentKind;
+  status: PaymentStatus;
+  currency: string;
+  amount_minor: number;
+  created_at: string;
+  paid_at: string | null;
+  needs_refund_reason: string | null;
+  invoice_number: string | null;
+  refund: { id: number; status: RefundStatus; reason: RefundReason; created_at: string } | null;
+  refund_option: { reason: RefundReason; allowed: boolean; message: string | null } | null;
+};
+export type AdminRefund = {
+  id: number;
+  payment_id: number;
+  payer_email: string | null;
+  reference: string;
+  reason: RefundReason;
+  status: RefundStatus;
+  currency: string;
+  amount_minor: number;
+  provider_refund_id: string | null;
+  note: string | null;
+  error: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  needs_resolution: boolean;
+};
+
+// What each of the three refund cases means, in the words the screen puts before the confirm button.
+export const REFUND_REASON_WORDS: Record<RefundReason, { label: string; effect: string }> = {
+  double_charge: {
+    label: "Double charge",
+    effect: "It granted nothing, so only the money goes back.",
+  },
+  first_plan_7d: {
+    label: "First plan payment, within 7 days, no hours used",
+    effect: "The plan ends now, its hours are removed and the saved card is deleted.",
+  },
+  pack_14d: {
+    label: "Unused pack, within 14 days",
+    effect: "The pack's hours are removed. The plan is not touched.",
+  },
+};
+
+export const REFUND_STATUS_WORDS: Record<RefundStatus, { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  submitted: { label: "Refund sent", tone: "success" },
+  pending: { label: "Being sent", tone: "warning" },
+  unknown: { label: "No answer: look at the provider", tone: "danger" },
+  failed: { label: "Did not happen", tone: "neutral" },
+};
+
+// The address of an invoice's PDF. A person downloads it with `api.billing.downloadInvoice`, which reads the
+// bytes (so a failure is a message, not a JSON page in a new tab); this is only for tests and the guide.
+export function invoicePdfPath(number: string): string {
+  return `/api/billing/invoices/${encodeURIComponent(number)}/pdf`;
+}
 
 export type BillingState = {
   state: PersonState;

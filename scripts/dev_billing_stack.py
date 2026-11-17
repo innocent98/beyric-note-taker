@@ -15,8 +15,9 @@ seeded plan and pack are the real rows) every time. The app listens on 127.0.0.1
 
 People (all with the password printed at start, a placeholder that exists only in this scratch
 database): `new@`, `us@`, `ng@`, `active@`, `cancel@`, `downgrade@`, `pastdue@`, `threeds@`,
-`lapsed@`, `canceled@`, `low@`, `out@`, `pending@` (all `@example.test`). Their state is built
-by `GET /dev/scenario/<name>` (JSON), through the real checkout, the real webhook inbox and
+`lapsed@`, `canceled@`, `low@`, `out@`, `pending@`, `invoices@`, `refunded@` and the administrator
+`root@` (all `@example.test`; `GET /dev/scenario/adminboard` fills the refund screen). Their state
+is built by `GET /dev/scenario/<name>` (JSON), through the real checkout, the real webhook inbox and
 settlement rules and one real scheduler pass; the dates are moved by SQL because a month cannot
 be waited for. `GET /dev/` lists the scenarios.
 
@@ -56,10 +57,14 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app import usage  # noqa: E402
 from app.billing import profile as profiles  # noqa: E402
-from app.billing import renewals  # noqa: E402
+from app.billing import (
+    refunds,  # noqa: E402
+    renewals,  # noqa: E402
+)
 from app.billing import subscriptions as subs  # noqa: E402
 from app.billing.fake import FakeProvider  # noqa: E402
 from app.billing.provider import PROVIDER_FACTORIES  # noqa: E402
+from app.billing.types import OutcomeUnknown  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -84,7 +89,8 @@ API = f"http://127.0.0.1:{API_PORT}"
 PASSWORD = "-".join(["dev", "screens", "password"])  # a placeholder, scratch database only
 PEOPLE = [
     "new", "us", "ng", "active", "cancel", "downgrade", "pastdue", "threeds", "lapsed", "canceled",
-    "low", "out", "pending", "ngactive",
+    "low", "out", "pending", "ngactive", "invoices", "refunded", "root",
+    "rf1", "rf2", "rf3", "rf4", "rf5",
 ]  # fmt: skip
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -222,6 +228,9 @@ SCENARIOS = {
     "out": "an active plan, every hour used",
     "pending": "a plan checkout started and not finished",
     "ngactive": "billed from Nigeria: an active plan in naira with an extra-hours pack",
+    "invoices": "an active plan and an extra-hours pack, each with its invoice (S9)",
+    "refunded": "a first plan payment the administrator refunded (S9)",
+    "adminboard": "five payments for the administrator's refund screen: sign in as root (S9)",
 }
 
 
@@ -234,13 +243,57 @@ def index():
     }
 
 
+def refund(session: Session, payment: Payment, reason: str):
+    admin = user_for(session, "root")
+    return refunds.request(session, payment.id, reason, admin, None, SETTINGS, datetime.now(UTC))
+
+
+def adminboard(session: Session) -> None:
+    """Five people's payments for the refund screen: one the rules let the administrator refund (a
+    first plan), one pack, one whose hours were used (refused, and says why), a double charge, and a
+    refund that got no answer from the provider (waits for a person)."""
+    from app.billing.payments import new_payment
+
+    one, two, three, four, five = (user_for(session, f"rf{n}") for n in range(1, 6))
+    buy(session, one)
+    buy(session, two)
+    pack(session, two)
+    buy(session, three)
+    burn(session, three, 3600)
+    buy(session, four)
+    duplicate = new_payment(
+        session, payer=four, provider="flutterwave", kind="plan", currency="USD", amount_minor=1800
+    )
+    duplicate.plan_price_id = session.scalar(
+        select(PlanPrice.id).where(PlanPrice.plan_code == "plan_20h", PlanPrice.currency == "USD")
+    )
+    session.commit()
+    pay(session, duplicate)
+    session.expire_all()
+    first = buy(session, five)
+    USD.refund_error = OutcomeUnknown("no answer")
+    try:
+        refund(session, first, "first_plan_7d")
+    finally:
+        USD.refund_error = None
+
+
 @router.get("/scenario/{name}")
 def scenario(name: str):
     if name not in SCENARIOS:
         raise HTTPException(404, "no such scenario")
     now = datetime.now(UTC)
     with SessionLocal() as session:
+        if name == "adminboard":
+            adminboard(session)
+            return {"scenario": name, "email": email_of("root"), "password": PASSWORD}
         user = user_for(session, name)
+        if name in ("invoices", "refunded"):
+            payment = buy(session, user)
+            if name == "invoices":
+                pack(session, user)
+            else:
+                refund(session, payment, "first_plan_7d")
         if name in ("us", "pending"):
             profiles.change_country(session, user, "US", now=LONG_AGO)
             session.commit()
@@ -404,6 +457,7 @@ def main() -> None:
                     email=email_of(name),
                     password_hash=hash_password(PASSWORD),
                     email_verified_at=datetime.now(UTC),
+                    is_admin=name == "root",
                 )
             )
         session.add(

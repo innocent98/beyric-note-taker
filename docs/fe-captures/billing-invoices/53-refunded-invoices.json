@@ -1,0 +1,37 @@
+{
+  "note": "The invoice shows the payment as `refunded` with `refunded_at`.",
+  "client": "cy billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "invoices": [
+        {
+          "number": "BN-2026-000004",
+          "issued_at": "2026-11-17T19:37:49.204079Z",
+          "currency": "USD",
+          "subtotal_minor": 1800,
+          "vat_rate_bp": 0,
+          "vat_minor": 0,
+          "total_minor": 1800,
+          "description": "20 hours a month",
+          "payment_reference": "bn-4-334fea36b549e82b",
+          "payment_status": "refunded",
+          "refunded_at": "2026-11-17T19:37:50.251209Z",
+          "test_mode": true
+        }
+      ]
+    }
+  }
+}

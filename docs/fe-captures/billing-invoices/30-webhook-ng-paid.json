@@ -1,0 +1,28 @@
+{
+  "note": "Paid in naira with VAT 7.5% configured as INCLUDED in the price.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/paystack",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-1",
+      "kind": "charge_succeeded",
+      "reference": "bn-3-a6c1cb2ff62e3413",
+      "tx_id": "fake-tx-1",
+      "amount_minor": 2500000,
+      "currency": "NGN",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

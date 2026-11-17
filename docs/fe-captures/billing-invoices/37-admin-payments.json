@@ -1,0 +1,263 @@
+{
+  "note": "Each payment with the ONE refund case that fits it and whether the rules allow it now (`refund_option`), and why not when not. The server decides; the screen only shows its answer.",
+  "client": "root billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/billing/payments",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payments": [
+        {
+          "id": 12,
+          "reference": "bn-12-e543a37d8393e87e",
+          "payer_email": "flo@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:50.021366Z",
+          "paid_at": "2026-11-17T19:37:50.051928Z",
+          "needs_refund_reason": "the person already has a live plan",
+          "invoice_number": null,
+          "refund": null,
+          "refund_option": {
+            "reason": "double_charge",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 11,
+          "reference": "bn-11-f24e156a63286c04",
+          "payer_email": "ivy@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.979010Z",
+          "paid_at": "2026-11-09T19:37:50.041812Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000011",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": false,
+            "message": "The refund window (7 days from the payment) is over."
+          }
+        },
+        {
+          "id": 10,
+          "reference": "bn-10-0dc7ad08ac543980",
+          "payer_email": "hal@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.864411Z",
+          "paid_at": "2026-11-17T19:37:49.878105Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000010",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 9,
+          "reference": "bn-9-91f4a4272ef6dcff",
+          "payer_email": "gus@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.755379Z",
+          "paid_at": "2026-11-17T19:37:49.770120Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000009",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 8,
+          "reference": "bn-8-1ba3a8440df40590",
+          "payer_email": "flo@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.641765Z",
+          "paid_at": "2026-11-17T19:37:49.656072Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000008",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 7,
+          "reference": "bn-7-87d7424a1e96e7bf",
+          "payer_email": "eve@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.527288Z",
+          "paid_at": "2026-11-17T19:37:49.541537Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000007",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": false,
+            "message": "Hours from this payment were used: it cannot be refunded."
+          }
+        },
+        {
+          "id": 6,
+          "reference": "bn-6-c04384acff3c8675",
+          "payer_email": "dee@example.test",
+          "provider": "flutterwave",
+          "kind": "pack",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1000,
+          "created_at": "2026-11-17T19:37:49.418162Z",
+          "paid_at": "2026-11-17T19:37:49.430742Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000006",
+          "refund": null,
+          "refund_option": {
+            "reason": "pack_14d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 5,
+          "reference": "bn-5-dca6da21c27bb295",
+          "payer_email": "dee@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.304820Z",
+          "paid_at": "2026-11-17T19:37:49.321945Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000005",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 4,
+          "reference": "bn-4-334fea36b549e82b",
+          "payer_email": "cy@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:49.188312Z",
+          "paid_at": "2026-11-17T19:37:49.204079Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000004",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 3,
+          "reference": "bn-3-a6c1cb2ff62e3413",
+          "payer_email": "ben@example.test",
+          "provider": "paystack",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "NGN",
+          "amount_minor": 2500000,
+          "created_at": "2026-11-17T19:37:46.689405Z",
+          "paid_at": "2026-11-17T19:37:46.703977Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000003",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 2,
+          "reference": "bn-2-d592b81d2ca126ab",
+          "payer_email": "ada@example.test",
+          "provider": "flutterwave",
+          "kind": "pack",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1000,
+          "created_at": "2026-11-17T19:37:46.625480Z",
+          "paid_at": "2026-11-17T19:37:46.644940Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000002",
+          "refund": null,
+          "refund_option": {
+            "reason": "pack_14d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 1,
+          "reference": "bn-1-3887f2fcfd75521a",
+          "payer_email": "ada@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:37:45.759531Z",
+          "paid_at": "2026-11-17T19:37:45.797572Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-000001",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": true,
+            "message": null
+          }
+        }
+      ]
+    }
+  }
+}

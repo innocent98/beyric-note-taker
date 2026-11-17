@@ -51,6 +51,8 @@ from app.config import Settings, get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import (  # noqa: E402
     HourGrant,
+    Invoice,
+    MailOutbox,
     Payment,
     PaymentMethod,
     Plan,
@@ -150,6 +152,25 @@ def proof(db: Session, settings: Settings, email: str) -> bool:
             grant.expires_at == sub.current_period_end,
             f"ends {sub.current_period_end.isoformat()}",
         )
+    invoice = db.scalars(select(Invoice).where(Invoice.payment_id == payment.id)).first()
+    check("that payment has exactly one invoice", invoice is not None)
+    if invoice is not None:
+        check(
+            "the invoice is for what was paid, and its parts add up",
+            invoice.total_minor == payment.amount_minor
+            and invoice.currency == payment.currency
+            and invoice.subtotal_minor + invoice.vat_minor == invoice.total_minor,
+            f"{invoice.number}, {invoice.currency} {invoice.total_minor / 100:.2f}, "
+            f"VAT {invoice.vat_minor / 100:.2f} at {invoice.vat_rate_bp} bp",
+        )
+        receipt = db.scalar(
+            select(MailOutbox.status).where(
+                MailOutbox.template == "billing_receipt",
+                MailOutbox.payload["invoice_id"].as_integer() == invoice.id,
+            )
+        )
+        mailed = receipt or "not queued (no mail provider configured)"
+        print(f"  [{'ok' if receipt else 'note'}] receipt mail: {mailed}")
     card = db.scalar(
         select(PaymentMethod.id).where(
             PaymentMethod.user_id == user.id, PaymentMethod.provider == sub.provider
@@ -203,6 +224,29 @@ def preflight(db: Session, settings: Settings, step: int) -> bool:
         )
         tables = set(inspect(db.get_bind()).get_table_names())
         check("migration 0052 is applied", {"subscriptions", "plans", "plan_prices"} <= tables)
+        check(
+            "migration 0053 is applied (invoices and refunds)",
+            {"invoices", "refunds", "invoice_counters"} <= tables,
+        )
+        # Stage S9: what an invoice says about the seller comes from these settings and nothing is
+        # invented. A test-mode invoice is marked as not a tax document, so these only block live.
+        for label, value in (
+            ("BILLING_SELLER_ADDRESS", settings.billing_seller_address),
+            ("BILLING_SELLER_REGISTRATION_NO", settings.billing_seller_registration_no),
+            ("BILLING_SELLER_TAX_ID", settings.billing_seller_tax_id),
+        ):
+            check(
+                f"{label} is set (the seller's line on every invoice)",
+                bool(value.strip()) and "PLACEHOLDER" not in value.upper(),
+                "" if value.strip() else "empty: the line is left off the invoice, never invented",
+                must=False,
+            )
+        check(
+            "BILLING_VAT_RATE_BP",
+            True,
+            f"{settings.billing_vat_rate_bp} basis points of VAT INCLUDED in the price "
+            "(0: no VAT line; the accountant decides)",
+        )
         if "plans" in tables:
             plan_rows = db.execute(
                 select(Plan.code, PlanPrice.currency)

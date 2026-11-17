@@ -1,0 +1,37 @@
+{
+  "note": "`subtotal_minor + vat_minor = total_minor`; `vat_rate_bp` 0 means no VAT line; `test_mode` true: paid with test keys, not a tax document.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "invoices": [
+        {
+          "number": "BN-2026-000001",
+          "issued_at": "2026-11-17T19:37:45.797572Z",
+          "currency": "USD",
+          "subtotal_minor": 1800,
+          "vat_rate_bp": 0,
+          "vat_minor": 0,
+          "total_minor": 1800,
+          "description": "20 hours a month",
+          "payment_reference": "bn-1-3887f2fcfd75521a",
+          "payment_status": "succeeded",
+          "refunded_at": null,
+          "test_mode": true
+        }
+      ]
+    }
+  }
+}

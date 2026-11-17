@@ -55,6 +55,11 @@ def _lock_person(session: Session, user: User) -> None:
     )
 
 
+# Public: another module that must hold a person's hours still while it decides about them (a
+# refund ending the grant a payment bought, `app/billing/refunds.py`) takes the same lock.
+lock_person = _lock_person
+
+
 def _spend(
     session: Session, entry_id: int, seconds: int, held: list[list]
 ) -> list[UsageAllocation]:

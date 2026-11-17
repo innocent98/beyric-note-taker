@@ -27,6 +27,8 @@ const SHOWABLE = new Set([
   "period_almost_over",
   "provider_error",
   "provider_unavailable",
+  "invoice_busy",
+  "invoice_failed",
 ]);
 
 export function billingErrorMessage(error: unknown): string {

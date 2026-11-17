@@ -1,0 +1,51 @@
+{
+  "note": "Newest first; the number is sequential within the year.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "invoices": [
+        {
+          "number": "BN-2026-000002",
+          "issued_at": "2026-11-17T19:37:46.644940Z",
+          "currency": "USD",
+          "subtotal_minor": 1000,
+          "vat_rate_bp": 0,
+          "vat_minor": 0,
+          "total_minor": 1000,
+          "description": "10 extra hours",
+          "payment_reference": "bn-2-d592b81d2ca126ab",
+          "payment_status": "succeeded",
+          "refunded_at": null,
+          "test_mode": true
+        },
+        {
+          "number": "BN-2026-000001",
+          "issued_at": "2026-11-17T19:37:45.797572Z",
+          "currency": "USD",
+          "subtotal_minor": 1800,
+          "vat_rate_bp": 0,
+          "vat_minor": 0,
+          "total_minor": 1800,
+          "description": "20 hours a month",
+          "payment_reference": "bn-1-3887f2fcfd75521a",
+          "payment_status": "succeeded",
+          "refunded_at": null,
+          "test_mode": true
+        }
+      ]
+    }
+  }
+}

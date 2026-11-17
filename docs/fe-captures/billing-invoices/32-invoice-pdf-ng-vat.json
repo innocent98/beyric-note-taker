@@ -1,0 +1,23 @@
+{
+  "note": "The same invoice as a PDF, with the VAT lines.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/BN-2026-000003/pdf"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/pdf",
+      "content-disposition": "attachment; filename=\"invoice-BN-2026-000003.pdf\"; filename*=UTF-8''invoice-BN-2026-000003.pdf",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "file": "32-invoice-pdf-ng-vat.pdf",
+      "bytes": 17650,
+      "sha256": "2b5b86454d9db66713aedea05eb14fe94f214e8290d5f5029b98fe1cff3eb61f",
+      "starts_with": "%PDF-1.7",
+      "text_extracted_by_pdftotext": "32-invoice-pdf-ng-vat.txt"
+    }
+  }
+}

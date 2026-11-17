@@ -29,10 +29,17 @@ stays waiting and the webhook answers 503 so the provider sends it again. A paym
 once. The grants' own unique key on (kind, source payment id) is the second line behind this.
 
 A `charge_failed` event moves a `pending` payment to `failed` only if the provider, asked, says it
-failed; a `failed` payment can still succeed later (a payer retries the same checkout). `refund` and
-`dispute` events are stored and left waiting for the refund stage (S9).
+failed; a `failed` payment can still succeed later (a payer retries the same checkout).
+
+**Stage S9 adds three things a person must hear about**, each an admin alert by ids only:
+a successful charge under a DIFFERENT transaction id for a payment that is already `succeeded` (the
+payer paid twice: the provider is asked first, so a stray event is not an alert), a successful
+charge the rules REFUSED (a wrong amount, currency or reference: money may have moved), and a
+`dispute` (a chargeback). A `refund` or `dispute` event is stored and marked decided: refunds are
+started by an admin (`refunds.py`), so the provider's later notice changes nothing here.
 """
 
+import hashlib
 import logging
 from collections.abc import Callable
 
@@ -40,6 +47,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.billing import notify
 from app.billing.mismatch import flag_country_mismatch, normalize_card_country
 from app.billing.provider import PaymentProvider
 from app.billing.types import (
@@ -80,6 +88,7 @@ def process(
         raise RetryLater("the event could not be applied") from exc
     if refusal:
         logger.warning("billing event %s refused: %s", row.id, refusal)
+        _alert_refusal(db, row, event, refusal)
     db.commit()
 
 
@@ -95,8 +104,7 @@ def _apply(
 ) -> str | None:
     """Apply the event inside the caller's transaction. Returns a refusal reason, or None."""
     if event.kind in ("refund", "dispute"):
-        row.error = "waiting for the refund stage (S9)"
-        return None
+        return _record_refund_notice(db, row, event, now)
     payment = db.scalars(
         select(Payment).where(Payment.reference == event.reference).with_for_update()
     ).one_or_none()
@@ -104,9 +112,77 @@ def _apply(
     if refusal is None and payment.status in OPEN_STATUSES:
         tx = provider.fetch_transaction(event.provider_tx_id)
         refusal = _malformed(tx) or _decide(db, payment, event, tx, now)
+    elif refusal is None and event.kind == "charge_succeeded":
+        _check_second_payment(db, provider, payment, event)
     row.processed_at = now
     row.error = refusal
     return refusal
+
+
+def _record_refund_notice(db: Session, row: BillingEvent, event: ProviderEvent, now) -> None:
+    """A refund or a dispute notice: marked decided (it is stored in the inbox, which is the
+    record). Refunds are started by an admin and their state is read from the provider's own
+    dashboard; a dispute (a chargeback: a bank pulling a payment back) tells the admins."""
+    row.processed_at = now
+    row.error = f"recorded: a {event.kind} notice"
+    if event.kind == "dispute":
+        payment = db.scalars(select(Payment).where(Payment.reference == event.reference)).first()
+        about = f"payment {payment.id}" if payment is not None else "a payment we cannot match"
+        notify.tell_admins(
+            db,
+            f"admin.billing_dispute:{row.id}",
+            "A payment was disputed",
+            f"{row.provider} reports a dispute (a chargeback) on {about}. Look at it in the "
+            "provider's dashboard and answer it there; refunds and disputes are not the same.",
+        )
+    return None
+
+
+def _check_second_payment(
+    db: Session, provider: PaymentProvider, payment: Payment, event: ProviderEvent
+) -> None:
+    """A `charge_succeeded` event for a payment that is already paid. The same transaction again
+    (a retry, a late webhook after the sweeper settled it) is nothing. A DIFFERENT transaction id
+    is possibly a second charge: ask the provider, and only if it reports that transaction
+    `successful` under this reference tell the admins. Nothing is granted, nothing changes."""
+    if event.provider_tx_id == payment.provider_tx_id:
+        return
+    tx = provider.fetch_transaction(event.provider_tx_id)  # an error parks the event and retries
+    if (
+        _malformed(tx) is None
+        and tx.status == "successful"
+        and tx.reference == payment.reference
+        and tx.provider_tx_id != payment.provider_tx_id
+    ):
+        digest = hashlib.sha256(tx.provider_tx_id.encode()).hexdigest()[:12]
+        notify.tell_admins(
+            db,
+            f"admin.billing_second_payment:{payment.id}:{digest}",
+            "A payment was charged twice",
+            f"Payment {payment.id} was already paid, and {provider.name} reports a second "
+            f"successful charge under the same reference (provider transaction id "
+            f"{tx.provider_tx_id}). Nothing was granted for it. Refund the second one in the "
+            "provider's dashboard.",
+        )
+
+
+# What a refusal that is only a person's own failed payment starts with: no alert for those.
+_QUIET_REFUSALS = ("not successful", "unknown reference", "the provider does not report")
+
+
+def _alert_refusal(db: Session, row: BillingEvent, event: ProviderEvent, refusal: str) -> None:
+    """A successful charge the rules refused (a wrong amount, currency or reference, a transaction
+    another payment holds): money may have moved for something we will not give. A declined or
+    unknown payment is not an alert."""
+    if event.kind != "charge_succeeded" or refusal.startswith(_QUIET_REFUSALS):
+        return
+    notify.tell_admins(
+        db,
+        f"admin.billing_charge_refused:{row.id}",
+        "A payment was refused by the settlement rules",
+        f"{row.provider} reports a successful charge (event {row.id}) that our rules refused: "
+        f"{refusal}. Money may have moved. Look at it in the provider's dashboard.",
+    )
 
 
 def _decide(

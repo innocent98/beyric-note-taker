@@ -1,0 +1,28 @@
+{
+  "note": "A SECOND successful charge under a different transaction id for a payment that is already paid: 200 (decided); the provider is asked first, nothing is granted, and the administrators are told by id.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fx-second-charge",
+      "kind": "charge_succeeded",
+      "reference": "bn-8-1ba3a8440df40590",
+      "tx_id": "fx-second-charge",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

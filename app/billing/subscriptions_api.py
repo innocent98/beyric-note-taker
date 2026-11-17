@@ -43,7 +43,7 @@ from app.api_schemas import Body, ErrorResponse, UtcDatetime
 from app.billing import plans, renewals, routing, states, subscriptions
 from app.billing.profile_api import RouteOut, billing_user
 from app.db import get_session
-from app.models import Payment, Plan, PlanPrice, Subscription, User
+from app.models import Invoice, Payment, Plan, PlanPrice, Subscription, User
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
@@ -116,6 +116,10 @@ class PaymentOut(BaseModel):
     paid_at: UtcDatetime | None
     # The payer's own page for a payment that waits for them; null once it is paid or failed.
     pay_url: str | None
+    # The number of the invoice for this payment (`BN-2026-000123`), once there is one: the
+    # invoice is made when the payment succeeds. Null while pending, failed, or when nothing could
+    # use the payment. `GET /api/billing/invoices/{number}/pdf` downloads it.
+    invoice_number: str | None = None
 
 
 class PaymentsOut(BaseModel):
@@ -176,7 +180,7 @@ def _refused(exc: subscriptions.Refused) -> services.Refused:
     return services.Refused(exc.status, exc.code, exc.message)
 
 
-def _payment_out(row: Payment) -> PaymentOut:
+def _payment_out(row: Payment, invoice_number: str | None = None) -> PaymentOut:
     waiting = row.status == "pending"
     return PaymentOut(
         reference=row.reference,
@@ -187,7 +191,19 @@ def _payment_out(row: Payment) -> PaymentOut:
         created_at=row.created_at,
         paid_at=row.paid_at,
         pay_url=row.pay_url if waiting else None,
+        invoice_number=invoice_number,
     )
+
+
+def _invoice_numbers(db: Session, rows) -> dict[int, str]:
+    """The invoice number of each of these payments that has one, by payment id."""
+    ids = [row.id for row in rows]
+    if not ids:
+        return {}
+    found = db.execute(
+        select(Invoice.payment_id, Invoice.number).where(Invoice.payment_id.in_(ids))
+    )
+    return {payment_id: number for payment_id, number in found}
 
 
 def _subscription_out(db: Session, sub: Subscription, now: datetime) -> SubscriptionOut:
@@ -351,7 +367,9 @@ def list_payments(
         .order_by(Payment.id.desc())
         .limit(50)
     )
-    return PaymentsOut(payments=[_payment_out(row) for row in rows])
+    rows = list(rows)
+    numbers = _invoice_numbers(db, rows)
+    return PaymentsOut(payments=[_payment_out(row, numbers.get(row.id)) for row in rows])
 
 
 @router.get("/payments/{reference}", responses=_NOT_FOUND)
@@ -367,7 +385,7 @@ def read_payment(
     ).one_or_none()
     if row is None:
         raise HTTPException(404, "Not found.")
-    return _payment_out(row)
+    return _payment_out(row, _invoice_numbers(db, [row]).get(row.id))
 
 
 def _own_state(db: Session, user: User, sub: Subscription, now: datetime) -> SubscriptionOut:

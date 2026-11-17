@@ -1,0 +1,23 @@
+{
+  "note": "The invoice PDF: built now, never stored. `Content-Disposition` carries the file name; `Cache-Control: no-store`. The .txt beside it is what `pdftotext` extracts from these exact bytes.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/BN-2026-000001/pdf"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/pdf",
+      "content-disposition": "attachment; filename=\"invoice-BN-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-2026-000001.pdf",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "file": "18-invoice-pdf.pdf",
+      "bytes": 17325,
+      "sha256": "2bca2d4f7188003702a6adff92a8cb88771b49e6f477683b3ea76a5e04ee8bb5",
+      "starts_with": "%PDF-1.7",
+      "text_extracted_by_pdftotext": "18-invoice-pdf.txt"
+    }
+  }
+}

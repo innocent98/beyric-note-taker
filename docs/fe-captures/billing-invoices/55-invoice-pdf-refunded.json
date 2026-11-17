@@ -1,0 +1,23 @@
+{
+  "note": "The refunded invoice's PDF says so on its face (there is no credit note yet: a follow-up for the accountant).",
+  "client": "cy billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/BN-2026-000004/pdf"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/pdf",
+      "content-disposition": "attachment; filename=\"invoice-BN-2026-000004.pdf\"; filename*=UTF-8''invoice-BN-2026-000004.pdf",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "file": "55-invoice-pdf-refunded.pdf",
+      "bytes": 17910,
+      "sha256": "6fba120578e021d165bd9c901f0ea12d4a785cecb6697c524d6745fdec8a1ad9",
+      "starts_with": "%PDF-1.7",
+      "text_extracted_by_pdftotext": "55-invoice-pdf-refunded.txt"
+    }
+  }
+}

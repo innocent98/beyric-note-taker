@@ -1,0 +1,39 @@
+{
+  "note": "A first plan payment within 7 days, no hours used: refunded in full. The provider was asked ONCE, with our own reference. `status` `submitted`: the provider accepted it (a card refund takes days to arrive). The plan ended and its hours were removed in the same step.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/4/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d",
+      "note": "asked by email (placeholder)"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "payment_id": 4,
+      "payer_email": "cy@example.test",
+      "reference": "bnrf-4-236f36c47a30d42b",
+      "reason": "first_plan_7d",
+      "status": "submitted",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": "fake-refund-1",
+      "note": "asked by email (placeholder)",
+      "error": null,
+      "created_at": "2026-11-17T19:37:50.251209Z",
+      "resolved_at": "2026-11-17T19:37:50.251209Z",
+      "needs_resolution": false
+    }
+  }
+}

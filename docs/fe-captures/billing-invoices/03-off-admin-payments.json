@@ -1,0 +1,25 @@
+{
+  "note": "Billing is off: 404 `not_found`, even for the administrator.",
+  "client": "root flag-off",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/billing/payments",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

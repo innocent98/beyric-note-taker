@@ -66,5 +66,5 @@ def test_the_fake_provider_has_the_whole_interface(session):
     assert checkout.reference == payment.reference and payment.reference in checkout.url
     tx = provider.charge_saved_method("tok", 1000, "NGN", "bn-renewal")
     assert provider.fetch_transaction(tx.provider_tx_id) == tx and tx.status == "successful"
-    assert provider.refund(tx.provider_tx_id, 400) == "fake-refund-1"
+    assert provider.refund(tx.provider_tx_id, 400, reference="bnrf-1-abc") == "fake-refund-1"
     assert provider.refunds == [(tx.provider_tx_id, 400)]

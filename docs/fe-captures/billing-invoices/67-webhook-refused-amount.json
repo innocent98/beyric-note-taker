@@ -1,0 +1,28 @@
+{
+  "note": "A successful charge for HALF the amount we asked: the rules refuse it (nothing granted) and the administrators are told: money may have moved.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fx-half",
+      "kind": "charge_succeeded",
+      "reference": "bn-13-bc20bea86218d3ac",
+      "tx_id": "fx-half",
+      "amount_minor": 500,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

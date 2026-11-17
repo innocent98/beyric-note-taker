@@ -1,0 +1,37 @@
+{
+  "note": "Starts the hosted checkout; the payment is `pending`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-1-3887f2fcfd75521a",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-17T19:37:45.759531Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-1-3887f2fcfd75521a",
+        "invoice_number": null
+      },
+      "checkout_url": "https://fake.test/pay/bn-1-3887f2fcfd75521a"
+    }
+  }
+}

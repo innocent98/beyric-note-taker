@@ -1,0 +1,205 @@
+{
+  "note": "The invoices table at the end of the run (numbers are sequential within the year; the seller and buyer are snapshots).",
+  "content": {
+    "invoices": [
+      {
+        "number": "BN-2026-000001",
+        "payment_id": 1,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000002",
+        "payment_id": 2,
+        "currency": "USD",
+        "subtotal_minor": 1000,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1000,
+        "kind": "pack",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000003",
+        "payment_id": 3,
+        "currency": "NGN",
+        "subtotal_minor": 2325581,
+        "vat_rate_bp": 750,
+        "vat_minor": 174419,
+        "total_minor": 2500000,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000004",
+        "payment_id": 4,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000005",
+        "payment_id": 5,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000006",
+        "payment_id": 6,
+        "currency": "USD",
+        "subtotal_minor": 1000,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1000,
+        "kind": "pack",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000007",
+        "payment_id": 7,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000008",
+        "payment_id": 8,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000009",
+        "payment_id": 9,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000010",
+        "payment_id": 10,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      },
+      {
+        "number": "BN-2026-000011",
+        "payment_id": 11,
+        "currency": "USD",
+        "subtotal_minor": 1800,
+        "vat_rate_bp": 0,
+        "vat_minor": 0,
+        "total_minor": 1800,
+        "kind": "plan",
+        "seller": {
+          "name": "Beyrichq LTD",
+          "email": "billing-placeholder@example.test",
+          "tax_id": "TIN-PLACEHOLDER-NOT-REAL",
+          "address": "PLACEHOLDER ADDRESS (not real), Lagos, Nigeria",
+          "registration_no": "RC-PLACEHOLDER-NOT-REAL"
+        },
+        "test_mode": true
+      }
+    ]
+  }
+}

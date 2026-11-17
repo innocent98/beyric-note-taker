@@ -84,6 +84,9 @@ import type {
   TranslationLanguage,
 } from "./types";
 import type {
+  AdminPayment,
+  AdminRefund,
+  BillingInvoice,
   BillingPayment,
   BillingProfile,
   BillingState,
@@ -92,6 +95,7 @@ import type {
   Checkout,
   CountryResult,
   Plans,
+  RefundReason,
   RoutePreview,
   Subscription,
 } from "@/lib/billing";
@@ -660,6 +664,9 @@ export function createApi(options: ApiOptions = {}) {
       payments: async () => (await request<{ payments: BillingPayment[] }>("GET", "/api/billing/payments")).payments,
       payment: (reference: string) =>
         request<BillingPayment>("GET", `/api/billing/payments/${encodeURIComponent(reference)}`),
+      // Invoices (stage S9): the list, and one as a PDF file built when asked and never stored.
+      invoices: async () => (await request<{ invoices: BillingInvoice[] }>("GET", "/api/billing/invoices")).invoices,
+      downloadInvoice: (number: string) => download(`/api/billing/invoices/${encodeURIComponent(number)}/pdf`, {}),
       checkout: (kind: "plan" | "pack", code: string) =>
         request<Checkout>("POST", "/api/billing/checkout", { body: { kind, code }, write: true }),
       cancel: () => request<Subscription>("POST", "/api/billing/subscription/cancel", { write: true }),
@@ -673,6 +680,20 @@ export function createApi(options: ApiOptions = {}) {
       routeFor: (country: string) => request<RoutePreview>("GET", "/api/billing/route", { query: { country } }),
       setCountry: (billingCountry: string) =>
         request<CountryResult>("PUT", "/api/billing/profile/country", { body: { billing_country: billingCountry }, write: true }),
+    },
+    // The administrator's refund screen (stage S9). 403 for anyone else, 404 while billing is off.
+    adminBilling: {
+      payments: async (only: "all" | "needs_refund" = "all") =>
+        (await request<{ payments: AdminPayment[] }>("GET", "/api/admin/billing/payments", { query: { only } }))
+          .payments,
+      refunds: async () => (await request<{ refunds: AdminRefund[] }>("GET", "/api/admin/billing/refunds")).refunds,
+      refund: (paymentId: number, reason: RefundReason, note: string | null) =>
+        request<AdminRefund>("POST", `/api/admin/billing/payments/${paymentId}/refund`, {
+          body: note ? { reason, note } : { reason },
+          write: true,
+        }),
+      resolve: (refundId: number, outcome: "made" | "not_made") =>
+        request<AdminRefund>("POST", `/api/admin/billing/refunds/${refundId}/resolve`, { body: { outcome }, write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

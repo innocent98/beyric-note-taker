@@ -1,0 +1,38 @@
+{
+  "note": "A double charge: always refunded in full, any time; it granted nothing, so there is nothing else to remove.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/12/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "double_charge"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "payment_id": 12,
+      "payer_email": "flo@example.test",
+      "reference": "bnrf-12-904e24890a432964",
+      "reason": "double_charge",
+      "status": "submitted",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": "fake-refund-3",
+      "note": null,
+      "error": null,
+      "created_at": "2026-11-17T19:37:50.983708Z",
+      "resolved_at": "2026-11-17T19:37:50.983708Z",
+      "needs_resolution": false
+    }
+  }
+}

@@ -329,7 +329,7 @@ def test_a_failed_payment_can_still_be_paid_later_and_grants_once(
 
 
 @pytest.mark.parametrize("kind", ["refund", "dispute"])
-def test_refund_and_dispute_events_are_stored_and_change_nothing_yet(
+def test_refund_and_dispute_events_are_stored_decided_and_change_nothing(
     client, fake, grants, session, payment, kind
 ):
     fake.add_transaction(tx_for(payment))
@@ -341,7 +341,10 @@ def test_refund_and_dispute_events_are_stored_and_change_nothing_yet(
     assert reload_payment(session, payment).status == "succeeded"
     assert grants == [payment.id]
     row = events(session)[1]
-    assert row.type == kind and row.processed_at is None and "S9" in row.error
+    # stored in the inbox (the record) and decided: refunds are started by an admin (S9), so the
+    # provider's notice has nothing left to change; a dispute also tells the admins (test_billing_
+    # refunds_events)
+    assert row.type == kind and row.processed_at is not None and kind in row.error
 
 
 # ---- the signature, the bytes, the body ----

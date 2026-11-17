@@ -5,6 +5,7 @@ import { Alert, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { languageName } from "@/components/app/translation";
+import { saveBlob } from "@/lib/save-file";
 import type { ExportFormat, NoteLanguage } from "@/lib/api/types";
 
 const FORMATS: { format: ExportFormat; tag: string; label: string; sub: string }[] = [
@@ -19,20 +20,6 @@ type State =
   | { kind: "working"; format: ExportFormat }
   | { kind: "done"; filename: string }
   | { kind: "failed"; message: string };
-
-// Hands the bytes to the browser as a download. An object URL, so the file never touches a server
-// again: it was built for this click and is not stored.
-function save(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 // Two siblings for the header's flex row (`.detail-bar`): the button (`.dl`) and, on a row of its
 // own below, the answer to the last click (`.dl-status`).
@@ -76,7 +63,7 @@ export function DownloadMenu({
     try {
       const file = await api.meetings.export(meetingId, format, transcript && hasTranscript, language);
       const filename = file.filename ?? `${title}.${format}`;
-      save(file.blob, filename);
+      saveBlob(file.blob, filename);
       setState({ kind: "done", filename });
       timer.current = setTimeout(() => setState({ kind: "idle" }), DONE_SECONDS * 1000);
     } catch (caught) {

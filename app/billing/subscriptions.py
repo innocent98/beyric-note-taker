@@ -46,7 +46,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import alerts, usage, vault
-from app.billing import plans, routing, settle, states
+from app.billing import notify, plans, routing, settle, states
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import PaymentProvider, provider_named
@@ -320,16 +320,15 @@ def saved_card(db: Session, user_id: int, provider: str) -> tuple[str, str | Non
 
 def _tell_admins(db: Session, key: str, title: str, body: str) -> None:
     """One admin alert per key, by ids only (no emails). Best effort: it must not stop the money."""
-    try:
-        with db.begin_nested():
-            alerts.notify_admins(db, kind=key.split(":")[0], title=title, body=body, dedupe_key=key)
-    except Exception as exc:
-        logger.error("admin alert %s failed: %s", key.split(":")[0], type(exc).__name__)
+    notify.tell_admins(db, key, title, body)
 
 
 def needs_refund(db: Session, payment: Payment, why: str) -> None:
-    """Money arrived that no subscription period can use: tell the admins, grant nothing."""
+    """Money arrived that no subscription period can use: tell the admins, grant nothing. The
+    reason is kept on the payment (`needs_refund_reason`): it is never invoiced, and it is what
+    makes a refund of it a double charge (`refunds.py`)."""
     logger.warning("payment %s succeeded but grants nothing: %s", payment.id, why)
+    payment.needs_refund_reason = why
     _tell_admins(
         db,
         f"admin.billing_refund_needed:{payment.id}",
@@ -340,6 +339,8 @@ def needs_refund(db: Session, payment: Payment, why: str) -> None:
 
 
 def _receipt(db: Session, payment: Payment, what: str) -> None:
+    """The bell entry for a payment. The MAIL is the receipt with the invoice (`invoices.
+    queue_receipt`, stage S9), so this one sends none: a person gets one mail, not two."""
     if payment.payer_user_id is None:
         return
     alerts.notify_user(
@@ -351,7 +352,6 @@ def _receipt(db: Session, payment: Payment, what: str) -> None:
         body=f"We received your payment of {money(payment.amount_minor, payment.currency)} "
         f"for {what}. Thank you.",
         dedupe_key=f"billing.receipt:{payment.id}",
-        email_template=alerts.ALERT_TEMPLATE,
     )
 
 
@@ -589,6 +589,11 @@ def register() -> None:
         settle.TRANSACTION_HANDLERS.append(save_card)
     if on_payment_succeeded not in settle.GRANT_HANDLERS:
         settle.GRANT_HANDLERS.append(on_payment_succeeded)
+    # Stage S9: the invoice handler runs right after this one (it needs to see what it did), and is
+    # registered here so that no caller of `settle` can have the hours without the invoice.
+    from app.billing import invoices
+
+    invoices.register()
 
 
 register()

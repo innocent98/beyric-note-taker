@@ -506,9 +506,7 @@ class FlutterwaveProvider:
                 "this reference before charging again"
             ) from None
 
-    def refund(
-        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
-    ) -> str:
+    def refund(self, provider_tx_id: str, amount_minor: int, *, reference: str) -> str:
         """Refund part or all of a payment: `POST /v3/transactions/{id}/refund` with the amount.
         Returns the refund's id (`data.id`). A refund the vendor accepts is only *initiated*: card
         refunds finish in 3 to 15 days (refunds page), so the id is a receipt, not proof the money
@@ -519,11 +517,9 @@ class FlutterwaveProvider:
         if not isinstance(provider_tx_id, str) or not _ID.fullmatch(provider_tx_id):
             raise ProviderError("the transaction id is not a Flutterwave transaction id")
         amount_text = _major_text(amount_minor)
-        body: dict[str, object] = {}
-        if reference is not None:
-            if not isinstance(reference, str) or not 0 < len(reference) <= 100:
-                raise ProviderError("a refund reference is 1 to 100 characters")
-            body["comments"] = reference
+        if not isinstance(reference, str) or not 0 < len(reference) <= 100:
+            raise ProviderError("a refund reference is 1 to 100 characters")
+        body: dict[str, object] = {"comments": reference}
         answer = self._request(
             "POST",
             f"/v3/transactions/{provider_tx_id}/refund",

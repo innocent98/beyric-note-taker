@@ -419,6 +419,19 @@ class Settings(BaseSettings):
     # app's own `/billing/return` page (`PUBLIC_BASE_URL` + `/billing/return`). The page only shows
     # the payment's state; nothing is granted there, so a wrong address costs nothing.
     billing_return_url: str = ""
+    # Invoices (stage S9, billing spec section 6). The seller's details are read from here and
+    # snapshotted onto each invoice when it is issued, so a later edit never rewrites an old one.
+    # NOTHING here is a real registration or tax number: they are empty until Adebayo supplies
+    # them, and an empty one is left off the invoice (the invoice says nothing, it never invents).
+    # `BILLING_VAT_RATE_BP` is the VAT INCLUDED in the price charged, in basis points (750 = 7.5%);
+    # default 0: no VAT line. An added-on VAT (a higher charge) is not built: it would change every
+    # amount a provider is asked for, and the accountant has not answered (spec section 6).
+    billing_seller_name: str = "Beyrichq LTD"
+    billing_seller_address: str = ""
+    billing_seller_registration_no: str = ""
+    billing_seller_tax_id: str = ""
+    billing_seller_email: str = ""
+    billing_vat_rate_bp: int = Field(default=0, ge=0, le=5000)
     # Paystack, naira (stage S6). All three stay empty until Adebayo puts them in the server's
     # `.env`: with no secret key set, every call the adapter could make raises before it leaves the
     # process. `repr=False` keeps them out of the settings' own repr; no log line or error ever

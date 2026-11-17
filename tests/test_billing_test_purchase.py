@@ -52,6 +52,8 @@ def test_the_proof_passes_for_a_real_purchase_and_says_what_it_checked(
     assert "[ok] a plan payment has succeeded" in out
     assert "[ok] exactly one plan-period grant came from that payment" in out
     assert "saved card for renewals: yes" in out
+    assert "[ok] that payment has exactly one invoice" in out  # stage S9
+    assert "[ok] the invoice is for what was paid, and its parts add up" in out
     assert "@" not in out and "tok-1" not in out  # no email, no token
 
 
@@ -75,6 +77,18 @@ def test_the_proof_fails_when_a_grant_is_missing(session, ada, providers, capsys
     passed, out = run_proof(session, capsys)
 
     assert not passed and "[FAIL] exactly one plan-period grant" in out
+
+
+def test_the_proof_fails_when_the_invoice_is_missing(session, ada, providers, capsys):
+    from app.models import Invoice
+
+    buy_plan(session, ada, providers.usd)
+    session.query(Invoice).delete()
+    session.commit()
+
+    passed, out = run_proof(session, capsys)
+
+    assert not passed and "[FAIL] that payment has exactly one invoice" in out
 
 
 def test_the_proof_is_read_only(session, ada, providers):
