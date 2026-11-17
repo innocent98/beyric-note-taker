@@ -1410,6 +1410,19 @@ time to a webhook, and the raw body through nginx and the Next.js proxy are not 
 and plain text mail (no link) through the existing alert path; none was sent. The scheduler's pass was run once by the
 capture script at the real time after the stored dates were moved by SQL (it cannot wait a month).
 
+### The billing screens built on this contract (stage S8b)
+
+The screens exist now (`web/app/billing`, `docs/sop/2026-11-17-billing-screens.md`). They use only what is above and add **no field and no route**. What they taught about the contract, for whoever builds a second client or changes the API:
+
+* **The return address.** The page reads OUR reference from `reference`, then `trxref`, then `tx_ref`, and falls back to the reference its own tab stored before sending the person away. The names Flutterwave adds are still **not verified**.
+* **A payment has five statuses, nothing more.** `pending`, `succeeded`, `failed`, `refunded`, `partly_refunded`. An **abandoned checkout** and a payment the server **refused** (wrong amount, currency or reference: "What a wrong or short payment does") are both `pending` for ever, so a screen cannot tell "we are still waiting" from "this will never be credited". The return page says "still confirming" after 5 minutes and asks the person to keep the reference. If the product wants a better sentence, the payment needs a status or reason for it (**gap, reported**).
+* **404 `not_found` from a billing route means "not available to this person"**, not a fault: the Settings card and the banner draw nothing, the billing pages say so plainly. **Except on `GET /payments/{reference}`**, where the same 404 `not_found` also means "no such payment, or not yours" (capture 66): the return page then reads `GET /subscription`, and only if that is a 404 too says billing is not available; otherwise it says it could not find that payment. The banner remembers a 404 for the browser tab, and a healthy answer for a minute, so it does not ask on every page (both are forgotten when this client signs someone in or out).
+* **A charge waiting for the bank is a payment with its own page**: the banner and the billing page send the person to `pending_payment.pay_url` when `pending_payment.kind` is `renewal`, and never call `POST /subscription/pay-link` for it.
+* **`hours.warning` drives the words**, not the bar's ratio; **`can_*` drive the buttons**.
+* **A pay link asked while a saved-card charge is in flight** is 409 `payment_in_progress` (S8a review fix): the banner and the billing page show the server's sentence and stay where they are.
+* **The brand and last four digits of the card** are still null, so no screen names the card.
+* The billing routes are **not in `docs/openapi.json`**; the screens' types (`web/lib/billing.ts`) are written from this guide's captures.
+
 ## Verification
 
 | Behaviour | Verified |
@@ -1464,3 +1477,6 @@ capture script at the real time after the stored dates were moved by SQL (it can
 | `409 not_an_upgrade`, `period_over`, `period_almost_over`, `payment_in_progress`, 502 `provider_error`, 503 `provider_unavailable` | tests only (`tests/test_billing_subscriptions.py`, `tests/test_billing_subscriptions_api.py`) |
 | Mail for the notices, and the notices' wording on screen | tests only (bell entries), mail not sent |
 | A real provider's hosted page, return address, saved-card renewal, bank refusal, webhook timing; the raw body through nginx and the proxy | **not verified live**: the runbook in `docs/sop/2026-11-17-billing-subscriptions.md` is the test |
+| S8b: the screens (plans, return page, billing page, banner, Settings card, gate links) | driven in a browser against a local app with the scripted provider (`scripts/dev_billing_stack.py`) in 13 account states at 1440, 768 and 390 px, and by vitest on the captured bodies; **not** against a real provider's page or return address |
+| S8b: the return page's 5-minute "still confirming" | tests with fake timers and a browser run with the clock fast-forwarded; not waited in real time |
+| S8b: "abandoned" and "mismatch" as states of a payment | **not states of the API** (both are `pending`); the screens use the provider's `status=cancelled` in the return address as a hint for the words only |

@@ -5,6 +5,7 @@ import { Globe, LANGUAGES } from "@/components/app/translation";
 import { Alert, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
+import { GateText } from "@/components/billing/gate-text";
 import { validEmail } from "@/lib/accounts";
 import { initials } from "@/lib/format";
 import type { NoteLanguage, ShareCreated, TeamMember } from "@/lib/api/types";
@@ -429,7 +430,11 @@ export function ShareDialog({
                 onChange={(event) => setMessage(event.target.value)}
               />
             </div>
-            {error ? <Alert kind="error">{error}</Alert> : null}
+            {error ? (
+              <Alert kind="error">
+                <GateText message={error} />
+              </Alert>
+            ) : null}
           </div>
           <div className="sh-foot">
             <span className="sh-count" role="status">

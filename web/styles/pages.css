@@ -970,3 +970,36 @@
 .mt-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .mt-fields { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
 .mt-note { margin: var(--space-3) 0 0; }
+
+/* ---- Billing (stage S8b). LEAD-DESIGNED from the Settings cards: no billing design exists, so these are
+   only the layout glue around the existing card, row, badge, alert and button styles. The designer restyles
+   them later. ---- */
+.bill-card { display: flex; flex-direction: column; gap: var(--space-3); padding: 22px; }
+.bill-card .pl-row { padding-inline: 0; }
+.bill-card-flush { padding: 0; }
+.bill-flush-head { padding: 18px 22px 6px; }
+.bill-empty { margin: 0; padding: 0 22px 22px; }
+.bill-history { margin: 0; padding: 0; list-style: none; }
+.bill-plan { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 22px; }
+.bill-plan-main { flex: 1 1 260px; min-width: 0; }
+.bill-price { margin: var(--space-2) 0 0; }
+.bill-plan-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.bill-plan-name { margin: 4px 0 0; font-size: var(--text-md); font-weight: 600; }
+.bill-rules { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); line-height: 1.55; }
+.bill-hours { display: flex; flex-direction: column; gap: 2px; }
+.bill-hours-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.bill-form { display: flex; flex-direction: column; gap: var(--space-3); max-width: 420px; }
+.bill-statement { margin: 0; font-size: var(--text-sm); }
+.bill-option-row { border-bottom: 1px solid var(--border-softer); }
+.bill-option-row:last-child { border-bottom: 0; }
+.bill-preview { padding: 12px 14px; border: 1px solid var(--teal-line); border-radius: 9px; background: var(--teal-wash); font-size: var(--text-sm); color: var(--teal-deep); }
+.bill-actions { flex-wrap: wrap; }
+.bill-more-row { flex: 1 1 100%; }
+.bill-more > summary { cursor: pointer; font-size: var(--text-sm); font-weight: 550; color: var(--text-2); }
+.bill-more[open] > summary { margin-bottom: var(--space-2); }
+.bill-summary { display: flex; flex-direction: column; gap: 2px; }
+.billing-banner { width: 100%; max-width: var(--page-width); margin: 0 auto; padding: var(--space-4) var(--space-8) 0; }
+@media (max-width: 860px) { .billing-banner { padding: var(--space-3) var(--space-4) 0; } }
+@media (max-width: 560px) { .bill-card, .bill-plan { padding: var(--space-4); } .bill-flush-head { padding: 16px var(--space-4) 6px; } .bill-empty { padding: 0 var(--space-4) var(--space-4); } .bill-history .pl-row { padding-inline: var(--space-4); } }
+.bill-card .pl-controls { flex-wrap: wrap; }
+.bill-card [tabindex="-1"]:focus, [aria-live] [tabindex="-1"]:focus { outline: none; }

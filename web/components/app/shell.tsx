@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
+import { BillingBanner } from "@/components/billing/billing-banner";
 import { ActiveTeamSync } from "@/components/app/active-team-sync";
 import { ShellNav } from "@/components/app/shell-nav";
 import { TeamNavLink } from "@/components/app/team-nav-link";
@@ -105,6 +106,7 @@ export function AppShell({
         </div>
       </ShellNav>
       <div className="shell-main">
+        <BillingBanner />
         <main id="main" className="page">
           <TimeZoneProvider value={timeZone}>{children}</TimeZoneProvider>
         </main>

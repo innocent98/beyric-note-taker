@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, AppLink, Button, Card, Icon, SelectField } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
+import { GateText } from "@/components/billing/gate-text";
 import type { Meeting, Template } from "@/lib/api/types";
 import { describeLink, type SharedLink } from "@/lib/share";
 import { clearShare, peekShare, readShareFragment, stashShare } from "@/lib/share-pending";
@@ -155,8 +156,16 @@ export function ShareFlow({
             This is the first one.
           </Alert>
         ) : null}
-        {blocked ? <Alert kind="notice" role="alert">{blocked}</Alert> : null}
-        {error ? <Alert kind="error">{error}</Alert> : null}
+        {blocked ? (
+          <Alert kind="notice" role="alert">
+            <GateText message={blocked} />
+          </Alert>
+        ) : null}
+        {error ? (
+          <Alert kind="error">
+            <GateText message={error} />
+          </Alert>
+        ) : null}
         <SelectField
           id="template_id"
           label="Notes template"
