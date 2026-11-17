@@ -898,6 +898,8 @@ Legal and business
 - [x] Landing v2 from the new design with every claim cut to what is shipped (no HubSpot, Jira, Asana, timestamps, "every attendee", "unlimited", "free"); our footer (Beyrichq LTD, `privacy@`) and our signed-in `/welcome`; invite-only said plainly (PR open 2026-11-14, SOP `docs/sop/2026-11-14-landing-v2-and-pricing.md`, parity report and shots in `docs/ui/parity/landing-v2/`)
 - [x] `/pricing` page with placeholders only ("To be announced", Trial / Team / Team Plus), header and footer link, sitemap, robots, `llms.txt`; all plan data in `web/components/pricing/content.ts` (same PR)
 - [ ] Adebayo decides plan names, prices and hours, then one edit in `web/components/pricing/content.ts`
+- [x] One public header and one public footer for every public page (landing, `/pricing`, `/privacy`, `/terms`, 404) through the `app/(public)/` route group and `PublicShell`; the three old implementations and their CSS removed; `/pricing` now says hours belong to the person, no numbers (2026-11-17, branch `feature/public-shell-unified`, SOP `docs/sop/2026-11-17-public-shell-unified.md`; looked at in a browser as a visitor only)
+- [ ] Later: split Privacy and Terms into separate pages (a folder under `app/(public)/` each, plus `NEXT_PAGES`, proxy matcher, sitemap)
 - [x] Billing spec written and revised for his answers (PR #206, `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`; per-person model; every product question decided, open facts only in its section 11); the build is the module below, then real numbers on the pricing page
 - [ ] Later and separate: chat notice live, transcript turn times, per-team retention, translation languages, Jira or Asana, CRM (deferred; needs team rules first)
 

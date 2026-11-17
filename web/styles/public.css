@@ -4,7 +4,7 @@
 
 /* The base style lets any word break anywhere so a long link never widens the owner app. In these
    layouts it would crush flex items (the logo, the pill) to a letter wide, so words break normally. */
-.auth-split, .ld, .lg { overflow-wrap: normal; }
+.auth-split, .ld { overflow-wrap: normal; }
 
 /* ---- Avatars in the sizes the previews draw ---- */
 .avatar-26 { width: 26px; height: 26px; font-size: 10px; }
@@ -55,12 +55,13 @@
 /* `overflow-x: hidden` would make .ld a scroll container, and a sticky header inside one sticks to
    it instead of the window (it scrolled away). `clip` cuts the same overflow without that; the
    `hidden` line is for a browser that does not know `clip`. */
-.ld { overflow-x: hidden; overflow-x: clip; background: var(--surface); font-size: 1rem; line-height: 1.55; }
+.ld { display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; overflow-x: clip; background: var(--surface); font-size: 1rem; line-height: 1.55; }
+/* The page fills what the header and footer leave, so a short page (the 404) keeps the footer at the bottom. */
+.ld > main { flex: 1; min-width: 0; }
 .ld a { text-decoration: none; }
-/* "Skip to content" and every `#...` link land below the sticky headers: .ld-header is 68px + 1px
-   border, .lg-header 64px + 1px. The sections and the legal h2s carry their own margin. */
+/* "Skip to content" and every `#...` link land below the sticky header: .ld-header is 68px + 1px
+   border. The sections and the legal h2s carry their own margin. */
 .ld #main { scroll-margin-top: 69px; }
-.lg #main { scroll-margin-top: 65px; }
 .ld-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--border-soft); background: var(--header-blur); backdrop-filter: blur(10px); }
 .ld-header-in { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); max-width: 1200px; height: 68px; margin: 0 auto; padding: 0 var(--space-6); }
 .ld-nav { display: flex; flex-wrap: wrap; gap: 26px; font-size: var(--text-base); font-weight: 500; }
@@ -256,6 +257,8 @@
 
 /* ---- Pricing (Pricing.html, 2026-11-14) ---- */
 .ld-nav a[aria-current="page"] { color: var(--teal); font-weight: 600; }
+.ld-footer a:hover { color: var(--teal); }
+.ld-footer a[aria-current="page"] { color: var(--teal); font-weight: 600; }
 .ld-phero { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); max-width: 820px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) var(--space-6) var(--space-12); text-align: center; }
 .ld-phero h1 { margin: 0; font-size: clamp(38px, 5vw, 60px); line-height: 1.04; font-weight: 650; letter-spacing: -0.04em; text-wrap: balance; }
 .ld-phero p { max-width: 600px; margin: 0; color: var(--ink-3); font-size: 18px; }
@@ -300,21 +303,9 @@
 .ld-pclosing { padding: 0 var(--space-6) 88px; }
 .ld-pclosing .ld-closing-in { padding: clamp(40px, 6vw, 72px) clamp(24px, 6vw, 72px); gap: 28px; }
 .ld-pclosing .ld-h2 { max-width: 620px; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; }
-.ld-pfooter { border-top: 1px solid var(--border-soft); background: var(--bg); }
-.ld-pfooter-in { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; max-width: 1200px; margin: 0 auto; padding: var(--space-8) var(--space-6); color: var(--text-2); font-size: var(--text-base); }
-.ld-pfooter-links { display: flex; flex-wrap: wrap; gap: var(--space-5); }
-.ld-pfooter a { color: var(--text-2); }
 
 /* ---- Legal pages (Privacy Policy.dc.html, Terms of Service.dc.html) ---- */
-.lg { display: flex; flex-direction: column; min-height: 100vh; background: var(--surface); font-size: var(--text-md); line-height: 1.65; }
-.lg > main, .lg-body { flex: 1; }
-.lg-header { position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--border-soft); background: var(--surface); }
-.lg-header-in { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); max-width: 1120px; height: 64px; margin: 0 auto; padding: 0 var(--space-6); }
-.lg-tabs { display: flex; gap: 4px; }
-.lg-tabs a { padding: 7px var(--space-3); border-radius: var(--radius-sm); color: var(--text); font-size: var(--text-base); font-weight: 500; }
-.lg-tabs a:hover { background: var(--surface-menu); text-decoration: none; color: var(--text); }
-.lg-tabs a[aria-current="page"] { background: var(--surface-active); }
-.lg-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 56px; max-width: 1120px; margin: 0 auto; padding: 56px var(--space-6) 96px; }
+.lg-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 56px; max-width: 1120px; margin: 0 auto; padding: 56px var(--space-6) 96px; font-size: var(--text-md); line-height: 1.65; }
 .lg-toc { position: sticky; top: 96px; display: flex; flex: 0 1 240px; flex-direction: column; gap: 2px; }
 .lg-toc-title { margin-bottom: var(--space-2); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.02em; color: var(--text-3); }
 .lg-toc a { padding: 5px 0; color: var(--ink-3); font-size: var(--text-sm); line-height: 1.4; }
@@ -330,10 +321,6 @@
 .lg-article li { position: relative; padding-left: 17px; color: var(--ink-2); }
 .lg-article li::before { content: ""; position: absolute; left: 0; top: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--teal); }
 .lg-ask { margin-top: var(--space-12); padding: 18px var(--space-5); border-radius: var(--radius-lg); background: var(--bg); color: var(--ink-2); font-size: var(--text-base); }
-.lg-footer { border-top: 1px solid var(--border-soft); }
-.lg-footer-in { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); max-width: 1120px; margin: 0 auto; padding: 28px var(--space-6); color: var(--text-3); font-size: var(--text-sm); }
-.lg-footer-links { display: flex; gap: var(--space-5); }
-.lg-footer a { color: var(--text-3); }
 
 /* ---- Account screens (Auth.dc.html): sign-up, confirm email, reset password, waiting list ---- */
 .auth-fields { display: flex; flex-direction: column; gap: var(--space-4); }

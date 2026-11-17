@@ -6,6 +6,7 @@ import { RecordingAckCard } from "@/components/app/recording-ack-card";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { LandingPage } from "@/components/landing/landing-page";
+import { PublicShell } from "@/components/site/public-shell";
 import { Alert, PageHead } from "@/components/ui";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, resolveTeam, getShellTeams } from "@/lib/api/server";
 import type { Api } from "@/lib/api/client";
@@ -15,7 +16,7 @@ import { isFiltered, readRange, type DayRange } from "@/lib/date-range";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
 // and the owner's Meetings page for the owner (never indexed). GET /api/session says which. The owner
-// reaches the landing page at /welcome (app/welcome/page.tsx).
+// reaches the landing page at /welcome (app/(public)/welcome/page.tsx).
 export async function generateMetadata(): Promise<Metadata> {
   if ((await getSession())?.authenticated) return { title: "Meetings", robots: { index: false, follow: false } };
   return {
@@ -29,7 +30,13 @@ export default async function HomePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 } = {}) {
-  if (!(await getSession())?.authenticated) return <LandingPage />;
+  if (!(await getSession())?.authenticated) {
+    return (
+      <PublicShell>
+        <LandingPage />
+      </PublicShell>
+    );
+  }
   // The Meetings list's date filter is in the address (`/?from=2026-11-01&to=2026-11-07`, lead-designed),
   // so a filtered view can be reloaded and shared. A damaged value is ignored with a line about it. The
   // filter only reads `searchParams` and the list only knows its own `basePath`, so it moves with the

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PrivacyContent } from "@/components/legal/privacy-content";
 import { PRIVACY_TOC } from "@/components/legal/toc";
-import { LegalShell } from "@/components/site/legal-shell";
+import { LegalPage } from "@/components/legal/legal-page";
 import { audioRetentionDays, OG_IMAGES } from "@/lib/site";
 
 const description =
@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalShell current="privacy" toc={PRIVACY_TOC}>
+    <LegalPage toc={PRIVACY_TOC}>
       <PrivacyContent days={audioRetentionDays()} />
-    </LegalShell>
+    </LegalPage>
   );
 }

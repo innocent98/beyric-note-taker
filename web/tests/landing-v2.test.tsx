@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { GET as llms } from "@/app/llms.txt/route";
 import sitemap from "@/app/sitemap";
 import robots from "@/app/robots";
-import PricingRoute, { metadata as pricingMetadata } from "@/app/pricing/page";
-import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
-import { PricingPage } from "@/components/pricing/pricing";
+import PricingRoute, { metadata as pricingMetadata } from "@/app/(public)/pricing/page";
+import { Landing } from "@/components/landing/landing";
+import { Pricing } from "@/components/pricing/pricing";
+import { PublicShell } from "@/components/site/public-shell";
+import { renderPublic } from "./public-render";
 import { PLANS, TO_BE_ANNOUNCED, hoursLine, priceOf, tableRows, type Plan } from "@/components/pricing/content";
 import { read, WEB } from "./helpers";
 
@@ -16,16 +18,19 @@ vi.mock("@/lib/api/server", () => ({ getSession: async () => ({ authenticated: f
 // docs/superpowers/specs/2026-11-14-public-pages-audit.md). These tests keep the cuts cut.
 
 const text = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&#x27;|&apos;/g, "'").replace(/\s+/g, " ");
-const landing = text(
-  renderToStaticMarkup(
-    <>
-      <LandingHeader />
-      <Landing />
-      <LandingFooter />
-    </>,
-  ),
+// The pages inside the one public header and footer, as a visitor gets them (the shell reads the session).
+const landingHtml = await renderPublic(
+  <PublicShell>
+    <Landing />
+  </PublicShell>,
 );
-const pricing = text(renderToStaticMarkup(<PricingPage />));
+const pricingHtml = await renderPublic(
+  <PublicShell>
+    <Pricing />
+  </PublicShell>,
+);
+const landing = text(landingHtml);
+const pricing = text(pricingHtml);
 
 describe("the landing page: what is cut", () => {
   it.each([
@@ -55,8 +60,8 @@ describe("the landing page: what is cut", () => {
     expect(landing).toContain("© 2026 Beyrichq LTD");
     expect(landing).toContain("from Beyrichq LTD");
     expect(landing).not.toContain("Beyric Technologies");
-    expect(renderToStaticMarkup(<LandingFooter />)).toContain('href="mailto:privacy@beyrictech.com"');
-    expect(renderToStaticMarkup(<LandingFooter />)).not.toContain("hello@");
+    expect(landingHtml).toContain('href="mailto:privacy@beyrictech.com"');
+    expect(landingHtml).not.toContain("hello@");
   });
 
   it("words the bot's name, Outlook, Linear and translation as the app has them", () => {
@@ -67,14 +72,7 @@ describe("the landing page: what is cut", () => {
   });
 
   it("links Pricing from the header, the footer and the closing band", () => {
-    const html = renderToStaticMarkup(
-      <>
-        <LandingHeader />
-        <Landing />
-        <LandingFooter />
-      </>,
-    );
-    expect(html.match(/href="\/pricing"/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(landingHtml.match(/href="\/pricing"/g)?.length).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -91,8 +89,16 @@ describe("the pricing page", () => {
   it("has a one-time trial, a Team plan and a larger plan, and no Business plan, no free and no unlimited", () => {
     expect(PLANS.map((p) => p.name)).toEqual(["Trial", "Team", "Team Plus"]);
     expect(pricing).not.toMatch(/business|\bfree\b|unlimited|forever|hubspot|jira|asana|most teams pick/i);
-    expect(pricing).toContain("shared by the whole team");
     expect(pricing).toContain("Extra-hour packs");
+  });
+
+  it("says the hours belong to the person, never that a team shares them (decided 2026-11-16)", () => {
+    expect(pricing).toContain("Hours belong to the person");
+    expect(pricing).toContain("the hours belong to the person who has the plan, not to a team");
+    expect(pricing).not.toMatch(/whole team|shared by|shared across|share[sd]? (the )?hours|pooled/i);
+    const description = pricingMetadata.description ?? "";
+    expect(description).toContain("belong to the person");
+    expect(description).not.toMatch(/shared|whole team/i);
   });
 
   it("gates no feature: every feature row is 'Yes' on every plan", () => {
@@ -113,29 +119,21 @@ describe("the pricing page", () => {
   });
 
   it("starts every plan at the sign-up page, since no plan is on sale", () => {
-    const html = renderToStaticMarkup(<PricingPage />);
-    expect(html.match(/class="ld-plan-cta" href="\/signup"/g)).toHaveLength(3);
+    expect(pricingHtml.match(/class="ld-plan-cta" href="\/signup"/g)).toHaveLength(3);
     expect(pricing).toContain("No plan is on sale yet");
   });
 
-  it("draws the designer's header (Product, Pricing marked current) and footer, with our entity", () => {
-    const html = renderToStaticMarkup(<PricingPage />);
-    expect(html).toContain('aria-current="page"');
+  it("sits inside the shared public header and footer, with our entity and mailbox", () => {
+    expect(pricing).toContain("Who it's for");
     expect(pricing).toContain("© 2026 Beyrichq LTD");
-    expect(html).toContain('href="mailto:privacy@beyrictech.com"');
-    expect(html).not.toContain("hello@");
-  });
-
-  it("gives a signed-in owner the way back into the app, with the logo to /welcome", () => {
-    const html = renderToStaticMarkup(<PricingPage signedIn />);
-    expect(html).toContain("Open the app");
-    expect(html).not.toContain("Sign in");
-    expect(/<a class="logo[^"]*" href="([^"]+)"/.exec(html)?.[1]).toBe("/welcome");
+    expect(pricingHtml).toContain('href="mailto:privacy@beyrictech.com"');
+    expect(pricingHtml).not.toContain("hello@");
+    expect(pricingHtml).not.toContain("ld-pfooter");
   });
 
   it("is a public page with its own metadata and canonical, in the sitemap and allowed in robots.txt", async () => {
     expect(pricingMetadata.alternates?.canonical).toBe("/pricing");
-    expect(text(renderToStaticMarkup(await PricingRoute()))).toContain("Pay when your team runs on it.");
+    expect(text(renderToStaticMarkup(PricingRoute()))).toContain("Pay when your team runs on it.");
     expect(sitemap().map((e) => e.url.replace(/^https?:\/\/[^/]+/, ""))).toContain("/pricing");
     expect(robots().rules).toEqual([expect.objectContaining({ allow: expect.arrayContaining(["/pricing"]) })]);
   });

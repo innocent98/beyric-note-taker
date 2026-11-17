@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { TermsContent } from "@/components/legal/terms-content";
 import { TERMS_TOC } from "@/components/legal/toc";
-import { LegalShell } from "@/components/site/legal-shell";
+import { LegalPage } from "@/components/legal/legal-page";
 import { OG_IMAGES } from "@/lib/site";
 
 const description =
@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalShell current="terms" toc={TERMS_TOC}>
+    <LegalPage toc={TERMS_TOC}>
       <TermsContent />
-    </LegalShell>
+    </LegalPage>
   );
 }
