@@ -18,6 +18,12 @@ person. Since 2026-11-16 12:20 WAT new meetings take Skribby's own text and the 
 tag. Meeting 37 itself was made before that. Its Skribby segments are still saved, so the same build can be
 run on them. Meetings 34 and 35 are in the same position while their evidence lasts.
 
+**Update 2026-11-17.** The rebuild now also hands the saved speaker events (`skribby_segment_evidence.events`) and the
+`NAME_BY_MEET_TIMELINE` switch to the same naming functions, so a tag the earlier rules left unnamed can be named from Meet's
+own speaking indicator (`how: meet_timeline`); the dry run prints `timeline: <reason>` after a tag that stayed unknown. The
+exact steps for meeting 39 are in `docs/sop/2026-11-17-name-by-meet-timeline.md`. Without saved events the rebuild is what
+it was.
+
 ## Deadlines (the evidence is deleted 7 days after it was saved)
 
 | Meeting | Evidence kept until (about) | Order |
