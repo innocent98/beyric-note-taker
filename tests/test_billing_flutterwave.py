@@ -292,7 +292,7 @@ def test_the_verify_sample_is_read_into_the_neutral_transaction():
     [("NIGERIA NG", "NG"), ("NG", "NG"), ("UNITED STATES US", "US"), ("NIGERIA", None), ("", None)],
 )
 def test_the_card_country_is_the_trailing_two_letters(raw, code):
-    card = json.dumps({"country": raw, "token": "flw-t1-made-up-token"})
+    card = json.dumps({"country": raw, "token": "tok_made_up_token_2"})
     tx = flutterwave._transaction_from(flutterwave._loads(verify_text(card=card))["data"])
     assert tx.card_country == code
 
