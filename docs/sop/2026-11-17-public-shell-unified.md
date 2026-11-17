@@ -1,6 +1,6 @@
 # SOP: one public header and one public footer
 
-**What shipped.** Every public page (the landing page at `/` and `/welcome`, `/pricing`, `/privacy`, `/terms`, the 404 page) now wears the same header and the same footer, built once. `/pricing` no longer says hours are shared by the whole team. Branch `feature/public-shell-unified`; PR number is on the branch's PR.
+**What shipped.** Every public page (the landing page at `/` and `/welcome`, `/pricing`, `/privacy`, `/terms`, the 404 page) now wears the same header and the same footer, built once. `/pricing` no longer says hours are shared by the whole team. Branch `feature/public-shell-unified`; PR #224.
 
 ## Why
 
