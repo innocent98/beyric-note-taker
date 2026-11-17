@@ -92,6 +92,13 @@ export type BillingProfile = {
   pending_effective_at: string | null;
   route: BillingRoute | null;
   country_change_allowed_at: string | null;
+  // True once the person has paid or has a live plan: from then the country changes only under the 30-day
+  // rule. False before: it changes instantly, any number of times.
+  country_locked: boolean;
+  // Only while no country is saved: the country the saved time zone points to and what it pays with, to show
+  // and ask the person to confirm. A read never saves it. Both null when there is nothing to suggest.
+  suggested_country: string | null;
+  suggested_route: BillingRoute | null;
 };
 
 export type CountryResult = { result: "applied" | "scheduled" | "unchanged"; profile: BillingProfile };
