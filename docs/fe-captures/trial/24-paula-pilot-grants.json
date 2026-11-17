@@ -1,0 +1,13 @@
+{
+  "note": "The pilot grant after the scheduler's job ran: it has the end (the start of the day after the last usable day, UTC).",
+  "content": {
+    "grants": [
+      {
+        "kind": "pilot",
+        "seconds": 7200,
+        "starts_at": "2026-08-29T16:08:38.701587+00:00",
+        "expires_at": "2026-11-28T00:00:00+00:00"
+      }
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+
+$ scripts/trial_report.py   # what the sweep would do
+(exit 0)
+Trial and pilot expiry report, 2026-11-17 16:07 UTC
+
+HOURS_MODE is shadow (NOT enforcing); FEATURE_GATES_MODE is off. The trial does not depend on them; the pilot expiry acts only under HOURS_MODE=enforce.
+
+TRIAL
+A trial is 3 h for 14 days, given once per person.
+Confirmed accounts that hold no trial or pilot grant: 1.
+No daily budget (TRIAL_DAILY_BUDGET_SECONDS=0): all of them at once.
+Hours that would be given at once: 3.
+Trials in force: 0.
+
+PILOT EXPIRY
+PAID_PLANS_OPEN_ON is unset: no pilot hours expire and no mail goes.
+
+$ scripts/hours_reconcile_backlog.py   # reconcile, dry run
+(exit 0)
+Would do (nothing was kept): cap raises gifted, and usage counted before allocations existed settled:
+user 1: gift 0.00 h; settled 2.00 h; left 1.00 h before settling, 1.00 h after
+
+$ scripts/hours_reconcile_backlog.py --apply   # reconcile, keep it
+(exit 0)
+Done: cap raises gifted, and usage counted before allocations existed settled:
+user 1: gift 0.00 h; settled 2.00 h; left 1.00 h before settling, 1.00 h after
+
+$ scripts/hours_shadow_report.py   # shadow report
+(exit 0)
+Hours under the old and the new rule; window: last 30 days to 2026-11-17 16:08 UTC
+Admins are left out (no limit under either rule). People are ranked by hours recorded.
+
+user 1: recorded 2.00 h | old: 3.00 h left, allow | new: trial, 1.00 h left, allow | same
+user 2: recorded 0.00 h | old: 5.00 h left, allow | new: trial, 3.00 h left, allow | same
+
+2 account(s); 0 disagreement(s).
+The two rules agree for everyone.
+
+$ scripts/trial_report.py   # what the pilot job would do
+(exit 0)
+Trial and pilot expiry report, 2026-11-17 16:08 UTC
+
+HOURS_MODE is enforce (enforcing); FEATURE_GATES_MODE is off. The trial does not depend on them; the pilot expiry acts only under HOURS_MODE=enforce.
+
+TRIAL
+A trial is 3 h for 14 days, given once per person.
+Confirmed accounts that hold no trial or pilot grant: 0.
+No daily budget (TRIAL_DAILY_BUDGET_SECONDS=0): all of them at once.
+Hours that would be given at once: 0.
+Trials in force: 2, the first ends 2026-12-01 16:07 UTC.
+
+PILOT EXPIRY
+Paid plans open 2026-09-28; pilot hours can be used until the end of 2026-11-27 (UTC).
+The one mail goes 14 days before: from 2026-11-14 UTC; nobody's hours end sooner than 7 days after their mail.
+People holding pilot grants in force: 2; with hours left (they would be mailed): 2.

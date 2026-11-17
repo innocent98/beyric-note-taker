@@ -180,6 +180,7 @@ def verify_email(
         _now(),
         _limits(request).verify_wrong,
         _limits(request).signup_origin,
+        settings=request.app.state.settings,
     )
     return Verified(status="verified")
 
@@ -308,6 +309,7 @@ def _finish_google(request, session, google, flow, code, error, cookie, now) -> 
         accepted_terms=google_signin.cookie_accepted_terms(cookie),
         accepted_recording=google_signin.cookie_accepted_recording(cookie),
         now=now,
+        settings=request.app.state.settings,
     )
     if outcome.user is not None:
         services.start_session(request, session, outcome.user)

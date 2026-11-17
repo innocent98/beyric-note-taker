@@ -3,7 +3,7 @@ import uuid
 from datetime import date
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # `TRANSCRIPT_SOURCE=skribby` is allowed only with a Skribby model on this list: the notes then
@@ -99,6 +99,46 @@ class Settings(BaseSettings):
         if name not in ("off", "shadow", "enforce"):
             raise ValueError(f"HOURS_MODE is {value!r}; it must be off, shadow or enforce")
         return name
+
+    @field_validator(
+        "trial_seconds",
+        "trial_days",
+        "trial_daily_budget_seconds",
+        "paid_plans_open_on",
+        "pilot_expiry_days",
+        "pilot_expiry_notice_days",
+        "pilot_expiry_min_notice_days",
+        mode="before",
+    )
+    @classmethod
+    def _blank_trial_setting_is_unset(cls, value, info: ValidationInfo):
+        """An empty `TRIAL_SECONDS=` (or any of the S10 lines) means "not set": the default."""
+        if isinstance(value, str) and not value.strip():
+            return cls.model_fields[info.field_name].default
+        return value
+
+    @model_validator(mode="after")
+    def _trial_settings_make_sense(self):
+        """A budget under one trial would stop every trial without saying why, so it stops the
+        process at startup instead."""
+        if not (
+            self.pilot_expiry_min_notice_days
+            <= self.pilot_expiry_notice_days
+            < self.pilot_expiry_days
+        ):
+            # Above the days of the expiry the mail would say "Paid plans opened on" a future
+            # date; under the minimum the window would close before the minimum notice is given.
+            raise ValueError(
+                "PILOT_EXPIRY_NOTICE_DAYS must be at least PILOT_EXPIRY_MIN_NOTICE_DAYS and "
+                "smaller than PILOT_EXPIRY_DAYS"
+            )
+        budget = self.trial_daily_budget_seconds
+        if budget and self.trial_seconds and budget < self.trial_seconds:
+            raise ValueError(
+                "TRIAL_DAILY_BUDGET_SECONDS is smaller than TRIAL_SECONDS: no trial could ever "
+                "be given. Raise it, or set it to 0 for no daily cap"
+            )
+        return self
 
     @field_validator("feature_gates_mode", mode="before")
     @classmethod
@@ -482,6 +522,26 @@ class Settings(BaseSettings):
     # calendar event's length instead, when known). A first meeting is not affected. 0 turns the
     # reserve off. See `app/entitlements.py` (`check_join`).
     hours_reserve_minutes: int = Field(default=30, ge=0, le=360)
+    # The one-time trial (billing stage S10, spec 3.8). `TRIAL_SECONDS` is the size of the trial
+    # grant: 0 (default) turns the trial off, 10800 is 3 hours. A person gets it once, at the first
+    # confirmed sign-in, and it ends at the hours used or `TRIAL_DAYS` days after it is given,
+    # whichever comes first, in any `HOURS_MODE` (`app/trial.py`). `TRIAL_DAILY_BUDGET_
+    # SECONDS` caps the trial seconds given in any 24 hours (0 = no cap): the brake on how many
+    # trials start while sign-up is open; people past it wait and get theirs when the window frees.
+    trial_seconds: int = Field(default=0, ge=0, le=100 * 3600)
+    trial_days: int = Field(default=14, ge=1, le=365)
+    trial_daily_budget_seconds: int = Field(default=0, ge=0)
+    # The pilot grants' end (spec 3.9). Unset (default): nothing expires. Set to the date paid plans
+    # open (`PAID_PLANS_OPEN_ON=2027-02-01`): every pilot grant ends `PILOT_EXPIRY_DAYS` days after
+    # it (60, decided 2026-11-16) at the end of that day, UTC, and each person with pilot hours left
+    # gets one mail `PILOT_EXPIRY_NOTICE_DAYS` days before (`app/pilot_expiry.py`).
+    paid_plans_open_on: date | None = None
+    pilot_expiry_days: int = Field(default=60, ge=1, le=3650)
+    pilot_expiry_notice_days: int = Field(default=14, ge=1, le=60)
+    # The least notice a person gets: their pilot hours never end sooner than this after the mail
+    # (a week: the mail must be read by someone who checks their inbox about once a week, with time
+    # left to take a plan). If the job first acts closer to the end, that person's end moves out.
+    pilot_expiry_min_notice_days: int = Field(default=7, ge=1, le=60)
     # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
     # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
     # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under

@@ -1,0 +1,35 @@
+{
+  "note": "The one bell entry, kind `pilot.expiry`.",
+  "client": "paula",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notifications": [
+        {
+          "id": 3,
+          "kind": "pilot.expiry",
+          "severity": "info",
+          "title": "Your pilot hours will expire",
+          "body": "Paid plans opened on 28 September 2026. The recorded hours you still have from the pilot (2 h) can be used until the end of 27 November 2026 (UTC), and then they expire. After that the note taker will not join new meetings until you take a plan. You can still read, search and export your notes and transcripts, which we keep until you ask us to delete them or close your account. If you do not need more hours, you do not need to do anything.",
+          "meeting_id": null,
+          "created_at": "2026-11-17T16:08:57.073014Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

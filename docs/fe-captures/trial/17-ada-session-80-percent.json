@@ -1,0 +1,48 @@
+{
+  "note": "2.4 of the 3 hours used: exactly 80%, `warning` `low`, 0.6 hour left.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-H>",
+      "user": {
+        "email": "ada@example.test",
+        "name": "Ada Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": true
+      },
+      "usage": {
+        "used_seconds": 8640,
+        "cap_seconds": 10800,
+        "state": "trial",
+        "seconds_left": 2160,
+        "warning": "low",
+        "can_record": true,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": "2026-12-01T16:07:49.640644Z"
+      },
+      "unread_notifications": 1,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

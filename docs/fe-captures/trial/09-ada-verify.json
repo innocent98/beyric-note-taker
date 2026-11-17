@@ -1,0 +1,26 @@
+{
+  "note": "Confirming the email. With `TRIAL_SECONDS` set this is what gives the trial; the response is the same `{\"status\": \"verified\"}` as before the trial existed.",
+  "client": "visitor ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/verify-email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token-2>",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "verified"
+    }
+  }
+}

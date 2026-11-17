@@ -1,0 +1,29 @@
+{
+  "note": "202: the confirmation link is mailed (the scheduler's console mailer prints it).",
+  "client": "visitor gap",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Gap Example",
+      "email": "gap@example.test",
+      "password": "<password>",
+      "accept_terms": true,
+      "accept_recording": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

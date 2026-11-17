@@ -36,7 +36,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from app import accounts, google_oauth, signup, team_invites, tokens
+from app import accounts, google_oauth, signup, team_invites, tokens, trial
 from app.config import Settings
 from app.google_oauth import Identity
 from app.models import AuthToken, OAuthFlow, User, WaitlistEntry
@@ -148,13 +148,14 @@ def complete(
     accepted_terms: bool,
     accepted_recording: bool = False,
     now: datetime,
+    settings: Settings | None = None,
 ) -> Outcome:
     """Find or create the account for a Google identity (see the module docstring). Commits."""
     address = signup.normalise_email(identity.email)
     if address is None:
         return Outcome(error="email_unsupported")
     session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": signup.SIGNUP_LOCK})
-    outcome = _match(session, identity, address, accepted_terms, accepted_recording, now)
+    outcome = _match(session, identity, address, accepted_terms, accepted_recording, now, settings)
     if outcome.user is not None:
         session.commit()
     else:
@@ -169,6 +170,7 @@ def _match(
     accepted_terms: bool,
     accepted_recording: bool,
     now: datetime,
+    settings: Settings | None = None,
 ) -> Outcome:
     user = session.scalars(select(User).where(User.google_sub == identity.sub)).first()
     if user is not None:
@@ -177,8 +179,8 @@ def _match(
         select(User).where(User.email == address).with_for_update(of=User)
     ).first()
     if user is not None:
-        return _link_by_email(session, user, identity, now)
-    return _create(session, identity, address, accepted_terms, accepted_recording, now)
+        return _link_by_email(session, user, identity, now, settings)
+    return _create(session, identity, address, accepted_terms, accepted_recording, now, settings)
 
 
 def _refusal(user: User) -> Outcome | None:
@@ -199,7 +201,13 @@ def _sign_in_by_sub(session: Session, user: User, address: str) -> Outcome:
     return Outcome(user=user)
 
 
-def _link_by_email(session: Session, user: User, identity: Identity, now: datetime) -> Outcome:
+def _link_by_email(
+    session: Session,
+    user: User,
+    identity: Identity,
+    now: datetime,
+    settings: Settings | None = None,
+) -> Outcome:
     if refused := _refusal(user):
         return refused
     if user.google_sub is not None:  # linked to another Google account (ours was not found by sub)
@@ -214,6 +222,7 @@ def _link_by_email(session: Session, user: User, identity: Identity, now: dateti
         user.password_hash = None
         tokens.revoke(session, "verify_email", user.id, now)
         team_invites.accept_confirmed(session, user, now)  # Google proved the address
+        trial.give_on_confirmation(session, user, now, settings)  # off unless TRIAL_SECONDS is set
     return Outcome(user=user)
 
 
@@ -224,6 +233,7 @@ def _create(
     accepted_terms: bool,
     accepted_recording: bool,
     now: datetime,
+    settings: Settings | None = None,
 ) -> Outcome:
     invite = tokens.live_invite_for(session, address, now)
     team_invited = team_invites.live_for_email(session, address, now) is not None
@@ -258,6 +268,7 @@ def _create(
         )
     if team_invited:
         team_invites.accept_confirmed(session, user, now)  # Google proved the address
+    trial.give_on_confirmation(session, user, now, settings)  # off unless TRIAL_SECONDS is set
     return Outcome(user=user)
 
 

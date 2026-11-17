@@ -1,0 +1,48 @@
+{
+  "note": "The account the sweep gave a trial to: 3 hours, `trial`.",
+  "client": "gap",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-J>",
+      "user": {
+        "email": "gap@example.test",
+        "name": "Gap Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 10800,
+        "state": "trial",
+        "seconds_left": 10800,
+        "warning": null,
+        "can_record": true,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": "2026-12-01T16:07:47.171785Z"
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

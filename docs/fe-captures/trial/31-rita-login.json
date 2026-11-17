@@ -1,0 +1,56 @@
+{
+  "note": "",
+  "client": "rita",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-M>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "rita@example.test",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": [
+        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax",
+        "device=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
+      ]
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-N>",
+      "user": {
+        "email": "rita@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 0,
+        "state": "none",
+        "seconds_left": 0,
+        "warning": null,
+        "can_record": false,
+        "unlimited": false,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 1,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

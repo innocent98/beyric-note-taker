@@ -1,0 +1,77 @@
+Every mail the real scheduler's console mailer printed during the run (links' tokens masked):
+
+--- mail to gap@example.test: Confirm your email for Beyric Note Taker
+Confirm your email address
+
+Hi Gap Example, confirm this is your email to finish setting up your Beyric Note Taker account.
+
+Confirm email:
+http://127.0.0.1:8000/verify-email?token=<token>
+
+This link expires in 24 hours. If you did not create an account, you can ignore this email.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to ada@example.test: Confirm your email for Beyric Note Taker
+Confirm your email address
+
+Hi Ada Example, confirm this is your email to finish setting up your Beyric Note Taker account.
+
+Confirm email:
+http://127.0.0.1:8000/verify-email?token=<token>
+
+This link expires in 24 hours. If you did not create an account, you can ignore this email.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to ada@example.test: Most of your recorded hours are used
+Most of your recorded hours are used
+
+You have used 2.4 of your 3 recorded hours. When they run out the note taker will not join new meetings.
+
+This is an automatic message from Beyric Note Taker.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to ada@example.test: You are out of recorded hours
+You are out of recorded hours
+
+You have used all of your recorded hours, so the note taker will not join new meetings. A meeting that is recording now will finish. Your notes, transcripts and exports stay as they are.
+
+This is an automatic message from Beyric Note Taker.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to paula@example.test: Your pilot hours will expire
+Your pilot hours will expire
+
+Paid plans opened on 28 September 2026. The recorded hours you still have from the pilot (2 h) can be used until the end of 27 November 2026 (UTC), and then they expire. After that the note taker will not join new meetings until you take a plan. You can still read, search and export your notes and transcripts, which we keep until you ask us to delete them or close your account. If you do not need more hours, you do not need to do anything.
+
+This is an automatic message from Beyric Note Taker.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to quinn@example.test: Your pilot hours will expire
+Your pilot hours will expire
+
+Paid plans opened on 28 September 2026. The recorded hours you still have from the pilot (2 h) can be used until the end of 27 November 2026 (UTC), and then they expire. After that the note taker will not join new meetings until you take a plan. You can still read, search and export your notes and transcripts, which we keep until you ask us to delete them or close your account. If you do not need more hours, you do not need to do anything.
+
+This is an automatic message from Beyric Note Taker.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---
+
+--- mail to rita@example.test: Your pilot hours will expire
+Your pilot hours will expire
+
+Paid plans opened on 16 September 2026. The recorded hours you still have from the pilot (2 h) can be used until the end of 15 November 2026 (UTC), and then they expire. After that the note taker will not join new meetings until you take a plan. You can still read, search and export your notes and transcripts, which we keep until you ask us to delete them or close your account. If you do not need more hours, you do not need to do anything.
+
+This is an automatic message from Beyric Note Taker.
+
+Beyric Note Taker, a product of Beyrichq LTD
+---

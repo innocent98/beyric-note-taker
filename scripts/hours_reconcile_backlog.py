@@ -63,7 +63,7 @@ def reconcile(session: Session, now: datetime, max_poll_seconds: int) -> list[Ro
     something happened to. Writes nothing but grants and allocations; the caller commits or rolls
     back."""
     pilots = select(HourGrant.user_id).where(
-        HourGrant.kind == "pilot", HourGrant.user_id.is_not(None)
+        HourGrant.kind.in_(entitlements.BACKLOG_KINDS), HourGrant.user_id.is_not(None)
     )
     overridden = select(User.id).where(User.hours_cap_seconds.is_not(None))
     done = []
