@@ -708,7 +708,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
     for method, path in api_routes(app):
-        names = [n for n in re.findall(r"\{(\w+)\}", path) if n != "provider"]  # a name, not an id
+        # `provider` is a name, not an id; `reference` is a payment's own random reference, which
+        # the billing route answers 404 for anyone but its payer (test_billing_subscriptions_api)
+        names = [n for n in re.findall(r"\{(\w+)\}", path) if n not in ("provider", "reference")]
         if not names or path.startswith("/api/admin/"):
             continue  # admin routes answer 403 to any non-admin: tests/test_admin.py
         assert set(names) <= set(ids), f"classify the id in {method} {path} and scope it"

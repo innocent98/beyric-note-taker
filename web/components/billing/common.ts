@@ -20,6 +20,7 @@ const SHOWABLE = new Set([
   "nothing_due",
   "not_canceled",
   "payment_overdue",
+  "payment_in_progress",
   "no_subscription",
   "not_an_upgrade",
   "period_over",

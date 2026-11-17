@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(m
 
 const pending = cap<Record<string, unknown>>("18-payment-pending.json");
 const paid = cap<Record<string, unknown>>("25-payment-paid.json");
-const REF = "bn-1-8e578942a951e7e4";
+const REF = pending.reference as string;
 
 async function settle(ms = 0) {
   await act(async () => {

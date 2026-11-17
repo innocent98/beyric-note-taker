@@ -3,7 +3,7 @@
   "client": "ada billing-on",
   "request": {
     "method": "GET",
-    "path": "/api/billing/payments/bn-1-8e578942a951e7e4",
+    "path": "/api/billing/payments/bn-1-401d29c8bdee865f",
     "headers": {
       "Cookie": "device=<cookie>; session=<cookie>"
     },
@@ -16,13 +16,13 @@
       "cache-control": "no-store"
     },
     "body": {
-      "reference": "bn-1-8e578942a951e7e4",
+      "reference": "bn-1-401d29c8bdee865f",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T15:37:38.720374Z",
-      "paid_at": "2026-11-17T15:37:38.784707Z",
+      "created_at": "2026-11-17T16:27:28.526857Z",
+      "paid_at": "2026-11-17T16:27:28.762167Z",
       "pay_url": null
     }
   }

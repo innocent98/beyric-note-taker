@@ -975,6 +975,8 @@ class Payment(Base):
     cycle_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempt: Mapped[int | None] = mapped_column(Integer)
     pay_url: Mapped[str | None] = mapped_column(Text)
+    # When the sweeper last asked the provider about this pending payment (its back-off clock).
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

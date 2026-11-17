@@ -11,9 +11,9 @@
       "  [note] the Paystack webhook secret is set: without it the older signature header is used",
       "  [note] the Flutterwave secret key is set: dollars cannot be bought without it",
       "  [ok] migration 0052 is applied",
-      "  [ok] an active plan has a price: USD",
+      "  [ok] an active plan has a price: NGN, USD",
       "  [ok] a price in USD",
-      "  [note] a price in NGN: people billed there get price_not_available",
+      "  [ok] a price in NGN",
       "  [note] the billing clock runs in the scheduler process: recreate it after the change"
     ]
   }

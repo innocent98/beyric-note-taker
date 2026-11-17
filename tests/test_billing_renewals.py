@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app import entitlements, hours
 from app.billing import plans, renewals, settle
 from app.billing import subscriptions as subs
+from app.billing.payments import new_payment
 from app.billing.types import ProviderError, RetryLater
 from app.models import (
     BillingEvent,
@@ -403,12 +404,95 @@ def test_a_3d_secure_charge_gets_its_own_link_and_never_a_second_checkout(
     ).one().provider_tx_id == ("real-3ds-1")
 
 
-def test_a_pay_link_older_than_a_day_is_not_reused(session, ada, providers, bought):
+def test_an_open_3d_secure_charge_keeps_its_own_link_however_old_it_is(
+    session, ada, providers, bought
+):
     due = bought
     providers.usd.charge_outcome = "pending"
     tick(session, due + timedelta(seconds=7))
-    fresh = renewals.pay_link(session, ada, settings(), due + timedelta(days=2, hours=1))
-    assert fresh.payment.attempt is None and fresh.url != providers.usd.payer_action_url
+    checkouts = len(providers.usd.checkouts)
+
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(days=2, hours=1))
+
+    assert started.url == providers.usd.payer_action_url  # the charge's own page, two days on
+    assert len(providers.usd.checkouts) == checkouts  # and the provider was ASKED, no new page
+    assert providers.usd.lookups  # it is still open there
+
+
+def test_a_new_page_only_after_the_provider_says_the_open_charge_failed(
+    session, ada, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "pending"
+    tick(session, due + timedelta(seconds=7))
+    [charge] = renewal_payments(session)
+    providers.usd.complete(charge, status="failed", tx_id=charge.reference)  # abandoned at the bank
+
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(days=2))
+
+    assert started.url != providers.usd.payer_action_url
+    assert started.payment.attempt is None and started.payment.id != charge.id
+    assert renewal_payments(session)[0].status == "failed"  # the old charge is closed
+
+
+def test_the_pay_link_refuses_rather_than_guess_when_the_open_charge_cannot_be_checked(
+    session, ada, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "pending"
+    tick(session, due + timedelta(seconds=7))
+    checkouts = len(providers.usd.checkouts)
+    providers.usd.fetch_error = ProviderError("down")
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(days=2))
+
+    assert (refused.value.status, refused.value.code) == (502, "provider_error")
+    assert len(providers.usd.checkouts) == checkouts  # nothing new was made
+
+
+def test_the_pay_link_settles_a_charge_the_provider_says_was_paid(session, ada, providers, bought):
+    due = bought
+    providers.usd.charge_outcome = "pending"
+    tick(session, due + timedelta(seconds=7))
+    [charge] = renewal_payments(session)
+    providers.usd.complete(charge, tx_id="real-paid-1")  # the payer finished it after all
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(hours=5))
+
+    assert refused.value.code == "nothing_due"
+    assert live(session, ada).status == "active"  # renewed, from the payment
+
+
+def test_a_charge_in_flight_with_no_link_is_not_given_a_second_page(
+    session, ada, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "failed"
+    tick(session, due + timedelta(seconds=7))  # past_due
+    providers.usd.charge_outcome = "queued"
+    tick(session, due + DAY)  # the day-1 charge is accepted and queued: no verdict, no link
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + DAY + timedelta(hours=1))
+
+    assert (refused.value.status, refused.value.code) == (409, "payment_in_progress")
+
+
+def test_a_queued_charge_is_not_a_failure_and_opens_no_grace(session, ada, providers, bought):
+    due = bought
+    providers.usd.charge_outcome = "queued"
+
+    tick(session, due + timedelta(seconds=7))
+
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("active", 0)  # nothing decided
+    assert notices(session, ada, "billing.failed") == []
+    assert renewal_payments(session)[0].status == "pending"
+    providers.usd.complete(renewal_payments(session)[0])  # it went through
+    tick(session, due + timedelta(minutes=2))
+    assert live(session, ada).current_period_start == due  # renewed on time
 
 
 def test_a_late_payment_for_a_period_that_already_renewed_grants_nothing(
@@ -551,7 +635,10 @@ def test_a_subscription_another_worker_is_holding_is_skipped(
     assert providers.usd.charges == [] and renewal_payments(session) == []
 
 
-def test_an_attempt_slot_that_is_taken_is_never_charged_twice(session, ada, providers, bought):
+@pytest.mark.parametrize("held", ["pending", "failed"])
+def test_an_attempt_slot_that_is_taken_is_never_charged_twice(
+    session, ada, providers, bought, held
+):
     due = bought
     sub = live(session, ada)
     session.add(
@@ -565,7 +652,7 @@ def test_an_attempt_slot_that_is_taken_is_never_charged_twice(session, ada, prov
             reference="bn-taken-slot",
             cycle_end=due,
             attempt=0,
-            status="failed",
+            status=held,
         )
     )
     session.commit()
@@ -573,6 +660,13 @@ def test_an_attempt_slot_that_is_taken_is_never_charged_twice(session, ada, prov
     renewals.process_one(session, sub.id, due + timedelta(seconds=7), settings())
 
     assert providers.usd.charges == []  # the unique slot held it back
+    session.expire_all()
+    after = live(session, ada)
+    if held == "failed":
+        # a pass recorded the attempt as failed and died before the status moved: finished now
+        assert (after.status, after.retry_count) == ("past_due", 1)
+    else:
+        assert (after.status, after.retry_count) == ("active", 0)  # another worker owns it
 
 
 def test_three_workers_racing_for_one_renewal_charge_once_and_renew_once(
@@ -613,9 +707,21 @@ def test_two_renewal_payments_settled_at_once_grant_one_period(
     fail_all(providers)
     tick(session, due + timedelta(seconds=7))
     one = renewals.pay_link(session, ada, settings(), due + timedelta(hours=1))
-    session.query(Payment).filter(Payment.id == one.payment.id).update({"pay_url": None})
+    # a second page for the same period (two tabs, or a link made before the fix): the pay link
+    # itself no longer makes one, so the row is made directly
+    sub = live(session, ada)
+    second_row = new_payment(
+        session,
+        payer=ada,
+        provider="flutterwave",
+        kind="renewal",
+        currency="USD",
+        amount_minor=1800,
+        subscription_id=sub.id,
+    )
+    second_row.plan_price_id, second_row.cycle_end = sub.price_id, sub.current_period_end
     session.commit()
-    second = renewals.pay_link(session, ada, settings(), due + timedelta(hours=2))
+    second = subs.Started(second_row, "https://fake.test/pay/second")
     txs = [
         providers.usd.complete(one.payment, tx_id="race-1"),
         providers.usd.complete(second.payment, tx_id="race-2"),
@@ -884,3 +990,116 @@ def test_the_scheduler_runs_the_billing_clock_only_while_billing_is_on(engine, m
     [clock] = [j for j in on._jobs["sync"] if j.name == "billing_clock"]
     assert clock.every == td(seconds=60)
     assert on._jobs["dispatch"] == []  # never on the dispatch loop
+
+
+def test_abandoned_checkouts_cannot_starve_a_payment_that_was_just_paid(session, ada, providers):
+    """60 abandoned checkouts are older than the payment whose webhook was lost; the sweep takes
+    the ones asked about least recently first and backs off the abandoned, so the paid one is
+    settled in the first pass, and the abandoned are not asked about again a minute later."""
+    from app.billing.payments import new_payment
+
+    choose_country(session, ada, "US")
+    for i in range(60):
+        row = new_payment(
+            session,
+            payer=ada,
+            provider="flutterwave",
+            kind="pack",
+            currency="USD",
+            amount_minor=1000,
+        )
+        row.created_at = T0 - timedelta(minutes=30) + timedelta(seconds=i)
+    session.commit()
+    paid = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+    providers.usd.complete(paid.payment, card_token="tok-lost")
+
+    now = T0 + timedelta(minutes=3)
+    renewals.sweep(session, now, settings())
+
+    assert live(session, ada) is not None  # settled in the very first pass
+    assert len(providers.usd.lookups) <= renewals.BATCH + 1
+    # the next pass takes the ones never asked about; each payment has been asked about once
+    renewals.sweep(session, now + timedelta(seconds=30), settings())
+    assert len(providers.usd.lookups) == 61
+    renewals.sweep(session, now + timedelta(seconds=60), settings())  # inside every back-off
+    assert len(providers.usd.lookups) == 61  # nobody was asked about again too soon
+    renewals.sweep(session, now + timedelta(minutes=45), settings())  # the 30-minute tier is due
+    assert len(providers.usd.lookups) > 61
+
+
+# ---- delta review: the pay link must never strand a person in the grace -------------------------
+
+
+def test_an_unpaid_pay_link_page_is_returned_again_however_old_it_is(
+    session, ada, providers, bought
+):
+    """The provider has no record of a checkout nobody paid. A day later the person presses Pay now
+    again: the same page, never a 502 for the rest of the grace (it cannot double-charge)."""
+    due = bought
+    fail_all(providers)
+    tick(session, due + timedelta(seconds=7))
+    first = renewals.pay_link(session, ada, settings(), due + timedelta(hours=1))
+    checkouts = len(providers.usd.checkouts)
+
+    for later in (timedelta(days=1, hours=2), timedelta(days=2, hours=1)):
+        again = renewals.pay_link(session, ada, settings(), due + later)
+        assert again.url == first.url and again.payment.id == first.payment.id
+    assert len(providers.usd.checkouts) == checkouts  # and no second page was made
+
+
+def test_a_half_made_pay_link_row_with_no_page_is_abandoned_not_a_block(
+    session, ada, providers, bought
+):
+    due = bought
+    fail_all(providers)
+    tick(session, due + timedelta(seconds=7))
+    sub = live(session, ada)
+    orphan = new_payment(
+        session,
+        payer=ada,
+        provider="flutterwave",
+        kind="renewal",
+        currency="USD",
+        amount_minor=1800,
+        subscription_id=sub.id,
+    )
+    orphan.plan_price_id, orphan.cycle_end = sub.price_id, sub.current_period_end
+    orphan.created_at = due + timedelta(hours=1)  # the process died before the page was stored
+    session.commit()
+
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=2))
+
+    assert started.payment.id != orphan.id and started.url.startswith("https://fake.test/pay/")
+    session.expire_all()
+    assert session.get(Payment, orphan.id).status == "failed"
+
+
+def test_a_queued_charge_that_stays_pending_alerts_an_admin_after_six_hours(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "queued"
+    tick(session, due + timedelta(seconds=7))
+    assert notices(session, admin, "admin.billing_unresolved_charge") == []
+
+    tick(session, due + timedelta(hours=7))  # still pending at the provider, nothing for the payer
+
+    assert notices(session, admin, "admin.billing_unresolved_charge")
+
+
+def test_a_payment_the_rules_refuse_is_not_reported_as_received(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "pending"
+    tick(session, due + timedelta(seconds=7))
+    [charge] = renewal_payments(session)
+    providers.usd.complete(charge, tx_id="short-1", amount_minor=charge.amount_minor - 1)
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(hours=3))
+
+    assert (refused.value.status, refused.value.code) == (409, "payment_in_progress")
+    assert "received" not in refused.value.message
+    assert notices(session, admin, "admin.billing_payment_refused")
+    assert live(session, ada).status == "past_due"  # nothing was granted

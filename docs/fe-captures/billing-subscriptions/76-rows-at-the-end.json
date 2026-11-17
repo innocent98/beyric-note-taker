@@ -10,6 +10,15 @@
         "cancel_at_period_end": false,
         "pending_plan_code": null,
         "retry_count": 1
+      },
+      {
+        "plan": "plan_20h",
+        "status": "active",
+        "currency": "NGN",
+        "provider": "paystack",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "retry_count": 0
       }
     ],
     "hour_grants": [
@@ -32,6 +41,16 @@
         "kind": "plan_period",
         "seconds": 144000,
         "source_payment_id": 5
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 72000,
+        "source_payment_id": 8
+      },
+      {
+        "kind": "pack",
+        "seconds": 36000,
+        "source_payment_id": 9
       }
     ],
     "payments": [
@@ -83,6 +102,20 @@
         "attempt": 0,
         "amount_minor": 3400,
         "currency": "USD"
+      },
+      {
+        "kind": "plan",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 2500000,
+        "currency": "NGN"
+      },
+      {
+        "kind": "pack",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1500000,
+        "currency": "NGN"
       }
     ]
   }

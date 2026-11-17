@@ -3,7 +3,7 @@
   "client": "ben billing-on",
   "request": {
     "method": "GET",
-    "path": "/api/billing/payments/bn-1-8e578942a951e7e4",
+    "path": "/api/billing/payments/bn-1-401d29c8bdee865f",
     "headers": {
       "Cookie": "device=<cookie>; session=<cookie>"
     },

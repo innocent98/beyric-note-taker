@@ -293,9 +293,8 @@ def test_a_second_plan_payment_for_a_person_with_a_plan_grants_nothing_and_tells
 ):
     choose_country(session, ada, "US")
     first = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
-    second = subs.start_plan_checkout(
-        session, ada, "p20", settings(), T0
-    )  # two tabs, two checkouts
+    # a second checkout much later (the first page was left open): two payments, both paid
+    second = subs.start_plan_checkout(session, ada, "p20", settings(), T0 + timedelta(days=2))
     pay(session, providers.usd, first.payment, T0, card_token="t1")
     pay(session, providers.usd, second.payment, T0 + timedelta(minutes=1), card_token="t2")
 
@@ -772,3 +771,90 @@ def test_buttons_follow_the_clock_when_the_scheduler_has_not_run(session, ada, p
     with pytest.raises(subs.Refused) as resume:
         subs.resume(session, ada, in_grace)
     assert resume.value.code == "no_subscription"
+
+
+# ---- review fixes: money that lands where nothing can use it ---------------------------------
+
+
+def test_an_upgrade_paid_at_the_due_moment_changes_nothing_and_tells_the_admins(
+    session, ada, admin, providers
+):
+    """Paid 30 seconds after the period ended, with the scheduler not yet run (the row is still
+    stored `active`): the plan must not switch, no grant that expires before it starts may be
+    written, and a human is told. A late old-price renewal can then not flip the plan back."""
+    sub = buy_plan(session, ada, providers.usd)
+    change = subs.change_plan(
+        session, ada, "p40", settings(), sub.current_period_end - timedelta(days=1)
+    )
+    session.commit()
+    due = live(session, ada).current_period_end
+
+    pay(session, providers.usd, change.started.payment, due + timedelta(seconds=30))
+
+    sub = live(session, ada)
+    assert (sub.plan_code, sub.status) == ("p20", "active")
+    assert [g.seconds for g in grants(session, ada)] == [P20]  # no extra, expired or not
+    [alert] = notices(session, admin, "admin.billing_refund_needed")
+    assert str(change.started.payment.id) in alert.body
+
+
+def test_an_upgrade_paid_while_the_renewal_outcome_is_unknown_changes_nothing(
+    session, ada, admin, providers
+):
+    from app.billing import renewals
+
+    sub = buy_plan(session, ada, providers.usd)
+    change = subs.change_plan(
+        session, ada, "p40", settings(), sub.current_period_end - timedelta(days=1)
+    )
+    session.commit()
+    due = live(session, ada).current_period_end
+    providers.usd.charge_outcome = "error"  # the renewal charge got no answer
+    renewals.run_due(session, due + timedelta(seconds=7), settings())
+
+    pay(session, providers.usd, change.started.payment, due + timedelta(minutes=2))
+
+    assert live(session, ada).plan_code == "p20"
+    assert notices(session, admin, "admin.billing_refund_needed")
+    # and the renewal that was in flight settles at the OLD plan, not flipped by the upgrade
+    renewals.run_due(session, due + timedelta(minutes=3), settings())  # still unknown: waits
+    assert live(session, ada).plan_code == "p20"
+
+
+@pytest.mark.parametrize("kind", ["plan", "pack"])
+def test_a_checkout_paid_after_the_account_was_deleted_makes_nothing_for_a_ghost(
+    session, ada, admin, providers, kind
+):
+    if kind == "pack":
+        buy_plan(session, ada, providers.usd)
+        started = subs.start_pack_checkout(
+            session, ada, "pack10", settings(), T0 + timedelta(days=1)
+        )
+    else:
+        choose_country(session, ada, "US")
+        started = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+    before = len(grants(session, ada))
+    ada.status = "deleted"  # the account was deleted while the hosted page was open
+    session.commit()
+
+    pay(session, providers.usd, started.payment, T0 + timedelta(days=1, minutes=1))
+
+    session.expire_all()
+    assert len(grants(session, ada)) == before
+    assert session.scalar(select(func.count()).select_from(Subscription)) == (
+        1 if kind == "pack" else 0
+    )
+    assert notices(session, admin, "admin.billing_refund_needed")
+
+
+def test_asking_for_the_same_plan_twice_returns_the_first_page(session, ada, providers):
+    choose_country(session, ada, "US")
+    first = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+
+    again = subs.start_plan_checkout(session, ada, "p20", settings(), T0 + timedelta(hours=3))
+
+    assert again.payment.id == first.payment.id and again.url == first.url
+    assert len(providers.usd.checkouts) == 1 and len(payments(session)) == 1
+    # a day later the page is stale: a new checkout
+    later = subs.start_plan_checkout(session, ada, "p20", settings(), T0 + timedelta(days=2))
+    assert later.payment.id != first.payment.id

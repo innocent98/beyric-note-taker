@@ -83,7 +83,7 @@ API = f"http://127.0.0.1:{API_PORT}"
 PASSWORD = "-".join(["dev", "screens", "password"])  # a placeholder, scratch database only
 PEOPLE = [
     "new", "us", "ng", "active", "cancel", "downgrade", "pastdue", "threeds", "lapsed", "canceled",
-    "low", "out", "pending",
+    "low", "out", "pending", "ngactive",
 ]  # fmt: skip
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -209,7 +209,7 @@ def pack(session: Session, user: User) -> None:
 SCENARIOS = {
     "new": "no billing country, never had a plan",
     "us": "billing country US chosen, no plan",
-    "ng": "billing country NG chosen, no plan (no naira price unless /dev/ngn-prices?on=1)",
+    "ng": "billing country NG chosen, no plan (naira; /dev/ngn-prices?on=0 takes the prices away)",
     "active": "an active plan, 20 hours",
     "cancel": "an active plan with an extra-hours pack",
     "downgrade": "a 40-hour plan with a downgrade to 20 hours waiting for the renewal",
@@ -220,6 +220,7 @@ SCENARIOS = {
     "low": "an active plan, 90% of the hours used",
     "out": "an active plan, every hour used",
     "pending": "a plan checkout started and not finished",
+    "ngactive": "billed from Nigeria: an active plan in naira with an extra-hours pack",
 }
 
 
@@ -260,6 +261,9 @@ def scenario(name: str):
             "out",
         ):
             buy(session, user, "capture_40h" if name == "downgrade" else "plan_20h")
+        if name == "ngactive":
+            buy(session, user, "plan_20h", "NG")
+            pack(session, user)
         if name == "cancel":
             pack(session, user)
         if name == "downgrade":
@@ -283,23 +287,13 @@ def scenario(name: str):
 
 @router.get("/ngn-prices")
 def ngn_prices(on: int = 1):
-    """The naira list is an open fact, so it is NOT seeded: this adds (or removes) test rows."""
+    """The naira prices are seeded; this switches them off (a person billed from Nigeria then sees
+    every plan as not on sale) or back on. The dev-only second plan never had one."""
     with SessionLocal() as session:
-        if on:
-            for code, amount in (("plan_20h", 2_500_000), ("capture_40h", 4_800_000)):
-                exists = session.scalars(
-                    select(PlanPrice).where(
-                        PlanPrice.plan_code == code, PlanPrice.currency == "NGN"
-                    )
-                ).first()
-                if not exists:
-                    session.add(PlanPrice(plan_code=code, currency="NGN", amount_minor=amount))
-        else:
-            session.execute(
-                update(PlanPrice)
-                .where(PlanPrice.currency == "NGN")
-                .values(active_until=datetime.now(UTC))
-            )
+        value = None if on else datetime.now(UTC)
+        session.execute(
+            update(PlanPrice).where(PlanPrice.currency == "NGN").values(active_until=value)
+        )
         session.commit()
     return {"ngn_prices": bool(on)}
 

@@ -123,7 +123,7 @@ describe("changing plan", () => {
     expect(screen.getByText(/You are charged as soon as you confirm/)).toBeTruthy();
     expect(mocks.changePlan).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Confirm and pay $15.99" }));
-    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith("https://fake.test/pay/bn-3-600e0bbd3bce2f5c"));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(cap<{ checkout_url: string }>("42-change-upgrade.json").checkout_url));
   });
 
   it("says a downgrade charges nothing now and starts at the next renewal", async () => {
@@ -175,7 +175,7 @@ describe("a plan in its grace", () => {
     expect(screen.getByRole("button", { name: "Cancel plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Buy these hours" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Pay now" }));
-    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith("https://fake.test/pay/bn-5-3d7b934f67285800"));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(cap<{ checkout_url: string }>("52-pay-link.json").checkout_url));
   });
 
   it("sends a charge waiting for the bank to its own page, not to a second checkout", async () => {
@@ -211,7 +211,7 @@ describe("a plan that is over, and a person who never had one", () => {
     show(cap("19-subscription-pending.json"));
     render(<BillingView />);
     expect(await screen.findByText(/You have a payment that is not finished/)).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: "Continue to pay" })[0].getAttribute("href")).toBe("https://fake.test/pay/bn-1-8e578942a951e7e4");
+    expect(screen.getAllByRole("link", { name: "Continue to pay" })[0].getAttribute("href")).toBe(cap<{ checkout_url: string }>("17-checkout-plan.json").checkout_url);
   });
 });
 
@@ -237,7 +237,7 @@ describe("extra hours and the payments", () => {
     expect(await screen.findByText(/\$10\.00 once/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Buy these hours" }));
     await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith("pack", "pack_10h"));
-    expect(mocks.goTo).toHaveBeenCalledWith("https://fake.test/pay/bn-2-6ce6cfc67bd2c81e");
+    expect(mocks.goTo).toHaveBeenCalledWith(cap<{ checkout_url: string }>("33-checkout-pack.json").checkout_url);
   });
 
   it("lists payments with their words, and offers a waiting payment's own page", async () => {

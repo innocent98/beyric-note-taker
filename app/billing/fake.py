@@ -46,6 +46,7 @@ class FakeProvider:
         self.fetch_error: Exception | None = None
         self.checkout_error: Exception | None = None
         self.verified_bodies: list[bytes] = []
+        self.lookups: list[str] = []  # the reference of every `verify_reference` call
         self.checkouts: list[str] = []  # the reference of every hosted checkout started
         self.fetched: list[str] = []
         self.charges: list[tuple[str, int, str, str]] = []
@@ -177,6 +178,16 @@ class FakeProvider:
             raise ProviderError("the charge call got no answer")
         if self.charge_outcome == "unknown":  # the newer contract: a money call with no answer
             raise OutcomeUnknown("the charge call got no answer")
+        if self.charge_outcome == "queued":  # accepted, nothing for the payer to do, no verdict yet
+            tx = ProviderTransaction(
+                provider_tx_id=reference,
+                reference=reference,
+                status="pending",
+                amount_minor=amount_minor,
+                currency=currency,
+            )
+            self.transactions[reference] = tx
+            return tx
         if self.charge_outcome == "pending":  # the card's bank wants the payer: a link, no id yet
             tx = ProviderTransaction(
                 provider_tx_id=reference,
@@ -201,6 +212,7 @@ class FakeProvider:
 
     def verify_reference(self, reference: str) -> ProviderTransaction:
         """The payment under OUR reference, as the provider reports it now."""
+        self.lookups.append(reference)
         if self.fetch_error is not None:
             raise self.fetch_error
         for tx in reversed(list(self.transactions.values())):  # the newest report wins

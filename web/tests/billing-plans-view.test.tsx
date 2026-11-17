@@ -43,10 +43,10 @@ describe("a person with a country and no plan", () => {
     expect(screen.getByText("$18.00")).toBeTruthy();
     expect(screen.getByText("$34.00")).toBeTruthy();
     await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[0]);
-    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith("https://fake.test/pay/bn-1-8e578942a951e7e4"));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(cap<{ checkout_url: string }>("17-checkout-plan.json").checkout_url));
     expect(mocks.checkout).toHaveBeenCalledWith("plan", "plan_20h");
     // the reference is kept for the return page, in case the provider's address brings nothing back
-    expect(window.sessionStorage.getItem("beyric.billing.reference")).toBe("bn-1-8e578942a951e7e4");
+    expect(window.sessionStorage.getItem("beyric.billing.reference")).toBe(cap<{ payment: { reference: string } }>("17-checkout-plan.json").payment.reference);
   });
 
   it("tells them what renewing, cancelling and a changed price mean before they pay", async () => {
@@ -68,13 +68,26 @@ describe("a person with a country and no plan", () => {
   });
 });
 
-describe("a person billed from Nigeria, with no naira price", () => {
-  it("says the plan is not on sale in naira and keeps it listed, with the button off", async () => {
+describe("a person billed from Nigeria", () => {
+  it("shows the naira price from the API, and lists a plan with no naira price as not on sale with its button off", async () => {
+    // capture 69: plan_20h is priced in kobo; the capture's extra plan, capture_40h, has no naira price
     mocks.plans.mockResolvedValue(cap("69-plans-ng.json"));
     mocks.profile.mockResolvedValue({ ...PROFILE_US, billing_country: "NG", route: { currency: "NGN", provider: "paystack" } });
     render(<PlansView />);
     expect(await screen.findByText("20 hours a month")).toBeTruthy();
     expect(screen.getAllByText(/Prices in naira, paid through Paystack\./).length).toBeGreaterThan(0);
+    expect(screen.getByText(/25,000\.00/)).toBeTruthy();
+    expect(screen.getAllByText(/not on sale in naira yet/).length).toBe(1);
+    const buttons = screen.getAllByRole("button", { name: "Choose this plan" }) as HTMLButtonElement[];
+    expect(buttons.map((b) => b.disabled)).toEqual([false, true]);
+  });
+
+  it("lists every plan as not on sale when none has a naira price", async () => {
+    const body = cap<{ plans: Array<Record<string, unknown>> }>("69-plans-ng.json");
+    mocks.plans.mockResolvedValue({ ...body, plans: body.plans.map((plan) => ({ ...plan, price: null })), packs: [] });
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, billing_country: "NG", route: { currency: "NGN", provider: "paystack" } });
+    render(<PlansView />);
+    await screen.findByText("20 hours a month");
     expect(screen.getAllByText(/not on sale in naira yet/).length).toBe(2);
     for (const button of screen.getAllByRole("button", { name: "Choose this plan" })) expect((button as HTMLButtonElement).disabled).toBe(true);
   });
@@ -142,7 +155,7 @@ describe("a checkout that was started and not finished", () => {
     mocks.state.mockResolvedValue(cap("19-subscription-pending.json"));
     render(<PlansView />);
     const link = await screen.findByRole("link", { name: "Continue to pay" });
-    expect(link.getAttribute("href")).toBe("https://fake.test/pay/bn-1-8e578942a951e7e4");
+    expect(link.getAttribute("href")).toBe(cap<{ checkout_url: string }>("17-checkout-plan.json").checkout_url);
   });
 });
 

@@ -1,0 +1,36 @@
+{
+  "note": "The naira pack, with a naira plan: paid on the plan's route.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "pack",
+      "code": "pack_10h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-9-7fcd9cd9d125c5af",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "NGN",
+        "amount_minor": 1500000,
+        "created_at": "2026-11-17T16:27:34.990008Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-9-7fcd9cd9d125c5af"
+      },
+      "checkout_url": "https://fake.test/pay/bn-9-7fcd9cd9d125c5af"
+    }
+  }
+}
