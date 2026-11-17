@@ -227,6 +227,38 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _flutterwave_key_kind(self):
+        """Test and live keys are never mixed (billing spec 5.7), for Flutterwave. What its
+        authentication page states is that test keys always carry `_TEST` (its example is a public
+        key; the secret key's exact form is not shown, nor what a live key looks like). So the check
+        rests on that one fact and nothing else: with `BILLING_LIVE` false a key without `_TEST` is
+        refused (it is not a test key), with it true a key with `_TEST` is refused. A wrong key
+        stops the process at startup, naming the setting and never printing the key."""
+        for setting in ("flutterwave_secret_key", "flutterwave_public_key"):
+            value = getattr(self, setting).strip()
+            if not value:
+                continue
+            if self.billing_live and "_TEST" in value:
+                raise ValueError(
+                    f"{setting.upper()} is a Flutterwave TEST key (it contains _TEST) "
+                    "while BILLING_LIVE is true"
+                )
+            if not self.billing_live and "_TEST" not in value:
+                raise ValueError(
+                    f"{setting.upper()} is not a Flutterwave TEST key (test keys contain _TEST) "
+                    "while BILLING_LIVE is false"
+                )
+        secret_hash, secret = self.flutterwave_secret_hash, self.flutterwave_secret_key.strip()
+        if secret_hash and not secret_hash.strip():
+            raise ValueError("FLUTTERWAVE_SECRET_HASH is blank; remove the line or set the hash")
+        if secret_hash.strip() and not secret:
+            raise ValueError(
+                "FLUTTERWAVE_SECRET_HASH is set but FLUTTERWAVE_SECRET_KEY is not: a webhook "
+                "could be checked and then never settled"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _skribby_needs_its_key(self):
         """A process told to use Skribby with no key would fail at the first meeting; stop it at
         startup instead, naming the setting (never printing any key)."""
@@ -353,6 +385,15 @@ class Settings(BaseSettings):
     paystack_secret_key: str = Field(default="", repr=False)
     paystack_public_key: str = Field(default="", repr=False)
     paystack_webhook_secret: str = Field(default="", repr=False)
+    # Flutterwave, dollars (stage S7), from the server `.env` only. Empty by default: with no secret
+    # key every call the adapter could make raises before it leaves the process. The secret key
+    # calls the API; the secret hash is the value set in the Flutterwave dashboard that comes back
+    # in the `verif-hash` header of every webhook (empty refuses every webhook); the public key is
+    # kept for the day a page needs it (the adapter does not read it). Like Paystack's, a key of
+    # the wrong kind for `BILLING_LIVE` stops the process at startup (`_flutterwave_key_kind`).
+    flutterwave_secret_key: str = Field(default="", repr=False)
+    flutterwave_public_key: str = Field(default="", repr=False)
+    flutterwave_secret_hash: str = Field(default="", repr=False)
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved
