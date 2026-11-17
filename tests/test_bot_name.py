@@ -487,7 +487,11 @@ def test_the_provider_adds_the_name_skribby_reports_and_the_one_the_caller_knows
         url=f"{BASE}/bot/{BOT}",
         json=bot("finished", transcript=items, bot_name="Alex from Product"),
     )
-    with patch.object(get_settings(), "skribby_name_by_elimination", True):
+    # (the timeline naming makes a second request of its own; it is not what this test is about)
+    with (
+        patch.object(get_settings(), "skribby_name_by_elimination", True),
+        patch.object(get_settings(), "name_by_meet_timeline", False),
+    ):
         info = provider.get_meeting_by_id(BOT)
         assert [s["speaker"] for s in info.segments] == ["Ada Example", ""]
     # (b) The caller's stored name works even when the body says nothing about the name.
@@ -495,7 +499,10 @@ def test_the_provider_adds_the_name_skribby_reports_and_the_one_the_caller_knows
     httpx_mock.add_response(
         method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", transcript=items)
     )
-    with patch.object(get_settings(), "skribby_name_by_elimination", True):
+    with (
+        patch.object(get_settings(), "skribby_name_by_elimination", True),
+        patch.object(get_settings(), "name_by_meet_timeline", False),
+    ):
         info = provider.get_meeting_by_id(BOT, own_names=("Alex from Product",))
         assert [s["speaker"] for s in info.segments] == ["Ada Example", ""]
 

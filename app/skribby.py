@@ -40,7 +40,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from app import chat_notice
+from app import chat_notice, meet_timeline
 from app.bot_provider import (
     SEND_DEADLINE_SECONDS,
     BotDuplicate,
@@ -307,15 +307,21 @@ def _candidate_names(item: dict) -> dict[str, str] | None:
 
 
 def _resolve_tags(
-    value: list[dict], own_names: tuple[str, ...], by_elimination: bool
+    value: list[dict],
+    own_names: tuple[str, ...],
+    by_elimination: bool,
+    events: dict | None = None,
+    by_timeline: bool = False,
 ) -> dict[str, dict[str, str]]:
     """For every diarization tag Skribby used: `{"name", "how", "note"}`. `how` says why the tag
     has the name it has: `given` (its own segments carry exactly one `speaker_name`),
-    `elimination` or `sole_candidate` (see `_tag_names`; only when `by_elimination`) or `unknown`
-    (`name` is empty and `note` says why: `several_names`, `no_candidates`, `elimination_off`,
-    `unresolved`, `shared_claim`). With elimination off, `note` is `elimination_off` for a tag it
-    would have named, and `would_be` holds the name it would have taken, so a saved record shows
-    what the switch changed."""
+    `elimination` or `sole_candidate` (see `_tag_names`; only when `by_elimination`),
+    `meet_timeline` (only when `by_timeline` and `events` are given: see `_name_by_timeline`) or
+    `unknown` (`name` is empty and `note` says why: `several_names`, `no_candidates`,
+    `elimination_off`, `unresolved`, `shared_claim`). With elimination off, `note` is
+    `elimination_off` for a tag it would have named, and `would_be` holds the name it would have
+    taken, so a saved record shows what the switch changed. With the timeline rule on and a tag
+    left unnamed, `timeline` says why the speaking indicator did not name it."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -390,11 +396,124 @@ def _resolve_tags(
             result[tag] = {"name": "", "how": "unknown", "note": "no_candidates"}
         else:
             result[tag] = {"name": "", "how": "unknown", "note": "unresolved"}
+    if by_timeline and events:
+        _name_by_timeline(result, value, events, bot, listed)
+    return result
+
+
+# What the timeline rule may name: a tag the other rules left unnamed because they could not tell
+# (not a tag that carries two names of its own: that tag holds two people, a name would be one of
+# them). `elimination_off` is allowed only when the timeline agrees with what elimination would
+# have said.
+_TIMELINE_MAY_NAME = ("unresolved", "shared_claim", "no_candidates", "elimination_off")
+
+
+def _name_by_timeline(
+    result: dict[str, dict[str, str]],
+    value: list[dict],
+    events: dict | None,
+    bot: set[str],
+    listed: dict[str, dict[str, str] | None],
+) -> None:
+    """Name tags still unnamed after Skribby's name, elimination and the sole candidate, after the
+    participant who was speaking most over their segments, by Meet's own speaking indicator
+    (`app/meet_timeline.py`; docs/sop/2026-11-17-name-by-meet-timeline.md). Changes `result` in
+    place and never touches a tag that already has a name. A tag it does not name gets a
+    `timeline` key saying why. All of these must hold, else nothing is named:
+
+    * the events exist, are readable and are on the transcript's clock, and no shift of up to
+      30 s fits clearly better (`meet_timeline.read`);
+    * the timeline agrees with the names the other rules gave: at least one named tag's top
+      speaker is that person (so the Meet names and the clock are the transcript's), and none
+      has a different person clearly on top (`contradicted`: the signal or the clock is wrong);
+    per tag: the winner has at least `MIN_SECONDS` and `MIN_RATIO` times the runner-up, is not the
+    bot, is on the tag's own candidate list when it has one, and is the name the tag was claimed
+    for when it was a `shared_claim` or `elimination_off` tag. Several tags may take one name:
+    that is how the model's over-splitting of one person is put right. Participants listed under
+    one name (a rejoin) are one person."""
+
+    def group(name: str) -> tuple[str, str]:
+        shown = _clean_name(name)
+        return (_same(shown) if shown else ""), shown
+
+    items = [
+        {"tag": _tag(item.get("speaker")), "start": item.get("start"), "end": item.get("end")}
+        for item in value
+    ]
+    reading = meet_timeline.read(items, events, group, tag_of=lambda item: item["tag"])
+    named = {tag: info for tag, info in result.items() if info["name"]}
+    open_tags = [tag for tag, info in result.items() if not info["name"]]
+    if reading.refused:  # the events are there but cannot be used: say why on the tags
+        for tag in open_tags:
+            result[tag]["timeline"] = reading.refused
+        return
+    agreeing = 0
+    for tag, info in named.items():
+        key, why = meet_timeline.verdict(reading.cells.get(tag, {}), set())
+        if key is None:
+            continue  # the timeline has no clear say about this tag: no vote either way
+        if meet_timeline.same_person(key, _same(info["name"])):
+            agreeing += 1
+        else:
+            for other in open_tags:
+                result[other]["timeline"] = "contradicted"
+            return
+    if not agreeing:
+        for tag in open_tags:
+            result[tag]["timeline"] = "uncorroborated"
+        return
+    for tag in open_tags:
+        info = result[tag]
+        if info["note"] not in _TIMELINE_MAY_NAME:
+            info["timeline"] = "not_eligible"
+            continue
+        key, why = meet_timeline.verdict(reading.cells.get(tag, {}), bot)
+        if key is None:
+            info["timeline"] = why
+            continue
+        claimed = info.get("would_be") or ""
+        candidates = listed.get(tag) or {}
+        if (claimed and not meet_timeline.same_person(key, _same(claimed))) or (
+            candidates and not any(meet_timeline.same_person(key, other) for other in candidates)
+        ):
+            info["timeline"] = "disagrees"
+            continue
+        result[tag] = {"name": reading.shown[key], "how": "meet_timeline", "note": ""}
+
+
+def apply_timeline(
+    tags: dict[str, dict[str, str]], value: list[dict], events: dict | None, own_names=()
+) -> dict[str, dict[str, str]]:
+    """A copy of `tags` (what `_resolve_tags` kept with the evidence) after the timeline step, so
+    `scripts/skribby_segments_report.py` can say what the rule would do to a meeting saved before
+    it existed, without re-running the earlier rules. `value` is the transcript items (Skribby's
+    own shape or the evidence's: `speaker`, `start`, `end`, `potential_speaker_names` as
+    `{"name"}` dicts)."""
+    result = {tag: dict(info) for tag, info in tags.items()}
+    if not events:
+        return result
+    listed: dict[str, dict[str, str] | None] = {}
+    for item in value:
+        tag = _tag(item.get("speaker"))
+        if tag is None:
+            continue
+        candidates = _candidate_names(item)
+        if candidates is None or listed.get(tag, {}) is None:
+            listed[tag] = None
+        else:
+            for key, name in candidates.items():
+                listed.setdefault(tag, {}).setdefault(key, name)
+    bot = {_same(name) for name in map(_clean_name, own_names) if name}
+    _name_by_timeline(result, value, events, bot, listed)
     return result
 
 
 def _tag_names(
-    value: list[dict], own_names: tuple[str, ...] = (), by_elimination: bool | None = None
+    value: list[dict],
+    own_names: tuple[str, ...] = (),
+    by_elimination: bool | None = None,
+    events: dict | None = None,
+    by_timeline: bool | None = None,
 ) -> dict[str, str]:
     """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
 
@@ -411,15 +530,26 @@ def _tag_names(
     in a meeting where at least one tag carries a name of its own (proof that Skribby's naming
     works there), is named after it although nothing was ruled out (meeting 37: the tag Skribby
     split off cleanly but never named). A name two tags would both take goes to neither. Whatever
-    stays unclear is left out: the label is "unknown", never a name made up."""
+    stays unclear is left out: the label is "unknown", never a name made up.
+
+    Last, only when `by_timeline` is true (`NAME_BY_MEET_TIMELINE`, read when None) and the
+    meeting's speaker `events` are given: a tag still unnamed takes the name of the participant
+    Meet's own speaking indicator shows speaking most over it, on a clear margin
+    (`_name_by_timeline`)."""
     if by_elimination is None:
         by_elimination = get_settings().skribby_name_by_elimination
-    resolved = _resolve_tags(value, own_names, by_elimination)
+    if by_timeline is None:
+        by_timeline = get_settings().name_by_meet_timeline
+    resolved = _resolve_tags(value, own_names, by_elimination, events, by_timeline)
     return {tag: info["name"] for tag, info in resolved.items() if info["name"]}
 
 
 def _segments(
-    body: dict, own_names: tuple[str, ...] = (), by_elimination: bool | None = None
+    body: dict,
+    own_names: tuple[str, ...] = (),
+    by_elimination: bool | None = None,
+    events: dict | None = None,
+    by_timeline: bool | None = None,
 ) -> list[dict[str, Any]]:
     """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
     labelling reads). Absent or null is none; any other shape means Skribby changed its response,
@@ -430,7 +560,7 @@ def _segments(
         return []
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
-    by_tag = _tag_names(value, own_names, by_elimination)
+    by_tag = _tag_names(value, own_names, by_elimination, events, by_timeline)
     segments = []
     for item in value:
         text = item.get("transcript")
@@ -450,7 +580,11 @@ def _number(value: Any) -> float | None:
 
 
 def _evidence(
-    body: dict, own_names: tuple[str, ...], by_elimination: bool
+    body: dict,
+    own_names: tuple[str, ...],
+    by_elimination: bool,
+    events: dict | None = None,
+    by_timeline: bool = False,
 ) -> dict[str, Any] | None:
     """What Skribby sent for a meeting, kept for a few days so a bad labelling can be diagnosed
     (`skribby_segment_evidence`): each transcript item as it came (`speaker` the diarization tag,
@@ -483,7 +617,7 @@ def _evidence(
         )
     return {
         "items": items,
-        "tags": _resolve_tags(value, own_names, by_elimination),
+        "tags": _resolve_tags(value, own_names, by_elimination, events, by_timeline),
         "by_elimination": by_elimination,
     }
 
@@ -542,12 +676,16 @@ def speaker_events_record(body: Any) -> dict[str, Any] | None:
 
 
 def _safe_evidence(
-    body: dict, own_names: tuple[str, ...], by_elimination: bool
+    body: dict,
+    own_names: tuple[str, ...],
+    by_elimination: bool,
+    events: dict | None = None,
+    by_timeline: bool = False,
 ) -> dict[str, Any] | None:
     """`_evidence`, which is only a record for diagnosis: whatever goes wrong in building it leaves
     it out (logged by exception class only) and never stops the meeting being read."""
     try:
-        return _evidence(body, own_names, by_elimination)
+        return _evidence(body, own_names, by_elimination, events, by_timeline)
     except Exception as exc:
         logger.warning("skribby: could not keep the segment evidence (%s)", type(exc).__name__)
         return None
@@ -638,12 +776,19 @@ def _bot_detected_is_final(
 
 
 def map_bot(
-    body: dict, now: datetime, bot_id: str | None = None, own_names: tuple[str, ...] = ()
+    body: dict,
+    now: datetime,
+    bot_id: str | None = None,
+    own_names: tuple[str, ...] = (),
+    speaker_events: dict | None = None,
 ) -> BotMeeting:
     """Skribby's bot body as a `BotMeeting`, in the vocabulary the pipeline reads (see the SOP's
     table). `bot_id` is the id the caller asked for (the recording's handle is made from it; the
     body's own `id` is the fallback). `own_names` are the names the bot itself goes by (a candidate
-    speaker name that is one of them is never used). `vexa_id` is left for the caller to set."""
+    speaker name that is one of them is never used). `speaker_events` is the meeting's
+    speaker-events record (`speaker_events_record`), given by the caller for a finished bot when
+    `NAME_BY_MEET_TIMELINE` is on; without it the timeline rule names nothing. `vexa_id` is left
+    for the caller to set."""
     raw = body.get("status")
     if not isinstance(raw, str):
         raise SkribbyError("get_meeting failed: 'status' is not a string")
@@ -655,13 +800,14 @@ def map_bot(
 
     if raw == "finished":
         by_elimination = get_settings().skribby_name_by_elimination
+        by_timeline = get_settings().name_by_meet_timeline
         url = _recording_url(body)
         handle = _handle_for(bot_id or body.get("id"))
         reason = _FINISHED_REASON[stop] if stop in _FINISHED_REASON else stop
         return BotMeeting(
             status="completed",
-            segments=_segments(body, own_names, by_elimination),
-            evidence=_safe_evidence(body, own_names, by_elimination),
+            segments=_segments(body, own_names, by_elimination, speaker_events, by_timeline),
+            evidence=_safe_evidence(body, own_names, by_elimination, speaker_events, by_timeline),
             last_segment_end=_last_segment_end(body),
             recording_id=handle if url else None,
             media_id=handle if url else None,
@@ -1391,13 +1537,42 @@ class SkribbyProvider:
             *own_names,
             *((reported,) if isinstance(reported, str) else ()),
         )
-        info = map_bot(body, self._clock(), bot_id, tuple(dict.fromkeys(n for n in names if n)))
+        info = map_bot(
+            body,
+            self._clock(),
+            bot_id,
+            tuple(dict.fromkeys(n for n in names if n)),
+            speaker_events=self._events_for_naming(body, bot_id, timeout),
+        )
         info.vexa_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)
         if info.status in TERMINAL:
             self._forget_bot(bot_id)
         return info
+
+    def _events_for_naming(self, body: dict, bot_id: str, timeout: float | None):
+        """The speaker events the timeline naming reads (`NAME_BY_MEET_TIMELINE`), for a bot that
+        has finished with a transcript: the answer of a second request (`with-speaker-events`),
+        because the plain one carries none. None for any other bot (one request per poll is
+        enough while it is live), when the setting is off, or when the request fails or answers in
+        a shape that is not the documented one: then the tags are named without the timeline, as
+        before. Never raises; logged by exception class only (a message could hold a name)."""
+        if (
+            body.get("status") != "finished"
+            or not get_settings().name_by_meet_timeline
+            or not isinstance(body.get("transcript"), list)
+        ):
+            return None
+        try:
+            return speaker_events_record(
+                self._client.get_bot(
+                    bot_id, timeout=timeout, params={"with-speaker-events": "true"}
+                )
+            )
+        except Exception as exc:
+            logger.warning("skribby: no speaker events for naming (%s)", type(exc).__name__)
+            return None
 
     # ---- the BotProvider interface ----
 

@@ -362,6 +362,15 @@ class Settings(BaseSettings):
     # 2026-11-10); the evidence will show whether it did. The same switch covers the sole
     # candidate rule (one name on every segment of the tag, nobody else has it; 2026-11-16).
     skribby_name_by_elimination: bool = True
+    # Whether a diarization tag still unnamed after Skribby's own name, elimination and the sole
+    # candidate may be named after the participant Meet's own speaking indicator shows speaking most
+    # over its segments (`app/meet_timeline.py`, `app/skribby.py::_name_by_timeline`;
+    # docs/sop/2026-11-17-name-by-meet-timeline.md). ON by default: it only acts on a clear margin,
+    # after a clock check, and in a meeting where the timeline already agrees with the names Skribby
+    # gave; the saved evidence records `how: meet_timeline` for every name it gave. OFF: no extra
+    # request to Skribby and no name from the timeline. Independent of the elimination switch. A
+    # value that is not a boolean stops startup, like the other switches.
+    name_by_meet_timeline: bool = True
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.

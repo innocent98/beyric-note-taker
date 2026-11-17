@@ -6,6 +6,15 @@ when every segment of the tag lists the same single name in `potential_speaker_n
 (#208). **No migration.** **It goes live on deploy, for the `own` path too:** the switch `SKRIBBY_NAME_BY_ELIMINATION` defaults to on and every Skribby meeting's tags are read through it, so the day this is deployed (no `.env` change, no server step, before any flip) a tag in the meeting-37 shape is named in the notes of the `own` path as well. The off switch is `SKRIBBY_NAME_BY_ELIMINATION=false` plus a recreate. Plus the plain-words server steps to flip to one transcript
 (`TRANSCRIPT_SOURCE=skribby`) once this is deployed, with the stale restart wording in older SOPs fixed.
 
+**Update 2026-11-17** (`docs/sop/2026-11-17-name-by-meet-timeline.md`). Two things in this SOP changed. (1) A third rule
+now runs after the sole candidate: a tag still unnamed may take the participant Meet's own speaking indicator shows speaking
+most over it (`how: meet_timeline`, switch `NAME_BY_MEET_TIMELINE`, default on). The sole-candidate and elimination rules
+themselves are unchanged and still run first; a tag they named is never touched. (2) `speakers_incomplete` on the `skribby`
+path was "someone is named" (`Candidate.complete`) and is now false only when someone is named **and** the "Unknown speaker"
+lines hold under 5% of the words, so Step 2's "good result" below (`f` in `speakers_incomplete`) now also means "almost
+every line has a name". Part 2's remark that one unnamed tag of three "does not by itself make a meeting speakers
+incomplete" still holds for a small tag and no longer holds for one carrying 5% or more of the words.
+
 ## Why
 
 Meeting 37 (Google Meet, three people, `elevenlabs/scribe-v2`): Skribby split the voices cleanly. Two tags

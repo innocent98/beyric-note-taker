@@ -73,7 +73,38 @@ def test_a_speaker_who_comes_back_is_a_new_turn():
 def test_an_unnamed_speaker_is_written_as_label_transcript_writes_it():
     found = transcript_source.candidate([seg("Ada", "One."), seg("", "Two."), seg(None, "Three.")])
     assert found.text == "[Ada]: One.\n[Unknown speaker]: Two. Three."
-    assert (found.speakers, found.unnamed_segments, found.complete) == (1, 2, True)
+    # Two of the three words sit under "Unknown speaker": that is not a complete labelling any
+    # more (it was, while `complete` meant only "someone is named": docs/sop/2026-11-17).
+    assert (found.speakers, found.unnamed_segments, found.unnamed_words) == (1, 2, 2)
+    assert found.complete is False
+
+
+def filler(n):
+    return " ".join(["w"] * n)
+
+
+def test_a_meeting_is_complete_when_the_unnamed_lines_are_under_five_percent_of_the_filler():
+    assert transcript_source.MAX_UNNAMED_SHARE == 0.05
+    named = [seg("Ada", filler(500)), seg("Bo", filler(450))]
+    under = transcript_source.candidate([*named, seg("", filler(49))])  # 49 of 999 words
+    assert under.unnamed_words == 49 and under.complete is True
+    at_the_line = transcript_source.candidate([*named, seg("", filler(50))])  # 50 of 1000: 5%
+    assert at_the_line.complete is False
+    assert transcript_source.candidate(named).complete is True  # nobody unnamed: the old case
+
+
+def test_most_of_the_speech_unnamed_is_incomplete_though_someone_is_named():
+    # The bug of meeting 39: six of nine tags unnamed, three named, and the flag read "complete".
+    found = transcript_source.candidate(
+        [
+            seg("Ada", filler(300)),
+            seg("", filler(700)),
+            seg("Bo", filler(100)),
+            seg("", filler(900)),
+        ]
+    )
+    assert found.speakers == 2 and found.unnamed_words == 1600
+    assert found.complete is False
 
 
 def test_nobody_named_is_plain_text_and_incomplete_as_label_transcript_returns_it():

@@ -47,6 +47,14 @@ MIN_WORDS_PER_MINUTE = 20
 # fires).
 MIN_DISTINCT_SHARE = 0.05
 
+# The share of the words that may sit under "Unknown speaker" before the meeting counts as having
+# speaker names missing for part of it (`speakers_incomplete`, which shows the notice "Speaker names
+# unavailable for part of this transcript"). Meeting 39 (2026-11-17, six speakers): six of nine tags
+# were unnamed, about 73% of the words, and the flag still said no, because it asked only whether
+# ANYONE was named. A hole of a few percent (a back-channel tag) is not worth a notice on the
+# page; 5% of an hour is three minutes of speech, which is.
+MAX_UNNAMED_SHARE = 0.05
+
 SHADOW_BUCKETS = 100
 
 _WORD = re.compile(r"[a-z0-9']+")
@@ -63,14 +71,19 @@ class Candidate:
     segments: int  # segments that carried words
     unnamed_segments: int  # of those, the ones with no (usable) speaker name
     named: bool  # at least one named speaker: the text carries "[Name]:" turns
+    unnamed_words: int = 0  # the words of the unnamed segments
     distinct_words: int = 0  # different words (case and punctuation ignored)
     last_end: float | None = None  # seconds into the recording where the last segment ends; None
     # means the provider gave no segment times at all (a fallback reason), not how far it reaches
 
     @property
     def complete(self) -> bool:
-        """What `label_transcript` calls complete: someone could be named."""
-        return self.named
+        """The opposite of `speakers_incomplete`: someone is named AND the lines credited to
+        "Unknown speaker" hold under `MAX_UNNAMED_SHARE` of the words. (Until 2026-11-17 this was
+        only "someone is named", which stayed true for a meeting where most of the speech was
+        unattributed: a bug against the flag's own meaning, "some part of the transcript could not
+        be given speaker names".)"""
+        return self.named and self.unnamed_words < MAX_UNNAMED_SHARE * self.words
 
 
 def candidate(segments: list[dict], last_end: float | None = None) -> Candidate | None:
@@ -98,6 +111,7 @@ def candidate(segments: list[dict], last_end: float | None = None) -> Candidate 
     ]
     named = {name for name, _ in turns if name != UNKNOWN_SPEAKER}
     unnamed = sum(1 for name, _ in turns if name == UNKNOWN_SPEAKER)
+    unnamed_words = sum(len(text.split()) for name, text in turns if name == UNKNOWN_SPEAKER)
     words = sum(len(text.split()) for _, text in turns)
     if named:
         merged: list[list[str]] = []
@@ -116,6 +130,7 @@ def candidate(segments: list[dict], last_end: float | None = None) -> Candidate 
         speakers=len(named),
         segments=len(turns),
         unnamed_segments=unnamed,
+        unnamed_words=unnamed_words,
         named=bool(named),
         distinct_words=len(set(_words(" ".join(spoken for _, spoken in turns)))),
         last_end=last_end if last_end is not None else (max(ends) if ends else None),

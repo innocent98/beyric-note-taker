@@ -24,14 +24,13 @@ absolute (Unix milliseconds, as the docs' example suggests, not proven live) and
 transcript's clock from the moment the bot's status became `recording`, which is only close to the
 recording's own start. If the two clocks look out of step the section says by how much, and
 `--offset SECONDS` re-runs it with the Meet times shifted. Without events, or with events in a
-shape it cannot read, it says so in one line.
+shape it cannot read, it says so in one line. A final section says which unnamed tags the
+timeline naming rule would name, and why not for the others.
 """
 
 import argparse
-import bisect
 import sys
 import unicodedata
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -39,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app import meet_timeline, skribby  # noqa: E402
 from app.models import SkribbySegmentEvidence  # noqa: E402
 
 NO_TAG = "(no tag)"
@@ -53,122 +53,23 @@ def _clock(seconds) -> str:
 
 # ---- Meet's own speaker timeline ----
 
-SEARCH_SECONDS = 30  # how far either way the clock fit looks
+# The arithmetic lives in `app/meet_timeline.py`, shared with the naming rule (`meet_timeline`
+# in the tag headers), so the report and the app can never read the timeline two ways.
+SEARCH_SECONDS = meet_timeline.SEARCH_SECONDS  # how far either way the clock fit looks
 NAME_WIDTH = 12
 
-
-def _seconds(value) -> float | None:
-    """A time as seconds: Skribby's example shows 13-digit integers (Unix milliseconds); anything
-    that large is divided by 1000. Not a number: None."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return value / 1000 if value >= 1e11 else float(value)
+_seconds = meet_timeline.seconds
+_merge = meet_timeline.merge
+_overlap = meet_timeline.overlap
+speaking_intervals = meet_timeline.speaking_intervals
+_anchor = meet_timeline.anchor
+heard_by_tag = meet_timeline.heard_by_tag
+clock_fit = meet_timeline.clock_fit
 
 
 def _same(name: str) -> str:
     plain = unicodedata.normalize("NFKD", name)
     return " ".join("".join(c for c in plain if not unicodedata.combining(c)).casefold().split())
-
-
-def _merge(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    merged: list[list[float]] = []
-    for start, end in sorted(i for i in intervals if i[1] > i[0]):
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
-        else:
-            merged.append([start, end])
-    return [(a, b) for a, b in merged]
-
-
-def _overlap(intervals: list[tuple[float, float]], start: float, end: float) -> float:
-    """Seconds of [start, end] covered by `intervals` (merged, sorted)."""
-    ends = [i[1] for i in intervals]
-    total = 0.0
-    for index in range(bisect.bisect_right(ends, start), len(intervals)):
-        a, b = intervals[index]
-        if a >= end:
-            break
-        total += max(0.0, min(b, end) - max(a, start))
-    return total
-
-
-def speaking_intervals(record) -> dict[str, list[tuple[float, float]]] | None:
-    """`{participant name: speaking intervals, seconds}` from the saved events, or None when the
-    record is not in the shape this reads. A `started-speaking` opens an interval and
-    `stopped-speaking` or `left` closes it; one never closed ends at the last time seen anywhere in
-    the record."""
-    people = record.get("participants") if isinstance(record, dict) else None
-    if not isinstance(people, list):
-        return None
-    seen, named = [], {}
-    for person in people:
-        if not isinstance(person, dict) or not isinstance(person.get("name"), str):
-            continue
-        events = [e for e in person.get("events") or [] if isinstance(e, dict)]
-        stamped = sorted(
-            (t, e.get("type")) for e in events if (t := _seconds(e.get("timestamp"))) is not None
-        )
-        seen += [t for t, _ in stamped]
-        named.setdefault(person["name"], []).extend(stamped)
-    if not named:
-        return None
-    last = max(seen) if seen else 0.0
-    result: dict[str, list[tuple[float, float]]] = {}
-    for name, stamped in named.items():
-        opened, spans = None, []
-        for t, kind in sorted(stamped):
-            if kind == "started-speaking" and opened is None:
-                opened = t
-            elif kind in ("stopped-speaking", "left") and opened is not None:
-                spans.append((opened, t))
-                opened = None
-        if opened is not None:
-            spans.append((opened, last))
-        result[name] = _merge(spans)
-    return result
-
-
-def _anchor(record, spans) -> tuple[float | None, str]:
-    """The Meet clock's zero on the transcript's clock: (seconds to subtract, how it was got).
-    Times that are small numbers are taken as already relative to the recording."""
-    sample = [t for spans_ in spans.values() for span in spans_ for t in span]
-    if not sample or min(sample) < 1e9:
-        return 0.0, "times read as seconds from the recording start"
-    stamp = record.get("recording_started_at") if isinstance(record, dict) else None
-    try:
-        return datetime.fromisoformat(stamp).timestamp(), (
-            f"times read as Unix time, placed from the bot's `recording` status at {stamp}"
-        )
-    except (TypeError, ValueError):
-        return None, "times are Unix time but the bot's `recording` status time was not kept"
-
-
-def heard_by_tag(items: list[dict]) -> dict:
-    """Each tag's timed segments as `(start, end)` seconds (tag -> list); untagged or untimed
-    segments are left out."""
-    heard: dict = {}
-    for item in items:
-        a, b = _seconds(item.get("start")), _seconds(item.get("end"))
-        if a is not None and b is not None and b > a and item.get("speaker") is not None:
-            heard.setdefault(item["speaker"], []).append((a, b))
-    return heard
-
-
-def clock_fit(spans: dict, heard: dict) -> tuple[int, float, float]:
-    """How well Meet's clock fits the segments' clock: `(best shift, overlap now, overlap at the
-    best shift)`. `spans` is each participant's speaking intervals already placed on the
-    transcript's clock; `heard` is `heard_by_tag`. The shift is whole seconds, up to
-    SEARCH_SECONDS either way, by which Meet's times would be moved later."""
-    union = _merge([span for v in spans.values() for span in v])
-
-    def total_overlap(shift_meet: int) -> float:
-        """Overlap if Meet's times were moved `shift_meet` seconds later."""
-        return sum(
-            _overlap(union, a - shift_meet, b - shift_meet) for v in heard.values() for a, b in v
-        )
-
-    best = max(range(-SEARCH_SECONDS, SEARCH_SECONDS + 1), key=total_overlap)
-    return best, total_overlap(0), total_overlap(best)
 
 
 def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0) -> list[str]:
@@ -228,6 +129,34 @@ def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0)
     return out
 
 
+def naming_section(items: list[dict], tags: dict, record) -> list[str]:
+    """What the timeline naming rule (`NAME_BY_MEET_TIMELINE`, `app/skribby.py::_name_by_timeline`)
+    would do to the tags this meeting left unnamed, run on the saved tags and the saved events at
+    offset 0 (the rule never uses `--offset`: a shifted clock is a reason to name nothing)."""
+    head = ["", "== What naming from Meet's timeline would do to the unnamed tags =="]
+    if not record:
+        return [*head, "  No speaker events were kept, so it would name nothing."]
+    value = [
+        {
+            **i,
+            "potential_speaker_names": [
+                {"name": n} for n in i.get("potential_speaker_names") or []
+            ],
+        }
+        for i in items
+    ]
+    after = skribby.apply_timeline(tags, value, record)
+    out = []
+    for tag in sorted(after, key=str):
+        if tags.get(tag, {}).get("name"):
+            continue
+        if after[tag].get("name"):
+            out.append(f"  tag {tag}: would be named {after[tag]['name']} [meet_timeline]")
+        else:
+            out.append(f"  tag {tag}: stays unknown ({after[tag].get('timeline') or 'no reason'})")
+    return [*head, *(out or ["  Every tag already has a name."])]
+
+
 def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
     """The report text for one meeting; says so plainly when nothing is kept for it."""
     row = session.scalar(
@@ -268,6 +197,7 @@ def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
             )
             lines.append(f"      {item.get('text', '')}")
     lines += timeline_section(items, tags, row.events, offset)
+    lines += naming_section(items, tags, row.events)
     return "\n".join(lines) + "\n"
 
 
