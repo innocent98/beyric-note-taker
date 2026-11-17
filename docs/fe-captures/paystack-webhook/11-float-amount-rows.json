@@ -1,0 +1,37 @@
+{
+  "note": "Waiting, not decided.",
+  "content": {
+    "payments": [
+      {
+        "reference": "bn-1-a998653d76a2166a",
+        "status": "succeeded",
+        "provider_tx_id": "4099260516",
+        "card_country": "NG",
+        "country_mismatch": false
+      },
+      {
+        "reference": "bn-2-a10c835a624c5791",
+        "status": "pending",
+        "provider_tx_id": null,
+        "card_country": null,
+        "country_mismatch": false
+      }
+    ],
+    "billing_events": [
+      {
+        "provider": "paystack",
+        "dedupe_key": "charge.success:4099260516",
+        "type": "charge_succeeded",
+        "decided": true,
+        "error": null
+      },
+      {
+        "provider": "paystack",
+        "dedupe_key": "charge.success:4099260999",
+        "type": "charge_succeeded",
+        "decided": false,
+        "error": "ProviderError: malformed Paystack answer: amount is not a whole number of kobo"
+      }
+    ]
+  }
+}

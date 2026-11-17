@@ -1,0 +1,62 @@
+{
+  "note": "No Paystack-Signature header at all: 401. (Paystack's API side: the documented Paystack samples (tests/fixtures/paystack/README.md), not a real Paystack.)",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/paystack",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "event": "charge.success",
+      "data": {
+        "id": 4099260999,
+        "domain": "live",
+        "status": "success",
+        "reference": "bn-2-a10c835a624c5791",
+        "amount": 150000,
+        "message": null,
+        "gateway_response": "Approved by Financial Institution",
+        "paid_at": "2016-09-30T21:10:19.000Z",
+        "created_at": "2016-09-30T21:09:56.000Z",
+        "channel": "card",
+        "currency": "NGN",
+        "ip_address": "41.242.49.37",
+        "metadata": 0,
+        "fees": null,
+        "customer": {
+          "id": 68324,
+          "first_name": "BoJack",
+          "last_name": "Horseman",
+          "email": "bojack@horseman.com",
+          "customer_code": "CUS_qo38as2hpsgk2r0",
+          "phone": null,
+          "metadata": null,
+          "risk_action": "default"
+        },
+        "authorization": {
+          "authorization_code": "AUTH_f5rnfq9p",
+          "bin": "539999",
+          "last4": "8877",
+          "exp_month": "08",
+          "exp_year": "2020",
+          "card_type": "mastercard DEBIT",
+          "bank": "Guaranty Trust Bank",
+          "country_code": "NG",
+          "brand": "mastercard",
+          "account_name": "BoJack Horseman"
+        },
+        "plan": {}
+      }
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "The signature is not valid."
+      }
+    }
+  },
+  "calls_to_paystack_made_by_the_adapter": []
+}

@@ -11,6 +11,7 @@ bytes (`app/auth.py` lets this path past its login and CSRF check for that reaso
 | 413 | the body is over `MAX_BODY_BYTES` |
 | 401 | the signature or secret is wrong or missing; nothing is stored |
 | 400 | genuine request, unreadable event; nothing is stored |
+| 200 | genuine request, an event kind we do not act on (`IgnoredEvent`); nothing is stored |
 | 503 | stored, not decided yet (provider down, still pending, a step failed): provider resends |
 | 200 | stored and decided (applied or refused), or already seen |
 """
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.billing import inbox, settle
 from app.billing.provider import PaymentProvider, provider_named
-from app.billing.types import BadEvent, RetryLater, WebhookRejected
+from app.billing.types import BadEvent, IgnoredEvent, RetryLater, WebhookRejected
 from app.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,8 @@ async def webhook(
         raise HTTPException(401, "The signature is not valid.") from None
     except BadEvent:
         raise HTTPException(400, "The event could not be read.") from None
+    except IgnoredEvent:
+        return JSONResponse({"status": "ignored"})
     except RetryLater:
         raise HTTPException(503, "Try again later.") from None
     return JSONResponse({"status": "ok"})

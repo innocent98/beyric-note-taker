@@ -1,0 +1,22 @@
+{
+  "note": "A genuine event we do not act on (ping, invoice.*, transfer.*): 200 with status `ignored`, stored nowhere, so Paystack does not resend it for 72 hours. (Paystack's API side: the documented Paystack samples (tests/fixtures/paystack/README.md), not a real Paystack.)",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/paystack",
+    "headers": {
+      "Content-Type": "application/json",
+      "Paystack-Signature": "t=<unix seconds>,v1=<key id>:<128 lowercase hex>"
+    },
+    "body": {
+      "event": "ping",
+      "data": {}
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ignored"
+    }
+  },
+  "calls_to_paystack_made_by_the_adapter": []
+}

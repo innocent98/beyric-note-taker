@@ -1,0 +1,32 @@
+{
+  "event": "charge.dispute.create",
+  "data": {
+    "id": 358950,
+    "refund_amount": 5800,
+    "currency": "NGN",
+    "status": "awaiting-merchant-feedback",
+    "resolution": null,
+    "domain": "live",
+    "transaction": {
+      "id": 896467688,
+      "domain": "live",
+      "status": "success",
+      "reference": "v3mjfgbnc19v97x",
+      "amount": 5800,
+      "currency": "NGN",
+      "authorization": {}
+    },
+    "transaction_reference": null,
+    "category": "chargeback",
+    "customer": {
+      "id": 5406463,
+      "first_name": "John",
+      "last_name": "Doe",
+      "email": "example@test.com",
+      "customer_code": "CUS_6wbxh6689vt0n7s"
+    },
+    "bin": "123456",
+    "last4": "1234",
+    "created_at": "2020-11-24T13:46:57.000Z"
+  }
+}

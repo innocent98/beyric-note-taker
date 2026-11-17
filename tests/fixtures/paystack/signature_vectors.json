@@ -1,0 +1,11 @@
+{
+  "note": "Secrets are invented test values, not keys. t is the timestamp in Paystack's sample header. Signatures computed with openssl dgst -sha512 -hmac over the exact bytes of charge_success_event.json (see README.md).",
+  "body_file": "charge_success_event.json",
+  "t": 1760270400,
+  "webhook_secret_new": "whsec_vector_secret_not_a_key_new",
+  "webhook_secret_old": "whsec_vector_secret_not_a_key_old",
+  "secret_key_legacy": "sk_test_vector_secret_not_a_key",
+  "timestamped_signature_new": "54278518f86c3487a8dea2d39b4fd055f63a2fa72b595bebaaa2205b78c9cd02547dfe0266e565d0a4ebdd833c993e4a0de41d5d624cdae3c92d12ac4d56192d",
+  "timestamped_signature_old": "daf9abf8261f8bca9e22d9c459cb82e738b95c7d4e3d9fef8b55c4bb6a662eb2d03796d6cad92808eaad9e4c92e51a637774ee9341a4fcd584860f9a58d6b7ff",
+  "legacy_signature": "5ae0e667c2c95b2e2795ef6f6a568295cbf6fd299db309a064326c32e208a450c1a1ccfdd47092f04e0dc8df2076468720774dd9c293f874a298494b6c426c6c"
+}
