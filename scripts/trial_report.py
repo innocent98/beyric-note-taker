@@ -28,6 +28,9 @@ from app import pilot_expiry, trial  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.models import HourGrant  # noqa: E402
 
+# The lapse line is a NOTE until the first trial is this close to ending, then a WARNING.
+LAPSE_WARNING_DAYS = 2
+
 
 def _hours(seconds: int) -> str:
     return f"{seconds / 3600:.1f}".removesuffix(".0")
@@ -101,8 +104,10 @@ def build(session: Session, settings: Settings, now: datetime) -> list[str]:
 
 def _trial_lapse(session: Session, settings: Settings, now: datetime, enforcing: bool) -> list[str]:
     """The preflight for the switch-on order: a trial lasts TRIAL_DAYS in every mode, so trials
-    given before HOURS_MODE=enforce end on their own clock. Warn when enforce is not on yet and
-    some will end (or already ended with hours unused) before it can be switched on."""
+    given before HOURS_MODE=enforce end on their own clock. Say so when enforce is not on yet
+    and some will end before it can be switched on: a NOTE while there is time (the normal state
+    between steps 2 and 5), a WARNING when the first is under LAPSE_WARNING_DAYS away or any has
+    already ended."""
     held = session.execute(
         select(func.count(), func.min(HourGrant.expires_at)).where(
             HourGrant.kind == "trial", HourGrant.expires_at > now
@@ -119,15 +124,18 @@ def _trial_lapse(session: Session, settings: Settings, now: datetime, enforcing:
         return lines
     if held[0]:
         days = max((held[1] - now).days, 0)
-        lines.append(
-            f"WARNING: HOURS_MODE is not enforce. {held[0]} trial(s) end on their own clock, the "
-            f"first in {days} day(s): switch HOURS_MODE=enforce before then, or those people are "
-            "refused `no_plan` (no plan can be bought yet)."
+        what = (
+            f"{held[0]} trial(s) in force end on their own clock, the first in {days} day(s): "
+            "switch HOURS_MODE=enforce before then, or those people are refused `no_plan` (no "
+            "plan can be bought yet)."
         )
+        # Normal while the switch-on is under way; a warning only when it is nearly too late.
+        lines.append(("WARNING: " if days < LAPSE_WARNING_DAYS else "NOTE: ") + what)
     if ended:
         lines.append(
-            f"WARNING: {ended} trial(s) already ended while HOURS_MODE was not enforce. Those "
-            "people hold nothing at enforce; see the SOP for the one-line fix."
+            f"WARNING: {ended} trial(s) have already ended while HOURS_MODE was not enforce (any "
+            "whose hours were used or not: that is not known before enforce). Those people hold "
+            "nothing at enforce; see the SOP for the one-line fix."
         )
     return lines
 

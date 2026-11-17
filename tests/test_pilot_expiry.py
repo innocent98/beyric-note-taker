@@ -385,7 +385,6 @@ def test_an_unconfirmed_account_is_not_mailed_although_it_holds_a_pilot_grant(se
     pilot_person(session, "unconfirmed", email_verified_at=None)
     pilot_person(session, "confirmed")
     pilot_expiry.run(session, NOTICE_FROM, on())
-    assert [n.user_id for n in notices(session)] != []
     assert len(notices(session)) == 1
     assert [m.to_email for m in mails(session)] == ["confirmed@example.test"]
 
@@ -398,13 +397,34 @@ def test_the_gates_alone_do_not_start_the_job(session):
 
 
 def test_no_warning_after_the_end_when_every_grant_was_given_its_end(session, caplog):
-    """Two people, one with nothing left to be told: the job ran, every grant carries the end, so a
-    later run logs nothing (the first version warned every hour for ever)."""
-    pilot_person(session, "ada")
-    pilot_expiry.run(session, NOTICE_FROM, on())
+    """The first version warned from the notifications, so it warned every hour for ever when
+    nobody had hours left to be told (no notice ever written), and again once the bell entry was
+    pruned after 90 days. The guard now reads the grants: every grant carries its end, so a later
+    run is quiet in both cases."""
+    spent = pilot_person(session, "spent", seconds=HOUR)
+    entry = UsageEntry(user_id=spent.id, email_hash=email_hash(spent.email), seconds=HOUR)
+    entry.counted_at = datetime(2027, 1, 1, tzinfo=UTC)
+    session.add(entry)
+    session.flush()
+    session.add(
+        UsageAllocation(usage_entry_id=entry.id, grant_id=pilots(session)[0].id, seconds=HOUR)
+    )
+    session.commit()
+    pilot_expiry.run(session, NOTICE_FROM, on())  # sets the end; nothing left, so nobody is mailed
+    assert notices(session) == []
     with caplog.at_level(logging.WARNING, logger="app.pilot_expiry"):
         pilot_expiry.run(session, END + 5 * DAY, on())
-        pilot_expiry.run(session, END + 100 * DAY, on())  # past the bell's 90-day pruning too
+    assert caplog.text == ""
+    # and once someone WAS mailed and the bell entry is pruned (90 days), still quiet
+    pilot_person(session, "ada")
+    pilot_expiry.run(session, NOTICE_FROM + timedelta(minutes=1), on())  # ada: first sight, mailed
+    assert len(notices(session)) == 1
+    for note in notices(session):
+        session.delete(note)
+    session.commit()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.pilot_expiry"):
+        pilot_expiry.run(session, END + 100 * DAY, on())
     assert caplog.text == ""
 
 

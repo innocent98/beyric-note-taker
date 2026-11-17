@@ -84,27 +84,39 @@ def test_it_is_read_only_and_gives_nothing(session):
     assert session.scalars(select(HourGrant)).all() == []
 
 
-def test_it_warns_when_trials_will_end_before_enforce_is_on(session):
-    for name, started in (("a", NOW - timedelta(days=2)), ("b", NOW - timedelta(days=20))):
-        user = make_user(session, f"{name}@example.test")
-        session.add(
-            HourGrant(
-                user_id=user.id,
-                email_hash=email_hash(user.email),
-                kind="trial",
-                seconds=3 * HOUR,
-                starts_at=started,
-                expires_at=started + timedelta(days=14),
-            )
+def _trial(session, name, started):
+    user = make_user(session, f"{name}@example.test")
+    session.add(
+        HourGrant(
+            user_id=user.id,
+            email_hash=email_hash(user.email),
+            kind="trial",
+            seconds=3 * HOUR,
+            starts_at=started,
+            expires_at=started + timedelta(days=14),
         )
+    )
     session.commit()
+
+
+def test_a_trial_with_time_left_before_enforce_is_a_note_not_a_warning(session):
+    """The state between steps 2 and 5 of the switch-on: the proof must be able to pass."""
+    _trial(session, "a", NOW - timedelta(days=2))  # ends in 12 days
     out = text(session, hours_mode="shadow", trial_seconds=3 * HOUR)
     assert "Trials in force: 1, the first ends 2027-03-13" in out
-    assert "WARNING: HOURS_MODE is not enforce. 1 trial(s) end on their own clock" in out
-    assert "the first in 12 day(s)" in out
-    assert "WARNING: 1 trial(s) already ended while HOURS_MODE was not enforce" in out
+    assert "NOTE: 1 trial(s) in force end on their own clock, the first in 12 day(s)" in out
+    assert "WARNING" not in out
+
+
+def test_a_trial_nearly_over_or_already_ended_before_enforce_is_a_warning(session):
+    _trial(session, "a", NOW - timedelta(days=13))  # ends in 1 day
+    _trial(session, "b", NOW - timedelta(days=20))  # ended
+    out = text(session, hours_mode="shadow", trial_seconds=3 * HOUR)
+    assert "WARNING: 1 trial(s) in force end on their own clock, the first in 1 day(s)" in out
+    assert "WARNING: 1 trial(s) have already ended while HOURS_MODE was not enforce" in out
     enforcing = text(session, hours_mode="enforce", trial_seconds=3 * HOUR)
-    assert "WARNING" not in enforcing and "Trials in force: 1" in enforcing
+    assert "WARNING" not in enforcing and "NOTE" not in enforcing
+    assert "Trials in force: 1" in enforcing
 
 
 def test_it_says_the_pilot_job_waits_for_enforce_and_the_minimum_notice(session):
