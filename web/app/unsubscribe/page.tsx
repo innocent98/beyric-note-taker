@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Stop emails", robots: { index: false
 // fetches the link must not opt anyone out, so the button posts. The token is read in the browser.
 export default function UnsubscribePage() {
   return (
-    <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
+    <AuthShell>
       <UnsubscribeForm />
     </AuthShell>
   );

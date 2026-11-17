@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Choose a new password", robots: { in
 // read in the browser and removed from the address, not read here.
 export default function ResetPasswordPage() {
   return (
-    <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
+    <AuthShell>
       <ResetPasswordForm />
     </AuthShell>
   );

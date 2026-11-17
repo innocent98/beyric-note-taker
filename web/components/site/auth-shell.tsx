@@ -1,45 +1,27 @@
 import type { ReactNode } from "react";
-import { AppLink, Badge, Icon, Logo } from "@/components/ui";
-import { LEGAL_NAME } from "@/lib/site";
+import { Badge, Icon } from "@/components/ui";
+import { PublicShell } from "./public-shell";
 
 // The sign-in layout from Auth.dc.html: the form on the left, a teal panel with a product preview
 // on the right (the panel drops below the form on a narrow screen, as the prototype's grid does).
 // Only what the app can do today is drawn on the left: see docs/ui/parity-report.md. Every account
-// screen (sign-in, sign-up, confirm email, forgot and reset password, pilot full) uses this frame.
-// `action` is the prototype's link at the top right ("New to Beyric? Create account").
-export function AuthShell({
-  children,
-  action,
-}: {
-  children: ReactNode;
-  action?: { text?: string; label: string; href: string };
-}) {
+// screen (sign-in, sign-up, confirm email, forgot and reset password, accept invite, set up, stop
+// emails, pilot full) uses this frame.
+// The frame sits inside PublicShell, so these screens wear the same header and footer as the landing
+// page (Sign in and Get started are in the header; the footer carries Privacy, Terms and Contact).
+// PublicShell supplies the one `main` landmark, so the form column is a plain div.
+export function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <div className="auth-split">
-      <div className="auth-main">
-        <div className="auth-bar">
-          <Logo size="lg" />
-          {action ? (
-            <div className="auth-bar-link">
-              {action.text ? <span className="auth-bar-text">{action.text}</span> : null}
-              <AppLink href={action.href}>{action.label}</AppLink>
-            </div>
-          ) : null}
+    <PublicShell>
+      <div className="auth-split">
+        <div className="auth-main">
+          <div className="auth-center">
+            <div className="auth-box">{children}</div>
+          </div>
         </div>
-        <main className="auth-center">
-          <div className="auth-box">{children}</div>
-        </main>
-        <div className="auth-foot">
-          <span>&copy; 2026 {LEGAL_NAME}</span>
-          <span className="auth-foot-links">
-            <AppLink href="/privacy">Privacy</AppLink>
-            <AppLink href="/terms">Terms</AppLink>
-            <AppLink href="mailto:privacy@beyrictech.com">Help</AppLink>
-          </span>
-        </div>
+        <AuthPanel />
       </div>
-      <AuthPanel />
-    </div>
+    </PublicShell>
   );
 }
 
