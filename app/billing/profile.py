@@ -3,12 +3,21 @@
 A person has one profile: who they are billed as, and the country they are billed from. The country
 decides the currency and the provider (`app/billing/routing.py`). It is chosen by the person (never
 guessed) and only they change their own: nothing here takes a user other than the one passed in, and
-the routes pass the signed-in user.
+the routes pass the signed-in user. The screen may SUGGEST one (`suggest_country`, from the saved
+time zone) but a suggestion is never saved: only `change_country`, which the person asks for,
+writes it.
 
 **Changing the country** (`change_country`), with a table test of every row in `tests/`:
 
 - the same country as now: `unchanged`, nothing is written;
 - a change already waiting for the end of a period: refused, `country_change_pending` (409);
+- **before the person has ever paid** (no successful payment, no live subscription: `country_lock`
+  is None): `applied` at once, instantly, any number of times. Nothing is at stake yet, and a
+  wrong first pick (a country chosen from a list by mistake) must not trap them. Each change still
+  writes its `billing_country_changes` row;
+- **from the first successful payment or a live subscription on**, the rules below apply, and
+  only changes made since then count towards the 30 days (the changes made while it was free do
+  not):
 - the first choice: `applied` at once, and not counted as a change for the 30-day rule;
 - another change within the last 30 days: refused, `country_change_too_soon` (409);
 - no live subscription: `applied` at once;
@@ -39,12 +48,15 @@ from sqlalchemy.orm import Session
 
 from app.billing import routing
 from app.billing.types import BillingError
+from app.billing.zone_countries import country_for_zone
 from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
     BillingCountryChange,
     BillingProfile,
+    Payment,
     Subscription,
     User,
+    UserSettings,
 )
 
 # At most one change in this many days. The first choice is not a change.
@@ -65,6 +77,15 @@ class LiveSubscription:
     @property
     def route(self) -> routing.Route:
         return routing.Route(self.currency, self.provider)
+
+
+@dataclass(frozen=True)
+class CountryLock:
+    """The person has paid (or has a live plan), so the change rules apply. `since` is when counting
+    changes towards the 30 days starts: the first successful payment. None when the lock comes from
+    a live subscription with no payment on record (every change counts)."""
+
+    since: datetime | None
 
 
 @dataclass(frozen=True)
@@ -112,6 +133,41 @@ def live_subscription(db: Session, user_id: int, now: datetime) -> LiveSubscript
     if row is None:
         return None
     return LiveSubscription(period_end=row[0], currency=row[1], provider=row[2])
+
+
+# A payment that took the person's money at least once (a refund later does not undo that).
+_PAID_STATUSES = ("succeeded", "refunded", "partly_refunded")
+
+
+def country_lock(db: Session, user_id: int, now: datetime) -> CountryLock | None:
+    """None while the person has never paid and has no live subscription: the country is then
+    free to change, instantly and without limit. Otherwise a `CountryLock` and the change rules
+    apply. Once a person has paid it stays locked even after the plan ends."""
+    first_paid = db.scalar(
+        select(func.min(func.coalesce(Payment.paid_at, Payment.created_at))).where(
+            Payment.payer_user_id == user_id, Payment.status.in_(_PAID_STATUSES)
+        )
+    )
+    if first_paid is not None:
+        return CountryLock(first_paid)
+    if live_subscription(db, user_id, now) is not None:
+        return CountryLock(None)
+    return None
+
+
+def suggest_country(db: Session, user: User, routes_text: str) -> str | None:
+    """The country the saved time zone points to (`Africa/Lagos` gives `NG`), or None when the
+    person has no zone, the zone has no country or the country cannot be routed. Only a suggestion
+    for the screen to confirm: it is never saved here."""
+    zone = db.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    country = country_for_zone(zone)
+    if country is None:
+        return None
+    try:
+        routing.provider_for(country, routes_text)
+    except routing.RoutingError:
+        return None
+    return country
 
 
 def country_view(row: BillingProfile | None, at: datetime) -> CountryView:
@@ -171,18 +227,27 @@ def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:
 
 
 def country_change_allowed_at(db: Session, user_id: int, now: datetime) -> datetime | None:
-    """When the next change is allowed, or None when one is allowed now. Only real changes count
-    (a row with an `old_country`); the first choice does not."""
-    last = db.scalar(
-        select(func.max(BillingCountryChange.created_at)).where(
-            BillingCountryChange.user_id == user_id,
-            BillingCountryChange.old_country.is_not(None),
-        )
-    )
+    """When the next change is allowed, or None when one is allowed now: always before the person
+    has paid. Only real changes made since the lock began count (a row with an `old_country`); the
+    first choice does not, and neither do the changes made while the country was still free."""
+    lock = country_lock(db, user_id, now)
+    if lock is None:
+        return None
+    conditions = [
+        BillingCountryChange.user_id == user_id,
+        BillingCountryChange.old_country.is_not(None),
+    ]
+    if lock.since is not None:
+        conditions.append(BillingCountryChange.created_at >= lock.since)
+    last = db.scalar(select(func.max(BillingCountryChange.created_at)).where(*conditions))
     if last is None:
         return None
     allowed = last + CHANGE_WINDOW
     return allowed if allowed > now else None
+
+
+def _day(moment: datetime) -> str:
+    return f"{moment.astimezone(UTC).day} {moment.astimezone(UTC):%B %Y}"
 
 
 def save_details(
@@ -231,20 +296,24 @@ def change_country(
         raise CountryChangeRefused(
             409,
             "country_change_pending",
-            "A change of billing country is already waiting for the end of your paid period.",
+            "A change of billing country is already waiting for the end of your paid period"
+            + (f" ({_day(profile.pending_effective_at)})." if profile.pending_effective_at else ".")
+            + " It cannot be changed again until then.",
         )
     old = profile.billing_country
     if country == old:
         return CountryChange("unchanged", profile)
 
     scheduled_for = None
-    if old is not None:
+    # Before the first payment nothing is locked: any change applies at once (see the module note).
+    if old is not None and country_lock(db, user.id, now) is not None:
         allowed_at = country_change_allowed_at(db, user.id, now)
         if allowed_at is not None:
             raise CountryChangeRefused(
                 409,
                 "country_change_too_soon",
-                "You can change your billing country once every 30 days.",
+                "Since your first payment your billing country can be changed once every 30 days. "
+                f"You can change it again on {_day(allowed_at)}.",
             )
         live = live_subscription(db, user.id, now)
         # Crossing is judged against the route the subscription was sold on, not today's table.
