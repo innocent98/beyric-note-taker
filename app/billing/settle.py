@@ -52,9 +52,15 @@ from app.models import BILLING_CURRENCIES, BillingEvent, Payment
 
 logger = logging.getLogger(__name__)
 
-# Called as `handler(db, payment)` once, when a payment first becomes `succeeded`. Empty in S4.
+# Called as `handler(db, payment)` once, when a payment first becomes `succeeded`. Stage S8
+# registers the subscription and pack grants here (`subscriptions.py`).
 GrantHandler = Callable[[Session, Payment], None]
 GRANT_HANDLERS: list[GrantHandler] = []
+# Called as `handler(db, payment, tx)` just before the grant handlers, with what the provider
+# reported: the one place a handler can see the reusable card token (it is never stored in the
+# inbox). The saved-card handler of stage S8 registers here. Same transaction, same single run.
+TransactionHandler = Callable[[Session, Payment, ProviderTransaction], None]
+TRANSACTION_HANDLERS: list[TransactionHandler] = []
 
 OPEN_STATUSES = ("pending", "failed")  # a payment in one of these can still be paid
 
@@ -163,18 +169,50 @@ def _refuse_transaction(payment: Payment, tx: ProviderTransaction) -> str | None
 
 def _mark_paid(db: Session, payment: Payment, tx: ProviderTransaction, now) -> str | None:
     """The one place a payment becomes `succeeded`; runs the grant handlers once."""
-    payment.status = "succeeded"
-    payment.provider_tx_id = tx.provider_tx_id
-    payment.paid_at = now
-    payment.card_country = normalize_card_country(tx.card_country)
     try:
+        # The assignments are INSIDE the savepoint: `begin_nested` flushes pending changes before
+        # it opens, so a unique violation on the provider transaction id raised from a flush
+        # outside it would poison the whole transaction (stage S6 found this: a 500 instead of
+        # the refusal below).
         with db.begin_nested():
+            payment.status = "succeeded"
+            payment.provider_tx_id = tx.provider_tx_id
+            payment.paid_at = now
+            payment.card_country = normalize_card_country(tx.card_country)
             db.flush()
     except IntegrityError:  # another payment already carries this provider transaction id
         db.refresh(payment)
         return "transaction already used by another payment"
     # A note for a human look, never a rule: it cannot raise and cannot stop the grants below.
     flag_country_mismatch(db, payment)
+    for transaction_handler in TRANSACTION_HANDLERS:
+        transaction_handler(db, payment, tx)
     for handler in GRANT_HANDLERS:
         handler(db, payment)
     return None
+
+
+def settle_transaction(
+    db: Session, provider: PaymentProvider, payment_id: int, tx: ProviderTransaction, now
+) -> str | None:
+    """Decide one payment from a transaction the provider reported for it, with the same rules a
+    webhook gets (the module note), for callers that did not come from a webhook: the sweeper that
+    looks a payment up by its reference, and a saved-card renewal. `tx` must be a report the
+    provider itself just gave about this payment; what a webhook or a charge call CLAIMED is never
+    passed here. Locks the payment row, applies the rules, and flushes; the caller commits (or
+    rolls back after an exception). Returns a refusal reason, or None: None means the payment is
+    `succeeded` (now or already), still open without a verdict (`pending`, `failed`), or a failed
+    report was recorded. Raises `RetryLater` while the provider still says `pending`."""
+    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
+    refusal = _refuse_payment(payment, provider)
+    if refusal is None and payment.status in OPEN_STATUSES:
+        refusal = _malformed(tx)
+        if refusal is None and tx.reference != payment.reference:
+            refusal = "reference mismatch: the provider reports a different payment"
+        if refusal is None and tx.status == "failed":
+            payment.status = "failed"
+        elif refusal is None:
+            refusal = _refuse_transaction(payment, tx) or _mark_paid(db, payment, tx, now)
+    if refusal:
+        logger.warning("payment %s refused: %s", payment.id, refusal)
+    return refusal

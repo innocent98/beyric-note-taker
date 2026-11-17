@@ -1,0 +1,28 @@
+{
+  "note": "404 `plan_not_found`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/change-plan",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "plan_code": "nope"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "plan_not_found",
+        "message": "That plan does not exist."
+      }
+    }
+  }
+}

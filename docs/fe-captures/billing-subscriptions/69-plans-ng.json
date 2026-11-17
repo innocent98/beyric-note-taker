@@ -1,0 +1,54 @@
+{
+  "note": "The seeded naira list (decided 2026-11-17: NGN 25,000 a month, `amount_minor` is kobo), and the naira 10-hour pack (NGN 15,000, 1,500,000 kobo, decided the same day).",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": {
+        "currency": "NGN",
+        "provider": "paystack"
+      },
+      "plans": [
+        {
+          "code": "plan_20h",
+          "name": "20 hours a month",
+          "monthly_seconds": 72000,
+          "price": {
+            "currency": "NGN",
+            "amount_minor": 2500000
+          }
+        },
+        {
+          "code": "capture_40h",
+          "name": "40 hours a month",
+          "monthly_seconds": 144000,
+          "price": null
+        }
+      ],
+      "packs": [
+        {
+          "code": "pack_10h",
+          "name": "10 extra hours",
+          "seconds": 36000,
+          "valid_months": 12,
+          "price": {
+            "currency": "NGN",
+            "amount_minor": 1500000
+          }
+        }
+      ]
+    }
+  }
+}

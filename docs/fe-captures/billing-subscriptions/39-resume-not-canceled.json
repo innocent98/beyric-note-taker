@@ -1,0 +1,26 @@
+{
+  "note": "Nothing to take back: 409 `not_canceled`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/resume",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_canceled",
+        "message": "Your plan is not set to end."
+      }
+    }
+  }
+}

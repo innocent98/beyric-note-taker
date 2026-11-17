@@ -70,22 +70,86 @@ def seed_country(session, user, country, *, asked_at=NOW - timedelta(days=100)):
 # ---- part one: the change rules -------------------------------------------------------------
 
 
-def test_the_stub_says_nobody_has_a_live_subscription_until_stage_s8(session, person):
+def test_a_person_with_no_subscription_has_no_live_one(session, person):
     assert profiles.live_subscription(session, person.id, NOW) is None
 
 
-def test_the_stub_is_a_tripwire_for_stage_s8(session, person, monkeypatch):
-    """Subscriptions arrive with S8. If the table exists while this function is still the stub,
-    every crossing change would quietly apply at once: it raises instead."""
-    assert not profiles.has_subscription_table(Base.metadata.tables)  # S5: no such table yet
-    assert profiles.live_subscription.is_stub  # S8 replaces the function and removes the marker
-    monkeypatch.setattr(profiles, "_subscriptions_table_exists", lambda: True)
+def test_the_s5_stub_and_its_tripwire_are_gone_because_the_real_answer_exists(session, person):
+    """Stage S8 added the subscriptions table and replaced the stub: the table exists, the function
+    carries no stub marker, and it answers from the table with the route the subscription was SOLD
+    on (the behaviour is tested in `test_billing_subscriptions.py`). This used to be a tripwire
+    that raised while both a table and the stub existed; it now proves the stub went away for the
+    right reason (a real answer), not because the table was hidden."""
+    assert profiles.has_subscription_table(Base.metadata.tables)  # the table exists
+    assert not getattr(profiles.live_subscription, "is_stub", False)  # and the stub is gone
+    assert not hasattr(profiles, "_subscriptions_table_exists")
 
-    with pytest.raises(RuntimeError, match="stage S8 must replace it"):
-        profiles.live_subscription(session, person.id, NOW)
-    seed_country(session, person, "US")
-    with pytest.raises(RuntimeError, match="stage S8 must replace it"):
-        set_country(session, person, "NG")  # and so no change can go through while it is
+    # the real function reads the table: a live row is answered with the route it was sold on, a
+    # lapsed or cancelled one is not live
+    from app.models import Plan, PlanPrice, Subscription
+
+    session.add(Plan(code="t", name="T", monthly_seconds=3600))
+    session.flush()
+    price = PlanPrice(plan_code="t", currency="NGN", amount_minor=100, active_from=NOW)
+    session.add(price)
+    session.flush()
+    row = Subscription(
+        user_id=person.id,
+        payer_user_id=person.id,
+        plan_code="t",
+        price_id=price.id,
+        status="active",
+        currency="NGN",
+        provider="paystack",
+        current_period_start=NOW,
+        current_period_end=PERIOD_END,
+    )
+    session.add(row)
+    session.commit()
+    live = profiles.live_subscription(session, person.id, NOW)
+    assert (live.period_end, live.currency, live.provider) == (PERIOD_END, "NGN", "paystack")
+    assert live.route == routing.Route("NGN", "paystack")
+    for status in ("lapsed", "canceled", "ended"):
+        row.status = status
+        session.commit()
+        assert profiles.live_subscription(session, person.id, NOW) is None
+    row.status = "past_due"  # the grace is still live: a country change applies at once there
+    session.commit()
+    assert profiles.live_subscription(session, person.id, NOW) is not None
+
+
+def test_a_crossing_change_is_judged_against_the_route_the_subscription_was_sold_on(
+    session, person
+):
+    """The country table is edited mid-period: a naira subscription must not become a dollar one."""
+    from app.models import Plan, PlanPrice, Subscription
+
+    seed_country(session, person, "NG")
+    session.add(Plan(code="t", name="T", monthly_seconds=3600))
+    session.flush()
+    price = PlanPrice(plan_code="t", currency="NGN", amount_minor=100, active_from=NOW)
+    session.add(price)
+    session.flush()
+    session.add(
+        Subscription(
+            user_id=person.id,
+            payer_user_id=person.id,
+            plan_code="t",
+            price_id=price.id,
+            status="active",
+            currency="NGN",
+            provider="paystack",
+            current_period_start=NOW,
+            current_period_end=PERIOD_END,
+        )
+    )
+    session.commit()
+    # an operator has since pointed every country, Nigeria too, at dollars through Flutterwave:
+    # today's table says NG and GB pay alike, but the subscription was SOLD in naira (Paystack)
+    table = "*=USD:flutterwave"
+    change = profiles.change_country(session, person, "GB", routes_text=table, now=NOW)
+
+    assert change.result == "scheduled"  # judged against the sold route, not today's table
 
 
 @pytest.mark.parametrize(
@@ -721,10 +785,28 @@ def test_only_the_person_reads_and_changes_their_own_profile(session, engine, ad
     )
 
 
-def test_no_billing_profile_route_takes_a_persons_id(web):
-    """Nothing in the API can aim at someone else's row: no path has a parameter."""
+def test_no_billing_route_takes_a_persons_id(web):
+    """Nothing in the API can aim at someone else's row: no path names a person, and the one path
+    with a parameter (stage S8's `/payments/{reference}`) takes a payment reference that the route
+    only answers for the payer who owns it (`test_billing_subscriptions_api.py`)."""
     paths = [p for p in web.app.openapi()["paths"] if p.startswith(API) and "webhooks" not in p]
-    assert sorted(paths) == [f"{API}/profile", f"{API}/profile/country", f"{API}/route"]
+    assert sorted(paths) == [
+        f"{API}/checkout",
+        f"{API}/payments",
+        f"{API}/payments/{{reference}}",
+        f"{API}/plans",
+        f"{API}/profile",
+        f"{API}/profile/country",
+        f"{API}/route",
+        f"{API}/subscription",
+        f"{API}/subscription/cancel",
+        f"{API}/subscription/change-plan",
+        f"{API}/subscription/change-plan/preview",
+        f"{API}/subscription/pay-link",
+        f"{API}/subscription/resume",
+    ]
+    parameters = {part.strip("{}") for p in paths for part in p.split("/") if part.startswith("{")}
+    assert parameters == {"reference"}
 
 
 def test_only_allow_listed_accounts_use_billing_when_there_is_a_list(engine, session):

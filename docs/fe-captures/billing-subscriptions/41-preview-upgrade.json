@@ -1,0 +1,27 @@
+{
+  "note": "What the upgrade would cost, BEFORE the person commits: `amount_minor` is charged the moment they press the button, `extra_seconds` is added to this period. A read: nothing is written.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription/change-plan/preview?plan_code=capture_40h",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "upgrade",
+      "plan_code": "capture_40h",
+      "currency": "USD",
+      "amount_minor": 1599,
+      "extra_seconds": 71640,
+      "takes_effect": "now"
+    }
+  }
+}

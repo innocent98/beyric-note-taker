@@ -72,7 +72,9 @@ class UsageOut(BaseModel):
     # HOURS_MODE=enforce: the hours the person holds now (every grant in force, spent or not).
     cap_seconds: int | None
     # The fields below are filled only under HOURS_MODE=enforce; otherwise they are all null.
-    # trial, pilot, active or none (a person with no hours, or an admin: see `unlimited`).
+    # trial, pilot, active, past_due, lapsed or none (a person with no hours, or an admin: see
+    # `unlimited`). past_due (the 3 days of grace after a failed renewal) and lapsed come from a
+    # subscription.
     state: str | None = None
     # Seconds the person may still record, counting meetings still running; null for an admin.
     seconds_left: int | None = None

@@ -1,0 +1,11 @@
+{
+  "note": "`billing_test_purchase.py state`: what this person can do under the modes the server runs with (here HOURS_MODE and FEATURE_GATES_MODE are at their defaults, off).",
+  "content": {
+    "exit": 0,
+    "output": [
+      "  state: active, hours left: 20.00",
+      "  a new recording would start if HOURS_MODE were enforce (it is off)",
+      "  Ask Beyric is allowed by the rule; the gate is off (closed only when enforce)"
+    ]
+  }
+}

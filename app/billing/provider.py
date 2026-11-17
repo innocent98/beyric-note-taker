@@ -16,7 +16,7 @@ look the payment up, never retry blind.
 from collections.abc import Callable, Mapping
 from typing import Protocol, runtime_checkable
 
-from app.billing.types import Checkout, ProviderEvent, ProviderTransaction
+from app.billing.types import Checkout, ProviderError, ProviderEvent, ProviderTransaction
 from app.config import Settings
 
 
@@ -87,3 +87,15 @@ def provider_named(name: str, settings: Settings) -> PaymentProvider | None:
         return None
     factory = PROVIDER_FACTORIES.get(name)
     return factory(settings) if factory else None
+
+
+def lookup_by_reference(provider: PaymentProvider, reference: str) -> ProviderTransaction:
+    """Ask the provider about a payment by OUR reference: for a payment whose webhook never came and
+    for a charge whose outcome is not known. The adapters name it differently (Paystack
+    `verify_reference`, Flutterwave `fetch_by_reference`); the fake has the first. Raises
+    `ProviderError` when the provider cannot be asked or has nothing under that reference."""
+    for name in ("verify_reference", "fetch_by_reference"):
+        method = getattr(provider, name, None)
+        if method is not None:
+            return method(reference)
+    raise ProviderError("this provider cannot look a payment up by its reference")

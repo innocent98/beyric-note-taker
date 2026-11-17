@@ -1,0 +1,25 @@
+{
+  "note": "Another account cannot see Ada's payment: 404 `not_found`.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments/bn-1-401d29c8bdee865f",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

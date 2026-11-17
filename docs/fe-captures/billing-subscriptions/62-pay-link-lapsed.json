@@ -1,0 +1,26 @@
+{
+  "note": "Nothing is overdue on a lapsed plan any more: 409 `no_subscription`; the person subscribes again from `/checkout`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/pay-link",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "no_subscription",
+        "message": "You do not have a plan."
+      }
+    }
+  }
+}

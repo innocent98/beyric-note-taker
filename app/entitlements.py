@@ -24,8 +24,14 @@ spending have no allocation yet and are taken off the grants here, in that order
 Grants are found by user id or by the email fingerprint, the same two keys as
 `usage.ledger_seconds`. An admin has no limit (`unlimited`), as under the old rule.
 
-Only grants exist in S1, so only the states they can show exist here: `trial`, `pilot`, `active`
-(a paid plan period) and `none`. `past_due` and `lapsed` need subscriptions (stage S8).
+Grants alone show `trial`, `pilot`, `active` (a paid plan period) and `none`. Since stage S8 the
+person's subscription adds the two states a grant cannot show (`_subscription_state`, which reads
+`app/billing/states.effective_status`, so a subscription whose renewal pass has not run yet is
+still judged by the clock): `past_due` (the 3 days of grace after a failed renewal; it wins over
+everything else, and the old period's leftover hours, extended to the grace's end, are all the
+person has) and `lapsed` (the grace ended unpaid; shown only when nothing else, such as a pilot
+grant with hours left, gives a better state). The hours themselves always come from the grants: the
+subscription never adds hours, only a verified payment's grant does.
 
 The bottom of the module (`can`, `gate`) answers the feature gates of spec 2.3 (stage S3): which
 states may use Ask Beyric, new translations and rewriting notes. The mode switch and the refusal
@@ -39,7 +45,17 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import usage
-from app.models import HourGrant, Meeting, ScheduledJoin, UsageAllocation, UsageEntry, User
+from app.billing import states
+from app.models import (
+    LIVE_SUBSCRIPTION_STATUSES,
+    HourGrant,
+    Meeting,
+    ScheduledJoin,
+    Subscription,
+    UsageAllocation,
+    UsageEntry,
+    User,
+)
 
 NO_HOURS = "no_hours"  # a grant is in force but spent
 NO_PLAN = "no_plan"  # no grant is in force at all
@@ -64,7 +80,7 @@ OUT = "out"
 
 @dataclass(frozen=True)
 class Status:
-    state: str  # trial, pilot, active or none (S8 adds past_due and lapsed)
+    state: str  # trial, pilot, active, past_due, lapsed or none
     seconds_left: int | None  # None = no limit (an admin)
     unlimited: bool
     has_grant: bool  # a grant is in force now, spent or not (tells no_hours from no_plan)
@@ -196,6 +212,32 @@ def _take_off(held: list[list], to_spend: int) -> None:
         to_spend -= taken
 
 
+def _subscription_state(session: Session, user: User, now: datetime) -> str | None:
+    """What the person's subscription is at `now` by the clock (`states.effective_status`): their
+    live one, else the newest one that ended. None when they never had one."""
+    sub = session.scalars(
+        select(Subscription)
+        .where(Subscription.user_id == user.id)
+        .order_by(
+            Subscription.status.in_(LIVE_SUBSCRIPTION_STATUSES).desc(), Subscription.id.desc()
+        )
+        .limit(1)
+    ).first()
+    if sub is None:
+        return None
+    return states.effective_status(
+        states.Snapshot(
+            status=sub.status,
+            current_period_end=sub.current_period_end,
+            cancel_at_period_end=sub.cancel_at_period_end,
+            grace_ends_at=sub.grace_ends_at,
+            next_charge_at=sub.next_charge_at,
+            retry_count=sub.retry_count,
+        ),
+        now,
+    )
+
+
 def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600) -> Status:
     """The person's state and the seconds they may still record."""
     if user.is_admin:
@@ -215,6 +257,13 @@ def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 
     else:
         shown = [GRANT_STATE[g.kind] for g, rest in held if rest > 0 and g.kind in GRANT_STATE]
         state = shown[0] if shown else "none"
+    sub_state = _subscription_state(session, user, now)
+    if sub_state == states.PAST_DUE:
+        state = "past_due"  # the grace: gates open, only the hours still left, no new period
+    elif sub_state == states.ACTIVE:
+        state = "active"
+    elif sub_state == states.LAPSED and state == "none":
+        state = "lapsed"
     if held and left == 0:
         warning = OUT
     elif held and used * 100 >= holdings * LOW_PERCENT:
@@ -323,8 +372,7 @@ FEATURES = (ASK, TRANSLATE, REWRITE)
 # everything, and `past_due` (the 3 days after a failed renewal) keeps Ask, translate and rewrite
 # (they use no recorded hours). `lapsed` and `none` (no plan, an expired plan, a used-up or expired
 # trial, a person who only reads) cannot. Anything not listed is closed: a state added later has to
-# be opened here on purpose. `status` shows only trial, pilot, active and none until S8 adds the
-# subscription states.
+# be opened here on purpose.
 OPEN_STATES = frozenset({"trial", "pilot", "active", "past_due"})
 
 
