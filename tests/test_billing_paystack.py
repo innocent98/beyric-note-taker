@@ -280,7 +280,7 @@ def test_the_event_id_is_stable_for_a_redelivery_and_differs_between_events():
     other = json.loads(EVENT_BODY)
     other["data"]["id"] = 302962
     assert provider.parse_event(json.dumps(other).encode()).event_id != again.event_id
-    assert refund.event_id == "refund.processed:132013318360" != again.event_id
+    assert refund.event_id == "refund.processed:rr:132013318360" != again.event_id
 
 
 def test_a_reusable_card_gives_a_token_and_the_token_is_not_in_the_repr():
@@ -311,7 +311,7 @@ def test_a_dispute_event_points_at_the_charge_it_is_about():
         "v3mjfgbnc19v97x",
         "896467688",
     )
-    assert event.event_id == "charge.dispute.create:358950" and event.amount_minor == 5800
+    assert event.event_id == "charge.dispute.create:id:358950" and event.amount_minor == 5800
 
 
 @pytest.mark.parametrize(
@@ -388,7 +388,7 @@ def test_a_refund_or_dispute_event_with_null_fields_is_still_an_event_never_a_lo
     refund["data"].update(refund_reference=None, status="pending")
     event = provider.parse_event(json.dumps(refund).encode())
     assert event.kind == "refund" and event.reference == "T2154954_412829_3be32076_6lcg3"
-    assert event.event_id == "refund.processed:T2154954_412829_3be32076_6lcg3"
+    assert event.event_id.startswith("refund.processed:body:")  # never the transaction reference
     assert event.provider_tx_id == "T2154954_412829_3be32076_6lcg3"
 
     for amount in ("50.00", 5000.5, None, "x"):
@@ -411,6 +411,15 @@ def test_a_refund_or_dispute_event_with_null_fields_is_still_an_event_never_a_lo
     dispute["data"].update(id=None, transaction=None, transaction_reference="v3mjfgbnc19v97x")
     event = provider.parse_event(json.dumps(dispute).encode())
     assert event.reference == "v3mjfgbnc19v97x" and event.event_id.startswith("charge.dispute.")
+
+    # Two partial refunds of ONE payment, neither with a refund reference: different events.
+    refund["data"].update(transaction_reference="T2154954_412829_3be32076_6lcg3", amount="5000")
+    first = provider.parse_event(json.dumps(refund).encode())
+    refund["data"]["amount"] = "2500"
+    second = provider.parse_event(json.dumps(refund).encode())
+    assert first.event_id != second.event_id and "T2154954" not in first.event_id
+    refund["data"]["id"] = 77  # a refund id, if the event carries one, is the key
+    assert provider.parse_event(json.dumps(refund).encode()).event_id == "refund.processed:id:77"
 
     refund["data"]["transaction_reference"] = "x" * 100  # over the column: a placeholder, not a 400
     assert provider.parse_event(json.dumps(refund).encode()).reference == "unknown"

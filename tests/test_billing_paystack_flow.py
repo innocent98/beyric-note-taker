@@ -428,7 +428,7 @@ def test_a_refund_event_is_stored_and_left_for_the_refund_stage(
 
     assert response.status_code == 200
     [row] = events(session)
-    assert (row.type, row.dedupe_key) == ("refund", "refund.processed:132013318360")
+    assert (row.type, row.dedupe_key) == ("refund", "refund.processed:rr:132013318360")
     assert row.processed_at is None and "waiting for the refund stage" in row.error
     assert script.requests == [] and reload(session, payment).status == "pending"
 
@@ -531,7 +531,7 @@ def test_a_refund_event_with_no_refund_reference_is_stored_not_lost(
     assert (first.status_code, second.status_code) == (200, 200)
     [row] = events(session)
     assert row.type == "refund" and "waiting for the refund stage" in row.error
-    assert row.dedupe_key == "refund.processed:T2154954_412829_3be32076_6lcg3"
+    assert row.dedupe_key.startswith("refund.processed:body:")
 
 
 def test_a_dispute_event_with_no_refund_amount_is_stored_not_lost(
@@ -542,7 +542,7 @@ def test_a_dispute_event_with_no_refund_amount_is_stored_not_lost(
     body["data"]["refund_amount"] = None
     assert post(client, json.dumps(body).encode()).status_code == 200
     [row] = events(session)
-    assert (row.type, row.dedupe_key) == ("dispute", "charge.dispute.create:358950")
+    assert (row.type, row.dedupe_key) == ("dispute", "charge.dispute.create:id:358950")
 
 
 def test_a_charge_that_is_not_ours_is_answered_200_and_stored_nowhere(

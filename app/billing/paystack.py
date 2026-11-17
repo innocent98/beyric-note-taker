@@ -277,9 +277,18 @@ class PaystackProvider:
         amount = data.get("amount")
         if isinstance(amount, str) and re.fullmatch(r"[0-9]{1,15}", amount):
             amount = int(amount)  # Paystack's refund events carry the amount as text
-        key = refund_reference or reference or _digest(raw_body)
+        # The key must be unique to this refund and the same for a redelivery. Each source has its
+        # own prefix so one cannot collide with another, and the transaction reference is never a
+        # key by itself: two partial refunds of one payment would share it and the second would be
+        # lost. With no refund id at all the key is a hash of the body (a resend is the same bytes).
+        if refund_reference:
+            key = f"rr:{refund_reference}"
+        elif _u64(data.get("id")):
+            key = f"id:{data['id']}"
+        else:
+            key = f"body:{_digest(raw_body)}"
         return ProviderEvent(
-            event_id=_fit(f"{name}:{key}", 200, f"{name}:{_digest(raw_body)}"),
+            event_id=_fit(f"{name}:{key}", 200, f"{name}:body:{_digest(raw_body)}"),
             kind="refund",
             reference=_fit(reference, 64, "unknown"),
             provider_tx_id=_fit(refund_reference or reference, 128, _digest(raw_body)),
@@ -296,12 +305,12 @@ class PaystackProvider:
             data.get("transaction_reference")
         )
         amount = data.get("refund_amount")
-        key = str(dispute_id) if _u64(dispute_id) else _digest(raw_body)
+        key = f"id:{dispute_id}" if _u64(dispute_id) else f"body:{_digest(raw_body)}"
         return ProviderEvent(
             event_id=f"{name}:{key}",
             kind="dispute",
             reference=_fit(reference, 64, "unknown"),
-            provider_tx_id=str(tx_id) if _u64(tx_id) else key,
+            provider_tx_id=str(tx_id) if _u64(tx_id) else _digest(raw_body),
             amount_minor=amount if _whole_number(amount) else 0,
             currency=_event_currency(data.get("currency")),
             payer_email=_text(_dig(data, "customer", "email")),
