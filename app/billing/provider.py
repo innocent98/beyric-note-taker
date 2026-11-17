@@ -6,8 +6,9 @@ outside `app/billing/` knows a vendor's name or field names. Real adapters regis
 empty, so no webhook is accepted for any provider name, and the fake is never reachable in
 production.
 
-Errors: `verify_webhook` raises `WebhookRejected`, `parse_event` raises `BadEvent`, and every call
-that talks to the vendor raises `ProviderError` (retryable).
+Errors: `verify_webhook` raises `WebhookRejected`, `parse_event` raises `BadEvent` (or
+`IgnoredEvent`, a genuine event we do not act on), and every call that talks to the vendor raises
+`ProviderError` (retryable).
 """
 
 from collections.abc import Callable, Mapping
@@ -41,10 +42,19 @@ class PaymentProvider(Protocol):
         ...
 
     def charge_saved_method(
-        self, token: str, amount_minor: int, currency: str, reference: str
+        self,
+        token: str,
+        amount_minor: int,
+        currency: str,
+        reference: str,
+        *,
+        payer_email: str | None = None,
     ) -> ProviderTransaction:
         """Charge a saved card token (a renewal). Returns the transaction as the provider reports
-        it; a charge that needs the payer is a failed or pending transaction, never an exception."""
+        it; a charge that needs the payer is a failed or pending transaction, never an exception.
+        `payer_email` is the email the provider saw on the first payment (`email_at_provider`):
+        Paystack charges a saved card only with the email that created it, so an adapter that
+        needs it raises `ProviderError` when it is missing; one that does not need it ignores it."""
         ...
 
     def refund(self, provider_tx_id: str, amount_minor: int) -> str:
@@ -57,6 +67,9 @@ PROVIDER_FACTORIES: dict[str, Callable[[Settings], PaymentProvider]] = {}
 
 
 def provider_named(name: str, settings: Settings) -> PaymentProvider | None:
-    """The provider registered under `name`, or None for a name nobody registered."""
+    """The provider registered under `name`, or None for a name nobody registered. The test double
+    is never returned while `BILLING_LIVE` is true, even if something registered it."""
+    if name == "fake" and settings.billing_live:
+        return None
     factory = PROVIDER_FACTORIES.get(name)
     return factory(settings) if factory else None

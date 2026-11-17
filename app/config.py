@@ -204,6 +204,21 @@ class Settings(BaseSettings):
         return frozenset(t for t in self.microsoft_allowed_tenants.split(",") if t)
 
     @model_validator(mode="after")
+    def _paystack_keys_match_billing_live(self):
+        """Test and live keys are never mixed (billing spec 5.7): with `BILLING_LIVE` false only
+        `sk_test_` / `pk_test_` keys are accepted, with it true only `sk_live_` / `pk_live_`. A
+        wrong prefix stops the process at startup, naming the setting and never printing the key."""
+        mode = "live" if self.billing_live else "test"
+        for setting, prefix in (("paystack_secret_key", "sk"), ("paystack_public_key", "pk")):
+            value = getattr(self, setting).strip()
+            if value and not value.startswith(f"{prefix}_{mode}_"):
+                raise ValueError(
+                    f"{setting.upper()} is not a {mode}-mode key (it must start with "
+                    f"{prefix}_{mode}_) while BILLING_LIVE is {str(self.billing_live).lower()}"
+                )
+        return self
+
+    @model_validator(mode="after")
     def _skribby_needs_its_key(self):
         """A process told to use Skribby with no key would fail at the first meeting; stop it at
         startup instead, naming the setting (never printing any key)."""
@@ -315,6 +330,21 @@ class Settings(BaseSettings):
     # "for allow-listed accounts only"); `*` in the list means every account. An account not allowed
     # gets the same 404 as billing being off. The pilot of the pay screens is this list.
     billing_allowed_emails: str = ""
+    # Which kind of provider key this process may hold (billing spec 5.7, stage S6). `false`
+    # (default): TEST keys only (`sk_test_...`); no real money can move. `true`: LIVE keys only
+    # (`sk_live_...`). A key of the other kind stops the process at startup naming the setting; the
+    # key itself is never printed. Switch on only at go-live (S11).
+    billing_live: bool = False
+    # Paystack, naira (stage S6). All three stay empty until Adebayo puts them in the server's
+    # `.env`: with no secret key set, every call the adapter could make raises before it leaves the
+    # process. `repr=False` keeps them out of the settings' own repr; no log line or error ever
+    # carries one. The secret key calls the API and (while no webhook secret is set) signs the
+    # legacy webhook header; the webhook signing secret (`whsec_...`, dashboard: Developers > API
+    # configuration) signs the `Paystack-Signature` header. The public key is read by nothing yet
+    # (hosted checkout needs only the secret key); it is accepted so a later screen can use it.
+    paystack_secret_key: str = Field(default="", repr=False)
+    paystack_public_key: str = Field(default="", repr=False)
+    paystack_webhook_secret: str = Field(default="", repr=False)
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
     # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved

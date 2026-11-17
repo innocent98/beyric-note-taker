@@ -30,6 +30,12 @@ class ProviderError(BillingError):
     """A call to the provider failed or gave no usable answer. Retryable."""
 
 
+class IgnoredEvent(BillingError):
+    """The request was genuine and readable, but it is an event we do not act on (a vendor sends
+    every kind of event to one address). Nothing is stored; the route answers 200 so the vendor
+    does not resend it for days."""
+
+
 @dataclass(frozen=True)
 class ProviderEvent:
     """One webhook, as we understand it. It is a claim, not a fact: money moves only after the

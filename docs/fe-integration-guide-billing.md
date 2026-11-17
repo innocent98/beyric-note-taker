@@ -442,6 +442,41 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 * **Sending notes in French or Spanish is a translation.** The share dialog can get this 403 for a person with no plan; English sharing still works for them.
 * **Rewriting is also a button on the old page**: `POST /meetings/{id}/regenerate` (a form post, not JSON) is gated the same way and shows the same sentence on the page with status 403.
 
+## Paystack adapter, naira (billing stage S6)
+
+**Nothing the frontend calls changed in this stage.** No route the browser uses was added or changed (there is still no checkout route: stage S8 adds the screens and the routes behind them). The only route S6 touches is `POST /api/billing/webhooks/paystack`, which **Paystack calls, never the browser**; it is written down here so the answers are copied, not remembered, and so S8's author knows what the payment pages will see. Every file is in `docs/fe-captures/paystack-webhook/` (made by `scripts/capture_paystack_webhook.py`: the real app under uvicorn with real migrations, real HTTP to the real route, the real settlement rules and the real adapter).
+
+**What is NOT real in those captures: Paystack itself.** There are no Paystack test keys yet, so the adapter's calls to Paystack were answered by a script that returns Paystack's *documented sample bodies* (`tests/fixtures/paystack/README.md` names the page of each), changed only in our reference, the amount and, in one case, a float. **Not verified live:** that a real Paystack sends and answers these shapes.
+
+### What the webhook route answers (captured)
+
+| Capture | Request | Answer |
+|---|---|---|
+| `01-billing-off` | `BILLING_ENABLED` false | `404` `{"error":{"code":"not_found","message":"Not found."}}` |
+| `02-paid` | signed `charge.success`, Paystack's verify answer matches | `200` `{"status":"ok"}`; the payment becomes `succeeded` (`03-paid-rows`: `provider_tx_id` `"4099260516"`, `card_country` `"NG"`, `country_mismatch` false) |
+| `04-replay` | the same event again | `200` `{"status":"ok"}`; no second call to Paystack, still one event row (`05-replay-rows`) |
+| `06-tampered`, `08-unsigned`, `07-stale-timestamp` | one changed byte; no signature header; a correct signature 400 seconds old | `401` `{"error":{"code":"not_authenticated","message":"The signature is not valid."}}`; nothing stored, Paystack not asked |
+| `09-ping-ignored` | a genuine `ping` (also invoices, transfers, subscriptions) | `200` `{"status":"ignored"}`; stored nowhere |
+| `10-float-amount` | Paystack's answer says the amount is `150000.0` | `503` `{"error":{"code":"error","message":"Try again later."}}`; the payment stays `pending`, the event stays waiting (`11-float-amount-rows`: `decided` false, `error` `ProviderError: malformed Paystack answer: amount is not a whole number of kobo`) |
+| `12-retry-two-signatures` | Paystack's resend, two `v1` signatures (a secret rotation), a well-formed answer this time | `200` `{"status":"ok"}`; the payment is `succeeded` (`13-retry-rows`) |
+| `14-amount-too-low` | Paystack's answer says 149999 kobo for 150000 asked | `200` `{"status":"ok"}`; the payment stays `pending` and the event is decided with `error` `amount too low: asked 150000, provider reports 149999 NGN` (`15-amount-too-low-rows`) |
+
+A `400` (genuine signature, a body that is not an event we can read) is **not captured live**: tests only (`tests/test_billing_paystack.py`, `tests/test_billing_paystack_flow.py`).
+
+### What the payment pages (stage S8) must know
+
+* **The payer pays on Paystack's own page** (a link on `checkout.paystack.com`); the adapter refuses any other address. We never see a card number: only a reusable token, kept encrypted by S8. Send the payer to `Checkout.url` and back to the callback address.
+* **The return page grants nothing and decides nothing.** It reads the payment's state (`pending`, `succeeded`, `failed`) from our database and polls. The webhook (or a verify by reference) is what settles it, so a payer who closes the tab still gets their hours.
+* **Paystack sends a webhook only for a payment that succeeded.** A declined or abandoned payment sends nothing: the page can learn it only by our asking Paystack. The screen must not wait for a "failed" event that never comes; offer "Try again" after a sensible wait.
+* **A saved card may be refused or may need the payer again.** A renewal charge answered `failed` (for example insufficient funds: a Paystack test card exists for it) or `pending` with the card "paused" (the card's bank wants the payer to authorize again) is not an error in the adapter: the person must be sent a pay link (spec 5.3 fallback). A card Paystack does not mark reusable (the test card `5078 5078 5078 5078 53` creates no token) can be paid once but never renewed by us.
+* **The amount charged can be higher than the amount asked** (Paystack's own sample shows 40333 paid for 30050 requested): at least what we asked is accepted. Show the person what we asked, not what the card was charged.
+* **Naira only.** Amounts are whole kobo end to end (NGN 1,500.00 is `150000`); Paystack's documented minimum is NGN 50.00.
+* **A foreign card pays, and is noted.** The card's country (`authorization.country_code`) is stored as `card_country`; a difference from the billing country sets `country_mismatch` for a human look and never refuses the payment (S5). What a real foreign card returns is not verified live.
+
+### The checkout request the adapter makes (documented path, not an HTTP route of ours)
+
+`PaystackProvider.start_checkout` sends `POST https://api.paystack.co/transaction/initialize` with `{"email": <payer>, "amount": "150000", "currency": "NGN", "reference": "bn-<payment id>-<random>", "callback_url": <return address>}` and returns `Checkout(url, reference)` from the documented answer `{"status": true, "message": "Authorization URL created", "data": {"authorization_url": "https://checkout.paystack.com/3ni8kdavz62431k", "access_code": "3ni8kdavz62431k", "reference": "re4lyvq3s3"}}` (the page's own sample, `tests/fixtures/paystack/initialize_response.json`). This is a shape from Paystack's page and the adapter's unit test, **not** a capture of any call to Paystack and not an answer of ours.
+
 ## Verification
 
 | Behaviour | Verified |
@@ -467,3 +502,7 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 | `past_due` and `lapsed` states against the gates | tests only (the states arrive with subscriptions in stage S8) |
 | Export, decisions and the Review spelling step stay open | export and decisions: tests only (`tests/test_feature_gates.py`); Review list: live (capture 11); the spelling step: tests only. Search: not exercised in this stage (its code is untouched) |
 | A `features` signal in the session payload | not built (see "What the frontend must do") |
+| The webhook route's answers: 404 off, 200 paid, 200 replay, 401 bad signature, stale timestamp and no header, 200 `ignored`, 503 on a float amount then 200 on the retry with two signatures, 200 refused on a low amount | live over HTTP (`docs/fe-captures/paystack-webhook/`, 15 files), **with Paystack's side scripted from documented samples, not a real Paystack** |
+| A `400` for a genuine but unreadable event | tests only |
+| The checkout request and answer shape, saved-card charge, refund, verify | documented samples and unit tests only: **not verified live** (no Paystack test keys yet) |
+| A real Paystack test-mode payment, the raw body through nginx and the Next.js proxy, what a foreign card returns in `country_code`, that real events match the documented samples | **not verified live**: the runbook in `docs/sop/2026-11-17-billing-paystack-adapter.md` |
