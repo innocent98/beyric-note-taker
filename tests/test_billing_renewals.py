@@ -1025,3 +1025,81 @@ def test_abandoned_checkouts_cannot_starve_a_payment_that_was_just_paid(session,
     assert len(providers.usd.lookups) == 61  # nobody was asked about again too soon
     renewals.sweep(session, now + timedelta(minutes=45), settings())  # the 30-minute tier is due
     assert len(providers.usd.lookups) > 61
+
+
+# ---- delta review: the pay link must never strand a person in the grace -------------------------
+
+
+def test_an_unpaid_pay_link_page_is_returned_again_however_old_it_is(
+    session, ada, providers, bought
+):
+    """The provider has no record of a checkout nobody paid. A day later the person presses Pay now
+    again: the same page, never a 502 for the rest of the grace (it cannot double-charge)."""
+    due = bought
+    fail_all(providers)
+    tick(session, due + timedelta(seconds=7))
+    first = renewals.pay_link(session, ada, settings(), due + timedelta(hours=1))
+    checkouts = len(providers.usd.checkouts)
+
+    for later in (timedelta(days=1, hours=2), timedelta(days=2, hours=1)):
+        again = renewals.pay_link(session, ada, settings(), due + later)
+        assert again.url == first.url and again.payment.id == first.payment.id
+    assert len(providers.usd.checkouts) == checkouts  # and no second page was made
+
+
+def test_a_half_made_pay_link_row_with_no_page_is_abandoned_not_a_block(
+    session, ada, providers, bought
+):
+    due = bought
+    fail_all(providers)
+    tick(session, due + timedelta(seconds=7))
+    sub = live(session, ada)
+    orphan = new_payment(
+        session,
+        payer=ada,
+        provider="flutterwave",
+        kind="renewal",
+        currency="USD",
+        amount_minor=1800,
+        subscription_id=sub.id,
+    )
+    orphan.plan_price_id, orphan.cycle_end = sub.price_id, sub.current_period_end
+    orphan.created_at = due + timedelta(hours=1)  # the process died before the page was stored
+    session.commit()
+
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=2))
+
+    assert started.payment.id != orphan.id and started.url.startswith("https://fake.test/pay/")
+    session.expire_all()
+    assert session.get(Payment, orphan.id).status == "failed"
+
+
+def test_a_queued_charge_that_stays_pending_alerts_an_admin_after_six_hours(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "queued"
+    tick(session, due + timedelta(seconds=7))
+    assert notices(session, admin, "admin.billing_unresolved_charge") == []
+
+    tick(session, due + timedelta(hours=7))  # still pending at the provider, nothing for the payer
+
+    assert notices(session, admin, "admin.billing_unresolved_charge")
+
+
+def test_a_payment_the_rules_refuse_is_not_reported_as_received(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "pending"
+    tick(session, due + timedelta(seconds=7))
+    [charge] = renewal_payments(session)
+    providers.usd.complete(charge, tx_id="short-1", amount_minor=charge.amount_minor - 1)
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(hours=3))
+
+    assert (refused.value.status, refused.value.code) == (409, "payment_in_progress")
+    assert "received" not in refused.value.message
+    assert notices(session, admin, "admin.billing_payment_refused")
+    assert live(session, ada).status == "past_due"  # nothing was granted

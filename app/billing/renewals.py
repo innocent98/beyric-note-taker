@@ -74,7 +74,7 @@ SWEEP_AFTER = timedelta(
 )  # a payment or event younger than this is the webhook's to settle
 SWEEP_LOOKBACK = timedelta(days=3)  # older unpaid checkouts are left alone
 MIN_RETRY_GAP = timedelta(hours=1)  # a late pass never fires two attempts back to back
-OPEN_LINK_REUSE = timedelta(days=1)  # a pay-link checkout the provider cannot be asked about
+NO_LINK_GRACE = timedelta(minutes=2)  # a pay-link row still waiting for its page is not abandoned
 UNRESOLVED_AFTER = timedelta(hours=6)
 
 
@@ -400,6 +400,16 @@ def _settle_open_payments(
             result = "open_link"
         else:
             result = "wait"
+            if not payment.pay_url and payment.created_at <= now - UNRESOLVED_AFTER:
+                # a charge the provider keeps reporting as pending with nothing for the payer to do
+                subscriptions._tell_admins(
+                    session,
+                    f"admin.billing_unresolved_charge:{payment.id}",
+                    "A renewal charge has stayed pending",
+                    f"Renewal payment {payment.id} has been pending at the provider for more "
+                    "than six hours with no page for the payer. Look it up by reference in the "
+                    "provider's dashboard.",
+                )
     return result
 
 
@@ -597,8 +607,12 @@ def _open_page(
     - `failed`: marked failed, and does not count;
     - still open with a link: that is the page (an open charge keeps its own link for ever);
     - open with no link (a charge in flight): refused, 409 `payment_in_progress`;
-    - the provider cannot be asked: a pay-link checkout under a day old is reused (it is only a
-      page); anything else is refused, 502 `provider_error`, rather than guessed.
+    - the provider has no record of a pay-link checkout nobody paid (or cannot be asked): its page
+      is reused WHATEVER ITS AGE, since handing back the same page can never double-charge; only an
+      open CHARGE (`attempt` set) that cannot be checked is refused, 502 `provider_error`, rather
+      than guessed;
+    - a pay-link row with no page that is older than two minutes (the process died between making
+      the row and storing the page) is abandoned: marked failed.
     """
     pending = session.scalars(
         select(Payment)
@@ -612,18 +626,17 @@ def _open_page(
     ).all()
     chosen = None
     for payment in pending:
+        if payment.attempt is None and not payment.pay_url:
+            if payment.created_at <= now - NO_LINK_GRACE:
+                payment.status = "failed"  # abandoned half-made page: never a reason to block
+            continue
         adapter = provider_named(payment.provider, settings)
         try:
             if adapter is None:
                 raise ProviderError("no provider is configured for this payment")
             tx = lookup_by_reference(adapter, payment.reference)
         except ProviderError:
-            young_link = (
-                payment.attempt is None
-                and payment.pay_url
-                and payment.created_at > now - OPEN_LINK_REUSE
-            )
-            if young_link:
+            if payment.attempt is None:  # an unpaid page: the same page, however old
                 chosen = chosen or payment
                 continue
             session.rollback()
@@ -634,11 +647,27 @@ def _open_page(
             ) from None
         if tx.status == "successful":
             try:
-                settle.settle_transaction(session, adapter, payment.id, tx, now)
-                session.commit()
+                refusal = settle.settle_transaction(session, adapter, payment.id, tx, now)
             except RetryLater:
-                session.rollback()
-            raise subscriptions.Refused(409, "nothing_due", "Your payment has just been received.")
+                refusal = "the provider is not final yet"
+            if refusal is None:
+                session.commit()
+                raise subscriptions.Refused(
+                    409, "nothing_due", "Your payment has just been received."
+                )
+            subscriptions._tell_admins(
+                session,
+                f"admin.billing_payment_refused:{payment.id}",
+                "A renewal payment was refused by the settlement rules",
+                f"Renewal payment {payment.id}: {refusal}. The provider reports it paid; "
+                "look at it.",
+            )
+            session.commit()
+            raise subscriptions.Refused(
+                409,
+                "payment_in_progress",
+                "We could not confirm your payment yet. We are looking into it.",
+            )
         if tx.status == "failed":
             settle.settle_transaction(session, adapter, payment.id, tx, now)
             continue

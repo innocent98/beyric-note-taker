@@ -1131,7 +1131,7 @@ Response body:
 **A card that needs the bank's confirmation (3-D Secure).** The saved card's bank may ask the person to confirm.
 The charge then waits for them and its own page is in `pending_payment.pay_url` (capture 57, `kind` `renewal`,
 `status` `pending`). Send them to that address: `POST /subscription/pay-link` returns **exactly the same address**
-(capture 58), never a second checkout **however old the charge is**: before it would make a new page the server asks the provider about every open charge of the period, and only when the provider says one failed or was abandoned does a new page exist (if the provider cannot be asked the call is 502 `provider_error`, and while a queued charge has no page yet it is 409 `payment_in_progress`). A second charge is not made while it waits.
+(capture 58), never a second checkout **however old the charge is**: before it would make a new page the server asks the provider about every open charge of the period, and only when the provider says one failed does a new page exist (Paystack reports an abandoned charge as pending, so an abandoned charge keeps its page; whether a real paused-charge page expires is not verified live). An unpaid pay-link page is returned again however old it is. If the provider cannot be asked about an open charge the call is 502 `provider_error`, and while a queued charge has no page yet it is 409 `payment_in_progress`. A second charge is not made while it waits.
 
 ```json
 {
