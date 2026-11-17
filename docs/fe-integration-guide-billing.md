@@ -1239,7 +1239,7 @@ payment brings a lapsed plan back, from the payment date).
 
 Error codes that exist but were **not** captured (their wording is from the code, listed in `app/billing/subscriptions_api.py`):
 409 `not_an_upgrade`, `period_over`, `period_almost_over` (an upgrade whose price rounds to nothing a moment before the
-period ends: change plan at the renewal instead), 409 `payment_in_progress` (a pay link asked while a saved-card charge is queued and has no page yet: wait and check again), 502 `provider_error` (the provider's page could
+period ends: change plan at the renewal instead), 409 `payment_in_progress` (tests only, not captured: wait a moment and ask again; three causes with three sentences: a saved-card charge is queued and has no page yet, `A payment is already being processed. Wait a moment and check again.`; the page of a first click is still being opened by a double click, `A payment page is being opened. Wait a moment and try again.`; or the provider reports a payment paid that our rules refuse and an admin has been told, `We could not confirm your payment yet. We are looking into it.`), 502 `provider_error` (the provider's page could
 not be opened: try again), 503 `provider_unavailable` (no provider is configured for the route).
 
 ### Field-nesting and shape traps
@@ -1346,7 +1346,7 @@ The screens exist now (`web/app/billing`, `docs/sop/2026-11-17-billing-screens.m
 | Checkout, pending payment, the return page's poll, the verified payment granting hours once, a wrong amount granting nothing, a replay granting once, a bad signature (401) | live over HTTP against the real route and settlement rules, **provider scripted, signature header is the fake's** (captures 17 to 26) |
 | A pack, cancel, resume, the upgrade preview and checkout, the downgrade, taking a downgrade back | live over HTTP, provider scripted (captures 33 to 47) |
 | `past_due` after a failed saved-card renewal, no new hours in the grace, change refused, pay link (the same page twice), a pack in the grace, a verified payment renewing from the payment date | live: HTTP plus **one real scheduler pass run by the capture script after the stored dates were moved by SQL**, provider scripted (captures 49 to 56) |
-| A 3-D Secure charge keeps its own page, and the pay link returns the same address | live shape only: the open charge is the scripted provider's (captures 57, 58); the pay link asks the provider about the open charge first and keeps its page however old it is (tests); the pay link asks the provider about the open charge first and keeps its page however old it is (tests); **a real bank's answer is not verified** |
+| A 3-D Secure charge keeps its own page, and the pay link returns the same address | live shape only: the open charge is the scripted provider's (captures 57, 58); the pay link asks the provider about the open charge first and keeps its page however old it is (tests); **a real bank's answer is not verified** |
 | `lapsed` before and after the scheduler's pass, pay link refused | live: dates moved by SQL (captures 59 to 62) |
 | The billing history route (own payments only, newest first) | live over HTTP (captures 63, 67) |
 | The runbook script's `proof`, `state` and `preflight 1` | run for real against the capture database (captures 27 to 29); **not yet on the real server** |
