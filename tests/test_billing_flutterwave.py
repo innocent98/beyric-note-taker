@@ -14,6 +14,8 @@ reference, a replay, a malformed answer).
 """
 
 import json
+import subprocess
+import sys
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -1256,3 +1258,25 @@ def test_a_key_of_the_wrong_kind_stops_startup_naming_the_setting_but_not_the_ke
 def test_a_live_looking_key_in_live_mode_is_accepted():
     """What a live key looks like is not documented; only a `_TEST` key is refused in live mode."""
     make_settings(billing_live=True, flutterwave_secret_key="FAKE-NOT-A-LIVE-KEY")
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "import app.models",
+        "import app.billing",
+        "import app.billing.flutterwave",
+        "import app.billing.types",
+        "import app.models, app.billing",
+        "import app.billing, app.models",
+        "import app.accounts",
+    ],
+)
+def test_the_billing_package_and_the_models_import_in_any_order_in_a_fresh_interpreter(statement):
+    """`app.models` imports `app.billing.types`, which runs the package `__init__`, which imports
+    each adapter. An adapter that imported `profile` or `routing` at the top (they import
+    `app.models`) closed a circle that only showed in a fresh interpreter, at test collection."""
+    done = subprocess.run(
+        [sys.executable, "-c", statement], capture_output=True, text=True, timeout=60
+    )
+    assert done.returncode == 0, done.stderr[-400:]

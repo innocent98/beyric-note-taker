@@ -47,7 +47,6 @@ from decimal import Decimal
 
 import httpx
 
-from app.billing.mismatch import normalize_card_country
 from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
@@ -169,6 +168,12 @@ def _transaction_from(data: object) -> ProviderTransaction:
     currency (never normalised) and the amount (`_minor`)."""
     if not isinstance(data, dict):
         raise ProviderError("Flutterwave answered without a transaction")
+    # Imported here, not at the top: `mismatch` imports `profile`, which imports `routing`, which
+    # imports `app.models`, and `app.models` imports `app.billing.types`, which runs the package
+    # `__init__` that imports this module. A top-level import would close that circle while
+    # `app.models` is still loading.
+    from app.billing.mismatch import normalize_card_country
+
     tx_id = data.get("id")
     if isinstance(tx_id, bool) or not isinstance(tx_id, (int, str)) or tx_id == "":
         raise ProviderError("Flutterwave answered without a transaction id")
