@@ -133,7 +133,7 @@ export function BillingView() {
       {live && sub?.status === "past_due" ? (
         <Alert kind="info">A plan cannot be changed while a payment is overdue. Pay it first, or cancel.</Alert>
       ) : null}
-      <Packs packs={plans.packs} sub={sub} />
+      <Packs packs={plans.packs} sub={sub} onStale={() => load()} />
       <BillingCountry profile={profile} onChange={() => load()} />
       <PaymentHistory payments={payments} />
     </div>
@@ -210,17 +210,16 @@ function PlanCard({
         </p>
         {sub?.status === "lapsed" ? (
           <p className="set-sub">
-            Your plan ended on <LocalTime iso={sub.current_period_end} kind="day" /> because a payment was not made. If you pay
-            the charge that is still waiting, your plan comes back.
+            Your last plan ended because a payment was not made.
+            {state.pending_payment?.kind === "renewal" && state.pending_payment.pay_url
+              ? " You can finish paying the charge that is still waiting, and your plan comes back, or choose a plan instead. Do one of the two, not both."
+              : ""}
           </p>
         ) : sub ? (
-          <p className="set-sub">
-            Your plan ended on <LocalTime iso={sub.current_period_end} kind="day" />.
-          </p>
+          <p className="set-sub">Your last plan has ended.</p>
         ) : (
           <p className="set-sub">Choose a plan to get recorded hours every month, for you alone.</p>
         )}
-        <p className="set-sub">Your notes, transcripts and exports stay as they are.</p>
         {state.pending_payment?.kind === "renewal" && state.pending_payment.pay_url ? <PayNow state={state} size="md" /> : null}
         <div>
           <Button href={BILLING_PLANS_HREF} kind="primary">
@@ -281,7 +280,8 @@ function PlanCard({
       {!overdue && sub.cancel_at_period_end ? (
         <p>
           You cancelled. Your plan and your hours work until <LocalTime iso={sub.current_period_end} kind="day" />. You will not be
-          charged again, and the part of this month you do not use is not refunded.
+          charged again. Cancelling does not refund the part of this month you do not use. If you keep your plan, your card
+          is charged <strong>{formatMoney(sub.amount_minor, sub.currency)}</strong> on that day.
         </p>
       ) : null}
 
@@ -324,10 +324,20 @@ function PlanCard({
       {sub.can_cancel && confirming ? (
         <Alert kind="notice" role="alert">
           <p className="alert-text">
-            <Headline>Cancel your plan?</Headline> It keeps working until <LocalTime iso={sub.current_period_end} kind="day" />. You will
-            not be charged again. The unused part of this month is not refunded, extra hours you bought stay valid, and you can
-            take the cancel back until then.
-            {overdue ? " Cancelling now also stops us trying your card." : ""}
+            <Headline>Cancel your plan?</Headline>{" "}
+            {overdue ? (
+              <>
+                Your remaining hours work until{" "}
+                {sub.grace_ends_at ? <LocalTime iso={sub.grace_ends_at} kind="day" /> : "the end of the grace"}. This cannot be
+                undone, and we stop trying your card. You will not be charged again. Extra hours you bought stay valid.
+              </>
+            ) : (
+              <>
+                It keeps working until <LocalTime iso={sub.current_period_end} kind="day" />, and you can take the cancel back
+                until then. You will not be charged again. Cancelling does not refund the part of this month you do not use.
+                Extra hours you bought stay valid.
+              </>
+            )}
           </p>
           <div className="alert-actions">
             <button type="button" className="btn btn-danger pl-btn" disabled={busy} onClick={() => void run(api.billing.cancel)}>

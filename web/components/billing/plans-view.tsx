@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Alert, AppLink, Badge, Button, Card, EmptyState, PageHead } from "@/components/ui";
-import { LocalTime } from "@/components/app/local-time";
 import { api } from "@/lib/api/browser";
 import {
   BILLING_HREF,
   currencyWords,
   formatHours,
   formatMoney,
+  samePrice,
   rememberReference,
   routeStatement,
   type BillingProfile,
@@ -37,6 +37,8 @@ export function PlansView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The plan whose button was pressed while another plan payment is still waiting: it asks once more first.
+  const [startOver, setStartOver] = useState<string | null>(null);
 
   usePageRestore(useCallback(() => setBusy(null), []));
   const [reads, setReads] = useState(0);
@@ -63,12 +65,26 @@ export function PlansView() {
     };
   }, [reads]);
 
-  async function choose(plan: PlanOffer) {
+  async function choose(plan: PlanOffer, waitingPlan: boolean) {
     if (busy) return;
+    // Two different plan pages can both be paid, and the second would have to be refunded by hand: ask first.
+    if (waitingPlan && startOver !== plan.code) {
+      setStartOver(plan.code);
+      return;
+    }
+    setStartOver(null);
     setBusy(plan.code);
     setError(null);
     try {
       const started = await api.billing.checkout("plan", plan.code);
+      if (plan.price && !samePrice(started.payment, plan.price)) {
+        setError(
+          `The price of this plan is now ${formatMoney(started.payment.amount_minor, started.payment.currency)}, not the ${formatMoney(plan.price.amount_minor, plan.price.currency)} shown. Nothing was charged. We have refreshed the page; check the price and choose again.`,
+        );
+        setBusy(null);
+        load();
+        return;
+      }
       rememberReference(started.payment.reference);
       goTo(started.checkout_url);
     } catch (caught) {
@@ -142,14 +158,16 @@ export function PlansView() {
 
       {sub && !hasPlan ? (
         <Alert kind="info">
-          Your last plan ended on <LocalTime iso={sub.current_period_end} kind="day" />. Choose a plan to start again. Your
-          notes, transcripts and exports are all still here.
+          Your last plan has ended. Choose a plan to start again. You can still read, search and export your notes.
         </Alert>
       ) : null}
 
       {waiting && waiting.pay_url && (waiting.kind === "plan" || waiting.kind === "pack") ? (
         <Alert kind="notice">
-          <p className="alert-text">You started a payment and have not finished it. No hours are added until it is paid.</p>
+          <p className="alert-text">
+            You started a payment and have not finished it. No hours are added until it is paid.
+            {waiting.kind === "plan" ? " Do not pay it and a second plan: you would be charged twice." : ""}
+          </p>
           <div className="alert-actions">
             <Button href={waiting.pay_url} kind="secondary" size="sm">
               Continue to pay
@@ -201,11 +219,29 @@ export function PlansView() {
                 type="button"
                 className="btn btn-primary pl-btn"
                 disabled={!route || !plan.price || hasPlan || busy !== null}
-                onClick={() => void choose(plan)}
+                onClick={() => void choose(plan, waiting?.kind === "plan" && waiting.status === "pending")}
               >
                 {busy === plan.code ? "Opening the payment page..." : "Choose this plan"}
               </button>
             </div>
+            {startOver === plan.code ? (
+              <div className="bill-more-row">
+                <Alert kind="notice" role="alert">
+                  <p className="alert-text">
+                    You already have a plan payment waiting. If you pay both, you will be charged twice. Start a new payment
+                    for this plan anyway?
+                  </p>
+                  <div className="alert-actions">
+                    <button type="button" className="btn btn-primary pl-btn" onClick={() => void choose(plan, true)}>
+                      Yes, start a new payment
+                    </button>
+                    <button type="button" className="btn btn-secondary pl-btn" onClick={() => setStartOver(null)}>
+                      No, keep the waiting one
+                    </button>
+                  </div>
+                </Alert>
+              </div>
+            ) : null}
           </section>
         ))}
       </div>
@@ -216,9 +252,9 @@ export function PlansView() {
         </h2>
         <ul className="bill-rules">
           <li>Your plan renews every month by charging the card you pay with now. You can cancel any time.</li>
-          <li>If you cancel, you keep your plan and your hours until the end of the month you paid for. The unused part of the month is not refunded.</li>
+          <li>If you cancel, you keep your plan and your hours until the end of the month you paid for. Cancelling does not refund the unused part of the month; payments are refunded only under our refund rules.</li>
           <li>Unused plan hours do not carry over to the next month.</li>
-          <li>If our price changes, it applies from your next renewal, and the billing page shows it before then.</li>
+          <li>If our price changes, it applies from your next renewal.</li>
           <li>Your hours appear when the provider confirms your payment, not when you come back to this site.</li>
           <li>Extra hours can be added once you have a plan.</li>
         </ul>

@@ -154,6 +154,13 @@ export const PAYMENT_STATUS_WORDS: Record<PaymentStatus, { label: string; tone: 
   partly_refunded: { label: "Partly refunded", tone: "neutral" },
 };
 
+// The payment a checkout made must be for the price the screen showed. The server is the authority and the
+// provider's page shows the real amount, but if the plan list was stale (another tab, a price or country change)
+// the screen must not send the person off to pay a different amount without saying so.
+export function samePrice(payment: Pick<BillingPayment, "currency" | "amount_minor">, price: Price): boolean {
+  return payment.currency === price.currency && payment.amount_minor === price.amount_minor;
+}
+
 // ---- the return page ----
 
 // Where the reference of the payment the person comes back to can be: Paystack adds `reference` and

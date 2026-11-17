@@ -9,8 +9,8 @@ import { billingErrorMessage } from "./common";
 import { usePageRestore } from "./use-page-restore";
 
 // The one way to pay what is overdue, used by the banner and the billing page.
-//  * A saved-card charge the bank wants the payer to confirm (3-D Secure) is already a payment of its own,
-//    with its own page in `pending_payment.pay_url`: "Confirm with your bank" goes THERE. It must never be
+//  * A saved-card charge the bank wants the payer to confirm (3-D Secure), or a pay-link page the person opened
+//    themselves, is already a payment of its own, with its own page in `pending_payment.pay_url`: "Finish paying" goes THERE. It must never be
 //    answered by asking for a second checkout (docs/fe-integration-guide-billing.md, "A card that needs the
 //    bank's confirmation"; the server's pay-link route would return the same address, but the screen does
 //    not need to ask).
@@ -25,7 +25,7 @@ export function PayNow({ state, size = "sm" }: { state: BillingState; size?: "sm
   if (bankPage) {
     return (
       <Button href={bankPage} kind="primary" size={size}>
-        Confirm with your bank
+        Finish paying
       </Button>
     );
   }

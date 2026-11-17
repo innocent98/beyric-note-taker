@@ -40,7 +40,7 @@ describe("a plan in its grace", () => {
   it("sends a charge waiting for the bank to THAT charge's own page and never asks for a second checkout", async () => {
     mocks.state.mockResolvedValue(cap("57-subscription-3ds.json"));
     render(<BillingBanner />);
-    const link = await screen.findByRole("link", { name: "Confirm with your bank" });
+    const link = await screen.findByRole("link", { name: "Finish paying" });
     expect(link.getAttribute("href")).toBe("https://fake.test/3ds/open-charge");
     expect(screen.queryByRole("button", { name: "Pay now" })).toBeNull();
     expect(mocks.payLink).not.toHaveBeenCalled();
@@ -63,16 +63,30 @@ describe("a lapsed plan", () => {
     mocks.state.mockResolvedValue({ ...cap<Record<string, unknown>>("61-subscription-lapsed-after-pass.json"), pending_payment: null });
     render(<BillingBanner />);
     expect(await screen.findByText(/Your plan has ended because a payment was not made/)).toBeTruthy();
-    expect(screen.getByText(/Ask Beyric, translating and rewriting notes are closed/)).toBeTruthy();
-    expect(screen.getByText(/except recordings from extra hours you still hold/)).toBeTruthy();
-    expect(screen.getByText(/notes, transcripts and exports are all still here/)).toBeTruthy();
+    expect(screen.getByText(/Ask Beyric, translating and rewriting notes\s+are closed/)).toBeTruthy();
+    expect(screen.getByText(/including the meetings your note taker joins from your calendar/)).toBeTruthy();
+    // the capture still holds 10 extra hours: recordings start from them
+    expect(screen.getByText(/from the extra hours you still hold/)).toBeTruthy();
+    expect(screen.getByText(/You can still read, search and\s+export your notes/)).toBeTruthy();
+    expect(screen.queryByText(/still here|stay as they are/)).toBeNull();
     expect(screen.getByRole("link", { name: "Choose a plan" }).getAttribute("href")).toBe("/billing/plans");
+  });
+
+  it("says recordings need hours again when none are held", async () => {
+    mocks.state.mockResolvedValue({
+      ...cap<Record<string, unknown>>("61-subscription-lapsed-after-pass.json"),
+      pending_payment: null,
+      hours: { seconds_left: 0, holdings_seconds: 0, warning: null },
+    });
+    render(<BillingBanner />);
+    expect(await screen.findByText(/once you have hours again/)).toBeTruthy();
   });
 
   it("still offers the bank's page for a charge that waits, because paying it late brings the plan back", async () => {
     mocks.state.mockResolvedValue(cap("61-subscription-lapsed-after-pass.json"));
     render(<BillingBanner />);
-    expect((await screen.findByRole("link", { name: "Confirm with your bank" })).getAttribute("href")).toBe("https://fake.test/3ds/open-charge");
+    expect((await screen.findByRole("link", { name: "Finish paying" })).getAttribute("href")).toBe("https://fake.test/3ds/open-charge");
+    expect(screen.getByText(/Do one of the two, not both/)).toBeTruthy();
   });
 });
 

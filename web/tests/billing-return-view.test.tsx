@@ -46,7 +46,9 @@ describe("while the payment is pending", () => {
     expect(screen.queryByText("Payment received.")).toBeNull();
     await settle(2000);
     expect(screen.getByText("Payment received.")).toBeTruthy();
-    expect(screen.getByText("Your plan is active and your hours are added.")).toBeTruthy();
+    // it does not claim the effect: a paid payment can still have granted nothing (a double payment)
+    expect(screen.getByText(/Your plan and hours are shown on Billing/)).toBeTruthy();
+    expect(screen.queryByText(/is active and your hours are added/)).toBeNull();
     expect(screen.getByText("$18.00 for your plan.")).toBeTruthy();
     expect(mocks.payment).toHaveBeenCalledWith(REF);
     // and it stops asking
@@ -82,6 +84,13 @@ describe("the other states", () => {
     expect(screen.getByText("The payment did not go through.")).toBeTruthy();
     expect(screen.getByText(/No hours were added/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Try again" }).getAttribute("href")).toBe("/billing/plans");
+  });
+
+  it("sends a failed pack, upgrade or renewal to Billing, not to the plans page", async () => {
+    mocks.payment.mockResolvedValue({ ...pending, kind: "pack", status: "failed", pay_url: null });
+    render(<ReturnView />);
+    await settle();
+    expect(screen.getByRole("link", { name: "Go to Billing to try again" }).getAttribute("href")).toBe("/billing");
   });
 
   it("says a person who backed out did not pay, keeps reading, and still shows a late success", async () => {

@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { Alert, AppLink } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import { BILLING_PLANS_HREF, formatHours, formatMoney, rememberReference, type PackOffer, type Subscription } from "@/lib/billing";
+import { BILLING_PLANS_HREF, formatHours, formatMoney, rememberReference, samePrice, type PackOffer, type Subscription } from "@/lib/billing";
 import { goTo } from "@/lib/navigate";
 import { billingErrorMessage } from "./common";
 import { usePageRestore } from "./use-page-restore";
@@ -11,7 +11,7 @@ import { usePageRestore } from "./use-page-restore";
 // Extra hours (billing stage S8b part B). A pack is valid only with a live plan (the server answers 409
 // `plan_required` otherwise, and a plan in its grace may still buy one), and is paid on the route the
 // plan was sold on, so the price shown is `GET /plans`'s own. It adds hours when the payment is verified.
-export function Packs({ packs, sub }: { packs: PackOffer[]; sub: Subscription | null }) {
+export function Packs({ packs, sub, onStale }: { packs: PackOffer[]; sub: Subscription | null; onStale?: () => void }) {
   const live = sub !== null && (sub.status === "active" || sub.status === "past_due");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +23,14 @@ export function Packs({ packs, sub }: { packs: PackOffer[]; sub: Subscription | 
     setError(null);
     try {
       const started = await api.billing.checkout("pack", pack.code);
+      if (!samePrice(started.payment, pack.price)) {
+        setError(
+          `The price of these hours is now ${formatMoney(started.payment.amount_minor, started.payment.currency)}, not the ${formatMoney(pack.price.amount_minor, pack.price.currency)} shown. Nothing was charged. We have refreshed the page; check the price and try again.`,
+        );
+        setBusy(null);
+        onStale?.();
+        return;
+      }
       rememberReference(started.payment.reference);
       goTo(started.checkout_url);
     } catch (caught) {

@@ -54,7 +54,7 @@ export function HoursCard({ state }: { state: BillingState }) {
           {planEnded
             ? ""
             : " They start again when you add extra hours, upgrade, or your plan renews. Ask Beyric, translating and rewriting notes keep working."}{" "}
-          Your notes, transcripts and exports stay as they are.
+         
         </Alert>
       ) : null}
 
@@ -67,8 +67,9 @@ export function HoursCard({ state }: { state: BillingState }) {
 
       {planEnded ? (
         <p className="set-sub">
-          Without a plan, new recordings, Ask Beyric, translating and rewriting notes are closed. Any extra hours you still
-          hold work for recordings only. <AppLink href={BILLING_PLANS_HREF}>Choose a plan</AppLink>
+          Without a plan, Ask Beyric, translating and rewriting notes are closed. New recordings, including meetings your note
+          taker would join from your calendar, only start from extra hours you still hold. You can still read, search and
+          export your notes. <AppLink href={BILLING_PLANS_HREF}>Choose a plan</AppLink>
         </p>
       ) : hasPlan ? (
         <p className="pl-row-sub">

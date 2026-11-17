@@ -53,7 +53,8 @@ describe("a person with a country and no plan", () => {
     render(<PlansView />);
     await screen.findByText("Before you pay");
     expect(screen.getByText(/renews every month by charging the card you pay with/)).toBeTruthy();
-    expect(screen.getByText(/The unused part of the month is not refunded/)).toBeTruthy();
+    expect(screen.getByText(/Cancelling does not refund the unused part of the month/)).toBeTruthy();
+    expect(screen.queryByText(/billing page shows it/)).toBeNull();
     expect(screen.getByText(/do not carry over/)).toBeTruthy();
     expect(screen.getByText(/our price changes, it applies from your next renewal/)).toBeTruthy();
     expect(screen.getByText(/not when you come back to this site/)).toBeTruthy();
@@ -197,5 +198,35 @@ describe("the plan button", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save country" }));
     expect(await screen.findByText(/What you see may be out of date/)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Billing country" })).toBeTruthy();
+  });
+});
+
+describe("a plan payment that is still waiting", () => {
+  it("warns about paying twice and asks once more before starting a different plan page", async () => {
+    mocks.state.mockResolvedValue(cap("19-subscription-pending.json"));
+    mocks.checkout.mockResolvedValue(cap("17-checkout-plan.json"));
+    render(<PlansView />);
+    expect(await screen.findByText(/Do not pay it and a second plan: you would be charged twice/)).toBeTruthy();
+    const second = (await screen.findAllByRole("button", { name: "Choose this plan" }))[1];
+    await userEvent.click(second);
+    expect(mocks.checkout).not.toHaveBeenCalled();
+    expect(screen.getByText(/If you pay both, you will be charged twice/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "No, keep the waiting one" }));
+    expect(screen.queryByText(/If you pay both/)).toBeNull();
+    await userEvent.click(second);
+    await userEvent.click(screen.getByRole("button", { name: "Yes, start a new payment" }));
+    await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith("plan", "capture_40h"));
+  });
+});
+
+describe("a price that moved since the plans were read", () => {
+  it("does not redirect, says the new price, and reads the plans again", async () => {
+    const started = cap<{ payment: Record<string, unknown>; checkout_url: string }>("17-checkout-plan.json");
+    mocks.checkout.mockResolvedValue({ ...started, payment: { ...started.payment, amount_minor: 2000 } });
+    render(<PlansView />);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[0]);
+    expect(await screen.findByText(/The price of this plan is now \$20\.00, not the \$18\.00 shown\. Nothing was charged/)).toBeTruthy();
+    expect(mocks.goTo).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.plans.mock.calls.length).toBeGreaterThan(1));
   });
 });

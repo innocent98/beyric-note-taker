@@ -75,8 +75,8 @@ describe("an active plan", () => {
     render(<BillingView />);
     await userEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
     expect(screen.getByText(/It keeps working until/)).toBeTruthy();
-    expect(screen.getByText(/not refunded/)).toBeTruthy();
-    expect(screen.getByText(/take the cancel back until then/)).toBeTruthy();
+    expect(screen.getByText(/does not refund the part of this month you do not use/)).toBeTruthy();
+    expect(screen.getByText(/you can take the cancel back/)).toBeTruthy();
     expect(mocks.cancel).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Yes, cancel my plan" }));
     await waitFor(() => expect(mocks.cancel).toHaveBeenCalledTimes(1));
@@ -106,7 +106,9 @@ describe("a cancelled plan that still runs", () => {
     render(<BillingView />);
     expect(await screen.findByText("Ending")).toBeTruthy();
     expect(screen.getByText(/You will not be/)).toBeTruthy();
-    expect(screen.getByText(/the part of this month you do not use is not refunded/)).toBeTruthy();
+    expect(screen.getByText(/does not refund the part of this month you do not use/)).toBeTruthy();
+    // keeping the plan says what will be charged and when
+    expect(screen.getByText(/If you keep your plan, your card\s+is charged/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Keep my plan" }));
     await waitFor(() => expect(mocks.resume).toHaveBeenCalledTimes(1));
   });
@@ -121,7 +123,7 @@ describe("changing plan", () => {
     expect(mocks.previewChange).toHaveBeenCalledWith("capture_40h");
     expect(await screen.findByText(/You pay \$15\.99 today/)).toBeTruthy();
     expect(screen.getByText(/19 hours 54 minutes extra this month/)).toBeTruthy();
-    expect(screen.getByText(/You are charged as soon as you confirm/)).toBeTruthy();
+    expect(screen.getByText(/You are charged as soon as you pay on the provider's page, which shows the exact amount/)).toBeTruthy();
     expect(mocks.changePlan).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Confirm and pay $15.99" }));
     await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(cap<{ checkout_url: string }>("42-change-upgrade.json").checkout_url));
@@ -182,7 +184,7 @@ describe("a plan in its grace", () => {
   it("sends a charge waiting for the bank to its own page, not to a second checkout", async () => {
     show(cap("57-subscription-3ds.json"));
     render(<BillingView />);
-    const link = await screen.findByRole("link", { name: "Confirm with your bank" });
+    const link = await screen.findByRole("link", { name: "Finish paying" });
     expect(link.getAttribute("href")).toBe("https://fake.test/3ds/open-charge");
     expect(mocks.payLink).not.toHaveBeenCalled();
   });
@@ -193,10 +195,14 @@ describe("a plan that is over, and a person who never had one", () => {
     show(cap("61-subscription-lapsed-after-pass.json"));
     render(<BillingView />);
     expect(await screen.findByText("You do not have a plan.")).toBeTruthy();
-    expect(screen.getByText(/because a payment was not made/)).toBeTruthy();
-    expect(screen.getByText(/notes, transcripts and exports stay as they are/i)).toBeTruthy();
+    expect(screen.getByText(/ended because a payment was not made/)).toBeTruthy();
+    expect(screen.getByText(/You can still read, search and export your notes/)).toBeTruthy();
+    expect(screen.queryByText(/stay as they are|still here/)).toBeNull();
+    // no date: the end of a lapsed plan is 3 days after the due date, which the page does not know
+    expect(screen.queryByText(/ended on/)).toBeNull();
     expect(screen.getAllByRole("link", { name: "Choose a plan" })[0].getAttribute("href")).toBe("/billing/plans");
     expect(within(card("Your hours")).getByText(/Ask Beyric, translating and rewriting notes are closed/)).toBeTruthy();
+    expect(within(card("Your hours")).getByText(/meetings your note taker would join from your calendar/)).toBeTruthy();
   });
 
   it("offers a plan to a person who never had one, and no extra hours without a plan", async () => {
@@ -410,5 +416,54 @@ describe("an upgrade preview the API could not price", () => {
     expect(screen.queryByRole("button", { name: /Confirm and pay/ })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(mocks.previewChange).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the cancel question during the grace", () => {
+  it("says the hours work until the grace ends, that it cannot be undone and that the card is no longer tried", async () => {
+    show(cap("50-subscription-past-due.json"));
+    mocks.cancel.mockResolvedValue(cap("36-cancel.json"));
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel plan" }));
+    const question = screen.getByRole("alert");
+    expect(question.textContent).toMatch(/Your remaining hours work until Fri 20 Nov 2026/);
+    expect(question.textContent).toMatch(/This cannot be\s+undone, and we stop trying your card/);
+    expect(question.textContent).not.toMatch(/take the cancel back/);
+    expect(question.textContent).not.toMatch(/keeps working until/);
+  });
+});
+
+describe("a price that moved between the page and the checkout", () => {
+  it("does not send the person to pay a different pack price, says so, and refreshes", async () => {
+    const started = cap<{ payment: Record<string, unknown>; checkout_url: string }>("33-checkout-pack.json");
+    mocks.checkout.mockResolvedValue({ ...started, payment: { ...started.payment, amount_minor: 1200 } });
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buy these hours" }));
+    expect(await screen.findByText(/The price of these hours is now \$12\.00, not the \$10\.00 shown\. Nothing was charged/)).toBeTruthy();
+    expect(mocks.goTo).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.state.mock.calls.length).toBeGreaterThan(1));
+    expect((screen.getByRole("button", { name: "Buy these hours" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not send the person to pay a different upgrade amount than the preview, and shows the new one to confirm", async () => {
+    mocks.previewChange.mockResolvedValue(cap("41-preview-upgrade.json"));
+    const done = cap<{ payment: Record<string, unknown> }>("42-change-upgrade.json");
+    mocks.changePlan.mockResolvedValue({ ...done, payment: { ...done.payment, amount_minor: 1700 } });
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "See what changes" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm and pay $15.99" }));
+    expect(await screen.findByText(/The price of this change is now \$17\.00, not the \$15\.99 shown/)).toBeTruthy();
+    expect(mocks.goTo).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirm and pay $17.00" })).toBeTruthy();
+  });
+});
+
+describe("the lapsed plan card", () => {
+  it("offers one way to pay and says not to do both when a renewal charge still waits", async () => {
+    show(cap("61-subscription-lapsed-after-pass.json"));
+    render(<BillingView />);
+    expect(await screen.findByText(/Do one of the two, not both/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Finish paying" })).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Choose a plan" }).length).toBeGreaterThan(0);
   });
 });

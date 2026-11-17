@@ -165,8 +165,8 @@ export function BillingCountry({
             month ends. You then pay again on the new route, because a saved card cannot be moved.
           </li>
           <li>
-            A card from any country is accepted. If you are billed in US dollars, use a card your bank lets you spend in
-            dollars. If you are established in Nigeria, choose Nigeria so you pay in naira.
+            You can pay with a card from another country, but your bank may decline it. If you are billed in US dollars, use a
+            card your bank lets you spend in dollars. If you are established in Nigeria, choose Nigeria so you pay in naira.
           </li>
         </ul>
       </details>

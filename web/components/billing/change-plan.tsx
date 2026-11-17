@@ -9,6 +9,7 @@ import {
   formatHours,
   formatMoney,
   rememberReference,
+  samePrice,
   type ChangePreview,
   type PlanOffer,
   type Plans,
@@ -62,6 +63,16 @@ export function ChangePlan({
     try {
       const done = await api.billing.changePlan(plan.code);
       if (done.result === "checkout" && done.checkout_url && done.payment) {
+        // The price may have moved since the preview (the server works it out again at the confirm): never send the
+        // person to pay a different amount than the one they were shown, without saying so.
+        if (preview && preview.answer.amount_minor !== null && !samePrice(done.payment, { currency: preview.answer.currency, amount_minor: preview.answer.amount_minor })) {
+          setError(
+            `The price of this change is now ${formatMoney(done.payment.amount_minor, done.payment.currency)}, not the ${formatMoney(preview.answer.amount_minor, preview.answer.currency)} shown. Nothing was charged. Check it and confirm again.`,
+          );
+          setPreview({ plan: preview.plan, answer: { ...preview.answer, amount_minor: done.payment.amount_minor } });
+          setBusy(null);
+          return;
+        }
         // The browser is leaving for the provider: the button stays busy so it cannot be pressed twice. It is
         // freed if the person comes back with the back button (`usePageRestore`).
         rememberReference(done.payment.reference);
@@ -156,7 +167,7 @@ export function ChangePlan({
                       <strong>You pay {formatMoney(open.amount_minor, open.currency)} today</strong> for the days left in
                       this month, and you get {open.extra_seconds ? `${formatHours(open.extra_seconds)} extra` : "extra hours"}{" "}
                       this month. From your next renewal the plan costs {plan.price ? formatMoney(plan.price.amount_minor, plan.price.currency) : "its full price"}{" "}
-                      a month. You are charged as soon as you confirm, on the provider&apos;s page.
+                      a month. You are charged as soon as you pay on the provider&apos;s page, which shows the exact amount.
                     </p>
                     <button type="button" className="btn btn-primary pl-btn" disabled={busy !== null} onClick={() => void confirm(plan)}>
                       {busy === plan.code ? "Opening the payment page..." : `Confirm and pay ${formatMoney(open.amount_minor, open.currency)}`}

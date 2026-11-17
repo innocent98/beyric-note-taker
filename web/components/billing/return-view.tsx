@@ -242,12 +242,14 @@ function Body({
           <p className="set-sub">No hours were added and your plan has not changed. You can try again with the same card or another one.</p>
           {ref}
           <div className="pl-controls bill-actions">
-            <Button href="/billing/plans" kind="primary">
-              Try again
+            <Button href={payment.kind === "plan" ? "/billing/plans" : "/billing"} kind="primary">
+              {payment.kind === "plan" ? "Try again" : "Go to Billing to try again"}
             </Button>
-            <Button href="/billing" kind="secondary">
-              Go to Billing
-            </Button>
+            {payment.kind === "plan" ? (
+              <Button href="/billing" kind="secondary">
+                Go to Billing
+              </Button>
+            ) : null}
           </div>
         </div>
       </Card>
@@ -345,15 +347,14 @@ const FOR_WORDS: Record<BillingPayment["kind"], string> = {
   pack: "extra hours",
 };
 
+// What a paid payment says. It does NOT claim the effect: a payment can be `succeeded` and still grant nothing (a
+// second plan bought while one is live, an upgrade whose period moved on, a renewal already settled: the server
+// keeps the money for a refund by hand), so the page points to Billing, which shows what the server now holds.
 function succeededWords(payment: BillingPayment): string {
   switch (payment.kind) {
-    case "plan":
-      return "Your plan is active and your hours are added.";
-    case "upgrade":
-      return "Your plan is upgraded and the extra hours are added.";
-    case "renewal":
-      return "Your plan is renewed and your hours are added.";
     case "pack":
-      return "The extra hours are added.";
+      return "Your hours are shown on Billing. If they are not there within a few minutes, keep the reference below and tell us.";
+    default:
+      return "Your plan and hours are shown on Billing. If they are not what you expect, keep the reference below and tell us.";
   }
 }

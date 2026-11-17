@@ -22,7 +22,7 @@ import { PayNow } from "./pay-now";
 // every screen of the owner app except the billing pages (which say it in full). It reads
 // GET /api/billing/subscription:
 //   past_due   the 3 days of grace: the date it ends, "no new hours until paid", and Pay now. A charge the
-//              person's bank wants confirmed (3-D Secure) shows "Confirm with your bank", which goes to THAT
+//              person's bank wants confirmed (3-D Secure) shows "Finish paying", which goes to THAT
 //              charge's own page (`pending_payment.pay_url`), never to a second checkout.
 //   lapsed     the grace ended unpaid: what is closed, what is kept, and the way back (choose a plan, or
 //              confirm the charge still waiting: paying it late brings the plan back).
@@ -112,9 +112,13 @@ export function BillingBanner() {
     <div className="billing-banner" data-billing-banner="lapsed">
       <Alert kind="notice" role="alert">
         <p className="alert-text">
-          <strong>Your plan has ended because a payment was not made.</strong> New recordings, Ask Beyric, translating and
-          rewriting notes are closed{hasHours ? ", except recordings from extra hours you still hold" : ""}. Your notes,
-          transcripts and exports are all still here.
+          <strong>Your plan has ended because a payment was not made.</strong> Ask Beyric, translating and rewriting notes
+          are closed, and new recordings, including the meetings your note taker joins from your calendar, only start
+          {hasHours ? " from the extra hours you still hold" : " once you have hours again"}. You can still read, search and
+          export your notes.
+          {state.pending_payment?.pay_url
+            ? " You can finish paying the charge that is still waiting, and your plan comes back, or choose a plan instead. Do one of the two, not both."
+            : ""}
         </p>
         <div className="alert-actions">
           <PayNow state={state} />
