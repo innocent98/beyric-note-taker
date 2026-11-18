@@ -16,8 +16,20 @@ functions the live `TRANSCRIPT_SOURCE=skribby` path uses (`skribby._segments` wi
 speaker-naming rules, `transcript_source.candidate`, the same "too short" checks and the same
 vocabulary pass), then writes the notes again from the new text with the meeting's own template
 (`notes.generate_notes`, as the pipeline and the rewrite button do). The meeting's
-`transcript_source` becomes `skribby-rebuilt`, which is also how a second run knows it has
-nothing to do.
+`transcript_source` becomes `skribby-rebuilt`.
+
+It applies the line-level speaker correction too (`app/speaker_correction.py`, the kill switch
+`SPEAKER_LINE_CORRECTION`): a segment moves to the person Meet's timeline shows speaking over it
+when exactly one person was lit and that person is not the one its tag says. The dry run prints how
+many segments and seconds would move, in the same five outcomes and with the same counts as
+`scripts/speaker_reattribution_report.py` for the same meeting. Running it a second time is safe,
+including on a meeting that an EARLIER version of this script already rebuilt (meeting 39): it
+compares the turns of the stored speaker transcript (who, and how many words) with the turns it
+would build, says "nothing to do" when they are the same and rebuilds when they are not. A meeting
+rebuilt before the correction existed therefore rebuilds once more; after that it is left alone.
+Nothing stores a row number: Ask works out its row citations from the transcript at question time
+and the tasks and decisions are read again from the new notes, so the only thing a rebuild leaves
+behind is a browser tab that still shows an Ask answer with the old row numbers.
 
 The default is a DRY RUN: it reads, prints counts (never a word anybody said, never a name) and
 changes nothing. With `--apply` it first saves the old transcript, speaker transcript and notes to a
@@ -41,6 +53,7 @@ checked.
 """
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -55,7 +68,15 @@ from sqlalchemy import func, or_, select, text  # noqa: E402
 from sqlalchemy.exc import OperationalError  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import ai_runs, bot_names, pipeline, skribby, transcript_source, workspace  # noqa: E402
+from app import (  # noqa: E402
+    ai_runs,
+    bot_names,
+    pipeline,
+    skribby,
+    speaker_correction,
+    transcript_source,
+    workspace,
+)
 from app import tasks as task_rules  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
@@ -103,6 +124,10 @@ class Plan:
     tag_segments: dict = field(default_factory=dict)
     segments: int = 0
     kept_until: datetime | None = None
+    # What the line-level speaker correction does to this meeting now (None when it does not run:
+    # `correction_off` says why). Counts only; the same numbers the report prints.
+    correction: speaker_correction.Correction | None = None
+    correction_off: str = ""
 
 
 # ---- reading ----
@@ -116,24 +141,38 @@ def _labels(text_: str | None) -> list[str]:
     return LABEL.findall(text_ or "")
 
 
+def _turns(text_: str | None) -> list[tuple[str, list[str]]]:
+    """Each `[Name]:` turn as (name, the words spoken)."""
+    parts = LABEL.split(text_ or "")  # [before, name, spoken, name, spoken, ...]
+    return [(parts[i], parts[i + 1].split()) for i in range(1, len(parts) - 1, 2)]
+
+
+def same_turns(stored: str | None, built: str | None) -> bool:
+    """Whether the stored speaker transcript says the same as the text a rebuild would store: the
+    same people in the same turns, saying the same words. The words may differ ONLY by respellings
+    to the owner's vocabulary: the stored text has been through that pass (a model call, so it
+    cannot be repeated for a comparison) and `built` has not, and the pass may turn "bay rick" into
+    "Beyric". Such an edit replaces words (`difflib` "replace"); a line that moved to another
+    person's turn is a pure insertion in one turn and a pure deletion in another, which the pass
+    can never do (`app/vocabulary_pass.py`: "a pure insertion or deletion is refused too"). So a
+    meeting rebuilt for an owner with vocabulary terms is "nothing to do" the second time, and a
+    meeting whose lines would move is not, whatever the pass did to the word counts."""
+    old, new = _turns(stored), _turns(built)
+    if [name for name, _ in old] != [name for name, _ in new]:
+        return False
+    for (_, before), (_, after) in zip(old, new, strict=True):
+        if before == after:
+            continue
+        matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
+        if any(tag in ("insert", "delete") for tag, *_ in matcher.get_opcodes()):
+            return False
+    return True
+
+
 def _body(items: list) -> dict:
-    """The evidence items in the shape of Skribby's own answer, which is what `skribby._segments`
-    and `skribby._resolve_tags` read (the evidence keeps the candidate names as plain strings)."""
-    return {
-        "transcript": [
-            {
-                "speaker": i.get("speaker"),
-                "speaker_name": i.get("speaker_name"),
-                "potential_speaker_names": [
-                    {"name": name} for name in i.get("potential_speaker_names") or []
-                ],
-                "start": i.get("start"),
-                "end": i.get("end"),
-                "transcript": i.get("text"),
-            }
-            for i in items
-        ]
-    }
+    """The evidence items in the shape of Skribby's own answer (`speaker_correction.skribby_body`),
+    which is what `skribby._segments` and `skribby._resolve_tags` read."""
+    return speaker_correction.skribby_body(items)
 
 
 def _check_state(meeting: Meeting) -> None:
@@ -161,22 +200,25 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     if meeting is None:
         raise Refused(f"there is no meeting {meeting_id}.")
     _check_state(meeting)
-    if meeting.transcript_source == REBUILT:
-        return Plan(
-            meeting,
-            already="already rebuilt from the saved evidence; nothing to do (to do it again, "
-            "restore the backup first)",
-        )
+    rebuilt = meeting.transcript_source == REBUILT
+    gone = (
+        "already rebuilt from the saved evidence; no evidence is left to build it from again, "
+        "so there is nothing to do"
+    )
     row = session.scalars(
         select(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
     ).first()
     if row is None:
+        if rebuilt:
+            return Plan(meeting, already=gone)
         raise Refused(
             f"no saved evidence for meeting {meeting_id}. Skribby's segments are kept 7 days after "
             "the meeting and removed after that, or this meeting never had any."
         )
     kept_until = row.created_at + timedelta(days=pipeline.EVIDENCE_RETENTION_DAYS)
     if kept_until <= now:
+        if rebuilt:
+            return Plan(meeting, already=gone)
         raise Refused(
             f"the evidence for meeting {meeting_id} has expired (kept until "
             f"{kept_until:%Y-%m-%d %H:%M} UTC)."
@@ -198,7 +240,13 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     # reports in its body: the evidence does not keep that one.
     own_names = bot_names.own_names(get_settings(), meeting.bot_name)
     body = _body(items)
-    segments = skribby._segments(body, own_names, by_elimination, events, by_timeline)
+    # The line-level correction (`app/speaker_correction.py`) is part of the same call the live
+    # path makes, so a rebuild moves exactly the lines a live meeting would have. Not gated by
+    # `TRANSCRIPT_SOURCE` (a rebuild builds Skribby's text by definition), only by the kill switch.
+    by_correction = get_settings().speaker_line_correction
+    segments, correction = skribby._labelled(
+        body, own_names, by_elimination, events, by_timeline, by_correction
+    )
     found = transcript_source.candidate(segments, skribby._last_segment_end(body))
     why_not = transcript_source.fallback_reason(
         found, meeting.recorded_seconds or 0, pipeline.MIN_WORDS
@@ -217,17 +265,26 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
         ),
         segments=len(items),
         kept_until=kept_until,
+        correction=correction,
+        correction_off=(
+            ""
+            if correction is not None
+            else "switched off (SPEAKER_LINE_CORRECTION=false)"
+            if not by_correction
+            else "no speaker events were kept for this meeting, so no line can move"
+        ),
     )
     for item in items:
         tag = str(item.get("speaker")) if item.get("speaker") is not None else "(no tag)"
         plan.tag_segments[tag] = plan.tag_segments.get(tag, 0) + 1
-    if meeting.transcript_source == transcript_source.SKRIBBY and _labels(
-        meeting.speaker_transcript
-    ) == _labels(found.text):
+    if meeting.transcript_source in (transcript_source.SKRIBBY, REBUILT) and same_turns(
+        meeting.speaker_transcript, found.text
+    ):
         plan.already = (
-            "this meeting's transcript is already Skribby's own text with the same speakers; "
-            "nothing to do"
-        )
+            "already rebuilt from the saved evidence"
+            if rebuilt
+            else "this meeting's transcript is already Skribby's own text"
+        ) + " with the same speakers and turns; nothing to do"
     return plan
 
 
@@ -408,6 +465,60 @@ def _how_counts(tags: dict) -> str:
     return ", ".join(f"{n} {how}" for how, n in sorted(counts.items())) or "none"
 
 
+def _why_none(plan: Plan) -> str:
+    fix = plan.correction
+    return plan.correction_off if fix is None else (fix.refused or "nothing moved")
+
+
+def _correction_lines(plan: Plan) -> list[str]:
+    """What the line-level correction does, as counts (no word, no name): the same five outcomes,
+    with the same segment and second counts, as `scripts/speaker_reattribution_report.py` prints
+    for the same meeting with its default knobs."""
+    fix = plan.correction
+    head = "speaker line correction (Meet's timeline; the same counts as the report script):"
+    if fix is None:
+        return [head, f"  not applied: {plan.correction_off}"]
+    if fix.refused:
+        return [
+            head,
+            f"  not applied: {fix.refused} (the Meet clock or the events cannot be trusted for "
+            "this meeting, so no line moves)"
+            + (
+                f"; best shift of Meet's clock {fix.clock.best:+g} s, agreement "
+                f"{fix.clock.here:.0f} s now, {fix.clock.there:.0f} s there"
+                if fix.clock is not None
+                else ""
+            ),
+        ]
+    rows = [
+        ("agrees", "agrees with the tag's name"),
+        ("move", "WOULD MOVE to another person"),
+        ("ambiguous", "ambiguous (2+ lit): stays"),
+        ("no_signal", "no Meet signal: stays"),
+        ("bot", "note taker on top: stays"),
+        ("unmatched", "lit person has no name here: stays"),
+    ]
+    lines = [head]
+    for key, label in rows:
+        count, seconds = fix.outcome(key)
+        lines.append(f"  {label:<30}{count:>6} segments{seconds:>10.1f} s")
+    lines.append(
+        f"  {'not timed or no tag: stays':<30}{int(fix.not_timed['count']):>6} segments"
+        f"{fix.not_timed['seconds']:>10.1f} s"
+    )
+    out_of: dict[str, list[float]] = {}
+    for a in fix.assessments:
+        if a.outcome == "move":
+            row = out_of.setdefault(a.tag, [0, 0.0])
+            row[0] += 1
+            row[1] += a.seconds
+    for tag in sorted(out_of):
+        lines.append(
+            f"  moved out of tag {tag}: {int(out_of[tag][0])} segments, {out_of[tag][1]:.1f} s"
+        )
+    return lines
+
+
 def describe(session: Session, plan: Plan) -> list[str]:
     meeting, found = plan.meeting, plan.candidate
     assert found is not None and plan.evidence is not None
@@ -442,6 +553,7 @@ def describe(session: Session, plan: Plan) -> list[str]:
         f"speakers incomplete: before {'yes' if meeting.speakers_incomplete else 'no'}, "
         f"after {'no' if found.complete else 'yes'}",
     ]
+    lines += _correction_lines(plan)
     found_touched = touched(session, meeting.id)
     lines.append(
         "touched by a person: " + _count_line({kind: len(found_touched[kind]) for kind in KINDS})
@@ -556,7 +668,11 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
     now = datetime.now(UTC)
     meeting = _lock(session, meeting_id)
     _check_state(meeting)
-    if meeting.transcript_source == REBUILT:  # someone ran it between the look and the lock
+    if (
+        meeting.transcript_source == REBUILT
+        and plan.candidate is not None
+        and same_turns(meeting.speaker_transcript, plan.candidate.text)
+    ):  # someone ran it between the look and the lock
         out(f"Meeting {meeting_id}: already rebuilt; nothing to do.")
         session.rollback()
         return 0
@@ -623,6 +739,14 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
     session.commit()
     out("")
     out(f"APPLIED to meeting {meeting_id}: transcript, speaker transcript and notes rebuilt.")
+    fix = plan.correction
+    if fix is not None and not fix.refused:
+        out(
+            f"  Lines moved to the person Meet's timeline showed: {fix.moved_segments} segments, "
+            f"{fix.moved_seconds:.1f} s."
+        )
+    else:
+        out(f"  Lines moved to the person Meet's timeline showed: none ({_why_none(plan)}).")
     if sum(losing.values()):
         out(f"  --force gave up touched items the new notes do not contain: {_count_line(losing)}.")
     out(

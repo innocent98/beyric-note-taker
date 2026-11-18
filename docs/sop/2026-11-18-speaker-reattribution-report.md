@@ -3,8 +3,19 @@
 **What shipped.** A read-only measurement, `scripts/speaker_reattribution_report.py <meeting_id>`, and a design
 note, `docs/superpowers/specs/2026-11-18-line-level-speaker-correction-design.md`, on whether production should
 re-credit a segment to the person Meet's own speaking timeline shows over it when that differs from the
-diarization tag. Branch `docs/speaker-lines-report` (PR number is on the checklist). **Nothing about how
-production attributes speakers changed.** No migration, no env variable, no endpoint, no screen (so no FE guide).
+diarization tag. Branch `docs/speaker-lines-report` (PR number is on the checklist). **When this SOP shipped,
+nothing about how production attributes speakers changed.** No migration, no env variable, no endpoint, no screen (so no FE guide).
+
+**Update 2026-11-19: the correction it measured is built and ON by default** (`docs/sop/2026-11-19-line-level-speaker-correction.md`,
+switch `SPEAKER_LINE_CORRECTION`). The report now shares the rule with production: `MIN_SECONDS` (1 s) and
+`AMBIGUOUS_RATIO` (0.25) are imported from `app/speaker_correction.py` (so the defaults below are the production
+constants), and `classify`, `assess` and `place` live there. Two behaviour changes: **tag names are read again with the
+current naming rules by default** (as production and the rebuild do; `--saved-names` reads the names saved with the
+evidence, which reproduces the first runs: meeting 39's 128 moves came from tags that were unnamed when it was
+processed, so the default will print fewer), and the segment's own `speaker_name` is what a segment is compared with
+(else its tag's name). With a `CLOCK WARNING` the report still prints its numbers, but production would move nothing in
+that meeting. A segment already moved when the meeting was processed carries `corrected_to` in the evidence; the report
+prints how many.
 
 ## Why
 

@@ -1,9 +1,15 @@
 # Line-level speaker correction: should a line follow Meet's timeline when the tag disagrees?
 
-**Status:** design note, 2026-11-18. Nothing here is built. The only code that ships with it is the
-read-only measurement `scripts/speaker_reattribution_report.py` (SOP
-`docs/sop/2026-11-18-speaker-reattribution-report.md`), which changes nothing about how production
-attributes speakers.
+**Status:** design note, 2026-11-18. **BUILT 2026-11-19** (SOP `docs/sop/2026-11-19-line-level-speaker-correction.md`,
+branch `feature/line-level-speaker-correction`), with Adebayo's decisions overriding this note where they differ:
+**ON by default** with one emergency kill switch `SPEAKER_LINE_CORRECTION` (not default-off, no percent rollout or shadow
+mode; sections 2, 7 and the end of 9 are superseded); the rule is **"exactly one person lit, nobody else"** with the
+report's own defaults `--min-seconds 1` and `--ambiguous-ratio 0.25` as the production constants (the table in section 4
+is superseded: no share of the line, no 4-word minimum, no smoothing, no "protect people with no light"); it runs in the
+pipeline for `TRANSCRIPT_SOURCE=skribby` and in the rebuild script (section 5: not in `_segments` alone but through
+`skribby._labelled`, the evidence keeps `corrected_to`). Sections 1, 3, 6, 8 and 10 still describe the problem, the
+numbers, the risks and the alternative. Written first: the read-only measurement
+`scripts/speaker_reattribution_report.py` (SOP `docs/sop/2026-11-18-speaker-reattribution-report.md`).
 
 ## 1. The question
 
@@ -76,7 +82,7 @@ what `scripts/rebuild_meeting_from_evidence.py` calls, so a rebuild applies it t
 | Risk | What goes wrong | Mitigation / status |
 |---|---|---|
 | **Several people on one Meet account, or a room mic** | Meet shows one participant lit for the whole room. Diarization may have separated the people correctly; the timeline cannot tell them apart | Tags in that room are named the same account, so same-name segments "agree" and do not move. But a *remote* person's line can be pulled into the room name when the remote person's light is missing. The "protect people with no light" and ambiguity rules limit it; the proof run must include a meeting with a shared account if one exists. Cannot be fully solved from this data |
-| **Indicator lag** | The previous speaker stays lit for a fraction of a second into the next turn, and the new speaker's light starts late | 2 s minimum and the runner-up rule absorb it; short lines are not moved. The script could print the share lit in the first and last second if needed |
+| **Indicator lag** | The previous speaker stays lit for a fraction of a second into the next turn, and the new speaker's light starts late | **Not mitigated by the built rule (corrected 2026-11-19; this row used to say short lines are protected, which is false once the 2 s / 4-word / share conditions were dropped by decision).** A short line ("yes, I'll take it", 2 s) can be moved to the previous speaker when that speaker's light lags into it and the line's own speaker's light covers under 1 s: the previous speaker is then the one clearly lit. Accepted by Adebayo's rule ("exactly one person lit") because such lines rarely hold action items or decisions, the clock check stops a steady offset of 1 s or more from correcting anything, and `SPEAKER_LINE_CORRECTION=false` is the emergency off. An edge trim (ignore the first and last 0.5 to 1 s of a segment's overlap) is the cheap guard if live reading shows it; it is not built and is not a share rule |
 | **Meet misses a speaker** | Only about half to two thirds of speech lights; a quiet person may never light | Absence is never a reason to move (rule above), only a clear *other* person |
 | **Clock placement not proven live** | Event times are read as Unix ms placed from the bot's `recording` status; "not proven live" in the report. A fixed offset of a few seconds would make every move wrong | The clock check is a hard gate (the same one naming uses). The proof run reads its line first. Meeting 39's clock check said no shift of up to 30 s fits better, which is some evidence the placement is right |
 | **Double-correcting the model** | When the tag is right and the light lags, the correction makes it wrong | The proof step counts moves a human judges wrong; the bar is in section 9 |

@@ -50,58 +50,32 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import bot_names, meet_timeline, skribby  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.models import Meeting, SkribbySegmentEvidence  # noqa: E402
+from app.speaker_correction import (  # noqa: E402
+    AMBIGUOUS_RATIO,
+    MIN_SECONDS,
+    UNKNOWN,
+    assess,
+    classify,
+    clock_check,
+    place,
+    same_person,
+    skribby_body,
+    tag_of,
+)
+from app.speaker_correction import key_and_shown as _key_and_shown  # noqa: E402
 
 MAX_MOVES_SHOWN = 15
 TEXT_WIDTH = 200
-UNKNOWN = "Unknown speaker"
-# Report knobs, not production thresholds (the design note proposes the production ones).
-MIN_SECONDS = 1.0  # fewest seconds a person must be lit over a segment to count at all
-AMBIGUOUS_RATIO = 0.25  # runner-up with this share of the top's seconds makes a segment ambiguous
-
-
-def _key_and_shown(name: str) -> tuple[str, str]:
-    """A participant's name -> (comparison key, shown name): the grouping the naming rule uses
-    (`app/skribby.py::_name_by_timeline`), so a rejoin is one person."""
-    shown = skribby._clean_name(name)
-    return (skribby._same(shown) if shown else ""), shown
-
-
-def same_person(a: str, b: str) -> bool:
-    """Equal after cleaning, or one inside the other (the segments report's "ok" test)."""
-    ka, kb = skribby._same(a), skribby._same(b)
-    return bool(ka and kb) and (ka == kb or ka in kb or kb in ka)
+# The two knobs (`MIN_SECONDS`, `AMBIGUOUS_RATIO`) and the rule itself live in
+# `app/speaker_correction.py`: they are the production constants, so what this prints is what the
+# live path and the rebuild do. `--min-seconds` and `--ambiguous-ratio` only try other values.
+# Names other code (the tests) reads from this script.
+__all__ = ["_key_and_shown", "classify", "same_person"]
 
 
 def _clock(seconds: float) -> str:
     total = int(seconds)
     return f"{total // 60:3d}:{total % 60:02d}"
-
-
-def _tag_of(item: dict) -> str | None:
-    return skribby._tag(item.get("speaker"))
-
-
-def classify(
-    spans: dict[str, list[tuple[float, float]]],
-    start: float,
-    end: float,
-    min_seconds: float = MIN_SECONDS,
-    ambiguous_ratio: float = AMBIGUOUS_RATIO,
-) -> tuple[str, str | None, float]:
-    """`(outcome, person, seconds)` for one segment: `outcome` is `clear`, `ambiguous` or
-    `no_signal`; `person` and `seconds` are Meet's top participant and the seconds they were lit
-    over [start, end] (person is None for `no_signal`)."""
-    ranked = sorted(
-        ((meet_timeline.overlap(v, start, end), n) for n, v in spans.items()),
-        key=lambda pair: (-pair[0], pair[1]),
-    )
-    if not ranked or ranked[0][0] < min_seconds:
-        return "no_signal", None, 0.0
-    top, person = ranked[0]
-    second = ranked[1][0] if len(ranked) > 1 else 0.0
-    if second >= min_seconds and second >= ambiguous_ratio * top:
-        return "ambiguous", person, top
-    return "clear", person, top
 
 
 def analyse(
@@ -110,37 +84,28 @@ def analyse(
     spans: dict[str, list[tuple[float, float]]],
     min_seconds: float = MIN_SECONDS,
     ambiguous_ratio: float = AMBIGUOUS_RATIO,
+    bot: frozenset[str] | set[str] = frozenset(),
 ) -> dict[str, Any]:
     """Every number of the report. `spans` is each participant's merged speaking intervals already
-    on the transcript's clock (the bot left out)."""
-    segments = []
-    not_timed = {"count": 0, "seconds": 0.0}
-    for item in items:
-        tag = _tag_of(item)
-        a, b = meet_timeline.seconds(item.get("start")), meet_timeline.seconds(item.get("end"))
-        if tag is None or a is None or b is None or b <= a:
-            not_timed["count"] += 1
-            if a is not None and b is not None and b > a:
-                not_timed["seconds"] += b - a
-            continue
-        named = (tags.get(tag) or {}).get("name") or ""
-        outcome, person, lit = classify(spans, a, b, min_seconds, ambiguous_ratio)
-        if outcome == "clear":
-            outcome = "agrees" if named and same_person(named, person) else "move"
-        segments.append(
-            {
-                "tag": tag,
-                "tag_name": named,
-                "start": a,
-                "end": b,
-                "seconds": b - a,
-                "outcome": outcome,
-                "person": person,
-                "lit": lit,
-                "text": item.get("text") or "",
-            }
-        )
-    return {"segments": segments, "not_timed": not_timed, "people": _people(spans, segments, tags)}
+    on the transcript's clock, the note taker's included (named in `bot`: it takes part in the
+    ranking but is never a destination)."""
+    assessed, not_timed = assess(items, tags, spans, min_seconds, ambiguous_ratio, bot)
+    segments = [
+        {
+            "tag": a.tag,
+            "tag_name": a.current,
+            "start": a.start,
+            "end": a.end,
+            "seconds": a.seconds,
+            "outcome": a.outcome,
+            "person": a.person,
+            "lit": a.lit,
+            "text": items[a.index].get("text") or "",
+        }
+        for a in assessed
+    ]
+    people = {n: v for n, v in spans.items() if n not in bot}
+    return {"segments": segments, "not_timed": not_timed, "people": _people(people, segments, tags)}
 
 
 def _people(spans: dict, segments: list[dict], tags: dict) -> dict[str, dict]:
@@ -191,6 +156,8 @@ def render(header: str, result: dict[str, Any], knobs: tuple[float, float]) -> s
         ("move", "WOULD MOVE to another person"),
         ("ambiguous", "ambiguous (2+ lit): stays"),
         ("no_signal", "no Meet signal: stays"),
+        ("bot", "note taker on top: stays"),
+        ("unmatched", "lit person has no name here: stays"),
     ]
     for key, label in labels:
         rows = [s for s in segments if s["outcome"] == key]
@@ -268,45 +235,57 @@ def build_report(
     min_seconds: float = MIN_SECONDS,
     ambiguous_ratio: float = AMBIGUOUS_RATIO,
     saved: str = "",
+    names: str = "",
 ) -> str:
     """The report text from the saved parts; says so plainly when the timeline cannot be used."""
     header = f"Meeting {meeting_id}: {len(items)} items from Skribby{saved}."
+    if names:
+        header += f"\n  Tag names: {names}."
     if not record:
         return f"{header}\n  No speaker events were kept, so there is nothing to compare with.\n"
-    spans = meet_timeline.speaking_intervals(record, _key_and_shown)
-    if not spans:
+    placed = place(record, own_names, offset)
+    if placed.refused == "unreadable":
         return f"{header}\n  Speaker events were kept but are not in a shape this can read.\n"
-    zero, how = meet_timeline.anchor(record, spans)
-    if zero is None:
-        return f"{header}\n  {how}, so they cannot be placed on the transcript.\n"
-    bot = {skribby._same(n) for n in map(skribby._clean_name, own_names) if n}
-    shift = zero - offset
-    spans = {
-        n: meet_timeline.merge([(a - shift, b - shift) for a, b in v])
-        for n, v in spans.items()
-        if skribby._same(n) not in bot
-    }
-    header += f"\n  {how}; Meet times shifted by {offset:+.0f} s."
+    if placed.spans is None:
+        return f"{header}\n  {placed.how}, so they cannot be placed on the transcript.\n"
+    spans = placed.spans
+    header += f"\n  {placed.how}; Meet times shifted by {offset:+.0f} s."
     if record.get("truncated"):
         header += f"\n  (events were cut to fit the size cap: {record['truncated']})"
-    heard = meet_timeline.heard_by_tag(items, _tag_of)
-    if not spans or not heard:
+    people = placed.people
+    if not people or not meet_timeline.heard_by_tag(items, tag_of):
         return f"{header}\n  Nobody to compare, or no timed segment.\n"
-    best, here, there = meet_timeline.clock_fit(spans, heard)
-    if meet_timeline.clock_is_fine(best, here, there):
-        header += "\n  Clock check: no shift of up to 30 s fits the segments clearly better."
+    fit = clock_check(items, tags, people)
+    if fit.fine:
+        header += (
+            f"\n  Clock check: no shift of Meet's clock makes the segments agree clearly better "
+            f"(best {fit.best:+g} s, gain {fit.gain:.0%}; compared on {fit.basis} segments)."
+        )
     else:
         header += (
-            f"\n  CLOCK WARNING: moving Meet's times {best:+d} s would raise the overlap from "
-            f"{here:.0f} s to {there:.0f} s; the numbers below may be off. "
-            f"Re-run with --offset {offset + best:g} to see them shifted."
+            f"\n  CLOCK WARNING: moving Meet's times {fit.best:+g} s would raise the agreement "
+            f"from {fit.here:.0f} s to {fit.there:.0f} s ({fit.gain:.0%}); the numbers below may "
+            f"be off, and production would move nothing in this meeting. "
+            f"Re-run with --offset {offset + fit.best:g} to see them shifted."
         )
-    result = analyse(items, tags, spans, min_seconds, ambiguous_ratio)
+    applied = [item for item in items if item.get("corrected_to")]
+    if applied:
+        header += (
+            f"\n  Already applied when this meeting was processed: {len(applied)} segments "
+            f"carry a corrected_to marker (the production rule, so they should be the moves "
+            f"below when the defaults are used)."
+        )
+    result = analyse(items, tags, spans, min_seconds, ambiguous_ratio, placed.bot)
     return render(header, result, (min_seconds, ambiguous_ratio))
 
 
-def report(session: Session, meeting_id: int, **knobs) -> str:
-    """The report for one meeting; says so plainly when nothing is kept for it."""
+def report(session: Session, meeting_id: int, current_names: bool = True, **knobs) -> str:
+    """The report for one meeting; says so plainly when nothing is kept for it. The tag names are
+    read again now with the current naming rules, exactly as production and the rebuild read them
+    (a tag the timeline can name today was "Unknown speaker" when meeting 39 was processed, and
+    its lines are not moves any more); `current_names=False` reads the names saved with the
+    evidence instead (not verified to reproduce the first runs' numbers exactly, e.g. meeting 39's
+    128 moves: a segment's own name and whole-word name matching are used now)."""
     row = session.scalar(
         select(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
     )
@@ -316,14 +295,34 @@ def report(session: Session, meeting_id: int, **knobs) -> str:
             "copy is deleted and removed after 7 days, or this meeting did not use Skribby).\n"
         )
     meeting = session.get(Meeting, meeting_id)
-    own = bot_names.own_names(get_settings(), meeting.bot_name if meeting else None)
+    settings = get_settings()
+    own = bot_names.own_names(settings, meeting.bot_name if meeting else None)
+    items = list(row.items or [])
+    events = row.events if isinstance(row.events, dict) else None
+    if current_names:
+        tags = skribby._resolve_tags(
+            skribby_body(items)["transcript"],
+            own,
+            settings.skribby_name_by_elimination,
+            events,
+            settings.name_by_meet_timeline,
+        )
+        names = "read again now with the current naming rules (the rebuild reads them the same way)"
+    else:
+        tags = dict(row.tags or {})
+        names = (
+            "as saved when the meeting was processed (--saved-names; the numbers of the first runs "
+            "are not guaranteed to come out the same: a segment's own name and whole-word name "
+            "matching are used now)"
+        )
     return build_report(
         meeting_id,
-        list(row.items or []),
-        dict(row.tags or {}),
+        items,
+        tags,
         row.events,
         own,
         saved=f", saved {row.created_at:%Y-%m-%d %H:%M} UTC",
+        names=names,
         **knobs,
     )
 
@@ -334,6 +333,11 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--offset", type=float, default=0.0, help="seconds added to Meet's times")
     parser.add_argument("--min-seconds", type=float, default=MIN_SECONDS)
     parser.add_argument("--ambiguous-ratio", type=float, default=AMBIGUOUS_RATIO)
+    parser.add_argument(
+        "--saved-names",
+        action="store_true",
+        help="read the tag names saved with the evidence, not the current naming rules",
+    )
     args = parser.parse_args(argv)
     from app.db import SessionLocal
 
@@ -342,6 +346,7 @@ def run(argv: list[str]) -> int:
             report(
                 session,
                 args.meeting_id,
+                current_names=not args.saved_names,
                 offset=args.offset,
                 min_seconds=args.min_seconds,
                 ambiguous_ratio=args.ambiguous_ratio,
