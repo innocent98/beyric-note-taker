@@ -15,6 +15,7 @@ a key of the right kind.
 
 import hmac
 import json
+import re
 import socket
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,6 +29,7 @@ from app.billing.provider import PROVIDER_FACTORIES, provider_named
 from app.billing.types import (
     BadEvent,
     IgnoredEvent,
+    OutcomeUnknown,
     ProviderError,
     WebhookRejected,
 )
@@ -304,6 +306,17 @@ def test_a_refund_event_reads_its_text_amount_as_whole_kobo():
     assert event.amount_minor == 5000 and type(event.amount_minor) is int
 
 
+def test_only_a_refund_failed_event_says_the_refund_failed():
+    provider, _ = make()
+    processed = provider.parse_event(raw("refund_processed_event.json"))
+    body = json.loads(raw("refund_processed_event.json"))
+    body["event"] = "refund.failed"
+    failed = provider.parse_event(json.dumps(body).encode())
+    assert processed.refund_failed is False
+    assert failed.refund_failed is True and failed.kind == "refund"
+    assert failed.event_id.startswith("refund.failed:")
+
+
 def test_a_dispute_event_points_at_the_charge_it_is_about():
     event = make()[0].parse_event(raw("dispute_create_event.json"))
     assert (event.kind, event.reference, event.provider_tx_id) == (
@@ -382,7 +395,7 @@ def test_a_body_that_is_not_an_event_is_unreadable(body):
 
 def test_a_refund_or_dispute_event_with_null_fields_is_still_an_event_never_a_lost_one():
     """A `refund.pending` may carry no processor reference yet, a dispute no refund amount: stored
-    for the refund stage, never a 400 that Paystack resends for 72 hours and then drops."""
+    as decided notices (S9), never a 400 that Paystack resends for 72 hours and then drops."""
     provider, _ = make()
     refund = sample("refund_processed_event.json")
     refund["data"].update(refund_reference=None, status="pending")
@@ -764,34 +777,38 @@ def test_a_charge_answer_with_a_float_amount_is_refused():
 # ---- refunds ----
 
 
+REF = "bnrf-17-0123456789abcdef"  # the shape our refund references have
+
+
 def test_a_refund_sends_whole_kobo_and_returns_paystacks_refund_id():
     provider, script = make(ok("refund_response.json"))
 
-    assert provider.refund("1004723697", 10000) == "3018284"
+    assert provider.refund("1004723697", 10000, reference=REF) == "3018284"
 
     assert str(script.requests[0].url) == f"{API_BASE}/refund"
-    assert script.sent() == {"transaction": "1004723697", "amount": 10000}
-    assert b"10000}" in script.requests[0].content  # an integer, not "10000.0"
+    assert script.sent() == {"transaction": "1004723697", "amount": 10000, "reference": REF}
+    assert b"10000," in script.requests[0].content  # an integer, not "10000.0"
 
 
-def test_a_refund_sends_our_reference_so_a_retry_cannot_refund_twice():
+def test_a_refund_without_our_reference_cannot_be_asked_at_all():
+    """The reference is Paystack's idempotency key: without it a retried refund pays twice, so the
+    argument is required (S9), not optional as it was in S6."""
     provider, script = make(ok("refund_response.json"))
-    provider.refund("1004723697", 10000, reference="refund-17-attempt")
-    assert script.sent() == {
-        "transaction": "1004723697",
-        "amount": 10000,
-        "reference": "refund-17-attempt",
-    }
+    with pytest.raises(TypeError):
+        provider.refund("1004723697", 10000)
+    assert script.requests == []
 
 
-def test_a_retried_refund_that_paystack_refuses_as_a_conflict_is_an_error_not_a_second_refund():
+def test_a_retried_refund_that_paystack_refuses_as_a_conflict_is_unknown_not_a_second_refund():
+    """A 409 says a refund with this reference exists: an earlier try went through. It is an
+    `OutcomeUnknown` (look at the dashboard), not a refusal, and nothing is sent twice."""
     provider, script = make((409, {"status": False, "message": "Duplicate refund reference"}))
-    with pytest.raises(ProviderError, match=r"\(409\): Duplicate refund reference"):
-        provider.refund("1004723697", 10000, reference="refund-17-attempt")
+    with pytest.raises(OutcomeUnknown, match="already exists"):
+        provider.refund("1004723697", 10000, reference=REF)
     assert len(script.requests) == 1
 
 
-@pytest.mark.parametrize("reference", ["short", "x" * 65, "has space", "a/b/c/d/e/f", "", 5])
+@pytest.mark.parametrize("reference", ["short", "x" * 65, "has space", "a/b/c/d/e/f", "", 5, None])
 def test_a_refund_reference_paystack_would_refuse_is_refused_before_any_call(reference):
     provider, script = make(ok("refund_response.json"))
     with pytest.raises(ProviderError):
@@ -799,23 +816,23 @@ def test_a_refund_reference_paystack_would_refuse_is_refused_before_any_call(ref
     assert script.requests == []
 
 
-def test_a_refund_for_another_amount_than_asked_is_an_error():
+def test_a_refund_for_another_amount_than_asked_may_have_moved_money_so_it_is_unknown():
     provider, _ = make(ok("refund_response.json", amount=5000))
-    with pytest.raises(ProviderError, match="amount we asked"):
-        provider.refund("1004723697", 10000)
+    with pytest.raises(OutcomeUnknown, match="amount we asked"):
+        provider.refund("1004723697", 10000, reference=REF)
 
 
-def test_a_refund_paystack_reports_as_failed_is_an_error():
+def test_a_refund_paystack_reports_as_failed_is_a_refusal():
     provider, _ = make(ok("refund_response.json", status="failed"))
     with pytest.raises(ProviderError, match="failed"):
-        provider.refund("1004723697", 10000)
+        provider.refund("1004723697", 10000, reference=REF)
 
 
 @pytest.mark.parametrize("data", [{"id": None}, {"id": "3018284"}, {"id": 3018284.0}, {"id": True}])
-def test_a_refund_answer_without_a_whole_number_id_is_an_error(data):
+def test_a_refund_answer_without_a_whole_number_id_is_unknown_it_may_exist(data):
     provider, _ = make(ok("refund_response.json", **data))
-    with pytest.raises(ProviderError, match="no refund id"):
-        provider.refund("1004723697", 10000)
+    with pytest.raises(OutcomeUnknown, match="refund id"):
+        provider.refund("1004723697", 10000, reference=REF)
 
 
 @pytest.mark.parametrize(
@@ -833,8 +850,58 @@ def test_a_refund_answer_without_a_whole_number_id_is_an_error(data):
 def test_a_refund_that_cannot_be_asked_properly_is_refused_before_any_call(tx, amount):
     provider, script = make(ok("refund_response.json"))
     with pytest.raises(ProviderError):
-        provider.refund(tx, amount)
+        provider.refund(tx, amount, reference=REF)
     assert script.requests == []
+
+
+# What a refund does when nothing usable came back. A call that moves money may have gone out, so
+# a missing answer is `OutcomeUnknown`, which is NOT a `ProviderError`: nobody may retry it blind.
+# A plain refusal (the key, the request) means nothing moved and stays a `ProviderError`.
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (500, {"status": False, "message": "boom"}),
+        (502, b"<html>bad gateway</html>"),
+        (503, b""),
+        (409, {"status": False, "message": "Duplicate refund reference"}),
+        (200, b"<html>not json</html>"),
+        (200, []),
+        (200, {"status": False, "message": "no", "data": {}}),
+        (200, {"status": True, "message": "ok"}),
+        (302, b""),
+        (204, b""),
+        httpx.ReadTimeout("secret-looking text"),
+        httpx.ConnectTimeout("t"),
+        httpx.ConnectError("https://api.paystack.co/leak"),
+        httpx.RemoteProtocolError("x"),
+    ],
+)
+def test_a_refund_that_got_no_usable_answer_is_unknown_and_leaks_nothing(answer):
+    provider, script = make(answer)
+    with pytest.raises(OutcomeUnknown) as caught:
+        provider.refund("1004723697", 10000, reference=REF)
+    assert not isinstance(caught.value, ProviderError)  # a retry-on-ProviderError loop misses it
+    message = str(caught.value)
+    assert KEY not in message and "paystack.co" not in message and "payer@example" not in message
+    assert len(script.requests) <= 1  # never retried inside the adapter
+
+
+@pytest.mark.parametrize(
+    "answer, text",
+    [
+        ((429, {"status": False, "message": "slow down"}), "answered 429"),
+        ((401, {"status": False, "message": "Invalid key"}), "refused the secret key"),
+        ((404, {"status": False, "message": "Transaction not found"}), "refused the request (404)"),
+        (
+            (400, sample("error_validation_response.json")),
+            "refused the request (400): Email Address is required",
+        ),
+    ],
+)
+def test_a_refund_paystack_plainly_refused_is_a_provider_error_nothing_moved(answer, text):
+    provider, _ = make(answer)
+    with pytest.raises(ProviderError, match=re.escape(text)):
+        provider.refund("1004723697", 10000, reference=REF)
 
 
 # ---- HTTP failures are explicit errors, never a quiet success ----
@@ -842,13 +909,17 @@ def test_a_refund_that_cannot_be_asked_properly_is_refused_before_any_call(tx, a
 EVERY_CALL = [
     lambda p: p.fetch_transaction("4099260516"),
     lambda p: p.verify_reference("re4lyvq3s3"),
-    lambda p: p.refund("1004723697", 10000),
+    lambda p: p.refund("1004723697", 10000, reference=REF),
     lambda p: p.start_checkout(PAYMENT, PAYER, "https://x.example.test/"),
     lambda p: charge(p),
 ]
 
 
-@pytest.mark.parametrize("call", EVERY_CALL)
+# The refund is judged on its own above (a missing answer is `OutcomeUnknown` there).
+NOT_MONEY_CALLS = [call for call in EVERY_CALL if call is not EVERY_CALL[2]]
+
+
+@pytest.mark.parametrize("call", NOT_MONEY_CALLS)
 @pytest.mark.parametrize(
     "answer, text",
     [

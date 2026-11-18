@@ -1,0 +1,36 @@
+{
+  "note": "After the previews the country is still not saved.",
+  "client": "lagos",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": null,
+      "address": null,
+      "tax_id": null,
+      "billing_email": null,
+      "billing_country": null,
+      "pending_billing_country": null,
+      "pending_effective_at": null,
+      "route": null,
+      "country_change_allowed_at": null,
+      "country_locked": false,
+      "suggested_country": "NG",
+      "suggested_route": {
+        "currency": "NGN",
+        "provider": "paystack"
+      }
+    }
+  }
+}

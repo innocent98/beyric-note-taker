@@ -24,7 +24,10 @@
       "pending_billing_country": null,
       "pending_effective_at": null,
       "route": null,
-      "country_change_allowed_at": null
+      "country_change_allowed_at": null,
+      "country_locked": false,
+      "suggested_country": null,
+      "suggested_route": null
     }
   }
 }

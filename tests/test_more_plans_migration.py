@@ -29,11 +29,10 @@ DECIDED_PRICES = [
 ]
 
 
-def test_0054_is_the_only_head_and_follows_the_billing_chain(scratch_url):
+def test_0054_is_the_only_head_and_follows_0053(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
-    # 0053 is S9's: until it has merged this points at 0052, afterwards at 0053.
-    assert script.get_revision("0054").down_revision in ("0052", "0053")
+    assert script.get_revision("0054").down_revision == "0053"  # S9's invoices and refunds
 
 
 def rows(conn):
@@ -69,7 +68,7 @@ def test_the_three_decided_plans_and_six_prices_and_the_round_trip(scratch_url):
     assert intervals == [("month",)]
     # The pack and the first plan are exactly what 0052 seeded.
     assert sorted(packs) == [("pack_10h", "NGN", 1_500_000), ("pack_10h", "USD", 1000)]
-    command.downgrade(cfg, "0052")
+    command.downgrade(cfg, "0053")
     with engine.connect() as conn:
         plans, prices, _flags = rows(conn)
     assert plans == DECIDED_PLANS[:1]
@@ -105,7 +104,7 @@ def test_the_downgrade_refuses_while_a_money_record_points_at_pro_or_scale(scrat
                 {"u": uid, "p": pro_price},
             )
     with pytest.raises(RuntimeError, match="Refusing to downgrade 0054"):
-        command.downgrade(cfg, "0052")
+        command.downgrade(cfg, "0053")
     with engine.connect() as conn:
         assert conn.execute(text("select count(*) from plans")).scalar() == 3
     engine.dispose()

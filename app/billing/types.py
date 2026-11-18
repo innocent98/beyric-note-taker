@@ -8,7 +8,7 @@ are the ISO codes the `payments` table allows.
 from dataclasses import dataclass, field
 
 # What a webhook can tell us. `charge_succeeded` and `charge_failed` move a payment; `refund` and
-# `dispute` are stored and left for the refund stage (S9).
+# `dispute` are stored and marked decided (stage S9); a failed refund or a dispute alerts admins.
 EVENT_KINDS = ("charge_succeeded", "charge_failed", "refund", "dispute")
 # What the provider says about one payment when we ask it directly.
 TRANSACTION_STATUSES = ("successful", "failed", "pending")
@@ -61,6 +61,10 @@ class ProviderEvent:
     currency: str
     payer_email: str | None = None
     card_token: str | None = field(default=None, repr=False)
+    # A `refund` notice that says the refund FAILED (Paystack `refund.failed`, a Flutterwave refund
+    # with status `failed`): a refund we recorded as accepted did not pay the person back. Only
+    # ever read to tell the admins; it changes nothing else.
+    refund_failed: bool = False
 
 
 @dataclass(frozen=True)

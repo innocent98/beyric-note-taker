@@ -25,13 +25,10 @@ Downgrade removes the two plans and their prices, and refuses while any subscrip
 downgrade or payment points at either: those are money records.
 
 Revision ID: 0054
-Revises: 0052
+Revises: 0053
 Create Date: 2026-11-17
 
-NOTE FOR MERGING: PR #234 (S9) takes revision 0053 (down revision 0052). This migration is
-numbered 0054 and still points at 0052 so that CI has one head while #234 is unmerged. **Merge
-#234 first, then change `down_revision` below to "0053"** (one line); two heads fail the single-
-head check."""
+Revision 0053 is S9's (invoices and refunds), merged before this one."""
 
 from datetime import UTC, datetime
 
@@ -39,7 +36,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0054"
-down_revision = "0052"  # becomes "0053" once #234 (S9) has merged
+down_revision = "0053"
 branch_labels = None
 depends_on = None
 

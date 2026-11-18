@@ -1,0 +1,31 @@
+{
+  "note": "What is queued when a payment succeeds: the template and the invoice id only. No amount, no name, no number: the text and the PDF are built when the mail is SENT.",
+  "content": {
+    "rows": [
+      {
+        "template": "billing_receipt",
+        "payload": {
+          "invoice_id": 1
+        },
+        "status": "pending",
+        "to_domain": "example.test"
+      },
+      {
+        "template": "billing_receipt",
+        "payload": {
+          "invoice_id": 2
+        },
+        "status": "pending",
+        "to_domain": "example.test"
+      },
+      {
+        "template": "billing_receipt",
+        "payload": {
+          "invoice_id": 3
+        },
+        "status": "pending",
+        "to_domain": "example.test"
+      }
+    ]
+  }
+}

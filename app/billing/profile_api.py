@@ -24,7 +24,8 @@ Errors, all in the API's one shape (`{"error": {"code", "message"}}`):
   country is empty, is not an ISO code, or has no route.
 - 422 `billing_email_invalid`: the billing email is not a plain address.
 - 422 `validation_error`: a field is too long, of the wrong type, or has control characters.
-- 409 `country_change_too_soon`, `country_change_pending`: the change rules.
+- 409 `country_change_too_soon`, `country_change_pending`: the change rules. They apply only once
+  the person has paid or has a live plan; before that a change always succeeds at once.
 """
 
 import unicodedata
@@ -83,8 +84,17 @@ class ProfileOut(BaseModel):
     pending_effective_at: UtcDatetime | None
     # What `billing_country` pays with; null when no country is chosen or none can be routed.
     route: RouteOut | None
-    # When the next country change is allowed (one every 30 days); null when one is allowed now.
+    # When the next country change is allowed (one every 30 days once they have paid); null when
+    # one is allowed now, which is always so before the first payment.
     country_change_allowed_at: UtcDatetime | None
+    # True once the person has paid or has a live plan: from then the country changes only under
+    # the 30-day rule. False before: it can be changed instantly, any number of times.
+    country_locked: bool
+    # Only while no country is saved: the country the saved time zone points to, and what it pays
+    # with, for the screen to show and the person to confirm. It is NEVER saved by a read; null
+    # when there is no zone, the zone has no country, or that country cannot be routed.
+    suggested_country: str | None
+    suggested_route: RouteOut | None
 
 
 class CountryChangeOut(BaseModel):
@@ -141,11 +151,18 @@ def _route_of(country: str | None, routes_text: str) -> RouteOut | None:
     return RouteOut(currency=found.currency, provider=found.provider)
 
 
+def _suggestion(db: Session, user: User, routes_text: str) -> dict:
+    """The suggested country and its route, or two nulls (see `ProfileOut.suggested_country`)."""
+    country = profiles.suggest_country(db, user, routes_text)
+    return {"suggested_country": country, "suggested_route": _route_of(country, routes_text)}
+
+
 def _profile_out(
     db: Session, user: User, row: BillingProfile | None, routes_text: str, now: datetime
 ) -> ProfileOut:
     """The profile as it applies at `now`: a scheduled change whose time has come is shown as
     applied (`profiles.country_view`) without this read writing anything."""
+    locked = profiles.country_lock(db, user.id, now) is not None
     if row is None:
         return ProfileOut(
             name_or_company=None,
@@ -157,6 +174,8 @@ def _profile_out(
             pending_effective_at=None,
             route=None,
             country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
+            country_locked=locked,
+            **_suggestion(db, user, routes_text),
         )
     view = profiles.country_view(row, now)
     return ProfileOut(
@@ -169,6 +188,12 @@ def _profile_out(
         pending_effective_at=view.pending_effective_at,
         route=_route_of(view.billing_country, routes_text),
         country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
+        country_locked=locked,
+        **(
+            _suggestion(db, user, routes_text)
+            if view.billing_country is None
+            else {"suggested_country": None, "suggested_route": None}
+        ),
     )
 
 

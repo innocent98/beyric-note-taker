@@ -1,0 +1,25 @@
+{
+  "note": "Someone else's invoice number is a plain 404, the same as an unknown one.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/BN-T-2026-000001/pdf",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

@@ -46,7 +46,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import alerts, usage, vault
-from app.billing import plans, routing, settle, states
+from app.billing import notify, plans, routing, settle, states
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import PaymentProvider, provider_named
@@ -54,11 +54,13 @@ from app.billing.types import BillingError, ProviderError, ProviderTransaction
 from app.config import Settings
 from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
+    BillingCountryChange,
     HourGrant,
     Payment,
     PaymentMethod,
     Plan,
     PlanPrice,
+    Refund,
     Subscription,
     User,
 )
@@ -100,6 +102,31 @@ def money(amount_minor: int, currency: str) -> str:
 
 
 # ---- reading ----
+
+
+def refund_waiting(db: Session, sub_id: int) -> bool:
+    """A refund of one of this subscription's payments is `pending` or `unknown` (stage S9): the
+    plan may be about to end, so nothing may renew it, charge its card or change it until a person
+    has settled the refund (`refunds.py`)."""
+    return (
+        db.scalar(
+            select(Refund.id)
+            .join(Payment, Payment.id == Refund.payment_id)
+            .where(Payment.subscription_id == sub_id, Refund.status.in_(("pending", "unknown")))
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _refuse_while_refunding(db: Session, sub: Subscription) -> None:
+    if refund_waiting(db, sub.id):
+        raise Refused(
+            409,
+            "refund_pending",
+            "A refund of your plan is being processed, so the plan cannot be changed or paid "
+            "until it is done.",
+        )
 
 
 def live_row(db: Session, user_id: int, *, lock: bool = False) -> Subscription | None:
@@ -320,16 +347,15 @@ def saved_card(db: Session, user_id: int, provider: str) -> tuple[str, str | Non
 
 def _tell_admins(db: Session, key: str, title: str, body: str) -> None:
     """One admin alert per key, by ids only (no emails). Best effort: it must not stop the money."""
-    try:
-        with db.begin_nested():
-            alerts.notify_admins(db, kind=key.split(":")[0], title=title, body=body, dedupe_key=key)
-    except Exception as exc:
-        logger.error("admin alert %s failed: %s", key.split(":")[0], type(exc).__name__)
+    notify.tell_admins(db, key, title, body)
 
 
 def needs_refund(db: Session, payment: Payment, why: str) -> None:
-    """Money arrived that no subscription period can use: tell the admins, grant nothing."""
+    """Money arrived that no subscription period can use: tell the admins, grant nothing. The
+    reason is kept on the payment (`needs_refund_reason`): it is never invoiced, and it is what
+    makes a refund of it a double charge (`refunds.py`)."""
     logger.warning("payment %s succeeded but grants nothing: %s", payment.id, why)
+    payment.needs_refund_reason = why
     _tell_admins(
         db,
         f"admin.billing_refund_needed:{payment.id}",
@@ -340,6 +366,8 @@ def needs_refund(db: Session, payment: Payment, why: str) -> None:
 
 
 def _receipt(db: Session, payment: Payment, what: str) -> None:
+    """The bell entry for a payment. The MAIL is the receipt with the invoice (`invoices.
+    queue_receipt`, stage S9), so this one sends none: a person gets one mail, not two."""
     if payment.payer_user_id is None:
         return
     alerts.notify_user(
@@ -351,7 +379,6 @@ def _receipt(db: Session, payment: Payment, what: str) -> None:
         body=f"We received your payment of {money(payment.amount_minor, payment.currency)} "
         f"for {what}. Thank you.",
         dedupe_key=f"billing.receipt:{payment.id}",
-        email_template=alerts.ALERT_TEMPLATE,
     )
 
 
@@ -406,6 +433,22 @@ def _plan_paid(db: Session, payment: Payment) -> None:
     if price is None or payer is None or payer.status != "active":
         # (a checkout paid after the account was deleted makes no plan for a ghost)
         return needs_refund(db, payment, "the plan is gone or the account is not active")
+    # The checkout was opened under a billing country and priced in its currency. If the country was
+    # changed afterwards the open checkouts were closed (`profiles.supersede_open_plan_checkouts`),
+    # so this page was paid after being closed: a plan sold on a route the profile no longer shows
+    # would renew on the wrong route with no warning. Take no plan; a person refunds it.
+    changed_since = db.scalar(
+        select(BillingCountryChange.id)
+        .where(
+            BillingCountryChange.user_id == payer.id,
+            BillingCountryChange.created_at > payment.created_at,
+        )
+        .limit(1)
+    )
+    if changed_since is not None:
+        return needs_refund(
+            db, payment, "the billing country was changed after this checkout was opened"
+        )
     plan = db.get(Plan, price.plan_code)
     start = payment.paid_at
     sub = Subscription(
@@ -455,6 +498,8 @@ def _renewal_paid(db: Session, payment: Payment) -> None:
     price = db.get(PlanPrice, payment.plan_price_id) if payment.plan_price_id else None
     if sub is None or price is None or sub.user_id is None:
         return needs_refund(db, payment, "the subscription is gone")
+    if refund_waiting(db, sub.id):
+        return needs_refund(db, payment, "a refund of the plan is being settled")
     current = payment.cycle_end == sub.current_period_end
     transition = states.apply(
         sub.status, states.PAYMENT_SUCCEEDED if current else states.PAYMENT_STALE
@@ -522,6 +567,7 @@ def _upgrade_paid(db: Session, payment: Payment) -> None:
         or price is None
         or sub.user_id is None
         or sub.status != states.ACTIVE
+        or refund_waiting(db, sub.id)  # the plan may be about to end: the upgrade has no case
         or payment.cycle_end != sub.current_period_end
         # It must land INSIDE the period it was for, judged by the clock at the payment: paid at
         # or after the due moment, before the scheduler pass has run (or while the renewal's
@@ -589,6 +635,11 @@ def register() -> None:
         settle.TRANSACTION_HANDLERS.append(save_card)
     if on_payment_succeeded not in settle.GRANT_HANDLERS:
         settle.GRANT_HANDLERS.append(on_payment_succeeded)
+    # Stage S9: the invoice handler runs right after this one (it needs to see what it did), and is
+    # registered here so that no caller of `settle` can have the hours without the invoice.
+    from app.billing import invoices
+
+    invoices.register()
 
 
 register()
@@ -722,6 +773,7 @@ def preview_plan_change(
     sub = live_row(db, user.id)
     if sub is None:
         raise Refused(409, "no_subscription", "You do not have a plan.")
+    _refuse_while_refunding(db, sub)
     kind, target, current, new_price = _classify_change(db, sub, plan_code, now)
     if kind == "clear":
         return PlanChangePreview("clear", target.code, sub.currency, None, None, "now")
@@ -744,6 +796,7 @@ def change_plan(
     Choosing the plan you are on takes a waiting downgrade back. Refused in the grace (409
     `payment_overdue`). The checkout is on the route the subscription was sold on."""
     sub = _locked_live(db, user)
+    _refuse_while_refunding(db, sub)
     kind, target, current, new_price = _classify_change(db, sub, plan_code, now)
     if kind == "clear":
         sub.pending_plan_code = None

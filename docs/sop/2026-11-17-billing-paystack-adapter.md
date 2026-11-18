@@ -135,7 +135,7 @@ Nothing below was run against a real or test-mode Paystack. Every Paystack shape
 | Resolve an uncertain charge (timeout) with `verify_reference` before charging again; store the renewal's reference before calling | S8 |
 | `queue: true` for scheduled charges (spec 5.3) is not used: an immediate answer was simpler to reason about. Decide when the scheduler exists | S8 |
 | S9 must pass `reference=` to `refund` (made from its refund row) and treat a 409 as "already created", then look the refund up before retrying | S9 |
-| Refund and dispute events are stored and left waiting (their claim fields may be placeholders); `charge.dispute.remind` repeats with the same key and is deduped | S9 |
+| Refund and dispute events are stored and left waiting (their claim fields may be placeholders); `charge.dispute.remind` repeats with the same key and is deduped | **S9 made them decided** (stored, `error` `recorded: a refund notice`; `refund.failed` and a dispute alert the admins); the placeholders and the dedupe are unchanged |
 | A sweeper for events whose retries ran out (Paystack: every 3 minutes for 4 tries, then hourly for 72 hours): `verify_reference` is the tool for a payment whose webhook never came | before live, S8 |
 | An nginx rate-limit exemption and body limit for the webhook path; consider Paystack's published IP list as a second check at the edge | the test-mode run |
 | `charge_saved_method` and `refund` answers' remaining fields are not compared with anything but the request (reference, currency, amount); a refund's `currency` is not checked | S9 |

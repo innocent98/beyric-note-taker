@@ -16,6 +16,7 @@ import {
   type PlanOffer,
   type Plans,
 } from "@/lib/billing";
+import { countryName } from "@/lib/countries";
 import { goTo } from "@/lib/navigate";
 import { BillingCountry } from "./billing-country";
 import { billingErrorMessage, billingUnavailable } from "./common";
@@ -29,6 +30,10 @@ type Loaded = { plans: Plans; state: BillingState; profile: BillingProfile };
 // ("Prices in naira, paid through Paystack."), then a plan button starts the hosted checkout
 // (POST /checkout) and the browser goes to the provider's page. Nothing is granted by pressing a button
 // or by coming back: the return page waits for a verified payment (components/billing/return-view.tsx).
+// A person who has not saved a billing country sees the country we suggest (or the one they pick) priced as
+// a preview (GET /plans?country=), and pressing a plan's button saves that country first (free before the
+// first payment) and then starts the checkout, which always uses the saved country: continuing to checkout
+// is the confirmation, and no guess is ever saved on its own.
 // No price is written here; a plan with no price in the person's currency says it is not on sale yet
 // and is never hidden.
 export function PlansView() {
@@ -41,6 +46,8 @@ export function PlansView() {
   const [startOver, setStartOver] = useState<string | null>(null);
 
   usePageRestore(useCallback(() => setBusy(null), []));
+  // The country in front of the person that is not saved yet (BillingCountry reports it): priced as a preview.
+  const [candidate, setCandidate] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
   const load = useCallback(() => {
     setLoadError(null);
@@ -49,7 +56,7 @@ export function PlansView() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([api.billing.plans(), api.billing.state(), api.billing.profile()])
+    Promise.all([api.billing.plans(candidate ?? undefined), api.billing.state(), api.billing.profile()])
       .then(([plans, state, profile]) => {
         if (!alive) return;
         setData({ plans, state, profile });
@@ -63,7 +70,7 @@ export function PlansView() {
     return () => {
       alive = false;
     };
-  }, [reads]);
+  }, [reads, candidate]);
 
   async function choose(plan: PlanOffer, waitingPlan: boolean) {
     if (busy) return;
@@ -76,6 +83,8 @@ export function PlansView() {
     setBusy(plan.code);
     setError(null);
     try {
+      // The country in front of them becomes theirs now that they go on to pay (a refusal stops here, nothing was charged).
+      if (data && data.profile.billing_country === null && candidate) await api.billing.setCountry(candidate);
       const started = await api.billing.checkout("plan", plan.code);
       if (plan.price && !samePrice(started.payment, plan.price)) {
         setError(
@@ -179,11 +188,14 @@ export function PlansView() {
         </Alert>
       ) : null}
 
-      <BillingCountry profile={profile} onChange={() => load()} />
+      <BillingCountry profile={profile} onChange={() => load()} onCandidate={setCandidate} />
 
       {route ? (
         <p className="bill-statement" role="status">
           <strong>{routeStatement(route)}</strong> You pay on the next page, on the provider&apos;s own site.
+          {profile.billing_country === null && candidate
+            ? ` Choosing a plan saves ${countryName(candidate)} as your billing country.`
+            : ""}
         </p>
       ) : (
         <Alert kind="notice">Choose your billing country first. Prices are shown once we know what you pay in.</Alert>

@@ -2,9 +2,9 @@
 
 **What shipped.** Two monthly plans next to the 20-hour one, decided by Adebayo on 2026-11-17: **Pro** (50 hours a month, USD 40.00 or NGN 56,000) and **Scale** (100 hours a month, USD 80.00 or NGN 112,000). Migration **0054** seeds the plans and four prices; the pricing page lists them from its catalog array; the billing screens show and sell all three and change between any two. PR from `feature/more-plans`.
 
-## Merge order and the revision number (read before merging)
+## Revision number
 
-PR #234 (S9) owns revision **0053** (down revision 0052). This PR is numbered **0054** and its `down_revision` is still `"0052"` so that CI sees one head while #234 is unmerged. **Merge #234 first, then change `down_revision` in `alembic/versions/0054_more_plans.py` to `"0053"`** (one line; `tests/test_more_plans_migration.py` accepts either), push, and merge. Two heads fail the single-head check in `tests/test_migrations.py`.
+Revision **0054**, `down_revision` `"0053"` (S9's invoices and refunds, #234, merged before this). One head. It was written against 0052 while #234 was open and moved onto 0053 when #234 merged.
 
 ## Why
 
@@ -37,20 +37,19 @@ Pro and Scale are both **0.80 USD an hour**, 11% below the 20-hour plan's 0.90. 
 
 ## Verification
 
-* **Migration, on a scratch Postgres:** `tests/test_more_plans_migration.py` (5): one head, follows 0052 or 0053; the three plans and six prices exactly as decided (names, seconds, sort order, kobo and cents, month interval, not public, active); the pack and the first plan unchanged; downgrade to 0052 removes only the two plans and four prices and upgrade to head restores them; the downgrade refuses with a subscription, a pending downgrade, or a payment on Pro or Scale. With the existing `test_billing_subscriptions_migration.py` and `test_migrations.py`: 87 passed. `ruff check` and `ruff format --check` clean (the pinned version).
+* **Migration, on a scratch Postgres:** `tests/test_more_plans_migration.py` (5): one head, follows 0053; the three plans and six prices exactly as decided (names, seconds, sort order, kobo and cents, month interval, not public, active); the pack and the first plan unchanged; downgrade to 0053 removes only the two plans and four prices and upgrade to head restores them; the downgrade refuses with a subscription, a pending downgrade, or a payment on Pro or Scale. With the existing `test_billing_subscriptions_migration.py` and `test_migrations.py`: 87 passed. `ruff check` and `ruff format --check` clean (the pinned version).
 * **Pricing page:** `web/tests/pricing-real.test.tsx` (19) and the JSON-LD test: every catalog entry against the migrations, 8 offers (monthly ones with P1M). Lint, type-check and the touched test files pass.
 * **Live, local, by me:** the real app with the scripted provider and `next dev`. Over HTTP (`scripts/capture_billing_plans.py`): the catalog in dollars and naira, a checkout for each plan, Starter to Pro, Starter to Scale, Pro to Scale upgrades with their proration (for example Starter to Pro: 2199 cents today for 29.9 extra hours a second after the period began, against 2200 and 30 for the whole month), a naira Pro checkout (5,600,000 kobo), Scale to the 20-hour plan scheduled and taken back, Scale to Pro scheduled, and a scheduler pass at the period's end that charged Pro's 4000 and applied the downgrade (plan Pro, 180000 seconds). In the browser: `/billing/plans` showed all three with their prices (and in naira ₦25,000, ₦56,000, ₦112,000); **Choose this plan** made the right payment for Scale (USD 8000) and for Pro in naira (NGN 5,600,000); Billing as a person on the 20-hour plan: Starter to Pro preview ($21.99, 29 h 54 min) and confirm through the provider page, then Pro to Scale ($39.99), then Scale to the 20-hour plan scheduled with **Keep Scale** offered. Database rows afterwards: 1800, upgrade 2199, upgrade 3999. Screenshots (not in git): `/Users/adebayovictor/Library/Application Support/Claude-Work/side-session-notes/local_a3623d84-4f5c-43f6-8ae2-036674e9b898/billing-nav/` (`more-plans-pricing-1440.png`, `-390.png`, `more-plans-billing-plans-1440.png`, `-390.png`, and `journey-*` for the change-plan steps).
 * **Not verified:** a real provider's page for these amounts; a naira upgrade or downgrade in the browser; the S8a captures were not regenerated; the "Before you pay" list on `/billing/plans` still says cancelling "does not refund the unused part ... payments are refunded only under our refund rules" (S8b wording, reviewed then), while the public pricing page prints no refund wording at all: the lawyer reads both.
 
 ## Operate / roll back
 
-Apply after #234 (see the top), then `alembic upgrade head`; the plans appear at once in `GET /api/billing/plans` for everyone billing answers for, and the pricing page prints them from the web build. Roll back: revert the web part, then `alembic downgrade 0053` (or `0052`): it refuses while anyone is on Pro or Scale.
+`alembic upgrade head` (after 0053); the plans appear at once in `GET /api/billing/plans` for everyone billing answers for, and the pricing page prints them from the web build. Roll back: revert the web part, then `alembic downgrade 0053` (or `0052`): it refuses while anyone is on Pro or Scale.
 
 ## Follow-ups
 
 | Item | Note |
 |---|---|
 | The first plan is still named "20 hours a month" (kept as seeded) next to "Pro" and "Scale"; a name like "Starter" would read better | one new migration plus the content line |
-| `down_revision` flips to 0053 when #234 merges | see the top |
 | Naira margin on foreign cards is thin at the stress cost | Adebayo's rate and price review |
 | Teal "main" card stays the first plan; no "most popular" badge (not decided) | design |

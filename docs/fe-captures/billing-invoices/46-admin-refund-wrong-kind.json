@@ -1,0 +1,28 @@
+{
+  "note": "The case must fit the payment: 409 `wrong_kind`.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/5/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "pack_14d"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "wrong_kind",
+        "message": "This is not a pack payment."
+      }
+    }
+  }
+}

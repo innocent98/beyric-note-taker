@@ -1,0 +1,25 @@
+{
+  "note": "A number that is not shaped like one: 404 `not_found`, never read from the database.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/not-a-number/pdf",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

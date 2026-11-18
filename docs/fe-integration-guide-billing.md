@@ -1,4 +1,4 @@
-# FE integration guide: hours, warnings, the refusal and the feature gates (billing stages S2 and S3)
+# FE integration guide: hours, warnings, the refusal and the feature gates (billing stages S2 and S3), and the later billing stages
 
 Every body below is pasted from `docs/fe-captures/hours-usage/` (made by `scripts/capture_hours_usage.py`:
 real migrations, the real app under uvicorn with `HOURS_MODE=enforce`, real HTTP). Anything that could
@@ -1423,6 +1423,313 @@ The screens exist now (`web/app/billing`, `docs/sop/2026-11-17-billing-screens.m
 * **The brand and last four digits of the card** are still null, so no screen names the card.
 * The billing routes are **not in `docs/openapi.json`**; the screens' types (`web/lib/billing.ts`) are written from this guide's captures.
 
+## Billing country flow (2026-11-17): suggest, confirm, free until the first payment
+
+Branch `feature/billing-country-flow`. Every body below is pasted from `docs/fe-captures/billing-country/`, made by
+`scripts/capture_billing_country.py`: real migrations, the real app under uvicorn, real HTTP, a real checkout and
+webhook with the **scripted provider** (`app.billing.fake.FakeProvider`; a real Paystack or Flutterwave is not involved).
+The people are placeholders. The shapes of the older profile routes are in `docs/fe-integration-guide-billing-profile.md`.
+
+### What changed, in the person's terms
+
+The first live user (2026-11-17) was made to pick a country from a long list, picked Ethiopia by mistake and was locked
+out of fixing it for 30 days. Now:
+
+1. **The country is suggested, not asked cold.** While no country is saved, the profile carries `suggested_country`
+   (from the person's saved time zone) and its route. The screen shows it as one confirmable line ("Nigeria. Prices in
+   naira, paid through Paystack. Not Nigeria? Change"). With no time zone the screen uses the browser's language region
+   (`en-NG` gives `NG`; a bare `en` gives nothing) and asks `GET /route?country=XX` what it pays with; with neither it
+   shows the picker (Nigeria first, common countries on top, searchable). **A guess is never saved by itself.**
+2. **Until the first payment the country changes instantly, any number of times.** Each change still writes its history
+   row. `country_locked` is `false` and `country_change_allowed_at` is `null` the whole time.
+3. **From the first successful payment (or a live plan) on, the old rule applies:** one change per 30 days, and a change
+   that crosses Nigeria and elsewhere while a plan is live waits for the end of the paid period. Only changes made
+   **since the first payment** count towards the 30 days, so the changes made while it was free do not lock anyone out.
+
+### The profile has three new keys (twelve in all)
+
+| Key | Meaning |
+|---|---|
+| `country_locked` | `false` until the person has a successful payment (a refunded one counts) or a live plan; then `true`, and it stays `true` even after the plan ends |
+| `suggested_country` | only while no country is saved; `null` otherwise (and when there is no zone, or the zone has no country, or that country cannot be routed) |
+| `suggested_route` | `{currency, provider}` of the suggestion; `null` when `suggested_country` is |
+
+Field-nesting trap: `suggested_route` is nested like `route`; `route` stays `null` until a country is **saved**, even when a
+suggestion exists, so never read `route` for the suggestion.
+
+A person whose time zone is `Africa/Lagos`:
+
+```
+GET /api/billing/profile
+```
+
+```json
+// 200  (capture billing-country/04-lagos-profile-suggests-nigeria.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": "NG",
+  "suggested_route": {
+    "currency": "NGN",
+    "provider": "paystack"
+  }
+}
+```
+
+Another zone (`Africa/Addis_Ababa`), the dollar route:
+
+```json
+// 200  (capture billing-country/08-addis-profile-suggests-ethiopia.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": "ET",
+  "suggested_route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  }
+}
+```
+
+No saved time zone (nothing to suggest; the screen falls back to the browser's language, then the picker):
+
+```json
+// 200  (capture billing-country/11-nozone-profile-no-suggestion.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": null,
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": null,
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+### Prices for a country that is not saved yet: `GET /api/billing/plans?country=XX`
+
+Without `country`, a person with no saved country gets `route: null` and no plans (unchanged). With `country=NG` they get
+the prices on that country's route **as a preview; nothing is saved**. It is ignored for a person who has a live plan
+(they always see the route they bought on). A value that is not a country is 422, as on `GET /route`.
+
+```json
+// 200  (capture billing-country/13-lagos-plans-preview-ng.json, packs trimmed)
+{
+  "route": {
+    "currency": "NGN",
+    "provider": "paystack"
+  },
+  "plans": [
+    {
+      "code": "plan_20h",
+      "name": "20 hours a month",
+      "monthly_seconds": 72000,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 2500000
+      }
+    }
+  ],
+  "packs": "<1 pack(s) trimmed>"
+}
+```
+
+```json
+// 422  (capture billing-country/15-lagos-plans-preview-bad.json)
+{
+  "error": {
+    "code": "billing_country_invalid",
+    "message": "That is not a country code we know. Pick one from the list."
+  }
+}
+```
+
+**The checkout always uses the saved country.** So the plans screen saves the country it is showing
+(`PUT /profile/country`, free before the first payment) and only then calls `POST /checkout`; pressing "Choose this
+plan" is the confirmation. If that save is refused, do not start the checkout; show the message.
+
+### Free changes before the first payment
+
+One person picks Ethiopia, then Nigeria, then the United States (captures 21 to 23, all 200 `applied`). After them:
+
+```json
+// 200  (capture billing-country/24-free-profile.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": "US",
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  },
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+The history rows are written for every change (capture `25-free-history-rows.json`, read from the database).
+
+### After the first payment
+
+The paid person chose US, changed to GB while it was free, then paid (captures 28 to 31). The lock is now on, but the free
+changes do not count:
+
+```json
+// 200  (capture billing-country/32-paid-profile-after-payment.json)
+{
+  "name_or_company": null,
+  "address": null,
+  "tax_id": null,
+  "billing_email": null,
+  "billing_country": "GB",
+  "pending_billing_country": null,
+  "pending_effective_at": null,
+  "route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  },
+  "country_change_allowed_at": null,
+  "country_locked": true,
+  "suggested_country": null,
+  "suggested_route": null
+}
+```
+
+One change is allowed (here GB to FR, the same dollar route, so `applied`); it starts the 30 days:
+
+```json
+// 200  (capture billing-country/33-paid-country-one-change.json)
+{
+  "result": "applied",
+  "profile": {
+    "name_or_company": null,
+    "address": null,
+    "tax_id": null,
+    "billing_email": null,
+    "billing_country": "FR",
+    "pending_billing_country": null,
+    "pending_effective_at": null,
+    "route": {
+      "currency": "USD",
+      "provider": "flutterwave"
+    },
+    "country_change_allowed_at": "2026-12-17T19:32:26.611431Z",
+    "country_locked": true,
+    "suggested_country": null,
+    "suggested_route": null
+  }
+}
+```
+
+The next one is refused. **The message carries the date in plain words, in the person's saved time zone (UTC when none), the zone the screen shows dates in; show the server's sentence as it comes**:
+
+```json
+// 409  (capture billing-country/34-paid-country-too-soon.json)
+{
+  "error": {
+    "code": "country_change_too_soon",
+    "message": "Since your first payment your billing country can be changed once every 30 days. You can change it again on 17 December 2026."
+  }
+}
+```
+
+### A change that crosses routes while a plan is live
+
+A person on the dollar route with a live plan asks for Nigeria: `scheduled`, for the end of the paid period (captures 35
+to 42):
+
+```json
+// 200  (capture billing-country/40-cross-country-scheduled.json)
+{
+  "result": "scheduled",
+  "profile": {
+    "name_or_company": null,
+    "address": null,
+    "tax_id": null,
+    "billing_email": null,
+    "billing_country": "US",
+    "pending_billing_country": "NG",
+    "pending_effective_at": "2026-12-17T19:32:26.730497Z",
+    "route": {
+      "currency": "USD",
+      "provider": "flutterwave"
+    },
+    "country_change_allowed_at": "2026-12-17T19:32:26.747944Z",
+    "country_locked": true,
+    "suggested_country": null,
+    "suggested_route": null
+  }
+}
+```
+
+```json
+// 409  (capture billing-country/42-cross-country-pending-refused.json)
+{
+  "error": {
+    "code": "country_change_pending",
+    "message": "A change of billing country is already waiting for the end of your paid period (17 December 2026). It cannot be changed again until then."
+  }
+}
+```
+
+### Open plan checkouts are closed by a change
+
+A change of country that takes effect (`applied`, or `scheduled`) turns the person's unpaid first-plan payments from `pending` to `failed` (in `GET /payments` they read "Did not go through"; nothing was bought). `GET /subscription`'s `pending_payment` is then null for them. The plans screen already starts a fresh checkout on the new route. If a closed page is paid anyway the person gets no plan and is refunded by the operator (admin alert); this is covered by tests (`tests/test_billing_subscriptions.py`), not captured.
+
+### What the FE must surface
+
+* **Always say what the country means, from the server's words:** "Prices in US dollars, paid through Flutterwave." Read
+  `route` (saved) or `suggested_route` / `GET /route` (not saved yet); never hard-code the table.
+* **Never save a suggestion silently.** Save it on the person's "Use X" button or when they go on to pay for a plan.
+* **Before the first payment, say the country can be changed any time.** After it, say "once every 30 days", and when
+  `country_change_allowed_at` is set, disable the control and show the date.
+* **A scheduled change says when and why** (the plan was bought on that route; a saved card cannot move) and offers no undo.
+* **A refusal says the date.** Both 409 messages above contain it; show them unchanged.
+
+### Verification (billing country flow)
+
+| Behaviour | Verified |
+|---|---|
+| Suggestion from a saved zone (`Africa/Lagos` to `NG`, `Africa/Addis_Ababa` to `ET`), none without a zone, none once a country is saved | live over HTTP (billing-country captures 04, 08, 11, 18) |
+| The suggestion saves nothing | live (captures 16, 18) and `tests/test_billing_country_flow.py` |
+| `GET /plans?country=` preview for NG and another country, 422 for a name | live (captures 13, 14, 15) |
+| Three changes in a row before paying all `applied`, no date, history rows written | live (captures 21 to 25) |
+| After a payment: one change `applied`, the next 409 `country_change_too_soon` with the date, the free changes not counted | live, payment through the real checkout and webhook with the scripted provider (captures 28 to 34) |
+| A live plan plus a route-crossing change `scheduled`, then 409 `country_change_pending` with the date | live, same provider caveat (captures 35 to 42) |
+| Browser-language fallback and the picker (Nigeria first, search) | browser run against a local app (`scripts/dev_billing_stack.py`) at 1440 and 390 px, and vitest; the browser language is read in the browser, so there is no HTTP capture |
+| Zones with no country (`UTC`, `Etc/GMT+1`) suggest nothing; a country with no route is not suggested | tests only (`tests/test_billing_country_flow.py`) |
+| A refunded or partly refunded payment locks the country; a pending or failed one does not | tests only |
+| An open first-plan checkout is closed by a country change; a closed page paid anyway makes no plan and asks for a refund; packs and paid payments are left alone | tests only (`tests/test_billing_subscriptions.py`) |
+| A refusal's date is in the person's saved time zone | tests only (`tests/test_billing_country_flow.py`); the captures' people have no zone, so theirs read in UTC |
+| A real Paystack or Flutterwave | not involved |
+
 ## More plans: the 20-hour plan, Pro and Scale (migration 0054)
 
 **What it is.** Three monthly plans now exist, all read from the database by the routes already described above; **no route, field or error is new**. In `GET /api/billing/plans` they come in `sort_order`: the first plan (`plan_20h`, name "20 hours a month"), **Pro** (`plan_50h`, 50 hours) and **Scale** (`plan_100h`, 100 hours), then the pack. The names are data (`plans.name`): show `name` as it comes, never a name typed in the screens. Captured by `scripts/capture_billing_plans.py` against the real migrations (the plans and prices are the seeded rows) with a scripted payment provider, over real HTTP: `docs/fe-captures/billing-plans/`.
@@ -1741,6 +2048,485 @@ No endpoint, field or error is new. Every entry point reads the answer of `GET /
 | "Not recorded" hours link | the calendar's `reason_text` | only for the two sentences "Your recording hours are used up." and "You have no recording hours at the moment." (pinned to `app/calendar_text.py` by a test) |
 
 Trap: the card's `state` words are the **person's** state (`trial`, `pilot`, `none`, ...), not the subscription's `status`; a person in a trial has `subscription: null`. Verified live against the local app with the scripted provider (trial, no plan, active, lapsed, 90% used, all used); the "Not recorded" link only by tests, with the server's real sentence.
+
+## Invoices, receipts and refunds (billing stage S9)
+
+Every body below is copied from `docs/fe-captures/billing-invoices/` (the file number is named next to it), captured by `scripts/capture_billing_invoices.py` against the real app under uvicorn on a scratch Postgres, with real HTTP, real signed webhooks, real PDFs and a **scripted payment provider** (no provider keys exist on the capture machine). The seller's registration and tax numbers in those captures are **placeholders** (`RC-PLACEHOLDER-NOT-REAL`, `TIN-PLACEHOLDER-NOT-REAL`); every person is `@example.test`. Anything not captured is marked inline.
+
+### What this is, in the person's terms
+
+When a payment succeeds and something was bought with it (a plan, a renewal, an upgrade, extra hours), Beyric makes **one invoice** for it, numbered `BN-<year>-<six digits>` (for example `BN-2026-000001`, sequential within the year, the year in Lagos time; **an invoice for a payment made with test keys is in its own series, `BN-T-2026-000001`**, so test purchases never use up the live numbers, and every number in the captures below is a `BN-T-` one because the capture machine runs in test mode) and mails a **receipt** with the invoice attached as a PDF. The person sees the invoice in their payment history and downloads it from there. A payment that nothing could use (a second payment for a plan already paid) gets **no invoice**: it is refunded in full.
+
+An administrator can **refund** a payment, in exactly three cases (spec 3.5): a **double charge**; a person's **first plan payment**, within 7 days, with no hours of it used; an **unused pack**, within 14 days. Whole payments only. Nobody else can refund: there is no self-service refund.
+
+Everything is behind `BILLING_ENABLED` and the allow-list like the rest of billing: with billing off, every route below is a plain 404 `not_found` (captures 03 and 06; the admin routes too, for an administrator).
+
+### The person's routes
+
+#### `GET /api/billing/invoices`: the person's own invoices, newest first, at most 50
+
+Empty before the first payment (capture 10, `200`):
+
+```json
+{
+  "invoices": []
+}
+```
+
+After a plan was paid (capture 17, `200`):
+
+```json
+{
+  "invoices": [
+    {
+      "number": "BN-T-2026-000001",
+      "issued_at": "2026-11-18T11:33:19.475597Z",
+      "currency": "USD",
+      "subtotal_minor": 1800,
+      "vat_rate_bp": 0,
+      "vat_minor": 0,
+      "total_minor": 1800,
+      "description": "20 hours a month",
+      "payment_reference": "bn-1-90d00af0acad327f",
+      "payment_status": "succeeded",
+      "refunded_at": null,
+      "test_mode": true
+    }
+  ]
+}
+```
+
+- `total_minor` is what the person paid, in kobo or cents. `vat_minor` is the VAT that price **includes** at `vat_rate_bp` basis points (750 = 7.5%); `subtotal_minor + vat_minor = total_minor`. The default rate is **0**: no VAT line, `vat_minor` is `0`.
+- `test_mode` true: the payment was made with test keys, the number starts `BN-T-`, the PDF says "TEST INVOICE" and it is not a tax document. The number is `BN-` + optional `T-` + year + 6 to 9 digits: do not parse it, show it. Say so on screen if you show an invoice list of your own.
+- `payment_status` is `succeeded`, or `refunded` once the payment was refunded; `refunded_at` is then set (capture 53).
+
+With VAT 7.5% included (the same route, a naira payment, capture 31 `200`, VAT configured only for that capture):
+
+```json
+{
+  "invoices": [
+    {
+      "number": "BN-T-2026-000003",
+      "issued_at": "2026-11-18T11:33:20.504041Z",
+      "currency": "NGN",
+      "subtotal_minor": 2325581,
+      "vat_rate_bp": 750,
+      "vat_minor": 174419,
+      "total_minor": 2500000,
+      "description": "20 hours a month",
+      "payment_reference": "bn-3-fda99da00ec7145f",
+      "payment_status": "succeeded",
+      "refunded_at": null,
+      "test_mode": true
+    }
+  ]
+}
+```
+
+Another account sees none of them (capture 23, `200`):
+
+```json
+{
+  "invoices": []
+}
+```
+
+A refunded payment's invoice (capture 53, `200`): `payment_status` `refunded` and `refunded_at` set.
+
+```json
+{
+  "invoices": [
+    {
+      "number": "BN-T-2026-000004",
+      "issued_at": "2026-11-18T11:33:22.950242Z",
+      "currency": "USD",
+      "subtotal_minor": 1800,
+      "vat_rate_bp": 0,
+      "vat_minor": 0,
+      "total_minor": 1800,
+      "description": "20 hours a month",
+      "payment_reference": "bn-4-13c16fbca080c23e",
+      "payment_status": "refunded",
+      "refunded_at": "2026-11-18T11:33:23.981540Z",
+      "test_mode": true
+    }
+  ]
+}
+```
+
+#### `GET /api/billing/payments`: the history now says which payment has an invoice
+
+Every payment object gains `invoice_number` (string or `null`). **Field-nesting trap:** it is on the payment, a sibling of `reference` and `status`; the invoice list is a separate route. `null` while the payment waits or failed (capture 14), the number once it succeeded (capture 16):
+
+```json
+{
+  "payments": [
+    {
+      "reference": "bn-1-90d00af0acad327f",
+      "kind": "plan",
+      "status": "pending",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "created_at": "2026-11-18T11:33:19.400529Z",
+      "paid_at": null,
+      "pay_url": "https://fake.test/pay/bn-1-90d00af0acad327f",
+      "invoice_number": null
+    }
+  ]
+}
+```
+
+```json
+{
+  "payments": [
+    {
+      "reference": "bn-1-90d00af0acad327f",
+      "kind": "plan",
+      "status": "succeeded",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "created_at": "2026-11-18T11:33:19.400529Z",
+      "paid_at": "2026-11-18T11:33:19.475597Z",
+      "pay_url": null,
+      "invoice_number": "BN-T-2026-000001"
+    }
+  ]
+}
+```
+
+The same field is on `GET /api/billing/payments/{reference}` and on the payment inside `POST /checkout` (always `null` there).
+
+#### `GET /api/billing/invoices/{number}/pdf`: the file
+
+`200`, `Content-Type: application/pdf`, built now and never stored (capture 18; the bytes are `18-invoice-pdf.pdf`, the text a PDF reader extracts from them is `18-invoice-pdf.txt`):
+
+```json
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/pdf",
+    "content-disposition": "attachment; filename=\"invoice-BN-T-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-T-2026-000001.pdf",
+    "cache-control": "no-store"
+  },
+  "body": {
+    "file": "18-invoice-pdf.pdf",
+    "bytes": 17384,
+    "sha256": "a9f16b3eaaf23386edc888b2ffe1d09ee06ff82180c34ff85944245b4a2a92e4",
+    "starts_with": "%PDF-1.7",
+    "text_extracted_by_pdftotext": "18-invoice-pdf.txt"
+  }
+}
+```
+
+Download it with a request that reads the bytes (the app's `api.billing.downloadInvoice` does), not a link that opens a tab: a failure is a JSON error and a tab would show it as a page. The file name is in `Content-Disposition`. Errors:
+
+| What | Status | Body (captures) |
+|---|---|---|
+| a number that is not shaped like `BN-2026-000123` or `BN-T-2026-000123` | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| an unknown number | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| **someone else's** number (it exists, it is not theirs) | 404, the same body | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| billing off, or an account not on the allow-list | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| not signed in | 401 | ``{"error": {"code": "not_authenticated", "message": "Log in first."}}`` |
+| the renderer is busy (two files are being built) | 503 `invoice_busy` | **tests only** (`tests/test_billing_invoices_api.py`), not captured: `{"error":{"code":"invoice_busy","message":"Invoices are being prepared. Try again in a few seconds."}}` |
+| the renderer failed | 500 `invoice_failed` | **tests only**, not captured |
+
+A refunded invoice's PDF says so on its face (capture 55, `55-invoice-pdf-refunded.txt`); a VAT invoice shows the subtotal and VAT lines (capture 32, `32-invoice-pdf-ng-vat.txt`).
+
+### The receipt mail
+
+Queued when the payment succeeds, built and sent by the outbox worker (it holds the invoice id and nothing else, capture 33). What the sender built, captured, not sent (capture 34, the first message shown):
+
+```json
+{
+  "subject": "Your receipt BN-T-2026-000001",
+  "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-T-2026-000001\n\n- Invoice (BN-T-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+  "attachments": [
+    {
+      "filename": "invoice-BN-T-2026-000001.pdf",
+      "content_type": "application/pdf",
+      "bytes": 17388,
+      "starts_with": "%PDF-1.7"
+    }
+  ]
+}
+```
+
+A receipt is account mail: an unsubscribe does not stop it, a bounce does. If the PDF cannot be built when the mail is sent, the mail still goes without the file and says the invoice is under Billing. **Not verified:** a real mail provider delivering it.
+
+### The administrator's routes (admin only)
+
+`403 forbidden` for a signed-in person who is not an administrator (capture 39), `401` for a visitor, `403 csrf_rejected` for a write without the token (capture 40), `404 not_found` for everyone while billing is off.
+
+#### `GET /api/admin/billing/payments?only=all|needs_refund&limit=`
+
+Newest first. Each payment carries the **one** refund case that fits it and whether the rules allow it now: the server decides, the screen shows (capture 37, trimmed to three of the nine payments):
+
+```json
+{
+  "payments": [
+    {
+      "id": 12,
+      "reference": "bn-12-2c2f31792de88796",
+      "payer_email": "flo@example.test",
+      "provider": "flutterwave",
+      "kind": "plan",
+      "status": "succeeded",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "created_at": "2026-11-18T11:33:23.759318Z",
+      "paid_at": "2026-11-18T11:33:23.788693Z",
+      "needs_refund_reason": "the person already has a live plan",
+      "invoice_number": null,
+      "refund": null,
+      "refund_option": {
+        "reason": "double_charge",
+        "allowed": true,
+        "message": null
+      }
+    },
+    {
+      "id": 11,
+      "reference": "bn-11-f66556ac25f67b3e",
+      "payer_email": "ivy@example.test",
+      "provider": "flutterwave",
+      "kind": "plan",
+      "status": "succeeded",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "created_at": "2026-11-18T11:33:23.717059Z",
+      "paid_at": "2026-11-10T11:33:23.778562Z",
+      "needs_refund_reason": null,
+      "invoice_number": "BN-T-2026-000011",
+      "refund": null,
+      "refund_option": {
+        "reason": "first_plan_7d",
+        "allowed": false,
+        "message": "The refund window (7 days from the payment) is over."
+      }
+    }
+  ]
+}
+```
+
+- `refund_option.reason` is `double_charge` (the payment succeeded and nothing could use it: `needs_refund_reason` says why), `first_plan_7d` (a plan payment) or `pack_14d` (a pack payment). A renewal or an upgrade only ever gets `double_charge`, never as a "first plan".
+- `refund_option` is `null` unless the payment succeeded. `refund` is the newest refund of it, or `null`.
+- `only=needs_refund` lists the payments with a `needs_refund_reason` (capture 38).
+
+#### `POST /api/admin/billing/payments/{payment_id}/refund`
+
+Body: `{"reason": "double_charge" | "first_plan_7d" | "pack_14d", "note": "..."}` (`note` optional, 500 characters). **An amount is never accepted** (an extra field is a 422, capture 42): the whole payment is refunded.
+
+A first plan payment within 7 days with no hours used (capture 48, `200`):
+
+```json
+{
+  "id": 1,
+  "payment_id": 4,
+  "payer_email": "cy@example.test",
+  "reference": "bnrf-4-8fafd293d74c021e",
+  "reason": "first_plan_7d",
+  "status": "submitted",
+  "currency": "USD",
+  "amount_minor": 1800,
+  "provider_refund_id": "fake-refund-1",
+  "note": "asked by email (placeholder)",
+  "error": null,
+  "created_at": "2026-11-18T11:33:23.981540Z",
+  "resolved_at": "2026-11-18T11:33:23.981540Z",
+  "needs_resolution": false
+}
+```
+
+`status` `submitted` means the provider **accepted** the refund; a card refund takes days to reach the person (the provider says 3 to 15 for Flutterwave). In the same step the plan ended and its hours were removed (capture 54: the person's `state` is `none`). A pack (capture 56) and a double charge (capture 57) answer the same shape; a pack refund removes only the pack's hours and leaves the plan.
+
+**Every refusal is a 409** with a code and a sentence written for the administrator (show it as it comes):
+
+| `code` | When | Capture |
+|---|---|---|
+| `already_refunded` | the payment was refunded already | 49 |
+| `refund_in_progress` | a refund of it is under way or waiting for a person | 59 |
+| `payment_not_paid` | it did not succeed | tests only |
+| `wrong_kind` | the case does not fit the payment (a pack case on a plan payment) | 46 |
+| `not_a_double_charge` | the payment was used: it bought a plan or hours | 47 |
+| `window_over` | more than 7 days (plan) or 14 days (pack) since the payment | 44 |
+| `hours_used` | an hour of what this payment bought was used | 45 |
+| `not_first_payment` | not the person's first plan payment ever | tests only |
+| `plan_changed` | the plan was upgraded or renewed since | tests only |
+| `refund_pending` (on `POST /subscription/change-plan`, its preview and `POST /subscription/pay-link`, for the person) | a refund of the plan is `pending` or `unknown`: the plan cannot be changed or paid until it is settled; the sentence is written for the person | tests only |
+| `recording_in_progress` | the person has a recording running or being prepared | tests only |
+| `payer_gone` | the account was deleted | tests only |
+| `not_used_for_hours`, `no_provider_transaction` | nothing was granted / no provider transaction on record | tests only |
+
+```json
+{
+  "error": {
+    "code": "window_over",
+    "message": "The refund window (7 days from the payment) is over."
+  }
+}
+```
+
+Other errors: `422 validation_error` for a reason that is not one of the three (capture 41) or an extra field (capture 42); `404 not_found` for an unknown payment (capture 43).
+
+#### The refund state machine: what the screen does in each state
+
+| `status` | Meaning | What the administrator does |
+|---|---|---|
+| `pending` | written, the provider not answered yet (a few seconds) | nothing; if it stays `pending` for **10 minutes** the process that started it died: `needs_resolution` becomes true and it is handled as `unknown` |
+| `submitted` | the provider accepted it; the payment is `refunded` | nothing |
+| `failed` | the provider **refused** the request (nothing moved) or an admin confirmed none exists; the hours are back | may start a new refund |
+| `unknown` | the provider gave **no answer** (a timeout, a 5xx, a conflict, an unreadable answer): it may or may not exist | **look in the provider's dashboard** for `reference`, then resolve it. **Never ask again**. While it waits, the plan is not renewed, charged or changed (an upgrade paid meanwhile becomes a payment owed back) |
+
+A refund that got no answer (capture 58, `200`; the lack of an answer is scripted here, a real one would be a timeout):
+
+```json
+{
+  "id": 4,
+  "payment_id": 9,
+  "payer_email": "gus@example.test",
+  "reference": "bnrf-9-b97948e95308900c",
+  "reason": "first_plan_7d",
+  "status": "unknown",
+  "currency": "USD",
+  "amount_minor": 1800,
+  "provider_refund_id": null,
+  "note": null,
+  "error": "no_answer",
+  "created_at": "2026-11-18T11:33:24.707648Z",
+  "resolved_at": null,
+  "needs_resolution": true
+}
+```
+
+While it is `unknown` the hours stay removed, the payment stays `succeeded` and **asking again is refused** (capture 59, `409 refund_in_progress`): nothing in Beyric ever retries a refund, because a repeated refund can pay twice (Flutterwave v3 has no idempotency key). `needs_resolution` true puts it in front of the administrator (capture 60, the list):
+
+```json
+{
+  "refunds": [
+    {
+      "id": 4,
+      "payment_id": 9,
+      "payer_email": "gus@example.test",
+      "reference": "bnrf-9-b97948e95308900c",
+      "reason": "first_plan_7d",
+      "status": "unknown",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": null,
+      "note": null,
+      "error": "no_answer",
+      "created_at": "2026-11-18T11:33:24.707648Z",
+      "resolved_at": null,
+      "needs_resolution": true
+    },
+    {
+      "id": 3,
+      "payment_id": 12,
+      "payer_email": "flo@example.test",
+      "reference": "bnrf-12-ea1e4fd870ec6896",
+      "reason": "double_charge",
+      "status": "submitted",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": "fake-refund-3",
+      "note": null,
+      "error": null,
+      "created_at": "2026-11-18T11:33:24.688557Z",
+      "resolved_at": "2026-11-18T11:33:24.688557Z",
+      "needs_resolution": false
+    },
+    {
+      "id": 2,
+      "payment_id": 6,
+      "payer_email": "dee@example.test",
+      "reference": "bnrf-6-455f1a72d989c121",
+      "reason": "pack_14d",
+      "status": "submitted",
+      "currency": "USD",
+      "amount_minor": 1000,
+      "provider_refund_id": "fake-refund-2",
+      "note": null,
+      "error": null,
+      "created_at": "2026-11-18T11:33:24.659312Z",
+      "resolved_at": "2026-11-18T11:33:24.659312Z",
+      "needs_resolution": false
+    },
+    {
+      "id": 1,
+      "payment_id": 4,
+      "payer_email": "cy@example.test",
+      "reference": "bnrf-4-8fafd293d74c021e",
+      "reason": "first_plan_7d",
+      "status": "submitted",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": "fake-refund-1",
+      "note": "asked by email (placeholder)",
+      "error": null,
+      "created_at": "2026-11-18T11:33:23.981540Z",
+      "resolved_at": "2026-11-18T11:33:23.981540Z",
+      "needs_resolution": false
+    }
+  ]
+}
+```
+
+#### `POST /api/admin/billing/refunds/{refund_id}/resolve`
+
+Body `{"outcome": "made" | "not_made"}`: what the provider's dashboard shows for that reference. Nothing here calls the provider. `made` makes the payment `refunded` and ends the plan (capture 62); `not_made` closes the refund as `failed` and gives the hours back, so a new refund may be started. Resolving a refund that is not waiting is `409 not_unresolved` (capture 63); a bad outcome is `422` (capture 61). When the provider **refused** the request (nothing moved) the answer is `200` with `status` `failed` and `error` `provider_refused` (capture 64):
+
+```json
+{
+  "id": 5,
+  "payment_id": 10,
+  "payer_email": "hal@example.test",
+  "reference": "bnrf-10-5a61fbd5d83d4e81",
+  "reason": "first_plan_7d",
+  "status": "failed",
+  "currency": "USD",
+  "amount_minor": 1800,
+  "provider_refund_id": null,
+  "note": null,
+  "error": "provider_refused",
+  "created_at": "2026-11-18T11:33:24.771485Z",
+  "resolved_at": "2026-11-18T11:33:24.771485Z",
+  "needs_resolution": false
+}
+```
+
+`error` is one of `provider_refused`, `provider_unavailable`, `no_answer`, `confirmed_not_made`, or `null`.
+
+### What the administrators are told (the bell, `GET /api/notifications`)
+
+By ids only, never an email or a provider's words. Capture 68 shows the administrator's bell after the events of the run: a second successful charge for a payment already paid (kind `admin.billing_second_payment`: the provider is asked first, nothing is granted), a successful charge the rules refused (`admin.billing_charge_refused`: money may have moved), a refund with no answer (`admin.billing_refund_unknown`), and one daily digest of payments that waited more than a day (`admin.billing_pending_old`). A dispute (a chargeback) raises `admin.billing_dispute`, a refund notice that says the refund **failed** after we recorded it as accepted raises `admin.billing_refund_failed` (the person was told they were refunded: pay it by hand in the provider's dashboard), and a provider answer that arrives after a person closed the refund raises `admin.billing_refund_late` (nothing is changed). All three are **tests only**: no real provider sends them here.
+
+### UX consequences the frontend must surface
+
+1. **A refund ends the plan.** Before the confirm button, say what it does for the case (the admin screen does: the plan ends now, its hours are removed, the saved card is deleted) and that it cannot be undone.
+2. **`unknown` is not a failure and not a success.** Never show "refunded" for it and never offer a second "Refund" button: offer only "the refund exists" / "no refund exists" after the administrator has looked at the provider.
+3. **A refunded person sees `Refunded` in their payments and on the invoice, and their plan is gone** (`state` `none`). Their invoice can still be downloaded.
+4. **A test-mode invoice is not a tax document**; the PDF and the mail say so. Do not present it as one.
+5. **The PDF is built when asked** (a second or two): show "Preparing..." and one at a time; a `503 invoice_busy` is "try again in a few seconds".
+6. **After a refused refund, read again**: another administrator may have been first (the screen does).
+7. **The seller's registration and tax numbers are not in these captures** (placeholders) and are **empty on a real server until Adebayo supplies them**: an empty line is left off the invoice, never invented.
+
+### Verification table (this section)
+
+| Behaviour | Verified |
+|---|---|
+| Invoice list, payments with `invoice_number`, the PDF route, 404s, 401, billing off | **live over HTTP** (captures 03, 06, 07, 10 to 24), provider scripted |
+| The PDF's real bytes and the text a PDF reader extracts (seller, buyer, line, total, payment reference, test notice, refunded notice, VAT lines) | **live**: the files `18-…`, `32-…`, `55-…` `.pdf` and `.txt`, opened with `pdftotext`; also downloaded by a real browser click through the Next.js proxy (file name `invoice-<number>.pdf`; that browser run was before the `BN-T-` test series was added, the PDF route is unchanged) |
+| Numbers sequential, unique under two connections and eight at once, no gap after a rollback | **tests on real Postgres** (`tests/test_billing_invoices.py`), two real connections |
+| VAT arithmetic (included, half up, parts add up) | tests (`test_vat_split_*`); live captures 31 and 32 at 7.5% |
+| The receipt mail: queued with ids only, built at send time with the PDF attached | live: captures 33 and 34 (a recording mailer, **nothing was sent by a real mail provider**) |
+| The three refund cases, every 409 in the table marked with a capture | live over HTTP (captures 40 to 49, 56, 57); the others tests only, marked |
+| A provider with no answer: `unknown`, hours stay off, no retry, resolve `made` and `not_made` | live over HTTP with a **scripted** provider (captures 58 to 63); two real connections for the double press and for a recording counted during a refund (`tests/test_billing_refunds.py`) |
+| A provider refusal: `failed`, hours restored, a new refund possible | live (capture 64) |
+| Paystack's refund with a mandatory `reference`; a timeout, 5xx or 409 as `OutcomeUnknown` | tests against Paystack's documented shapes; **not verified live** (no Paystack keys) |
+| A real provider's refund, its `refund.processed` / `refund.failed` events, how long a card refund takes | **not verified live** |
+| The admin alerts (second charge, refused charge, refund unknown, payments waiting a day) | live: capture 68; a dispute alert: tests only |
+| The screens (payment history with downloads, the refund screen) | driven in a real browser against the local app with the scripted provider at 1440, 768 and 390 wide; a refund clicked through the screen and the file downloaded by a real click |
+
 
 ## Verification
 

@@ -1,0 +1,22 @@
+{
+  "note": "Another account sees none of Ada's invoices.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "invoices": []
+    }
+  }
+}

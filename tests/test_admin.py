@@ -143,6 +143,11 @@ ADMIN_ROUTES = [
     ("GET", "/api/admin/pilot"),
     ("PUT", "/api/admin/pilot"),
     ("GET", "/api/admin/mail-failures"),
+    # billing stage S9: refunds (`app/billing/admin_api.py`)
+    ("GET", "/api/admin/billing/payments"),
+    ("POST", "/api/admin/billing/payments/1/refund"),
+    ("GET", "/api/admin/billing/refunds"),
+    ("POST", "/api/admin/billing/refunds/1/resolve"),
 ]
 
 
@@ -150,7 +155,14 @@ def test_every_admin_route_is_in_this_list(app):
     from tests.test_api import api_routes
 
     routes = {
-        (m, p.replace("{user_id}", "1").replace("{waitlist_id}", "1")) for m, p in api_routes(app)
+        (
+            m,
+            p.replace("{user_id}", "1")
+            .replace("{waitlist_id}", "1")
+            .replace("{payment_id}", "1")
+            .replace("{refund_id}", "1"),
+        )
+        for m, p in api_routes(app)
     }
     assert {r for r in routes if r[1].startswith("/api/admin/")} == set(ADMIN_ROUTES)
 

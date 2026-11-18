@@ -1,5 +1,5 @@
 {
-  "note": "A second change with no live subscription applies at once. `country_change_allowed_at` is now 30 days away.",
+  "note": "A second change before the person has ever paid applies at once, like every change before the first payment. `country_locked` is false and `country_change_allowed_at` is null: the 30-day rule starts with the first payment (captured in `docs/fe-captures/billing-country/`).",
   "client": "ada billing-on",
   "request": {
     "method": "PUT",
@@ -32,7 +32,10 @@
           "currency": "USD",
           "provider": "flutterwave"
         },
-        "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
+        "country_change_allowed_at": null,
+        "country_locked": false,
+        "suggested_country": null,
+        "suggested_route": null
       }
     }
   }

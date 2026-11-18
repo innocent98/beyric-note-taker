@@ -1,0 +1,39 @@
+{
+  "note": "Naira through the route named `paystack`.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "NG"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "result": "applied",
+      "profile": {
+        "name_or_company": null,
+        "address": null,
+        "tax_id": null,
+        "billing_email": null,
+        "billing_country": "NG",
+        "pending_billing_country": null,
+        "pending_effective_at": null,
+        "route": {
+          "currency": "NGN",
+          "provider": "paystack"
+        },
+        "country_change_allowed_at": null
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "note": "Asking again while it is unresolved: 409 `refund_in_progress`. The provider is not asked.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/9/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "refund_in_progress",
+        "message": "A refund of this payment is already under way. Look at it in the refunds list."
+      }
+    }
+  }
+}

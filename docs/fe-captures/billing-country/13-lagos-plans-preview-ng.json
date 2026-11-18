@@ -1,0 +1,48 @@
+{
+  "note": "A preview for the suggested country: prices in naira. Nothing is saved.",
+  "client": "lagos",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans?country=NG",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": {
+        "currency": "NGN",
+        "provider": "paystack"
+      },
+      "plans": [
+        {
+          "code": "plan_20h",
+          "name": "20 hours a month",
+          "monthly_seconds": 72000,
+          "price": {
+            "currency": "NGN",
+            "amount_minor": 2500000
+          }
+        }
+      ],
+      "packs": [
+        {
+          "code": "pack_10h",
+          "name": "10 extra hours",
+          "seconds": 36000,
+          "valid_months": 12,
+          "price": {
+            "currency": "NGN",
+            "amount_minor": 1500000
+          }
+        }
+      ]
+    }
+  }
+}

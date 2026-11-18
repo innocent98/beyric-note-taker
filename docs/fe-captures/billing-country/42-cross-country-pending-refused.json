@@ -1,0 +1,28 @@
+{
+  "note": "409 `country_change_pending`, with the date the waiting change takes effect.",
+  "client": "cross",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-L>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "GB"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "country_change_pending",
+        "message": "A change of billing country is already waiting for the end of your paid period (17 December 2026). It cannot be changed again until then."
+      }
+    }
+  }
+}

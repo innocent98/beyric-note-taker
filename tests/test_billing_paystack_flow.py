@@ -429,7 +429,8 @@ def test_a_refund_event_is_stored_and_left_for_the_refund_stage(
     assert response.status_code == 200
     [row] = events(session)
     assert (row.type, row.dedupe_key) == ("refund", "refund.processed:rr:132013318360")
-    assert row.processed_at is None and "waiting for the refund stage" in row.error
+    # stored and decided (S9): refunds are started by an admin; the notice changes nothing
+    assert row.processed_at is not None and "refund notice" in row.error
     assert script.requests == [] and reload(session, payment).status == "pending"
 
 
@@ -530,7 +531,7 @@ def test_a_refund_event_with_no_refund_reference_is_stored_not_lost(
 
     assert (first.status_code, second.status_code) == (200, 200)
     [row] = events(session)
-    assert row.type == "refund" and "waiting for the refund stage" in row.error
+    assert row.type == "refund" and "refund notice" in row.error
     assert row.dedupe_key.startswith("refund.processed:body:")
 
 

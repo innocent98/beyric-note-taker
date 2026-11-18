@@ -46,6 +46,15 @@ HOUR_GRANT_KINDS = ("trial", "pilot", "plan_period", "pack", "admin_gift")
 PAYMENT_KINDS = ("plan", "renewal", "upgrade", "pack")
 PAYMENT_STATUSES = ("pending", "succeeded", "failed", "refunded", "partly_refunded")
 BILLING_CURRENCIES = ("NGN", "USD")
+# Refunds (stage S9, spec 3.5): the three cases the rules allow, and where a refund stands. A
+# refund is `pending` from the moment its row is written until the provider answers; `submitted`
+# once the provider accepted it (the money is then on its way: card refunds take days);
+# `unknown` when the provider gave no answer (it may or may not have refunded: a person looks at
+# the provider's dashboard and resolves it, nothing retries); `failed` when the provider refused it
+# or a person confirmed none was made (nothing moved, the hours are restored).
+REFUND_REASONS = ("double_charge", "first_plan_7d", "pack_14d")
+REFUND_STATUSES = ("pending", "submitted", "unknown", "failed")
+REFUND_LIVE_STATUSES = ("pending", "submitted", "unknown")
 # Subscriptions (billing spec 3 and 7, stage S8): `active` and `past_due` are the live ones;
 # `lapsed` (grace ended unpaid), `canceled` (the person stopped it) and `ended` (anything else,
 # such as a deleted account) are history.
@@ -977,7 +986,121 @@ class Payment(Base):
     pay_url: Mapped[str | None] = mapped_column(Text)
     # When the sweeper last asked the provider about this pending payment (its back-off clock).
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Stage S9: set when a payment succeeded and nothing could use it (a second payment for a
+    # period already paid, money for a cancelled subscription, a gone account): the money arrived,
+    # a person refunds it. Such a payment is never invoiced, and it is what makes a refund a
+    # "double charge" (`app/billing/refunds.py`).
+    needs_refund_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InvoiceCounter(Base):
+    """The last invoice number given in a year (stage S9). A number is taken with one atomic
+    `insert ... on conflict do update ... returning`, whose row lock lasts to the end of the
+    transaction that issues the invoice: two payments settled at the same moment queue on this row,
+    so a number is never given twice, and a transaction that rolls back gives its number back (no
+    gaps)."""
+
+    __tablename__ = "invoice_counters"
+    __table_args__ = (CheckConstraint("last_number >= 0", name="ck_invoice_counters_number"),)
+
+    year: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    last_number: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class Invoice(Base):
+    """One invoice per payment that was used (billing spec sections 6 and 7, stage S9), numbered
+    `BN-<year>-<six digits>`, sequential within the year. Ours, not the provider's receipt.
+
+    A money record: it outlives the person (`payer_user_id` is set null on account deletion) and is
+    never edited, because the seller and the buyer are SNAPSHOTS taken at issue (`seller`,
+    `buyer`) and `line` says what was bought. `total_minor` is what the person paid;
+    `vat_minor` is the VAT that price INCLUDES at `vat_rate_bp` (default 0), `subtotal_minor` the
+    rest, so `subtotal + vat = total` always (a check constraint holds it). The PDF is built when
+    asked and never stored (`app/billing/invoice_pdf.py`). `test_mode` records that the payment
+    was made with test keys: such an invoice is marked as not a tax document."""
+
+    __tablename__ = "invoices"
+    __table_args__ = (
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_invoices_currency"),
+        CheckConstraint("total_minor > 0", name="ck_invoices_total"),
+        CheckConstraint("vat_minor >= 0 and subtotal_minor >= 0", name="ck_invoices_parts"),
+        CheckConstraint("subtotal_minor + vat_minor = total_minor", name="ck_invoices_sum"),
+        CheckConstraint("vat_rate_bp >= 0 and vat_rate_bp <= 10000", name="ck_invoices_rate"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    payment_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("payments.id", ondelete="RESTRICT"), unique=True
+    )
+    payer_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    currency: Mapped[str] = mapped_column(String(3))
+    subtotal_minor: Mapped[int] = mapped_column(BigInteger)
+    vat_rate_bp: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    vat_minor: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    total_minor: Mapped[int] = mapped_column(BigInteger)
+    seller: Mapped[dict] = mapped_column(JSONB)
+    buyer: Mapped[dict] = mapped_column(JSONB)
+    line: Mapped[dict] = mapped_column(JSONB)
+    test_mode: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Refund(Base):
+    """One refund of one payment (billing spec 3.5, stage S9): always the whole payment, asked for
+    by an admin for one of the three cases (`REFUND_REASONS`), checked against the facts by
+    `app/billing/refunds.py`. The row is written and committed BEFORE the provider is called, with
+    `reference`, our own key for it (Paystack takes it as an idempotency key; Flutterwave v3 has
+    none, so it is only a note there), and a partial unique index allows one live refund per
+    payment, so two admins pressing the button at once make one.
+
+    `grant_id` and `grant_expires_before` remember the hour grant that was ended when the refund
+    started (the hours the refund covers) so a refund the provider refused can give it back."""
+
+    __tablename__ = "refunds"
+    __table_args__ = (
+        CheckConstraint(_in("reason", REFUND_REASONS), name="ck_refunds_reason"),
+        CheckConstraint(_in("status", REFUND_STATUSES), name="ck_refunds_status"),
+        CheckConstraint(_in("currency", BILLING_CURRENCIES), name="ck_refunds_currency"),
+        CheckConstraint("amount_minor > 0", name="ck_refunds_amount"),
+        Index(
+            "uq_refunds_payment_live",
+            "payment_id",
+            unique=True,
+            postgresql_where=sa.text("status in ('pending', 'submitted', 'unknown')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("payments.id", ondelete="RESTRICT"), index=True
+    )
+    reference: Mapped[str] = mapped_column(String(64), unique=True)
+    reason: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(12), default="pending", server_default="pending")
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(String(3))
+    provider_refund_id: Mapped[str | None] = mapped_column(String(128))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    grant_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("hour_grants.id", ondelete="SET NULL")
+    )
+    grant_expires_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    seconds_removed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Why the provider's answer is what it is, by kind only (never a provider's text).
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
 
 
 class PaymentMethod(Base):

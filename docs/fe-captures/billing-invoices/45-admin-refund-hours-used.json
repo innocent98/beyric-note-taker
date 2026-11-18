@@ -1,0 +1,28 @@
+{
+  "note": "One hour of the plan was used: 409 `hours_used`.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/7/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "hours_used",
+        "message": "Hours from this payment were used: it cannot be refunded."
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "note": "Already resolved: 409 `not_unresolved`.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/refunds/4/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "outcome": "not_made"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_unresolved",
+        "message": "This refund is not waiting for a person to resolve it."
+      }
+    }
+  }
+}

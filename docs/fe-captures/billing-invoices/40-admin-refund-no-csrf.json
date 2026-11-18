@@ -1,0 +1,27 @@
+{
+  "note": "No CSRF header: 403 `csrf_rejected`.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/4/refund",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

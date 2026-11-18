@@ -60,6 +60,7 @@ RESUME = "resume"  # the person takes the cancel back
 UPGRADE = "upgrade"  # the person asks for a bigger plan now
 DOWNGRADE = "downgrade"  # the person asks for a smaller plan at the next renewal
 ACCOUNT_DELETED = "account_deleted"
+REFUNDED = "refunded"  # the first payment of the plan was refunded (stage S9): the plan ends
 
 # ---- effects (what the caller must do for the new status) ----
 START_PERIOD = "start_period"  # new period from the payment date, grant its hours, clear dunning
@@ -102,6 +103,7 @@ TABLE: dict[tuple[str, str], Transition] = {
     (ACTIVE, UPGRADE): _t(ACTIVE, CHARGE_DIFFERENCE),
     (ACTIVE, DOWNGRADE): _t(ACTIVE, SCHEDULE_DOWNGRADE),
     (ACTIVE, ACCOUNT_DELETED): _t(ENDED),
+    (ACTIVE, REFUNDED): _t(ENDED),
     # --- past_due: the 3 days of grace. Change plan and resume are refused (not in the table).
     (PAST_DUE, CHARGE_FAILED_1): _t(PAST_DUE, SCHEDULE_NEXT_ATTEMPT),
     (PAST_DUE, CHARGE_FAILED_2): _t(PAST_DUE, STOP_ATTEMPTS, NOTIFY_LAST_DAY),

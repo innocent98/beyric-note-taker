@@ -20,14 +20,17 @@
       "address": "1 Placeholder Road\nLagos",
       "tax_id": "TIN-PLACEHOLDER-0001",
       "billing_email": "billing@example.test",
-      "billing_country": "GB",
+      "billing_country": "FR",
       "pending_billing_country": null,
       "pending_effective_at": null,
       "route": {
         "currency": "USD",
         "provider": "flutterwave"
       },
-      "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
+      "country_change_allowed_at": null,
+      "country_locked": false,
+      "suggested_country": null,
+      "suggested_route": null
     }
   }
 }

@@ -46,6 +46,7 @@ SECRET_KEY = "FAKE-NOT-A-KEY_TEST"  # not a real key (the _TEST marks it as a te
 SECRET_HASH = "FAKE-NOT-A-HASH"  # not a real hash
 HOOK_URL = "/api/billing/webhooks/flutterwave"
 REF = "bn-7-FAKE-REFERENCE"
+RF = "bnrf-9-0123456789abcdef"  # our reference for a refund: mandatory since stage S9
 
 
 def settings(**over):
@@ -422,6 +423,17 @@ def test_the_refund_sample_is_a_refund_event():
     assert event.event_id == "refund:89074:completed"
 
 
+def test_a_refund_notice_with_status_failed_says_the_refund_failed():
+    base_body = (
+        '{"id":89074,"AmountRefunded":50.00,"status":"%s","FlwRef":"flwm3s4m0c",'
+        '"destination":"payment_source","TransactionId":8784082}'
+    )
+    provider = FlutterwaveProvider(settings())
+    assert provider.parse_event((base_body % "failed").encode()).refund_failed is True
+    assert provider.parse_event((base_body % "FAILED").encode()).refund_failed is True
+    assert provider.parse_event((base_body % "completed").encode()).refund_failed is False
+
+
 # ---------------------------------------------------------------- hosted checkout
 
 
@@ -676,7 +688,7 @@ def test_an_unknown_outcome_is_not_a_provider_error():
     assert not issubclass(OutcomeUnknown, ProviderError)
     for lost in (httpx.ReadTimeout("slow"), reply("busy", 503)):
         with pytest.raises(OutcomeUnknown) as caught:
-            Wire(lost).provider().refund("285959875", 500)
+            Wire(lost).provider().refund("285959875", 500, reference=RF)
         assert not isinstance(caught.value, ProviderError)
 
 
@@ -756,10 +768,10 @@ def test_a_charge_that_times_out_and_cannot_be_found_is_an_unknown_outcome():
 
 def test_a_refund_names_the_transaction_and_the_exact_amount_and_returns_its_id():
     wire = Wire(reply(REFUND_OK))
-    refund_id = wire.provider().refund("285959875", 500)
+    refund_id = wire.provider().refund("285959875", 500, reference=RF)
     assert refund_id == "8612"
     assert wire.sent == [("POST", "/v3/transactions/285959875/refund")]
-    assert wire.requests[0].content == b'{"amount": 5}'
+    assert wire.requests[0].content == b'{"comments": "%s", "amount": 5}' % RF.encode()
 
 
 def test_our_refund_reference_travels_as_the_comments_not_as_an_idempotency_key():
@@ -769,7 +781,7 @@ def test_our_refund_reference_travels_as_the_comments_not_as_an_idempotency_key(
     assert wire.body() == {"comments": "refund-row-9", "amount": 5}
 
 
-@pytest.mark.parametrize("bad", ["", "x" * 101, 5])
+@pytest.mark.parametrize("bad", ["", "x" * 101, 5, None])
 def test_a_refund_reference_that_cannot_be_sent_sends_nothing(bad):
     wire = Wire(reply(REFUND_OK))
     with pytest.raises(ProviderError):
@@ -779,8 +791,8 @@ def test_a_refund_reference_that_cannot_be_sent_sends_nothing(bad):
 
 def test_a_refund_of_cents_is_sent_exactly():
     wire = Wire(reply(REFUND_OK))
-    wire.provider().refund("285959875", 999)
-    assert wire.requests[0].content == b'{"amount": 9.99}'
+    wire.provider().refund("285959875", 999, reference=RF)
+    assert wire.requests[0].content == b'{"comments": "%s", "amount": 9.99}' % RF.encode()
 
 
 @pytest.mark.parametrize(
@@ -793,7 +805,7 @@ def test_a_refund_of_cents_is_sent_exactly():
 )
 def test_a_refund_the_vendor_does_not_accept_is_an_error(answer):
     with pytest.raises(ProviderError) as caught:
-        Wire(answer).provider().refund("285959875", 500)
+        Wire(answer).provider().refund("285959875", 500, reference=RF)
     assert not isinstance(caught.value, OutcomeUnknown)
 
 
@@ -803,7 +815,7 @@ def test_a_refund_the_vendor_does_not_accept_is_an_error(answer):
 def test_a_refund_that_gets_no_answer_is_an_unknown_outcome_never_a_second_try(lost):
     wire = Wire(lost)
     with pytest.raises(OutcomeUnknown):
-        wire.provider().refund("285959875", 500)
+        wire.provider().refund("285959875", 500, reference=RF)
     assert len(wire.requests) == 1  # no hidden retry: a second refund could pay twice
 
 
@@ -811,7 +823,7 @@ def test_a_refund_that_gets_no_answer_is_an_unknown_outcome_never_a_second_try(l
 def test_a_refund_that_cannot_be_made_properly_sends_nothing(bad):
     wire = Wire(reply(REFUND_OK))
     with pytest.raises(ProviderError):
-        wire.provider().refund(*bad)
+        wire.provider().refund(*bad, reference=RF)
     assert wire.requests == []
 
 
@@ -826,7 +838,7 @@ def calls_of(provider):
         lambda: provider.charge_saved_method(
             "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
         ),
-        lambda: provider.refund("285959875", 500),
+        lambda: provider.refund("285959875", 500, reference=RF),
     ]
 
 
@@ -1297,7 +1309,7 @@ def test_a_refund_answered_200_with_an_unusable_body_is_an_unknown_outcome(answe
     """The vendor may already have refunded: never a retryable `ProviderError`."""
     wire = Wire(answer)
     with pytest.raises(OutcomeUnknown) as caught:
-        wire.provider().refund("285959875", 500)
+        wire.provider().refund("285959875", 500, reference=RF)
     assert not isinstance(caught.value, ProviderError) and len(wire.requests) == 1
 
 
@@ -1311,7 +1323,7 @@ def test_a_refund_answered_200_with_an_unusable_body_is_an_unknown_outcome(answe
 )
 def test_a_refund_accepted_without_a_refund_id_is_an_unknown_outcome(answer):
     with pytest.raises(OutcomeUnknown, match="may have been made"):
-        Wire(answer).provider().refund("285959875", 500)
+        Wire(answer).provider().refund("285959875", 500, reference=RF)
 
 
 @pytest.mark.parametrize(

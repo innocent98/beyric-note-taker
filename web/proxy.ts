@@ -57,6 +57,7 @@ export const config = {
     "/billing",
     "/billing/plans",
     "/billing/return",
+    "/admin/billing",
     "/notifications",
     "/privacy",
     "/terms",

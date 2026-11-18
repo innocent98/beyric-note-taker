@@ -1,0 +1,36 @@
+{
+  "note": "Starts the hosted checkout on the saved country's route. The country is saved BEFORE this call; a checkout never uses a suggestion.",
+  "client": "cross",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-L>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-2-eb1e6bda7e6eef3e",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-17T19:32:26.717174Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-2-eb1e6bda7e6eef3e"
+      },
+      "checkout_url": "https://fake.test/pay/bn-2-eb1e6bda7e6eef3e"
+    }
+  }
+}

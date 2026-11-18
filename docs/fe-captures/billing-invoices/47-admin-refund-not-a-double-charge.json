@@ -1,0 +1,28 @@
+{
+  "note": "Flo's FIRST payment was used (it bought her plan): not a double charge, 409 `not_a_double_charge`.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/8/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "double_charge"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_a_double_charge",
+        "message": "This payment was used (it bought a plan or hours): it is not a double charge."
+      }
+    }
+  }
+}
