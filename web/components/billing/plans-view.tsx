@@ -28,7 +28,7 @@ type Loaded = { plans: Plans; state: BillingState; profile: BillingProfile };
 // "Choose a plan" (billing stage S8b, part A). LEAD-DESIGNED from the existing components: no billing
 // design exists. The page reads GET /plans (what can be bought, priced in the person's route), the
 // state and the billing profile; the person picks a billing country first, reads the plain statement
-// ("Prices in naira, paid through Paystack."), then a plan button starts the hosted checkout
+// ("Prices in naira."), then a plan button starts the hosted checkout
 // (POST /checkout) and the browser goes to the provider's page. Nothing is granted by pressing a button
 // or by coming back: the return page waits for a verified payment (components/billing/return-view.tsx).
 // A person who has not saved a billing country sees the country we suggest (or the one they pick) priced as

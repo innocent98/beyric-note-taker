@@ -2810,6 +2810,10 @@ being settled).
 * After `paid`: the plan or hours are shown by the next `GET /subscription`.
 * A 502 changes nothing: the notice stays, the person can try again.
 
+### Wording change on the plans screens (2026-11-18, no payload change)
+
+`GET /route` and the profile still return `route.provider` (`paystack`, `flutterwave`); the screens just no longer print it. `routeStatement` now says only "Prices in naira." or "Prices in US dollars." (earlier sections of this guide that quote "..., paid through Paystack" describe the old words). The plans screen keeps "You pay on the next page, on the provider's own site."; the return page, invoices, receipts and admin screens still name the provider.
+
 ### Verification (cancelling an unfinished checkout)
 
 | Behaviour | How verified |

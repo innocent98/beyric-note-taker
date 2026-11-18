@@ -209,9 +209,11 @@ export function providerName(provider: string): string {
   return PROVIDER_NAMES[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
-// The plain statement before any payment (spec 5.2): read from the route, never assumed from the country.
+// The plain statement before any payment (spec 5.2): read from the route, never assumed from the country. It names the
+// currency only: the plans screens do not name the payment provider (the pay page, the return page, invoices and
+// receipts do, with `providerName`).
 export function routeStatement(route: BillingRoute): string {
-  return `Prices in ${currencyWords(route.currency)}, paid through ${providerName(route.provider)}.`;
+  return `Prices in ${currencyWords(route.currency)}.`;
 }
 
 // An amount of the API's own, written for a person: "₦150,000.00", "$18.00". `amount_minor` is cents or kobo.
