@@ -1,0 +1,33 @@
+{
+  "note": "No saved time zone: both suggested fields are null. The screen then falls back to the browser's language region (read in the browser, not on the server), then the picker.",
+  "client": "nozone",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": null,
+      "address": null,
+      "tax_id": null,
+      "billing_email": null,
+      "billing_country": null,
+      "pending_billing_country": null,
+      "pending_effective_at": null,
+      "route": null,
+      "country_change_allowed_at": null,
+      "country_locked": false,
+      "suggested_country": null,
+      "suggested_route": null
+    }
+  }
+}

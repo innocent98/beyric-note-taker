@@ -32,7 +32,10 @@
           "currency": "NGN",
           "provider": "paystack"
         },
-        "country_change_allowed_at": null
+        "country_change_allowed_at": null,
+        "country_locked": false,
+        "suggested_country": null,
+        "suggested_route": null
       }
     }
   }

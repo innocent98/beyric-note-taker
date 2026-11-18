@@ -77,6 +77,7 @@ from app.models import (  # noqa: E402
     Subscription,
     Template,
     User,
+    UserSettings,
 )
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
@@ -89,9 +90,11 @@ API = f"http://127.0.0.1:{API_PORT}"
 PASSWORD = "-".join(["dev", "screens", "password"])  # a placeholder, scratch database only
 PEOPLE = [
     "new", "us", "ng", "active", "cancel", "downgrade", "pastdue", "threeds", "lapsed", "canceled",
-    "low", "out", "pending", "ngactive", "invoices", "refunded", "root",
+    "low", "out", "pending", "ngactive", "lagos", "addis", "invoices", "refunded", "root",
     "rf1", "rf2", "rf3", "rf4", "rf5",
 ]  # fmt: skip
+# A saved time zone and no billing country: the plans screen suggests the zone's country.
+TIME_ZONES = {"lagos": "Africa/Lagos", "addis": "Africa/Addis_Ababa"}
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
 
@@ -231,6 +234,8 @@ SCENARIOS = {
     "invoices": "an active plan and an extra-hours pack, each with its invoice (S9)",
     "refunded": "a first plan payment the administrator refunded (S9)",
     "adminboard": "five payments for the administrator's refund screen: sign in as root (S9)",
+    "lagos": "time zone Africa/Lagos, no billing country: Nigeria is suggested",
+    "addis": "time zone Africa/Addis_Ababa, no billing country: Ethiopia is suggested",
 }
 
 
@@ -460,6 +465,9 @@ def main() -> None:
                     is_admin=name == "root",
                 )
             )
+        session.flush()
+        for name, zone in TIME_ZONES.items():
+            session.add(UserSettings(user_id=user_for(session, name).id, time_zone=zone))
         session.add(
             Plan(code="capture_40h", name="40 hours a month", monthly_seconds=144000, sort_order=2)
         )

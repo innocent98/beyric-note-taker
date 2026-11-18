@@ -35,3 +35,39 @@ export function countryOptions(locale = "en"): Array<readonly [string, string]> 
     a[1].localeCompare(b[1], locale),
   );
 }
+
+// Shown first in the picker, Nigeria on top (the one country that pays in naira), then the countries most
+// people who sign up are established in. A person can still pick any country in the list below them.
+export const COMMON_COUNTRY_CODES: readonly string[] = ["NG", "US", "GB", "GH", "KE", "ZA", "CA", "IN", "AE", "DE", "FR", "AU"];
+
+// The region a browser reports in its language tags ("en-NG" gives "NG"), or null when none of them has one
+// ("en" says nothing about where a person is, so nothing is made up from it) or the region is not a country
+// the server accepts. Used only to SUGGEST a country; the person confirms it.
+export function regionFromLanguages(languages: readonly string[]): string | null {
+  for (const tag of languages) {
+    let region: string | undefined;
+    try {
+      region = new Intl.Locale(tag).region;
+    } catch {
+      continue;
+    }
+    if (region && COUNTRY_CODES.includes(region)) return region;
+  }
+  return null;
+}
+
+// What the picker lists: with nothing typed, the common countries and then all of them; with a search, the
+// countries whose name (or code) contains it, in name order.
+export function filterCountryOptions(
+  query: string,
+  locale = "en",
+): { common: Array<readonly [string, string]>; all: Array<readonly [string, string]> } {
+  const all = countryOptions(locale);
+  const needle = query.trim().toLowerCase();
+  if (needle) {
+    const found = all.filter(([code, name]) => name.toLowerCase().includes(needle) || code.toLowerCase() === needle);
+    return { common: [], all: found };
+  }
+  const common = COMMON_COUNTRY_CODES.map((code) => [code, countryName(code, locale)] as const);
+  return { common, all };
+}

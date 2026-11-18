@@ -395,7 +395,7 @@ def test_a_body_that_is_not_an_event_is_unreadable(body):
 
 def test_a_refund_or_dispute_event_with_null_fields_is_still_an_event_never_a_lost_one():
     """A `refund.pending` may carry no processor reference yet, a dispute no refund amount: stored
-    for the refund stage, never a 400 that Paystack resends for 72 hours and then drops."""
+    as decided notices (S9), never a 400 that Paystack resends for 72 hours and then drops."""
     provider, _ = make()
     refund = sample("refund_processed_event.json")
     refund["data"].update(refund_reference=None, status="pending")

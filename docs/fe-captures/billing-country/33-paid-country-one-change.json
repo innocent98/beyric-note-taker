@@ -1,0 +1,42 @@
+{
+  "note": "One change is allowed. Same currency and provider (dollars, Flutterwave), so it applies at once; `country_change_allowed_at` is now 30 days away.",
+  "client": "paid",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile/country",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "billing_country": "FR"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "result": "applied",
+      "profile": {
+        "name_or_company": null,
+        "address": null,
+        "tax_id": null,
+        "billing_email": null,
+        "billing_country": "FR",
+        "pending_billing_country": null,
+        "pending_effective_at": null,
+        "route": {
+          "currency": "USD",
+          "provider": "flutterwave"
+        },
+        "country_change_allowed_at": "2026-12-17T19:32:26.611431Z",
+        "country_locked": true,
+        "suggested_country": null,
+        "suggested_route": null
+      }
+    }
+  }
+}

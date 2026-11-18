@@ -1,0 +1,36 @@
+{
+  "note": "`country_locked` is true. `country_change_allowed_at` is still null: the changes made while the country was free do not count towards the 30 days.",
+  "client": "paid",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": null,
+      "address": null,
+      "tax_id": null,
+      "billing_email": null,
+      "billing_country": "GB",
+      "pending_billing_country": null,
+      "pending_effective_at": null,
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "country_change_allowed_at": null,
+      "country_locked": true,
+      "suggested_country": null,
+      "suggested_route": null
+    }
+  }
+}

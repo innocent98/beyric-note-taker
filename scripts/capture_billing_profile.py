@@ -210,15 +210,19 @@ def run(engine, server_base, off_base, narrow_base, closed_base) -> None:
         "PUT",
         "/api/billing/profile/country",
         body={"billing_country": "GB"},
-        note="A second change with no live subscription applies at once. "
-        "`country_change_allowed_at` is now 30 days away.",
+        note="A second change before the person has ever paid applies at once, like every change "
+        "before the first payment. `country_locked` is false and `country_change_allowed_at` is "
+        "null: the 30-day rule starts with the first payment (captured in "
+        "`docs/fe-captures/billing-country/`).",
     )
     ada.call(
-        "country-too-soon",
+        "country-third-free",
         "PUT",
         "/api/billing/profile/country",
         body={"billing_country": "FR"},
-        note="A third inside 30 days: 409 `country_change_too_soon`. Nothing is written.",
+        note="A third change, still before any payment: applied too. The refusal "
+        "(409 `country_change_too_soon`) exists only after a payment: see "
+        "`docs/fe-captures/billing-country/`.",
     )
     ada.call("profile-after", "GET", "/api/billing/profile", note="The profile after those calls.")
     base.note_file(

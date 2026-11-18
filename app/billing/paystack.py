@@ -265,7 +265,8 @@ class PaystackProvider:
             card_token=_reusable_token(_dig(data, "authorization")),
         )
 
-    # Refund and dispute events are stored and left for the refund stage (S9): nothing here is read
+    # Refund and dispute events are stored and marked decided (S9; a failed refund or a dispute only
+    # alerts the admins, see `settle._record_refund_notice`): nothing here is read
     # to move money, so a field Paystack leaves null (the processor's refund reference on a
     # `refund.pending`, a dispute's refund amount) must never turn a genuine event into a 400 that
     # is resent for 72 hours and lost. Only a body that is not an object is unreadable. The claims

@@ -1,0 +1,25 @@
+{
+  "note": "A name, not a code: 422 `billing_country_invalid`.",
+  "client": "lagos",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans?country=Nigeria",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "billing_country_invalid",
+        "message": "That is not a country code we know. Pick one from the list."
+      }
+    }
+  }
+}

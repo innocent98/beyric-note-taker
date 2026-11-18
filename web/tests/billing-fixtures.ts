@@ -24,6 +24,9 @@ export const PROFILE_US = {
   pending_effective_at: null,
   route: { currency: "USD", provider: "flutterwave" },
   country_change_allowed_at: null,
+  country_locked: false,
+  suggested_country: null,
+  suggested_route: null,
 };
 export const PROFILE_NONE = {
   ...PROFILE_US,

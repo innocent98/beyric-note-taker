@@ -1,5 +1,12 @@
 # FE integration guide: billing profile and billing country (billing stage S5)
 
+**Updated 2026-11-17 (billing country flow, branch `feature/billing-country-flow`).** The country is now
+*suggested* (never saved by a guess), is **free to change until the first payment**, and the 30-day and
+end-of-period rules apply only from the first payment on. The three new profile keys, the suggestion, the plans
+preview and the refusals with dates are in the section "Billing country flow" of
+`docs/fe-integration-guide-billing.md`, with captures in `docs/fe-captures/billing-country/` (made by
+`scripts/capture_billing_country.py`). The bodies below were re-captured after that change.
+
 Every request and response body below is pasted from `docs/fe-captures/billing-profile/` (made by
 `scripts/capture_billing_profile.py`: real migrations, the real app under uvicorn, real HTTP, three copies of
 the app on one scratch database). Anything that could **not** be exercised live is marked **NOT LIVE** inline
@@ -18,8 +25,9 @@ country**. The country decides what they pay in and through whom:
 | any other country | US dollars (`USD`) | Flutterwave (`flutterwave`) |
 
 (That table is the server's default. It is data on the server, so **never hard-code it: read `route` from the
-profile and from the preview route below.**) The country is **chosen by the person from a list, never guessed**
-from their address, browser or card. Only the person changes their own; there is no route for anyone else's.
+profile and from the preview route below.**) The country is **confirmed by the person, never saved from a guess**:
+the server and the screen may *suggest* one (from the saved time zone, then the browser's language region) but
+nothing is saved until the person confirms it. Only the person changes their own; there is no route for anyone else's.
 
 **Nothing here is switched on yet.** All four routes answer a plain 404 while the server runs with
 `BILLING_ENABLED` off (the default), and also for every account the operator has not allow-listed (the list is
@@ -32,7 +40,7 @@ There is no payment, plan or price on these routes: the profile is the first thi
 ## The profile object
 
 Returned by `GET /api/billing/profile`, by `PUT /api/billing/profile`, and inside `PUT /api/billing/profile/country`
-(under `profile`). Always all nine keys, present-but-null, never absent.
+(under `profile`). Always all twelve keys, present-but-null, never absent.
 
 | Key | Meaning | Null when |
 |---|---|---|
@@ -41,10 +49,13 @@ Returned by `GET /api/billing/profile`, by `PUT /api/billing/profile`, and insid
 | `tax_id` | the person's tax number (at most 64 characters, one line) | not saved |
 | `billing_email` | where billing mail goes (plain address, lower-cased by the server) | not saved |
 | `billing_country` | two-letter ISO country code the person chose, upper case | not chosen yet |
-| `pending_billing_country` | a change that waits for the end of a paid period | nothing is waiting (always, until subscriptions exist) |
+| `pending_billing_country` | a change that waits for the end of a paid period | nothing is waiting |
 | `pending_effective_at` | when the waiting change takes effect | nothing is waiting |
 | `route` | `{currency, provider}` that `billing_country` pays with | no country chosen, or none can be routed |
-| `country_change_allowed_at` | the next moment the person may change country again (30 days after their last change) | a change is allowed now |
+| `country_change_allowed_at` | the next moment the person may change country again (30 days after their last change **since their first payment**) | a change is allowed now, which is always so before the first payment |
+| `country_locked` | `true` once the person has had a successful payment or has a live plan: from then the 30-day rule applies | (never null) `false` before: the country changes instantly, any number of times |
+| `suggested_country` | only while no country is saved: the country the saved time zone points to (`Africa/Lagos` gives `NG`) | a country is saved, or no zone, or the zone has no country, or that country cannot be routed |
+| `suggested_route` | `{currency, provider}` the suggested country pays with | same as `suggested_country` |
 
 ### Field-nesting traps
 
@@ -74,7 +85,10 @@ GET /api/billing/profile
   "pending_billing_country": null,
   "pending_effective_at": null,
   "route": null,
-  "country_change_allowed_at": null
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
 }
 ```
 
@@ -170,7 +184,10 @@ PUT /api/billing/profile
   "pending_billing_country": null,
   "pending_effective_at": null,
   "route": null,
-  "country_change_allowed_at": null
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
 }
 ```
 
@@ -271,7 +288,7 @@ send a code from the list the screen offers, never a typed name. The answer is 2
 | `result` | Meaning |
 |---|---|
 | `applied` | the country is now this one; the next checkout uses its currency and provider |
-| `scheduled` | **NOT LIVE** (see below) the change waits for the end of the paid period; `profile.pending_*` say what and when |
+| `scheduled` | the change waits for the end of the paid period; `profile.pending_*` say what and when |
 | `unchanged` | it is already this country; nothing was written |
 
 The first choice (not counted as a change for the 30-day rule, so a wrong first pick can be fixed once straight away):
@@ -299,7 +316,10 @@ PUT /api/billing/profile/country
       "currency": "NGN",
       "provider": "paystack"
     },
-    "country_change_allowed_at": null
+    "country_change_allowed_at": null,
+    "country_locked": false,
+    "suggested_country": null,
+    "suggested_route": null
   }
 }
 ```
@@ -329,13 +349,17 @@ PUT /api/billing/profile/country
       "currency": "NGN",
       "provider": "paystack"
     },
-    "country_change_allowed_at": null
+    "country_change_allowed_at": null,
+    "country_locked": false,
+    "suggested_country": null,
+    "suggested_route": null
   }
 }
 ```
 
-A second, real change with no paid subscription applies at once. `country_change_allowed_at` now shows when
-the next one is allowed:
+A second, real change before the person has ever paid applies at once, like every change before the first
+payment: `country_locked` is false and `country_change_allowed_at` stays null (an earlier version of the API set a 30-day
+date here; it no longer does):
 
 ```
 PUT /api/billing/profile/country
@@ -360,7 +384,10 @@ PUT /api/billing/profile/country
       "currency": "USD",
       "provider": "flutterwave"
     },
-    "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
+    "country_change_allowed_at": null,
+    "country_locked": false,
+    "suggested_country": null,
+    "suggested_route": null
   }
 }
 ```
@@ -405,22 +432,23 @@ PUT /api/billing/profile/country
 }
 ```
 
-Another change inside 30 days (the refusal writes nothing; read `country_change_allowed_at` from the profile to
-tell the person when):
+A third change before any payment is applied as well (capture `23-country-third-free.json`; same shape as above).
+The refusal exists only **after the person has paid** (the 30-day rule counts the changes made since the first
+payment; the ones made while it was free do not count). It writes nothing, and the message carries the date in plain words, in the person's saved time zone (UTC when none):
 
 ```
 PUT /api/billing/profile/country
 {
-  "billing_country": "FR"
+  "billing_country": "DE"
 }
 ```
 
 ```json
-// 409  (capture 23-country-too-soon.json)
+// 409  (capture billing-country/34-paid-country-too-soon.json)
 {
   "error": {
     "code": "country_change_too_soon",
-    "message": "You can change your billing country once every 30 days."
+    "message": "Since your first payment your billing country can be changed once every 30 days. You can change it again on 17 December 2026."
   }
 }
 ```
@@ -448,7 +476,14 @@ PUT /api/billing/profile/country
 Also covered by tests, not captured: `validation_error` (422) for a missing `billing_country` key, or a value
 that is not a string.
 
-### Scheduled changes (**NOT LIVE**)
+### Scheduled changes (live since stage S8; the captures below are the older SQL-made ones)
+
+The `scheduled` result, the pending profile and the `country_change_pending` refusal are now captured live, through
+a real checkout and webhook with the scripted provider: see "Billing country flow" in
+`docs/fe-integration-guide-billing.md` (captures 40 to 42 in `docs/fe-captures/billing-country/`). The older captures
+below were made before any subscription could exist.
+
+### Scheduled changes, older captures (**written by SQL**)
 
 When a person who has a **live paid subscription** moves between Nigeria and elsewhere, the change cannot take
 effect at once (a saved card belongs to one provider): it waits for the end of the paid period. **No
@@ -467,14 +502,17 @@ GET /api/billing/profile
   "address": "1 Placeholder Road\nLagos",
   "tax_id": "TIN-PLACEHOLDER-0001",
   "billing_email": "billing@example.test",
-  "billing_country": "GB",
+  "billing_country": "FR",
   "pending_billing_country": "NG",
-  "pending_effective_at": "2026-11-28T22:02:15.275977Z",
+  "pending_effective_at": "2026-11-29T19:32:29.827690Z",
   "route": {
     "currency": "USD",
     "provider": "flutterwave"
   },
-  "country_change_allowed_at": "2026-12-16T22:02:15.248161Z"
+  "country_change_allowed_at": null,
+  "country_locked": false,
+  "suggested_country": null,
+  "suggested_route": null
 }
 ```
 
@@ -492,7 +530,7 @@ PUT /api/billing/profile/country
 {
   "error": {
     "code": "country_change_pending",
-    "message": "A change of billing country is already waiting for the end of your paid period."
+    "message": "A change of billing country is already waiting for the end of your paid period (29 November 2026). It cannot be changed again until then."
   }
 }
 ```
@@ -513,8 +551,8 @@ the person's next change or by the renewal. Proved by tests (`tests/test_billing
 | 422 | `billing_country_unsupported` | a real country with no route | `We cannot take payments from that country yet.` |
 | 422 | `billing_email_invalid` | the billing email is not a plain address | `That is not an email address we can send to.` |
 | 422 | `validation_error` | a field is missing, too long, unknown or of the wrong type | `Some fields are missing or not valid.` (with `fields`) |
-| 409 | `country_change_too_soon` | a change within 30 days of the last one | `You can change your billing country once every 30 days.` |
-| 409 | `country_change_pending` | a change is already waiting for the end of a period | `A change of billing country is already waiting for the end of your paid period.` |
+| 409 | `country_change_too_soon` | **after the first payment only**: a change within 30 days of the last one made since then | `Since your first payment your billing country can be changed once every 30 days. You can change it again on 17 December 2026.` (the date varies) |
+| 409 | `country_change_pending` | a change is already waiting for the end of a period | `A change of billing country is already waiting for the end of your paid period (17 December 2026). It cannot be changed again until then.` (the date varies) |
 
 The 401 and 404 bodies (the 404 is the same whether billing is off or the account is not allowed):
 
@@ -546,14 +584,16 @@ The 401 and 404 bodies (the 404 is the same whether billing is off or the accoun
 * **Tell the person the country is where they are established.** The country decides naira or dollars; the
   Terms will say it must be where the customer is established, and a card from another country is flagged for
   a human look (never refused). Do not call it "where you live today" or offer to detect it.
-* **A change is rate-limited, say so before they try.** When `country_change_allowed_at` is not null, disable
-  the change control and show the date; the 409 `country_change_too_soon` is the backstop, not the plan.
-* **A wrong first choice can be fixed once, straight away,** because the first choice does not count. After
-  that, one change in 30 days.
+* **A change is rate-limited only after the first payment, say so before they try.** When
+  `country_change_allowed_at` is not null, disable the change control and show the date; the 409
+  `country_change_too_soon` is the backstop, not the plan. Before the first payment (`country_locked` false)
+  the control is always on.
+* **Until the first payment a wrong country costs nothing:** it can be changed instantly, as often as needed.
+  After it, one change in 30 days (the first one after paying is allowed; the changes made earlier do not count).
 * **While `pending_billing_country` is set,** show that the change is waiting and when (`pending_effective_at`),
   keep showing the old route, and offer no change control. **There is no way to cancel a waiting change:**
   even a request for the current country gets 409 `country_change_pending`, so do not offer "undo".
-  (Never produced before stage S8.)
+  (Live since stage S8: see the billing guide, captures 40 to 42 in `docs/fe-captures/billing-country/`.)
 * **A 404 on any of these means "not available to this person"** (billing off, or not allowed), not
   a fault: hide the billing profile section.
 * **Billing email is not the sign-in email.** It may be empty; mail about payments will use it when set.
@@ -566,8 +606,9 @@ paid period (stage S8); re-read the profile whenever the billing screen is opene
 
 ```
 no country --PUT country--> applied (first choice, free)
-applied --PUT other country, no live subscription or same currency--> applied (30-day clock starts)
-applied --PUT other country, live subscription, Nigeria <-> elsewhere--> pending (NOT LIVE until S8)
+applied --PUT other country, never paid (country_locked false)--> applied (any number of times)
+applied --PUT other country, paid, no live subscription or same currency--> applied (30-day clock)
+applied --PUT other country, paid, live subscription, Nigeria <-> elsewhere--> pending
 pending --end of the paid period--> applied     (any PUT meanwhile: 409 country_change_pending)
 ```
 
@@ -589,13 +630,13 @@ with a fake provider, not by a live capture.
 | 422 `billing_email_invalid`, `validation_error` (too long, unknown key) | live (captures 14, 15, 16); control characters and wrong types by tests only |
 | Route preview for `NG`, `gb`, missing, a name | live (captures 09 to 12) |
 | First choice applied, same country unchanged, second change applied, `country_change_allowed_at` | live (captures 18, 19, 22, 24) |
-| 409 `country_change_too_soon`, and that it writes nothing | live (capture 23; history rows in capture 25) |
+| Changes before the first payment apply at once, with no 30-day date; the 409 `country_change_too_soon` exists only after a payment, carries the date, and writes nothing | live (billing-profile captures 22, 23, 25; billing-country captures 21 to 25 and 32 to 34) |
 | 422 `billing_country_missing`, `billing_country_invalid` | live (captures 20, 21) |
 | 422 `billing_country_unsupported` (a provider switched off) | live (capture 33) |
 | 404 with billing off, with an account off the allow-list, and with billing on but the allow-list empty (closed by default) | live (captures 03, 04, 36, 39) |
 | 401 for a visitor, 403 without CSRF | live (captures 05, 17) |
 | One person never sees or changes another's profile | live for the read (capture 30); the writes by tests |
-| `scheduled` result, pending shape, 409 `country_change_pending` | **NOT LIVE**: needs a live subscription (stage S8). The waiting row was written by SQL; the read and the refusal are real HTTP (captures 26, 27). The `scheduled` response itself is tests only |
+| `scheduled` result, pending shape, 409 `country_change_pending` | live through a real checkout and webhook with the scripted provider (billing-country captures 38 to 42); a real provider is not involved. The older billing-profile captures 26 and 27 were written by SQL |
 | A pending change taking effect at the period's end | tests only |
 | The card-country note on a payment | tests only (fake provider through the webhook route); no route exposes it |
 | Any real provider (Paystack, Flutterwave) | not involved in this stage; nothing here talks to a vendor |

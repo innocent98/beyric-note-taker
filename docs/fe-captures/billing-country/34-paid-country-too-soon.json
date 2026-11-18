@@ -1,15 +1,15 @@
 {
-  "note": "A third inside 30 days: 409 `country_change_too_soon`. Nothing is written.",
-  "client": "ada billing-on",
+  "note": "The next one: 409 `country_change_too_soon`, with the date in the message. Nothing is written.",
+  "client": "paid",
   "request": {
     "method": "PUT",
     "path": "/api/billing/profile/country",
     "headers": {
-      "X-CSRF-Token": "<csrf-D>",
+      "X-CSRF-Token": "<csrf-J>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
     "body": {
-      "billing_country": "FR"
+      "billing_country": "DE"
     }
   },
   "response": {
@@ -21,7 +21,7 @@
     "body": {
       "error": {
         "code": "country_change_too_soon",
-        "message": "You can change your billing country once every 30 days."
+        "message": "Since your first payment your billing country can be changed once every 30 days. You can change it again on 17 December 2026."
       }
     }
   }

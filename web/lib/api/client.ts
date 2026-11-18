@@ -660,7 +660,8 @@ export function createApi(options: ApiOptions = {}) {
     // "not available" and show nothing. Nothing here grants hours; only a verified payment does.
     billing: {
       state: () => request<BillingState>("GET", "/api/billing/subscription"),
-      plans: () => request<Plans>("GET", "/api/billing/plans"),
+      // `country` previews the prices of a country the person has not saved yet (nothing is saved by asking).
+      plans: (country?: string) => request<Plans>("GET", "/api/billing/plans", { query: country ? { country } : {} }),
       payments: async () => (await request<{ payments: BillingPayment[] }>("GET", "/api/billing/payments")).payments,
       payment: (reference: string) =>
         request<BillingPayment>("GET", `/api/billing/payments/${encodeURIComponent(reference)}`),
