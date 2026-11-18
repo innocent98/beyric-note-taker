@@ -150,6 +150,8 @@ describe("the sidebar's Billing link and hours card", () => {
     rememberBillingAbsent(1_000_000);
     expect(billingKnownAbsent(1_000_000 + ABSENT_FOR_MS - 1)).toBe(true);
     expect(billingKnownAbsent(1_000_000 + ABSENT_FOR_MS)).toBe(false);
+    // a time in the future (a clock set back) is not believed past the minute
+    expect(billingKnownAbsent(1_000_000 - 1)).toBe(false);
     forgetBillingTabState();
     expect(window.sessionStorage.getItem("beyric.billing.unavailable")).toBeNull();
     const blocked = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {

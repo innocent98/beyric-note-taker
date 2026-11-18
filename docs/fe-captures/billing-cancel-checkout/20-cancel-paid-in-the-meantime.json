@@ -3,7 +3,7 @@
   "client": "ada billing-on",
   "request": {
     "method": "POST",
-    "path": "/api/billing/payments/bn-2-708d954d0c366d18/cancel",
+    "path": "/api/billing/payments/bn-2-da7f37970efa7fb0/cancel",
     "headers": {
       "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"
@@ -19,13 +19,13 @@
     "body": {
       "result": "paid",
       "payment": {
-        "reference": "bn-2-708d954d0c366d18",
+        "reference": "bn-2-da7f37970efa7fb0",
         "kind": "plan",
         "status": "succeeded",
         "currency": "USD",
         "amount_minor": 1800,
-        "created_at": "2026-11-18T16:22:25.934167Z",
-        "paid_at": "2026-11-18T16:22:25.948111Z",
+        "created_at": "2026-11-18T16:55:52.047064Z",
+        "paid_at": "2026-11-18T16:55:52.059444Z",
         "pay_url": null,
         "invoice_number": "BN-T-2026-000001"
       }

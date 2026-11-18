@@ -1,9 +1,9 @@
 {
-  "note": "The (fake) provider has nothing under our reference: 502 `provider_error` and NOTHING changes. A real provider that answers 'no such transaction' for a page nobody opened would give the same answer: NOT verified live for Paystack or Flutterwave.",
+  "note": "The (fake) provider raises a plain `ProviderError` (it cannot give an answer): 502 `provider_error` and NOTHING changes. (A provider that says it has NO record is the separate `NoRecord` case, capture 32.)",
   "client": "ada billing-on",
   "request": {
     "method": "POST",
-    "path": "/api/billing/payments/bn-1-48b086c63af5aaa2/cancel",
+    "path": "/api/billing/payments/bn-1-e162dde14e49017f/cancel",
     "headers": {
       "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"

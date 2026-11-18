@@ -3,7 +3,7 @@
   "client": "ada billing-on",
   "request": {
     "method": "POST",
-    "path": "/api/billing/payments/bn-4-bb7af7f41149dde5/cancel",
+    "path": "/api/billing/payments/bn-4-9788721010342c3e/cancel",
     "headers": {
       "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"
@@ -19,12 +19,12 @@
     "body": {
       "result": "cancelled",
       "payment": {
-        "reference": "bn-4-bb7af7f41149dde5",
+        "reference": "bn-4-9788721010342c3e",
         "kind": "pack",
         "status": "failed",
         "currency": "USD",
         "amount_minor": 1000,
-        "created_at": "2026-11-18T16:22:26.118321Z",
+        "created_at": "2026-11-18T16:55:52.214795Z",
         "paid_at": null,
         "pay_url": null,
         "invoice_number": null

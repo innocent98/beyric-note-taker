@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app.billing.fake import FakeProvider  # noqa: E402
 from app.billing.provider import PROVIDER_FACTORIES  # noqa: E402
-from app.billing.types import ProviderError  # noqa: E402
+from app.billing.types import NoRecord, ProviderError  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import HourGrant, Payment, Subscription, User  # noqa: E402
@@ -182,9 +182,9 @@ def run(engine, on, off) -> None:
         "cancel-provider-has-no-record",
         "POST",
         f"/api/billing/payments/{ref}/cancel",
-        note="The (fake) provider has nothing under our reference: 502 `provider_error` and "
-        "NOTHING changes. A real provider that answers 'no such transaction' for a page nobody "
-        "opened would give the same answer: NOT verified live for Paystack or Flutterwave.",
+        note="The (fake) provider raises a plain `ProviderError` (it cannot give an answer): 502 "
+        "`provider_error` and NOTHING changes. (A provider that says it has NO record is the "
+        "separate `NoRecord` case, capture 32.)",
     )
     USD.fetch_error = ProviderError("the provider is down")
     ada.call(
@@ -314,6 +314,27 @@ def run(engine, on, off) -> None:
         f"/api/billing/payments/{ref5}/cancel",
         note="Only a plan or a pack checkout can be cancelled: 409 `cannot_cancel`.",
     )
+
+    # ---- the provider has no record of the page (Flutterwave: none until a payer tries) ----
+    empty = ada.call(
+        "checkout-pack-no-record",
+        "POST",
+        "/api/billing/checkout",
+        body={"kind": "pack", "code": "pack_10h"},
+        note="A pack checkout whose page nobody opened.",
+    ).json()
+    ref6 = empty["payment"]["reference"]
+    USD.fetch_error = NoRecord("no transaction was found")
+    ada.call(
+        "cancel-provider-has-no-transaction",
+        "POST",
+        f"/api/billing/payments/{ref6}/cancel",
+        note="The provider is reachable and says it has no transaction under our reference "
+        "(`NoRecord`; the real Flutterwave adapter raises it for HTTP 400, 404 or 422 on the "
+        "lookup, tested on a scripted wire, NOT captured against Flutterwave): nobody paid, so it "
+        "is closed. `result` `cancelled`, `payment.status` `failed`.",
+    )
+    USD.fetch_error = None
 
     base.note_file(
         "rows-at-the-end",

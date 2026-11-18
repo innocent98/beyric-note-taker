@@ -53,6 +53,7 @@ from app.billing.types import (
     BillingError,
     Checkout,
     IgnoredEvent,
+    NoRecord,
     OutcomeUnknown,
     ProviderError,
     ProviderEvent,
@@ -423,9 +424,15 @@ class FlutterwaveProvider:
         the vendor's advice after a timeout on a charge."""
         if not isinstance(reference, str) or not reference:
             raise ProviderError("a reference is required")
-        answer = self._request(
-            "GET", "/v3/transactions/verify_by_reference", params={"tx_ref": reference}
-        )
+        try:
+            answer = self._request(
+                "GET", "/v3/transactions/verify_by_reference", params={"tx_ref": reference}
+            )
+        except RequestRefused as exc:
+            # HTTP 400, 404 or 422 on a lookup: Flutterwave understood it and has no transaction
+            # under this reference (it makes one only when the payer tries to pay). Not a failure
+            # to ask: 401, 403, 429, 5xx and a lost connection stay plain `ProviderError`.
+            raise NoRecord(str(exc)) from None
         return _transaction_from(answer.get("data"))
 
     def charge_saved_method(

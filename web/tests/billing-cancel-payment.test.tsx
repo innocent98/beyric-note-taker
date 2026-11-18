@@ -73,6 +73,16 @@ describe("the plans screen's unfinished-payment notice", () => {
     expect(mocks.state.mock.calls.length).toBeGreaterThan(1);
   });
 
+  it("lets the person dismiss the notice", async () => {
+    mocks.cancelPayment.mockResolvedValue(CANCELLED());
+    thenShow(NEVER());
+    render(<PlansView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel this payment" }));
+    expect(await screen.findByText(/The payment was cancelled and no hours were added/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText(/The payment was cancelled and no hours were added/)).toBeNull();
+  });
+
   it("shows the busy state while it asks, and cannot be pressed twice", async () => {
     let finish: (value: unknown) => void = () => {};
     mocks.cancelPayment.mockReturnValue(new Promise((resolve) => (finish = resolve)));

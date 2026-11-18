@@ -5,15 +5,18 @@ A money path, so every answer the provider can give is a test: the page was paid
 the payment is someone else's, it is already settled. The provider is a scripted fake and a payer
 pays through the real webhook inbox and settlement rules, as in the other billing API tests."""
 
-from datetime import UTC, datetime
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 from sqlalchemy import select
 
-from app.billing import cancel_checkout
-from app.billing.types import ProviderError, ProviderTransaction
+from app.billing import cancel_checkout, renewals, settle
+from app.billing.types import NoRecord, ProviderError, ProviderTransaction
 from app.models import HourGrant, Notification, Payment, Refund, Subscription
-from tests.billing_support import P20, make_catalog, pay
+from tests.billing_support import P20, make_catalog, pay, settings
 from tests.test_billing_profile import API, api_client, error, rows
 from tests.test_billing_subscriptions_api import Buyer, buy
 from tests.test_web import make_user
@@ -367,3 +370,219 @@ def test_nothing_moves_while_a_refund_of_the_plan_is_being_settled(session, ada,
     error(out, 409, "refund_pending")
     assert stored(session, pack["reference"]).status == "pending"
     assert providers.usd.lookups == []
+
+
+# ---- a provider with no record of the page (Flutterwave makes one only when the payer tries) ----
+
+
+def test_a_page_the_provider_has_no_record_of_is_unpaid_and_is_cancelled(session, ada, providers):
+    """`NoRecord`: the provider is reachable and has nothing under our reference (Flutterwave for a
+    hosted page nobody opened). Nobody paid it, so it is closed: safe, because a `failed` payment
+    is still settled if the page is paid later."""
+    payment = start(ada)
+    providers.usd.fetch_error = NoRecord("no transaction was found")
+
+    out = cancel(ada, payment["reference"])
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "cancelled" and out.json()["payment"]["status"] == "failed"
+    assert stored(session, payment["reference"]).status == "failed"
+    assert ada.get(f"{API}/subscription").json()["pending_payment"] is None
+
+
+def test_the_flutterwave_adapter_answering_no_transaction_cancels_the_page(
+    session, ada, providers, monkeypatch
+):
+    """The real Flutterwave adapter on a scripted wire: HTTP 400 "no transaction" is `NoRecord`."""
+    from app.billing.flutterwave import FlutterwaveProvider
+    from app.billing.provider import PROVIDER_FACTORIES
+    from tests.test_billing_flutterwave import NO_TRANSACTION, Wire, reply
+    from tests.test_billing_flutterwave import settings as flutterwave_settings
+
+    payment = start(ada)
+    wire = Wire(reply(NO_TRANSACTION, 400))
+    real = FlutterwaveProvider(flutterwave_settings(), transport=httpx.MockTransport(wire))
+    monkeypatch.setitem(PROVIDER_FACTORIES, "flutterwave", lambda s: real)
+
+    out = cancel(ada, payment["reference"])
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "cancelled"
+    assert wire.sent == [("GET", "/v3/transactions/verify_by_reference")]
+    assert stored(session, payment["reference"]).status == "failed"
+
+
+def test_the_flutterwave_adapter_being_refused_its_key_is_still_a_502(
+    session, ada, providers, monkeypatch
+):
+    from app.billing.flutterwave import FlutterwaveProvider
+    from app.billing.provider import PROVIDER_FACTORIES
+    from tests.test_billing_flutterwave import Wire, reply
+    from tests.test_billing_flutterwave import settings as flutterwave_settings
+
+    payment = start(ada)
+    wire = Wire(reply('{"status":"error","message":"bad key"}', 401))
+    real = FlutterwaveProvider(flutterwave_settings(), transport=httpx.MockTransport(wire))
+    monkeypatch.setitem(PROVIDER_FACTORIES, "flutterwave", lambda s: real)
+
+    error(cancel(ada, payment["reference"]), 502, "provider_error")
+    assert stored(session, payment["reference"]).status == "pending"
+
+
+# ---- a grant that fails, and a refund that starts while the provider answers --------------------
+
+
+def test_a_grant_handler_that_fails_is_a_409_in_the_modules_shape_and_changes_nothing(
+    session, ada, providers, monkeypatch
+):
+    payment = start(ada)
+    providers.usd.complete(stored(session, payment["reference"]), card_token="tok-boom")
+
+    def boom(db, row):
+        raise RuntimeError("a grant failed")
+
+    monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, boom])
+
+    out = cancel(ada, payment["reference"])
+
+    assert error(out, 409, "payment_in_progress")
+    assert stored(session, payment["reference"]).status == "pending"  # undone: nothing was kept
+    assert rows(session, HourGrant) == 0 and rows(session, Subscription) == 0
+
+
+def test_a_refund_that_starts_while_the_provider_answers_stops_a_pack_being_closed(
+    session, ada, providers, monkeypatch
+):
+    bought = buy(session, ada, providers)
+    plan_payment = stored(session, bought["payment"]["reference"])
+    pack = ada.post(f"{API}/checkout", {"kind": "pack", "code": "pack10"}).json()["payment"]
+    unpaid = providers.usd.complete(stored(session, pack["reference"]), status="pending")
+    real_lookup = cancel_checkout.lookup_by_reference
+
+    def lookup_then_a_refund_starts(adapter, reference):
+        real_lookup(adapter, reference)
+        session.add(
+            Refund(
+                payment_id=plan_payment.id,
+                reference="refund-ref-race",
+                reason="first_plan_7d",
+                status="pending",
+                amount_minor=plan_payment.amount_minor,
+                currency=plan_payment.currency,
+            )
+        )
+        session.commit()
+        return unpaid
+
+    monkeypatch.setattr(cancel_checkout, "lookup_by_reference", lookup_then_a_refund_starts)
+
+    error(cancel(ada, pack["reference"]), 409, "refund_pending")
+    assert stored(session, pack["reference"]).status == "pending"
+
+
+# ---- real lock contention: a second connection settles while the cancel waits for the row ------
+
+
+def test_a_webhook_holding_the_row_makes_the_cancel_wait_and_then_answer_paid(
+    session, ada, providers, monkeypatch
+):
+    """Two connections, two threads. Our test session holds the payment row's lock (as a webhook
+    settling it does). The cancel's provider lookup says "unpaid", then its write BLOCKS on the
+    lock; the webhook then commits the payment as paid and releases it; the cancel wakes, reads the
+    row again and answers `paid`: it never marks a paid payment failed."""
+    payment = start(ada)
+    row = stored(session, payment["reference"])
+    unpaid = providers.usd.complete(row, status="pending")
+    looked_up = threading.Event()
+    real_lookup = cancel_checkout.lookup_by_reference
+
+    def lookup(adapter, reference):
+        real_lookup(adapter, reference)
+        looked_up.set()
+        return unpaid
+
+    monkeypatch.setattr(cancel_checkout, "lookup_by_reference", lookup)
+    session.scalars(select(Payment).where(Payment.id == row.id).with_for_update()).one()  # held
+    answers = []
+    worker = threading.Thread(target=lambda: answers.append(cancel(ada, payment["reference"])))
+    worker.start()
+    assert looked_up.wait(10)
+    time.sleep(0.7)  # the cancel is now waiting on the row lock
+    assert worker.is_alive() and answers == []
+
+    # The settlement the webhook and the sweeper make, in ONE transaction that holds the row until
+    # it commits (`pay` through the inbox commits the event row first, which frees the row early).
+    paid = providers.usd.complete(row, card_token="tok-contended", payer_email="p@example.test")
+    assert settle.settle_transaction(session, providers.usd, row.id, paid, now()) is None
+    session.commit()  # releases the lock
+    worker.join(15)
+
+    assert not worker.is_alive()
+    assert answers[0].status_code == 200, answers[0].text
+    assert answers[0].json()["result"] == "paid"
+    assert stored(session, payment["reference"]).status == "succeeded"
+    assert [g.seconds for g in session.scalars(select(HourGrant))] == [P20]  # granted once
+
+
+# ---- the sweeper also asks about a cancelled page, so a lost webhook is not a lost payment -------
+
+
+def cancelled_page(session, ada, providers):
+    """A plan checkout the person cancelled: `failed`, with its page."""
+    payment = start(ada)
+    providers.usd.complete(stored(session, payment["reference"]), status="pending")
+    assert cancel(ada, payment["reference"]).json()["result"] == "cancelled"
+    return stored(session, payment["reference"])
+
+
+def test_the_sweeper_settles_a_cancelled_page_that_was_paid_later_with_a_lost_webhook(
+    session, ada, providers
+):
+    row = cancelled_page(session, ada, providers)
+    providers.usd.complete(row, card_token="tok-late-sweep", payer_email="payer@example.test")
+    # no webhook: the provider's retries ran out. The sweeper asks about the failed page.
+
+    renewals.sweep(session, row.created_at + timedelta(hours=1), settings())
+
+    session.expire_all()
+    assert stored(session, row.reference).status == "succeeded"
+    assert [g.seconds for g in session.scalars(select(HourGrant))] == [P20]
+
+
+def test_the_sweeper_leaves_a_cancelled_page_alone_while_the_provider_says_unpaid(
+    session, ada, providers
+):
+    row = cancelled_page(session, ada, providers)
+    lookups = len(providers.usd.lookups)
+
+    renewals.sweep(session, row.created_at + timedelta(hours=1), settings())
+
+    assert len(providers.usd.lookups) == lookups + 1  # it asked
+    assert stored(session, row.reference).status == "failed" and rows(session, HourGrant) == 0
+    # and is not asked again inside the half hour back-off
+    renewals.sweep(session, row.created_at + timedelta(hours=1, minutes=10), settings())
+    assert len(providers.usd.lookups) == lookups + 1
+
+
+@pytest.mark.parametrize(
+    ("change", "age"),
+    [
+        ({"kind": "renewal"}, timedelta(hours=1)),  # not a plan or pack checkout
+        ({"pay_url": None}, timedelta(hours=1)),  # no page was ever made
+        ({}, timedelta(days=8)),  # older than the window
+    ],
+)
+def test_the_sweeper_does_not_touch_other_failed_payments(session, ada, providers, change, age):
+    row = cancelled_page(session, ada, providers)
+    if change:
+        session.execute(Payment.__table__.update().where(Payment.id == row.id).values(**change))
+        session.commit()
+    providers.usd.complete(
+        stored(session, row.reference), card_token="tok-other", payer_email="payer@example.test"
+    )
+    lookups = len(providers.usd.lookups)
+
+    renewals.sweep(session, row.created_at + age, settings())
+
+    assert len(providers.usd.lookups) == lookups  # never asked
+    assert stored(session, row.reference).status == "failed"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui";
+import { Alert, Button } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError } from "@/lib/api/client";
 import { forgetReference, rememberedReference, type BillingPayment, type CancelPaymentResult } from "@/lib/billing";
@@ -20,6 +20,20 @@ export function cancelNotice(result: CancelPaymentResult["result"]): { kind: "in
     kind: "info",
     text: "The payment was cancelled and no hours were added. Please do not pay on the old payment page.",
   };
+}
+
+// The notice a cancel leaves behind, with a way to put it away (it is not cleared by anything else).
+export function CancelNotice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  return (
+    <Alert kind="info">
+      <p className="alert-text">{text}</p>
+      <div className="alert-actions">
+        <Button type="button" kind="quiet" size="sm" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </div>
+    </Alert>
+  );
 }
 
 // "Cancel this payment" for a plan or pack checkout the person started and did not finish (`pending_payment`). The

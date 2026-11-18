@@ -3,7 +3,7 @@
   "client": "ada billing-on",
   "request": {
     "method": "POST",
-    "path": "/api/billing/payments/bn-1-48b086c63af5aaa2/cancel",
+    "path": "/api/billing/payments/bn-1-e162dde14e49017f/cancel",
     "headers": {
       "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"

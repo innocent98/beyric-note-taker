@@ -21,17 +21,17 @@
     },
     "body": {
       "payment": {
-        "reference": "bn-3-c2798ac61eb2d402",
+        "reference": "bn-3-a62baa9b2cb8a084",
         "kind": "pack",
         "status": "pending",
         "currency": "USD",
         "amount_minor": 1000,
-        "created_at": "2026-11-18T16:22:26.014267Z",
+        "created_at": "2026-11-18T16:55:52.114265Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-3-c2798ac61eb2d402",
+        "pay_url": "https://fake.test/pay/bn-3-a62baa9b2cb8a084",
         "invoice_number": null
       },
-      "checkout_url": "https://fake.test/pay/bn-3-c2798ac61eb2d402"
+      "checkout_url": "https://fake.test/pay/bn-3-a62baa9b2cb8a084"
     }
   }
 }

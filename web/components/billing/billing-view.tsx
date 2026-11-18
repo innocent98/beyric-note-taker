@@ -16,7 +16,7 @@ import {
   type Subscription,
 } from "@/lib/billing";
 import { BillingCountry } from "./billing-country";
-import { CancelPayment, cancelNotice } from "./cancel-payment";
+import { CancelNotice, CancelPayment, cancelNotice } from "./cancel-payment";
 import { ChangePlan } from "./change-plan";
 import { billingErrorMessage, billingUnavailable } from "./common";
 import { Headline } from "./headline";
@@ -137,7 +137,7 @@ export function BillingView() {
           }}
         />
       ) : null}
-      {cancelled ? <Alert kind="info">{cancelled}</Alert> : null}
+      {cancelled ? <CancelNotice text={cancelled} onDismiss={() => setCancelled(null)} /> : null}
       <PlanCard state={state} plans={plans} payments={payments} onChanged={() => load()} />
       <HoursCard state={state} />
       {live && sub?.can_change_plan ? <ChangePlan sub={sub} plans={plans} onChanged={() => load()} /> : null}

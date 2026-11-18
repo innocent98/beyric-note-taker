@@ -15,7 +15,9 @@ a second ago:
 - `failed`: the payment is marked `failed`, by the same rules. `result` is `failed`.
 - still unpaid (`pending`: an abandoned or open page): the payment is marked `failed`. `result` is
   `cancelled`.
-- nothing (it cannot be asked, no provider is set, or its answer is unusable): 502
+- no record under our reference (`NoRecord`: Flutterwave makes a transaction only when the payer
+  tries to pay, so a page nobody opened answers "no transaction"): treated as unpaid, as above.
+- nothing else (it cannot be asked, no provider is set, or its answer is unusable): 502
   `provider_error`, and **nothing changes**.
 - paid, but our rules refuse it (a wrong amount, say): 409 `payment_in_progress`, an admin is told,
   nothing changes.
@@ -26,10 +28,10 @@ cancel asks the provider again (a `failed` payment can still be paid, below).
 **"Cancelled" is `failed`, not a new state.** No migration. A `failed` payment is still open to
 settlement (`settle.OPEN_STATUSES`): if the page is paid later by mistake, or a payer was mid-way
 through it, the provider's webhook finds the row, asks the provider again and grants the hours as it
-would for a retried checkout. Nothing here can lose money the provider took. What it cannot do is
-settle a payment whose webhook never arrives: the sweeper (`renewals.sweep_pending`) only looks at
-`pending` rows, as for a payment the provider itself reported failed. The person is told the page
-must not be paid after this.
+would for a retried checkout. Nothing here can lose money the provider took. A payment whose
+webhook never arrives is found by the sweeper (`renewals._sweep_payments`), which also asks about
+recent `failed` plan and pack payments that have a page (`renewals.FAILED_LOOKBACK`) and settles one
+the provider says is paid. The person is also told not to pay the old page.
 
 Only a plan or a pack checkout can be cancelled here (a renewal belongs to the clock and an upgrade
 to the plan change). The payment row is locked only to write (the order everywhere is the payment,
@@ -46,7 +48,7 @@ from sqlalchemy.orm import Session
 
 from app.billing import settle, subscriptions
 from app.billing.provider import lookup_by_reference, provider_named
-from app.billing.types import ProviderError, ProviderTransaction, RetryLater
+from app.billing.types import NoRecord, ProviderError, ProviderTransaction, RetryLater
 from app.config import Settings
 from app.models import Payment, Subscription, User
 
@@ -76,6 +78,14 @@ def _provider_error() -> subscriptions.Refused:
     )
 
 
+def _refuse_while_refunding(db: Session, payment: Payment) -> None:
+    """409 `refund_pending` while a refund of this payment's plan is being settled."""
+    if payment.subscription_id is not None:
+        plan_row = db.get(Subscription, payment.subscription_id)
+        if plan_row is not None:
+            subscriptions._refuse_while_refunding(db, plan_row)
+
+
 def _locked(db: Session, payment_id: int) -> Payment:
     return db.scalars(
         select(Payment)
@@ -87,7 +97,8 @@ def _locked(db: Session, payment_id: int) -> Payment:
 
 def cancel_checkout(db: Session, user: User, reference: str, settings: Settings, now) -> Cancelled:
     """Put away the caller's own unfinished plan or pack checkout, after asking the provider. The
-    caller commits on a result and rolls back on a `subscriptions.Refused`."""
+    caller commits on a result and rolls back on a `subscriptions.Refused`. (One exception: the
+    refusal path of `_settle_reported` commits the admin alert it raised, then refuses.)"""
     payment = db.scalars(
         select(Payment).where(Payment.reference == reference, Payment.payer_user_id == user.id)
     ).one_or_none()
@@ -97,10 +108,7 @@ def cancel_checkout(db: Session, user: User, reference: str, settings: Settings,
         raise _refuse(409, "cannot_cancel", "This payment cannot be cancelled here.")
     if payment.status in PAID_STATUSES:
         return Cancelled("paid", payment)
-    if payment.subscription_id is not None:
-        plan_row = db.get(Subscription, payment.subscription_id)
-        if plan_row is not None:
-            subscriptions._refuse_while_refunding(db, plan_row)
+    _refuse_while_refunding(db, payment)
     payment_id, provider_name = payment.id, payment.provider
     adapter = provider_named(provider_name, settings)
     db.rollback()  # a read only so far: nothing is held while the provider is asked
@@ -108,6 +116,10 @@ def cancel_checkout(db: Session, user: User, reference: str, settings: Settings,
         raise _provider_error()
     try:
         tx = lookup_by_reference(adapter, reference)
+    except NoRecord:
+        # The provider is reachable and has nothing under our reference: nobody paid it. Safe to
+        # close, because a `failed` payment is still settled if the page is paid later.
+        return _close_unpaid(db, payment_id)
     except ProviderError:
         logger.warning("cancel of payment %s: the provider could not be asked", payment_id)
         raise _provider_error() from None
@@ -126,6 +138,7 @@ def _close_unpaid(db: Session, payment_id: int) -> Cancelled:
     payment = _locked(db, payment_id)
     if payment.status in PAID_STATUSES:
         return Cancelled("paid", payment)
+    _refuse_while_refunding(db, payment)  # a refund may have started while the provider answered
     payment.status = "failed"
     db.flush()
     return Cancelled("cancelled", payment)
@@ -140,6 +153,14 @@ def _settle_reported(
         refusal = settle.settle_transaction(db, adapter, payment_id, tx, now)
     except RetryLater:
         db.rollback()
+        raise _refuse(
+            409,
+            "payment_in_progress",
+            "We could not confirm your payment yet. We are looking into it.",
+        ) from None
+    except Exception as exc:  # a grant handler failed: the transaction is undone, nothing was kept
+        db.rollback()
+        logger.error("cancel of payment %s could not settle it: %s", payment_id, type(exc).__name__)
         raise _refuse(
             409,
             "payment_in_progress",

@@ -365,11 +365,12 @@ const HEALTHY_KEY = "beyric.billing.healthy";
 export const HEALTHY_FOR_MS = 60_000;
 export const ABSENT_FOR_MS = 60_000;
 
-// An old tab may hold the flag "1" from before it carried a time: as a time it is 1970, so it is expired.
+// An old tab may hold the flag "1" from before it carried a time: as a time it is 1970, so it is expired. A time in
+// the future (a clock that was set back) is not believed either: it must not keep the answer alive past a minute.
 export function billingKnownAbsent(now: number = Date.now()): boolean {
   try {
     const at = Number(window.sessionStorage.getItem(UNAVAILABLE_KEY));
-    return at > 0 && now - at < ABSENT_FOR_MS;
+    return at > 0 && at <= now && now - at < ABSENT_FOR_MS;
   } catch {
     return false;
   }

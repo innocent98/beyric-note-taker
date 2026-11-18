@@ -19,7 +19,7 @@ import {
 import { countryName } from "@/lib/countries";
 import { goTo } from "@/lib/navigate";
 import { BillingCountry } from "./billing-country";
-import { CancelPayment, cancelNotice } from "./cancel-payment";
+import { CancelNotice, CancelPayment, cancelNotice } from "./cancel-payment";
 import { billingErrorMessage, billingUnavailable } from "./common";
 import { usePageRestore } from "./use-page-restore";
 
@@ -83,6 +83,7 @@ export function PlansView() {
       return;
     }
     setStartOver(null);
+    setCancelled(null);
     setBusy(plan.code);
     setError(null);
     try {
@@ -198,7 +199,7 @@ export function PlansView() {
         </Alert>
       ) : null}
 
-      {cancelled ? <Alert kind="info">{cancelled}</Alert> : null}
+      {cancelled ? <CancelNotice text={cancelled} onDismiss={() => setCancelled(null)} /> : null}
 
       <BillingCountry profile={profile} onChange={() => load()} onCandidate={setCandidate} />
 
