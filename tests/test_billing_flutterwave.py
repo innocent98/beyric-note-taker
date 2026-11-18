@@ -423,6 +423,17 @@ def test_the_refund_sample_is_a_refund_event():
     assert event.event_id == "refund:89074:completed"
 
 
+def test_a_refund_notice_with_status_failed_says_the_refund_failed():
+    base_body = (
+        '{"id":89074,"AmountRefunded":50.00,"status":"%s","FlwRef":"flwm3s4m0c",'
+        '"destination":"payment_source","TransactionId":8784082}'
+    )
+    provider = FlutterwaveProvider(settings())
+    assert provider.parse_event((base_body % "failed").encode()).refund_failed is True
+    assert provider.parse_event((base_body % "FAILED").encode()).refund_failed is True
+    assert provider.parse_event((base_body % "completed").encode()).refund_failed is False
+
+
 # ---------------------------------------------------------------- hosted checkout
 
 

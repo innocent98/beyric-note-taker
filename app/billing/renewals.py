@@ -62,6 +62,7 @@ from app.models import (
     BillingEvent,
     HourGrant,
     Payment,
+    Refund,
     Subscription,
     User,
 )
@@ -108,8 +109,22 @@ def run_due(session: Session, now: datetime, settings: Settings) -> int:
             ),
         ),
     )
+    # Stage S9: a plan whose first payment has a refund still `pending` or `unknown` is not charged,
+    # retried or lapsed until a person settles the refund (`made` ends the plan, `not_made` lets
+    # the clock catch up and charge once, as after any pause).
+    waiting_refund = (
+        select(Refund.id)
+        .join(Payment, Payment.id == Refund.payment_id)
+        .where(
+            Payment.subscription_id == Subscription.id, Refund.status.in_(("pending", "unknown"))
+        )
+        .exists()
+    )
     ids = session.scalars(
-        select(Subscription.id).where(due).order_by(Subscription.current_period_end).limit(BATCH)
+        select(Subscription.id)
+        .where(due, ~waiting_refund)
+        .order_by(Subscription.current_period_end)
+        .limit(BATCH)
     ).all()
     for sub_id in ids:
         try:

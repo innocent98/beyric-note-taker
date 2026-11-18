@@ -28,6 +28,7 @@ const SHOWABLE = new Set([
   "provider_error",
   "provider_unavailable",
   "invoice_busy",
+  "refund_pending",
   "invoice_failed",
 ]);
 

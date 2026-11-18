@@ -125,6 +125,21 @@ def _record_refund_notice(db: Session, row: BillingEvent, event: ProviderEvent, 
     dashboard; a dispute (a chargeback: a bank pulling a payment back) tells the admins."""
     row.processed_at = now
     row.error = f"recorded: a {event.kind} notice"
+    if event.kind == "refund" and event.refund_failed:
+        # The person was told "Your payment was refunded", their plan ended and their card was
+        # deleted when the provider accepted the refund. A refund that then FAILS pays nobody:
+        # a person must pay it by hand. Nothing else changes here.
+        payment = db.scalars(select(Payment).where(Payment.reference == event.reference)).first()
+        about = f"payment {payment.id}" if payment is not None else "a payment we cannot match"
+        notify.tell_admins(
+            db,
+            f"admin.billing_refund_failed:{row.id}",
+            "A refund failed at the provider",
+            f"{row.provider} reports that the refund of {about} FAILED, after Beyric recorded it "
+            "as accepted: the person was told they were refunded, their plan ended, and they have "
+            "not been paid. Look at the refund in the provider's dashboard and pay it by hand "
+            "there (do not start another refund in Beyric: the payment already shows refunded).",
+        )
     if event.kind == "dispute":
         payment = db.scalars(select(Payment).where(Payment.reference == event.reference)).first()
         about = f"payment {payment.id}" if payment is not None else "a payment we cannot match"

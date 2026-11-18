@@ -192,6 +192,36 @@ def test_a_dispute_tells_the_admins_and_a_refund_notice_does_not(session, ada, a
     assert f"payment {payment.id}" in alert.body and "ada@example.test" not in alert.body
 
 
+def test_a_failed_refund_notice_tells_the_admins_what_to_do_but_a_processed_one_does_not(
+    session, ada, admin, providers
+):
+    from dataclasses import replace
+
+    buy_plan(session, ada, providers.usd)
+    payment = session.scalars(select(Payment)).one()
+    tx = providers.usd.transactions[payment.provider_tx_id]
+    ok = providers.usd.event_for(tx, kind="refund")
+    deliver(session, providers.usd, providers.usd.event_body(ok), T0 + timedelta(days=1))
+    assert alerts(session, "admin.billing_refund_failed") == []
+
+    failed = replace(ok, event_id="evt-refund-failed-1", refund_failed=True)
+    body = providers.usd.event_body(failed)
+    deliver(session, providers.usd, body, T0 + timedelta(days=2))
+    deliver(session, providers.usd, body, T0 + timedelta(days=2, minutes=1))  # a resend
+    [alert] = alerts(session, "admin.billing_refund_failed")
+    assert f"payment {payment.id}" in alert.body and "FAILED" in alert.body
+    assert "pay it by hand" in alert.body and "ada@example.test" not in alert.body
+
+
+def test_a_charge_the_sweeper_finds_short_tells_the_admins(session, ada, admin, providers):
+    choose_country(session, ada, "US")
+    started = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+    providers.usd.complete(started.payment, amount_minor=900, tx_id="fx-short-sweep")
+    renewals.sweep(session, T0 + timedelta(minutes=10), settings())
+    [alert] = alerts(session, "admin.billing_payment_refused")
+    assert f"Payment {started.payment.id}" in alert.body and "amount too low" in alert.body
+
+
 # ---- the sweeper's S9 checks --------------------------------------------------------------
 
 

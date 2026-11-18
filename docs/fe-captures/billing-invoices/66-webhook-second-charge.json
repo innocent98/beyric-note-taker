@@ -11,12 +11,13 @@
     "body": {
       "id": "evt-charge_succeeded-fx-second-charge",
       "kind": "charge_succeeded",
-      "reference": "bn-8-1ba3a8440df40590",
+      "reference": "bn-8-c4b9c5fd89322796",
       "tx_id": "fx-second-charge",
       "amount_minor": 1800,
       "currency": "USD",
       "payer_email": null,
-      "card_token": null
+      "card_token": null,
+      "refund_failed": false
     }
   },
   "response": {

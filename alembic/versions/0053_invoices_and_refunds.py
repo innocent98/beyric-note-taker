@@ -153,11 +153,15 @@ def downgrade() -> None:
     conn = op.get_bind()
     invoices = conn.execute(sa.text("select count(*) from invoices")).scalar()
     refunds = conn.execute(sa.text("select count(*) from refunds")).scalar()
-    if invoices or refunds:
+    owed = conn.execute(
+        sa.text("select count(*) from payments where needs_refund_reason is not null")
+    ).scalar()
+    if invoices or refunds or owed:
         raise RuntimeError(
-            f"Cannot downgrade 0053: {invoices} invoice(s) and {refunds} refund(s) exist, and "
-            "they are money records that cannot be rebuilt. Export them first, then delete them "
-            "by hand if you must."
+            f"Cannot downgrade 0053: {invoices} invoice(s), {refunds} refund(s) and {owed} "
+            "payment(s) still owed a refund exist, and they are money records that cannot be "
+            "rebuilt (the column that says a payment is owed a refund goes with this migration). "
+            "Export them first, then delete them by hand if you must."
         )
     op.drop_index("uq_refunds_payment_live", table_name="refunds")
     op.drop_index("ix_refunds_payment_id", table_name="refunds")

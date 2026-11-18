@@ -11,11 +11,12 @@ needs_refund_reason` is set: a second payment for a period already paid, money f
 is NOT invoiced: no supply happened, and a person refunds it in full. Every other succeeded payment
 gets one invoice, exactly one (`invoices.payment_id` is unique).
 
-**The number.** `BN-<year>-<six digits>`, sequential within the year, the year in Lagos time (the
-seller's). It comes from `invoice_counters` with one atomic upsert (`next_number`): the row lock
-lasts to the end of the issuing transaction, so two payments settled at the same moment queue on it
-and never get the same number, and a rollback gives its number back, so there are no gaps. The
-unique index on `invoices.number` is the second line behind it.
+**The number.** `BN-<year>-<six digits>`, sequential within the year (payments made with test keys
+have their own series, `BN-T-<year>-...`, so test purchases never use up the live numbers), the
+year in Lagos time (the seller's). It comes from `invoice_counters` with one atomic upsert
+(`next_number`): the row lock lasts to the end of the issuing transaction, so two payments settled
+at the same moment queue on it and never get the same number, and a rollback gives its number back,
+so there are no gaps. The unique index on `invoices.number` is the second line behind it.
 
 **The money.** `total_minor` is what the person paid (the payment's amount). `BILLING_VAT_RATE_BP`
 is the VAT that price INCLUDES (default 0: no VAT line): `vat = round_half_up(total * rate /
@@ -76,22 +77,26 @@ def invoice_year(at: datetime) -> int:
     return at.astimezone(SELLER_ZONE).year
 
 
-def number_text(year: int, n: int) -> str:
-    return f"BN-{year}-{n:06d}"
+def number_text(year: int, n: int, *, test: bool = False) -> str:
+    """`BN-2026-000123`; a test-mode invoice has its own series, `BN-T-2026-000123`."""
+    return f"BN-{'T-' if test else ''}{year}-{n:06d}"
 
 
-def next_number(db: Session, year: int) -> str:
-    """The next invoice number of `year`. One atomic upsert: the row stays locked until the caller
-    commits (or rolls back and gives the number back), so concurrent payments queue here."""
+def next_number(db: Session, year: int, *, test: bool = False) -> str:
+    """The next invoice number of `year` in the live series, or in the TEST series (`test`: payments
+    made with test keys, `BN-T-...`, counted under the negative year) so test purchases never use
+    up the live numbers: the first real invoice is `BN-<year>-000001`. One atomic upsert: the row
+    stays locked until the caller commits (or rolls back and gives the number back), so concurrent
+    payments queue here."""
     n = db.execute(
         text(
             "insert into invoice_counters (year, last_number) values (:year, 1) "
             "on conflict (year) do update set last_number = invoice_counters.last_number + 1 "
             "returning last_number"
         ),
-        {"year": year},
+        {"year": -year if test else year},
     ).scalar_one()
-    return number_text(year, n)
+    return number_text(year, n, test=test)
 
 
 def seller_snapshot(settings: Settings) -> dict:
@@ -176,10 +181,10 @@ def issue(
     subtotal, vat = vat_split(payment.amount_minor, settings.billing_vat_rate_bp)
     payer = db.get(User, payment.payer_user_id) if payment.payer_user_id else None
     invoice = Invoice(
-        number=next_number(db, invoice_year(paid_at)),
+        number=next_number(db, invoice_year(paid_at), test=not settings.billing_live),
         payment_id=payment.id,
         payer_user_id=payment.payer_user_id,
-        issued_at=now,
+        issued_at=paid_at,  # one date for the invoice: the number's year comes from it too
         currency=payment.currency,
         subtotal_minor=subtotal,
         vat_rate_bp=settings.billing_vat_rate_bp,

@@ -1,5 +1,6 @@
 "use client";
 
+import { HoursReasonLink } from "@/components/billing/hours-reason-link";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AppLink, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
@@ -222,7 +223,12 @@ function Row({
           {duration ? <span>{duration}</span> : null}
           {event.attendee_count > 0 ? <span>{plural(event.attendee_count, "person", "people")}</span> : null}
         </p>
-        {missed ? <p className="nr-reason">Not recorded: {missed}</p> : null}
+        {missed ? (
+          <p className="nr-reason">
+            Not recorded: {missed}
+            <HoursReasonLink reason={missed} />
+          </p>
+        ) : null}
         {error ? (
           <p className="nr-error" role="alert">
             {error}

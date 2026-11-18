@@ -61,6 +61,10 @@ class ProviderEvent:
     currency: str
     payer_email: str | None = None
     card_token: str | None = field(default=None, repr=False)
+    # A `refund` notice that says the refund FAILED (Paystack `refund.failed`, a Flutterwave refund
+    # with status `failed`): a refund we recorded as accepted did not pay the person back. Only
+    # ever read to tell the admins; it changes nothing else.
+    refund_failed: bool = False
 
 
 @dataclass(frozen=True)

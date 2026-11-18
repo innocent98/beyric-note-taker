@@ -1,6 +1,6 @@
  Invoice
- BN-2026-000001
- Issued 17 November 2026
+ BN-T-2026-000001
+ Issued 18 November 2026
 
 
 
@@ -21,21 +21,21 @@
 
 
  20 hours a month                                                                      USD 18.00
- 17 November 2026 to 17 December 2026
+ 18 November 2026 to 18 December 2026
 
 
 
                                                                  Total paid (USD)     USD 18.00
 
 
- Payment reference: bn-1-3887f2fcfd75521a
+ Payment reference: bn-1-90d00af0acad327f
 
- Paid 17 November 2026
+ Paid 18 November 2026
 
  No VAT is charged on this invoice.
 
 
 
 
-Beyrichq LTD - invoice BN-2026-000001                                                         1/1
+Beyrichq LTD - invoice BN-T-2026-000001                                                       1/1
 

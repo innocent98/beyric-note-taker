@@ -107,8 +107,9 @@ def _recording_running(db: Session, user: User) -> bool:
             .select_from(Meeting)
             .where(
                 Meeting.owner_user_id == user.id,
-                Meeting.status.in_(usage.RUNNING),
-                Meeting.started_polling_at.is_not(None),
+                Meeting.status.in_(
+                    usage.RUNNING
+                ),  # the bot is in the call, or it left and is not counted yet
                 Meeting.id.not_in(counted),
             )
         )
@@ -117,14 +118,17 @@ def _recording_running(db: Session, user: User) -> bool:
 
 
 def _is_first_plan_payment(db: Session, payment: Payment) -> bool:
-    """The earliest `plan` payment the person ever made that succeeded, refunded ones included: a
-    person who bought, was refunded and bought again has no second first payment."""
+    """The earliest `plan` payment the person ever made that succeeded and was used, refunded ones
+    included: a person who bought, was refunded and bought again has no second first payment. A
+    payment nothing could use (a double charge) is skipped, so it cannot hide the real first one."""
     earliest = db.scalar(
         select(Payment.id)
         .where(
             Payment.payer_user_id == payment.payer_user_id,
             Payment.kind == "plan",
             Payment.status.in_(("succeeded", "refunded", "partly_refunded")),
+            # a double-charged payment bought nothing: it must not be what "first" means
+            Payment.needs_refund_reason.is_(None),
         )
         .order_by(Payment.paid_at.asc(), Payment.id.asc())
         .limit(1)
@@ -284,7 +288,7 @@ def _accepted(
     refund.resolved_at = refund.resolved_at or now
     refund.error = None
     payment.status = "refunded"
-    if payment.kind == "plan" and payment.subscription_id is not None:
+    if refund.reason == "first_plan_7d" and payment.subscription_id is not None:
         sub = db.scalars(
             select(Subscription).where(Subscription.id == payment.subscription_id).with_for_update()
         ).first()
@@ -372,6 +376,14 @@ def request(
     payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
     refund = db.scalars(select(Refund).where(Refund.id == refund_id).with_for_update()).one()
     amount = subs.money(refund.amount_minor, refund.currency)
+    if refund.status != "pending":
+        # A person closed this refund (`resolve`, after STUCK_AFTER) while the provider's answer was
+        # still on its way. The answer is NOT applied: the row, the hours and the payment stay as
+        # the person left them, and the admins are told what the provider said, because money may
+        # have moved after a refund that was closed as "not made".
+        _late_answer(db, refund, payment, answer, error, unknown, amount)
+        db.commit()
+        return refund
     if unknown:
         refund.status = "unknown"
         refund.error = "no_answer"
@@ -390,6 +402,31 @@ def request(
         _accepted(db, refund, payment, answer, now)
     db.commit()
     return refund
+
+
+def _late_answer(
+    db: Session,
+    refund: Refund,
+    payment: Payment,
+    answer: str | None,
+    error: str | None,
+    unknown: bool,
+    amount: str,
+) -> None:
+    said = "accepted it" if error is None and not unknown else "gave no answer or refused it"
+    if refund.status == "submitted" and error is None and not unknown:
+        return  # the person said "made", and the provider now agrees: nothing to tell
+    notify.tell_admins(
+        db,
+        f"admin.billing_refund_late:{refund.id}",
+        "A refund answer came after it was closed",
+        f"Refund {refund.id} of payment {payment.id} ({amount}, {payment.provider}) was already "
+        f"{refund.status} when the provider's answer arrived: it {said}"
+        + (f" (provider refund id {answer})" if answer else "")
+        + f". Nothing was changed. Look in the provider's dashboard for the reference "
+        f"{refund.reference}: if the money really went back and the refund was closed as not made, "
+        "the hours are back with the person and the payment is not marked refunded.",
+    )
 
 
 def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetime) -> Refund:

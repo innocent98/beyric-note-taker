@@ -98,7 +98,9 @@ def test_a_person_lists_their_own_invoices_newest_first(session, ada, providers)
     payment = buy(session, ada, providers.usd)
     body = ada.get(f"{API}/invoices").json()
     [invoice] = body["invoices"]
-    assert invoice["number"].startswith("BN-") and len(invoice["number"]) == 14
+    assert (
+        invoice["number"].startswith("BN-") and len(invoice["number"]) == 16
+    )  # BN-T-2026-000001: a test-mode payment
     assert invoice["currency"] == "USD" and invoice["total_minor"] == 1800
     assert (invoice["subtotal_minor"], invoice["vat_minor"], invoice["vat_rate_bp"]) == (1800, 0, 0)
     assert invoice["description"] == "Twenty"

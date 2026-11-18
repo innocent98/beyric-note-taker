@@ -59,6 +59,7 @@ from app.models import (
     PaymentMethod,
     Plan,
     PlanPrice,
+    Refund,
     Subscription,
     User,
 )
@@ -100,6 +101,31 @@ def money(amount_minor: int, currency: str) -> str:
 
 
 # ---- reading ----
+
+
+def refund_waiting(db: Session, sub_id: int) -> bool:
+    """A refund of one of this subscription's payments is `pending` or `unknown` (stage S9): the
+    plan may be about to end, so nothing may renew it, charge its card or change it until a person
+    has settled the refund (`refunds.py`)."""
+    return (
+        db.scalar(
+            select(Refund.id)
+            .join(Payment, Payment.id == Refund.payment_id)
+            .where(Payment.subscription_id == sub_id, Refund.status.in_(("pending", "unknown")))
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _refuse_while_refunding(db: Session, sub: Subscription) -> None:
+    if refund_waiting(db, sub.id):
+        raise Refused(
+            409,
+            "refund_pending",
+            "A refund of your plan is being processed, so the plan cannot be changed until it "
+            "is done.",
+        )
 
 
 def live_row(db: Session, user_id: int, *, lock: bool = False) -> Subscription | None:
@@ -455,6 +481,8 @@ def _renewal_paid(db: Session, payment: Payment) -> None:
     price = db.get(PlanPrice, payment.plan_price_id) if payment.plan_price_id else None
     if sub is None or price is None or sub.user_id is None:
         return needs_refund(db, payment, "the subscription is gone")
+    if refund_waiting(db, sub.id):
+        return needs_refund(db, payment, "a refund of the plan is being settled")
     current = payment.cycle_end == sub.current_period_end
     transition = states.apply(
         sub.status, states.PAYMENT_SUCCEEDED if current else states.PAYMENT_STALE
@@ -522,6 +550,7 @@ def _upgrade_paid(db: Session, payment: Payment) -> None:
         or price is None
         or sub.user_id is None
         or sub.status != states.ACTIVE
+        or refund_waiting(db, sub.id)  # the plan may be about to end: the upgrade has no case
         or payment.cycle_end != sub.current_period_end
         # It must land INSIDE the period it was for, judged by the clock at the payment: paid at
         # or after the due moment, before the scheduler pass has run (or while the renewal's
@@ -727,6 +756,7 @@ def preview_plan_change(
     sub = live_row(db, user.id)
     if sub is None:
         raise Refused(409, "no_subscription", "You do not have a plan.")
+    _refuse_while_refunding(db, sub)
     kind, target, current, new_price = _classify_change(db, sub, plan_code, now)
     if kind == "clear":
         return PlanChangePreview("clear", target.code, sub.currency, None, None, "now")
@@ -749,6 +779,7 @@ def change_plan(
     Choosing the plan you are on takes a waiting downgrade back. Refused in the grace (409
     `payment_overdue`). The checkout is on the route the subscription was sold on."""
     sub = _locked_live(db, user)
+    _refuse_while_refunding(db, sub)
     kind, target, current, new_price = _classify_change(db, sub, plan_code, now)
     if kind == "clear":
         sub.pending_plan_code = None

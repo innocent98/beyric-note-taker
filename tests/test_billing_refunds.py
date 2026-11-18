@@ -12,7 +12,7 @@ import time
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app import entitlements, hours
@@ -669,3 +669,206 @@ def test_there_is_never_more_than_one_live_refund_per_payment_in_the_database(
     with pytest.raises(IntegrityError):
         session.flush()
     session.rollback()
+
+
+# ---- a provider's answer that arrives after a person closed the refund ------------------------
+
+
+def test_a_late_success_after_the_refund_was_closed_as_not_made_changes_nothing_and_alerts(
+    session, engine, ada, admin, providers, monkeypatch
+):
+    """The request's call is slow; meanwhile (10 minutes on) a person looks at the dashboard, finds
+    nothing, and closes the refund as `not_made` (the hours come back). Then the provider's answer
+    lands: it must NOT overwrite the closed row (no 500, no payment marked refunded while the hours
+    are granted): the admins are told instead."""
+    buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    original = providers.usd.refund
+    seen = {}
+
+    def slow(tx_id, amount, *, reference):
+        with Session(engine) as other:  # the person, on another connection, while the call hangs
+            row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
+            late = row.created_at + timedelta(minutes=11)
+            seen["closed"] = refunds.resolve(other, row.id, "not_made", admin, late).status
+        return original(tx_id, amount, reference=reference)  # the money DID move
+
+    monkeypatch.setattr(providers.usd, "refund", slow)
+    result = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+
+    assert seen["closed"] == "failed"
+    assert result.status == "failed"  # untouched by the late answer
+    session.expire_all()
+    assert session.get(Payment, payment.id).status == "succeeded"  # not marked refunded
+    assert status(session, ada, T0 + DAY).seconds_left == P20  # the hours are still the person's
+    assert live(session, ada).status == "active"
+    [alert] = session.scalars(
+        select(Notification).where(Notification.kind == "admin.billing_refund_late")
+    ).all()
+    assert result.reference in alert.body and "Nothing was changed" in alert.body
+
+
+def test_a_late_answer_does_not_crash_when_a_new_refund_is_already_live(
+    session, engine, ada, admin, providers, monkeypatch
+):
+    buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    original = providers.usd.refund
+    calls = []
+
+    def slow(tx_id, amount, *, reference):
+        calls.append(reference)
+        if len(calls) == 1:
+            with Session(engine) as other:
+                row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
+                late = row.created_at + timedelta(minutes=11)
+                refunds.resolve(other, row.id, "not_made", admin, late)
+                # a NEW refund starts and stays live (its provider call answers unknown)
+                providers.usd.refund_error = OutcomeUnknown("slow too")
+                again = refunds.request(
+                    other, payment.id, "first_plan_7d", admin, None, settings(), late
+                )
+                providers.usd.refund_error = None
+                seen = again.status
+                assert seen == "unknown"
+        return original(tx_id, amount, reference=reference)
+
+    monkeypatch.setattr(providers.usd, "refund", slow)
+    first = ask(session, payment, "first_plan_7d", admin, T0 + DAY)  # no 500 from the live index
+
+    assert first.status == "failed"
+    session.expire_all()
+    live_rows = session.scalars(select(Refund).where(Refund.status == "unknown")).all()
+    assert len(live_rows) == 1  # the second refund is untouched
+    assert session.get(Payment, payment.id).status == "succeeded"
+    assert (
+        len(
+            session.scalars(
+                select(Notification).where(Notification.kind == "admin.billing_refund_late")
+            ).all()
+        )
+        == 1
+    )
+
+
+def test_a_late_success_after_the_person_said_made_is_no_alert(
+    session, engine, ada, admin, providers, monkeypatch
+):
+    buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    original = providers.usd.refund
+
+    def slow(tx_id, amount, *, reference):
+        with Session(engine) as other:
+            row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
+            late = row.created_at + timedelta(minutes=11)
+            refunds.resolve(other, row.id, "made", admin, late)
+        return original(tx_id, amount, reference=reference)
+
+    monkeypatch.setattr(providers.usd, "refund", slow)
+    result = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+    assert result.status == "submitted"
+    session.expire_all()
+    assert session.get(Payment, payment.id).status == "refunded"
+    assert not session.scalars(
+        select(Notification).where(Notification.kind == "admin.billing_refund_late")
+    ).all()
+
+
+# ---- while a first-plan refund is not settled, the plan is not touched -------------------------
+
+
+def test_a_plan_with_an_unsettled_refund_cannot_be_changed_or_upgraded(
+    session, ada, admin, providers
+):
+    sub = buy_plan(session, ada, providers.usd)
+    sub.current_period_end = sub.current_period_start + timedelta(days=30)
+    session.commit()
+    payment = payment_of(session)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+
+    for call in (
+        lambda: subs.change_plan(session, ada, "p40", settings(), T0 + 2 * DAY),
+        lambda: subs.preview_plan_change(session, ada, "p40", T0 + 2 * DAY),
+    ):
+        with pytest.raises(subs.Refused) as refused_:
+            call()
+        session.rollback()
+        assert (refused_.value.status, refused_.value.code) == (409, "refund_pending")
+
+
+def test_the_clock_does_not_charge_a_plan_with_an_unsettled_refund_and_catches_up_after(
+    session, ada, admin, providers
+):
+    from app.billing import renewals
+
+    sub = buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    refund = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+    session.execute(
+        update(Subscription)
+        .where(Subscription.id == sub.id)
+        .values(current_period_end=T0 + timedelta(hours=1))
+    )
+    session.commit()
+    due = T0 + 2 * DAY
+
+    assert renewals.run_due(session, due, settings()) == 0  # not even looked at
+    assert providers.usd.charges == []
+    assert (
+        session.scalar(select(func.count()).select_from(Payment).where(Payment.kind == "renewal"))
+        == 0
+    )
+
+    # the person looked: no refund exists. The plan is the person's again and the clock charges once
+    providers.usd.refund_error = None
+    refunds.resolve(session, refund.id, "not_made", admin, due)
+    assert renewals.run_due(session, due + timedelta(minutes=1), settings()) == 1
+    assert len(providers.usd.charges) == 1
+
+
+def test_an_upgrade_paid_while_the_refund_is_unsettled_is_a_payment_owed_back_not_a_plan_change(
+    session, ada, admin, providers
+):
+    sub = buy_plan(session, ada, providers.usd)
+    sub.current_period_end = sub.current_period_start + timedelta(days=30)
+    session.commit()
+    started = subs.change_plan(session, ada, "p40", settings(), T0 + DAY).started  # checkout open
+    payment = payment_of(session)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+
+    pay(session, providers.usd, started.payment, T0 + DAY + timedelta(hours=1))
+
+    session.expire_all()
+    upgrade = session.get(Payment, started.payment.id)
+    assert upgrade.status == "succeeded" and upgrade.needs_refund_reason is not None
+    assert session.scalars(select(Subscription)).one().plan_code == "p20"  # not changed
+    # and it can be refunded in full as the double charge it is
+    providers.usd.refund_error = None
+    assert ask(session, upgrade, "double_charge", admin, T0 + 2 * DAY).status == "submitted"
+
+
+def test_a_double_charge_refund_never_ends_the_plan_even_for_a_plan_payment(
+    session, ada, admin, providers
+):
+    buy_plan(session, ada, providers.usd)
+    duplicate = second_plan_payment(session, ada, providers, T0 + timedelta(hours=2))
+    duplicate.subscription_id = live(session, ada).id  # even if it ever pointed at the real plan
+    session.commit()
+    ask(session, duplicate, "double_charge", admin, T0 + DAY)
+    assert live(session, ada).status == "active"  # keyed on the reason, not on the payment's kind
+    assert session.scalar(select(func.count()).select_from(PaymentMethod)) == 1  # the card stays
+
+
+def test_a_double_charged_payment_with_an_earlier_date_does_not_hide_the_real_first_payment(
+    session, ada, admin, providers
+):
+    buy_plan(session, ada, providers.usd)
+    first = payment_of(session)
+    duplicate = second_plan_payment(session, ada, providers, T0 + timedelta(hours=2))
+    duplicate.paid_at = first.paid_at - timedelta(days=1)  # sorts before the real one
+    session.commit()
+    assert ask(session, first, "first_plan_7d", admin, T0 + DAY).status == "submitted"

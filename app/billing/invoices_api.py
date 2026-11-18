@@ -36,12 +36,12 @@ from app.notes_document import content_disposition
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 _NOT_FOUND = {404: {"model": ErrorResponse, "description": "billing is off for this account"}}
-NUMBER = re.compile(r"BN-[0-9]{4}-[0-9]{6}")
+NUMBER = re.compile(r"BN-(?:T-)?[0-9]{4}-[0-9]{6,9}")  # live, or the test series (`BN-T-`)
 LIST_MAX = 50
 
 
 class InvoiceOut(BaseModel):
-    number: str  # `BN-2026-000123`
+    number: str  # `BN-2026-000123`; `BN-T-2026-000123` for a payment made with test keys
     issued_at: UtcDatetime
     currency: str  # `NGN` or `USD`
     # Whole minor units (kobo, cents). `total` is what the person paid; `vat` is the VAT that price

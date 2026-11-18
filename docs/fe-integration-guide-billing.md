@@ -1423,13 +1423,27 @@ The screens exist now (`web/app/billing`, `docs/sop/2026-11-17-billing-screens.m
 * **The brand and last four digits of the card** are still null, so no screen names the card.
 * The billing routes are **not in `docs/openapi.json`**; the screens' types (`web/lib/billing.ts`) are written from this guide's captures.
 
+## Where billing is reachable from the signed-in app (2026-11-17): no new payload
+
+No endpoint, field or error is new. Every entry point reads the answer of `GET /api/billing/subscription` already captured above (`docs/fe-captures/billing-subscriptions/09` never had a plan, `26` active, `50` grace, `61` lapsed) and nothing else:
+
+| Entry point | Reads | Rule |
+|---|---|---|
+| **Billing** link (Configure) and the sidebar **hours card** | `state`, `hours.seconds_left`, `hours.holdings_seconds`, `hours.warning`, `subscription.status`, `subscription.plan_name` | drawn only on a 200; a 404 `not_found` draws nothing and is remembered for the tab; any other failure draws nothing this time |
+| Where the card leads | `subscription.status` | `active` or `past_due`: `/billing`; anything else (`subscription` null, `lapsed`, `canceled`, `ended`, a trial or pilot with no plan): `/billing/plans` |
+| Card text | `hours` | `holdings_seconds` 0: "No recorded hours"; `warning` `out` or nothing left: "Out of hours" (and "Add hours" with a live plan); else "<hours> left" with the bar; `seconds_left` or `holdings_seconds` null (no limit): no card |
+| Notification links | the notice's `kind` (`usage.hours_low`, `usage.hours_out`, `pilot.expiry`) | the same rule for where it leads; a notice about a meeting still links to the meeting |
+| "Not recorded" hours link | the calendar's `reason_text` | only for the two sentences "Your recording hours are used up." and "You have no recording hours at the moment." (pinned to `app/calendar_text.py` by a test) |
+
+Trap: the card's `state` words are the **person's** state (`trial`, `pilot`, `none`, ...), not the subscription's `status`; a person in a trial has `subscription: null`. Verified live against the local app with the scripted provider (trial, no plan, active, lapsed, 90% used, all used); the "Not recorded" link only by tests, with the server's real sentence.
+
 ## Invoices, receipts and refunds (billing stage S9)
 
 Every body below is copied from `docs/fe-captures/billing-invoices/` (the file number is named next to it), captured by `scripts/capture_billing_invoices.py` against the real app under uvicorn on a scratch Postgres, with real HTTP, real signed webhooks, real PDFs and a **scripted payment provider** (no provider keys exist on the capture machine). The seller's registration and tax numbers in those captures are **placeholders** (`RC-PLACEHOLDER-NOT-REAL`, `TIN-PLACEHOLDER-NOT-REAL`); every person is `@example.test`. Anything not captured is marked inline.
 
 ### What this is, in the person's terms
 
-When a payment succeeds and something was bought with it (a plan, a renewal, an upgrade, extra hours), Beyric makes **one invoice** for it, numbered `BN-<year>-<six digits>` (for example `BN-2026-000001`, sequential within the year, the year in Lagos time) and mails a **receipt** with the invoice attached as a PDF. The person sees the invoice in their payment history and downloads it from there. A payment that nothing could use (a second payment for a plan already paid) gets **no invoice**: it is refunded in full.
+When a payment succeeds and something was bought with it (a plan, a renewal, an upgrade, extra hours), Beyric makes **one invoice** for it, numbered `BN-<year>-<six digits>` (for example `BN-2026-000001`, sequential within the year, the year in Lagos time; **an invoice for a payment made with test keys is in its own series, `BN-T-2026-000001`**, so test purchases never use up the live numbers, and every number in the captures below is a `BN-T-` one because the capture machine runs in test mode) and mails a **receipt** with the invoice attached as a PDF. The person sees the invoice in their payment history and downloads it from there. A payment that nothing could use (a second payment for a plan already paid) gets **no invoice**: it is refunded in full.
 
 An administrator can **refund** a payment, in exactly three cases (spec 3.5): a **double charge**; a person's **first plan payment**, within 7 days, with no hours of it used; an **unused pack**, within 14 days. Whole payments only. Nobody else can refund: there is no self-service refund.
 
@@ -1453,15 +1467,15 @@ After a plan was paid (capture 17, `200`):
 {
   "invoices": [
     {
-      "number": "BN-2026-000001",
-      "issued_at": "2026-11-17T19:37:45.797572Z",
+      "number": "BN-T-2026-000001",
+      "issued_at": "2026-11-18T11:33:19.475597Z",
       "currency": "USD",
       "subtotal_minor": 1800,
       "vat_rate_bp": 0,
       "vat_minor": 0,
       "total_minor": 1800,
       "description": "20 hours a month",
-      "payment_reference": "bn-1-3887f2fcfd75521a",
+      "payment_reference": "bn-1-90d00af0acad327f",
       "payment_status": "succeeded",
       "refunded_at": null,
       "test_mode": true
@@ -1471,7 +1485,7 @@ After a plan was paid (capture 17, `200`):
 ```
 
 - `total_minor` is what the person paid, in kobo or cents. `vat_minor` is the VAT that price **includes** at `vat_rate_bp` basis points (750 = 7.5%); `subtotal_minor + vat_minor = total_minor`. The default rate is **0**: no VAT line, `vat_minor` is `0`.
-- `test_mode` true: the payment was made with test keys, the PDF says "TEST INVOICE" and it is not a tax document. Say so on screen if you show an invoice list of your own.
+- `test_mode` true: the payment was made with test keys, the number starts `BN-T-`, the PDF says "TEST INVOICE" and it is not a tax document. The number is `BN-` + optional `T-` + year + 6 to 9 digits: do not parse it, show it. Say so on screen if you show an invoice list of your own.
 - `payment_status` is `succeeded`, or `refunded` once the payment was refunded; `refunded_at` is then set (capture 53).
 
 With VAT 7.5% included (the same route, a naira payment, capture 31 `200`, VAT configured only for that capture):
@@ -1480,15 +1494,15 @@ With VAT 7.5% included (the same route, a naira payment, capture 31 `200`, VAT c
 {
   "invoices": [
     {
-      "number": "BN-2026-000003",
-      "issued_at": "2026-11-17T19:37:46.703977Z",
+      "number": "BN-T-2026-000003",
+      "issued_at": "2026-11-18T11:33:20.504041Z",
       "currency": "NGN",
       "subtotal_minor": 2325581,
       "vat_rate_bp": 750,
       "vat_minor": 174419,
       "total_minor": 2500000,
       "description": "20 hours a month",
-      "payment_reference": "bn-3-a6c1cb2ff62e3413",
+      "payment_reference": "bn-3-fda99da00ec7145f",
       "payment_status": "succeeded",
       "refunded_at": null,
       "test_mode": true
@@ -1511,17 +1525,17 @@ A refunded payment's invoice (capture 53, `200`): `payment_status` `refunded` an
 {
   "invoices": [
     {
-      "number": "BN-2026-000004",
-      "issued_at": "2026-11-17T19:37:49.204079Z",
+      "number": "BN-T-2026-000004",
+      "issued_at": "2026-11-18T11:33:22.950242Z",
       "currency": "USD",
       "subtotal_minor": 1800,
       "vat_rate_bp": 0,
       "vat_minor": 0,
       "total_minor": 1800,
       "description": "20 hours a month",
-      "payment_reference": "bn-4-334fea36b549e82b",
+      "payment_reference": "bn-4-13c16fbca080c23e",
       "payment_status": "refunded",
-      "refunded_at": "2026-11-17T19:37:50.251209Z",
+      "refunded_at": "2026-11-18T11:33:23.981540Z",
       "test_mode": true
     }
   ]
@@ -1536,14 +1550,14 @@ Every payment object gains `invoice_number` (string or `null`). **Field-nesting 
 {
   "payments": [
     {
-      "reference": "bn-1-3887f2fcfd75521a",
+      "reference": "bn-1-90d00af0acad327f",
       "kind": "plan",
       "status": "pending",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T19:37:45.759531Z",
+      "created_at": "2026-11-18T11:33:19.400529Z",
       "paid_at": null,
-      "pay_url": "https://fake.test/pay/bn-1-3887f2fcfd75521a",
+      "pay_url": "https://fake.test/pay/bn-1-90d00af0acad327f",
       "invoice_number": null
     }
   ]
@@ -1554,15 +1568,15 @@ Every payment object gains `invoice_number` (string or `null`). **Field-nesting 
 {
   "payments": [
     {
-      "reference": "bn-1-3887f2fcfd75521a",
+      "reference": "bn-1-90d00af0acad327f",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T19:37:45.759531Z",
-      "paid_at": "2026-11-17T19:37:45.797572Z",
+      "created_at": "2026-11-18T11:33:19.400529Z",
+      "paid_at": "2026-11-18T11:33:19.475597Z",
       "pay_url": null,
-      "invoice_number": "BN-2026-000001"
+      "invoice_number": "BN-T-2026-000001"
     }
   ]
 }
@@ -1579,13 +1593,13 @@ The same field is on `GET /api/billing/payments/{reference}` and on the payment 
   "status": 200,
   "headers": {
     "content-type": "application/pdf",
-    "content-disposition": "attachment; filename=\"invoice-BN-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-2026-000001.pdf",
+    "content-disposition": "attachment; filename=\"invoice-BN-T-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-T-2026-000001.pdf",
     "cache-control": "no-store"
   },
   "body": {
     "file": "18-invoice-pdf.pdf",
-    "bytes": 17325,
-    "sha256": "2bca2d4f7188003702a6adff92a8cb88771b49e6f477683b3ea76a5e04ee8bb5",
+    "bytes": 17384,
+    "sha256": "a9f16b3eaaf23386edc888b2ffe1d09ee06ff82180c34ff85944245b4a2a92e4",
     "starts_with": "%PDF-1.7",
     "text_extracted_by_pdftotext": "18-invoice-pdf.txt"
   }
@@ -1596,7 +1610,7 @@ Download it with a request that reads the bytes (the app's `api.billing.download
 
 | What | Status | Body (captures) |
 |---|---|---|
-| a number that is not shaped like `BN-2026-000123` | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| a number that is not shaped like `BN-2026-000123` or `BN-T-2026-000123` | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | an unknown number | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | **someone else's** number (it exists, it is not theirs) | 404, the same body | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | billing off, or an account not on the allow-list | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
@@ -1612,13 +1626,13 @@ Queued when the payment succeeds, built and sent by the outbox worker (it holds 
 
 ```json
 {
-  "subject": "Your receipt BN-2026-000001",
-  "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-2026-000001\n\n- Invoice (BN-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+  "subject": "Your receipt BN-T-2026-000001",
+  "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-T-2026-000001\n\n- Invoice (BN-T-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
   "attachments": [
     {
-      "filename": "invoice-BN-2026-000001.pdf",
+      "filename": "invoice-BN-T-2026-000001.pdf",
       "content_type": "application/pdf",
-      "bytes": 17324,
+      "bytes": 17388,
       "starts_with": "%PDF-1.7"
     }
   ]
@@ -1640,15 +1654,15 @@ Newest first. Each payment carries the **one** refund case that fits it and whet
   "payments": [
     {
       "id": 12,
-      "reference": "bn-12-e543a37d8393e87e",
+      "reference": "bn-12-2c2f31792de88796",
       "payer_email": "flo@example.test",
       "provider": "flutterwave",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T19:37:50.021366Z",
-      "paid_at": "2026-11-17T19:37:50.051928Z",
+      "created_at": "2026-11-18T11:33:23.759318Z",
+      "paid_at": "2026-11-18T11:33:23.788693Z",
       "needs_refund_reason": "the person already has a live plan",
       "invoice_number": null,
       "refund": null,
@@ -1660,17 +1674,17 @@ Newest first. Each payment carries the **one** refund case that fits it and whet
     },
     {
       "id": 11,
-      "reference": "bn-11-f24e156a63286c04",
+      "reference": "bn-11-f66556ac25f67b3e",
       "payer_email": "ivy@example.test",
       "provider": "flutterwave",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-17T19:37:49.979010Z",
-      "paid_at": "2026-11-09T19:37:50.041812Z",
+      "created_at": "2026-11-18T11:33:23.717059Z",
+      "paid_at": "2026-11-10T11:33:23.778562Z",
       "needs_refund_reason": null,
-      "invoice_number": "BN-2026-000011",
+      "invoice_number": "BN-T-2026-000011",
       "refund": null,
       "refund_option": {
         "reason": "first_plan_7d",
@@ -1697,7 +1711,7 @@ A first plan payment within 7 days with no hours used (capture 48, `200`):
   "id": 1,
   "payment_id": 4,
   "payer_email": "cy@example.test",
-  "reference": "bnrf-4-236f36c47a30d42b",
+  "reference": "bnrf-4-8fafd293d74c021e",
   "reason": "first_plan_7d",
   "status": "submitted",
   "currency": "USD",
@@ -1705,8 +1719,8 @@ A first plan payment within 7 days with no hours used (capture 48, `200`):
   "provider_refund_id": "fake-refund-1",
   "note": "asked by email (placeholder)",
   "error": null,
-  "created_at": "2026-11-17T19:37:50.251209Z",
-  "resolved_at": "2026-11-17T19:37:50.251209Z",
+  "created_at": "2026-11-18T11:33:23.981540Z",
+  "resolved_at": "2026-11-18T11:33:23.981540Z",
   "needs_resolution": false
 }
 ```
@@ -1726,6 +1740,7 @@ A first plan payment within 7 days with no hours used (capture 48, `200`):
 | `hours_used` | an hour of what this payment bought was used | 45 |
 | `not_first_payment` | not the person's first plan payment ever | tests only |
 | `plan_changed` | the plan was upgraded or renewed since | tests only |
+| `refund_pending` (on `POST /subscription/change-plan` and its preview, for the person) | a refund of the plan is `pending` or `unknown`: the plan cannot be changed until it is settled; the sentence is written for the person | tests only |
 | `recording_in_progress` | the person has a recording running or being prepared | tests only |
 | `payer_gone` | the account was deleted | tests only |
 | `not_used_for_hours`, `no_provider_transaction` | nothing was granted / no provider transaction on record | tests only |
@@ -1748,7 +1763,7 @@ Other errors: `422 validation_error` for a reason that is not one of the three (
 | `pending` | written, the provider not answered yet (a few seconds) | nothing; if it stays `pending` for **10 minutes** the process that started it died: `needs_resolution` becomes true and it is handled as `unknown` |
 | `submitted` | the provider accepted it; the payment is `refunded` | nothing |
 | `failed` | the provider **refused** the request (nothing moved) or an admin confirmed none exists; the hours are back | may start a new refund |
-| `unknown` | the provider gave **no answer** (a timeout, a 5xx, a conflict, an unreadable answer): it may or may not exist | **look in the provider's dashboard** for `reference`, then resolve it. **Never ask again** |
+| `unknown` | the provider gave **no answer** (a timeout, a 5xx, a conflict, an unreadable answer): it may or may not exist | **look in the provider's dashboard** for `reference`, then resolve it. **Never ask again**. While it waits, the plan is not renewed, charged or changed (an upgrade paid meanwhile becomes a payment owed back) |
 
 A refund that got no answer (capture 58, `200`; the lack of an answer is scripted here, a real one would be a timeout):
 
@@ -1757,7 +1772,7 @@ A refund that got no answer (capture 58, `200`; the lack of an answer is scripte
   "id": 4,
   "payment_id": 9,
   "payer_email": "gus@example.test",
-  "reference": "bnrf-9-008a85faa2f4b4c1",
+  "reference": "bnrf-9-b97948e95308900c",
   "reason": "first_plan_7d",
   "status": "unknown",
   "currency": "USD",
@@ -1765,7 +1780,7 @@ A refund that got no answer (capture 58, `200`; the lack of an answer is scripte
   "provider_refund_id": null,
   "note": null,
   "error": "no_answer",
-  "created_at": "2026-11-17T19:37:51.012252Z",
+  "created_at": "2026-11-18T11:33:24.707648Z",
   "resolved_at": null,
   "needs_resolution": true
 }
@@ -1780,7 +1795,7 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "id": 4,
       "payment_id": 9,
       "payer_email": "gus@example.test",
-      "reference": "bnrf-9-008a85faa2f4b4c1",
+      "reference": "bnrf-9-b97948e95308900c",
       "reason": "first_plan_7d",
       "status": "unknown",
       "currency": "USD",
@@ -1788,7 +1803,7 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "provider_refund_id": null,
       "note": null,
       "error": "no_answer",
-      "created_at": "2026-11-17T19:37:51.012252Z",
+      "created_at": "2026-11-18T11:33:24.707648Z",
       "resolved_at": null,
       "needs_resolution": true
     },
@@ -1796,7 +1811,7 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "id": 3,
       "payment_id": 12,
       "payer_email": "flo@example.test",
-      "reference": "bnrf-12-904e24890a432964",
+      "reference": "bnrf-12-ea1e4fd870ec6896",
       "reason": "double_charge",
       "status": "submitted",
       "currency": "USD",
@@ -1804,15 +1819,15 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "provider_refund_id": "fake-refund-3",
       "note": null,
       "error": null,
-      "created_at": "2026-11-17T19:37:50.983708Z",
-      "resolved_at": "2026-11-17T19:37:50.983708Z",
+      "created_at": "2026-11-18T11:33:24.688557Z",
+      "resolved_at": "2026-11-18T11:33:24.688557Z",
       "needs_resolution": false
     },
     {
       "id": 2,
       "payment_id": 6,
       "payer_email": "dee@example.test",
-      "reference": "bnrf-6-5578d2ebe4a7d3e0",
+      "reference": "bnrf-6-455f1a72d989c121",
       "reason": "pack_14d",
       "status": "submitted",
       "currency": "USD",
@@ -1820,15 +1835,15 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "provider_refund_id": "fake-refund-2",
       "note": null,
       "error": null,
-      "created_at": "2026-11-17T19:37:50.948846Z",
-      "resolved_at": "2026-11-17T19:37:50.948846Z",
+      "created_at": "2026-11-18T11:33:24.659312Z",
+      "resolved_at": "2026-11-18T11:33:24.659312Z",
       "needs_resolution": false
     },
     {
       "id": 1,
       "payment_id": 4,
       "payer_email": "cy@example.test",
-      "reference": "bnrf-4-236f36c47a30d42b",
+      "reference": "bnrf-4-8fafd293d74c021e",
       "reason": "first_plan_7d",
       "status": "submitted",
       "currency": "USD",
@@ -1836,8 +1851,8 @@ While it is `unknown` the hours stay removed, the payment stays `succeeded` and 
       "provider_refund_id": "fake-refund-1",
       "note": "asked by email (placeholder)",
       "error": null,
-      "created_at": "2026-11-17T19:37:50.251209Z",
-      "resolved_at": "2026-11-17T19:37:50.251209Z",
+      "created_at": "2026-11-18T11:33:23.981540Z",
+      "resolved_at": "2026-11-18T11:33:23.981540Z",
       "needs_resolution": false
     }
   ]
@@ -1853,7 +1868,7 @@ Body `{"outcome": "made" | "not_made"}`: what the provider's dashboard shows for
   "id": 5,
   "payment_id": 10,
   "payer_email": "hal@example.test",
-  "reference": "bnrf-10-eda32f6add0f552c",
+  "reference": "bnrf-10-5a61fbd5d83d4e81",
   "reason": "first_plan_7d",
   "status": "failed",
   "currency": "USD",
@@ -1861,8 +1876,8 @@ Body `{"outcome": "made" | "not_made"}`: what the provider's dashboard shows for
   "provider_refund_id": null,
   "note": null,
   "error": "provider_refused",
-  "created_at": "2026-11-17T19:37:51.100803Z",
-  "resolved_at": "2026-11-17T19:37:51.100803Z",
+  "created_at": "2026-11-18T11:33:24.771485Z",
+  "resolved_at": "2026-11-18T11:33:24.771485Z",
   "needs_resolution": false
 }
 ```
@@ -1871,7 +1886,7 @@ Body `{"outcome": "made" | "not_made"}`: what the provider's dashboard shows for
 
 ### What the administrators are told (the bell, `GET /api/notifications`)
 
-By ids only, never an email or a provider's words. Capture 68 shows the administrator's bell after the events of the run: a second successful charge for a payment already paid (kind `admin.billing_second_payment`: the provider is asked first, nothing is granted), a successful charge the rules refused (`admin.billing_charge_refused`: money may have moved), a refund with no answer (`admin.billing_refund_unknown`), and one daily digest of payments that waited more than a day (`admin.billing_pending_old`). A dispute (a chargeback) raises `admin.billing_dispute` (**tests only**: no real provider sends one here).
+By ids only, never an email or a provider's words. Capture 68 shows the administrator's bell after the events of the run: a second successful charge for a payment already paid (kind `admin.billing_second_payment`: the provider is asked first, nothing is granted), a successful charge the rules refused (`admin.billing_charge_refused`: money may have moved), a refund with no answer (`admin.billing_refund_unknown`), and one daily digest of payments that waited more than a day (`admin.billing_pending_old`). A dispute (a chargeback) raises `admin.billing_dispute`, a refund notice that says the refund **failed** after we recorded it as accepted raises `admin.billing_refund_failed` (the person was told they were refunded: pay it by hand in the provider's dashboard), and a provider answer that arrives after a person closed the refund raises `admin.billing_refund_late` (nothing is changed). All three are **tests only**: no real provider sends them here.
 
 ### UX consequences the frontend must surface
 
@@ -1888,7 +1903,7 @@ By ids only, never an email or a provider's words. Capture 68 shows the administ
 | Behaviour | Verified |
 |---|---|
 | Invoice list, payments with `invoice_number`, the PDF route, 404s, 401, billing off | **live over HTTP** (captures 03, 06, 07, 10 to 24), provider scripted |
-| The PDF's real bytes and the text a PDF reader extracts (seller, buyer, line, total, payment reference, test notice, refunded notice, VAT lines) | **live**: the files `18-…`, `32-…`, `55-…` `.pdf` and `.txt`, opened with `pdftotext`; also downloaded by a real browser click through the Next.js proxy (file name `invoice-BN-2026-000001.pdf`) |
+| The PDF's real bytes and the text a PDF reader extracts (seller, buyer, line, total, payment reference, test notice, refunded notice, VAT lines) | **live**: the files `18-…`, `32-…`, `55-…` `.pdf` and `.txt`, opened with `pdftotext`; also downloaded by a real browser click through the Next.js proxy (file name `invoice-<number>.pdf`; that browser run was before the `BN-T-` test series was added, the PDF route is unchanged) |
 | Numbers sequential, unique under two connections and eight at once, no gap after a rollback | **tests on real Postgres** (`tests/test_billing_invoices.py`), two real connections |
 | VAT arithmetic (included, half up, parts add up) | tests (`test_vat_split_*`); live captures 31 and 32 at 7.5% |
 | The receipt mail: queued with ids only, built at send time with the PDF attached | live: captures 33 and 34 (a recording mailer, **nothing was sent by a real mail provider**) |

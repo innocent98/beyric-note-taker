@@ -11,12 +11,13 @@
     "body": {
       "id": "evt-charge_succeeded-fx-half",
       "kind": "charge_succeeded",
-      "reference": "bn-13-bc20bea86218d3ac",
+      "reference": "bn-13-ae16b977fb046e5f",
       "tx_id": "fx-half",
       "amount_minor": 500,
       "currency": "USD",
       "payer_email": null,
-      "card_token": null
+      "card_token": null,
+      "refund_failed": false
     }
   },
   "response": {

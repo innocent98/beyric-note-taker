@@ -306,6 +306,17 @@ def test_a_refund_event_reads_its_text_amount_as_whole_kobo():
     assert event.amount_minor == 5000 and type(event.amount_minor) is int
 
 
+def test_only_a_refund_failed_event_says_the_refund_failed():
+    provider, _ = make()
+    processed = provider.parse_event(raw("refund_processed_event.json"))
+    body = json.loads(raw("refund_processed_event.json"))
+    body["event"] = "refund.failed"
+    failed = provider.parse_event(json.dumps(body).encode())
+    assert processed.refund_failed is False
+    assert failed.refund_failed is True and failed.kind == "refund"
+    assert failed.event_id.startswith("refund.failed:")
+
+
 def test_a_dispute_event_points_at_the_charge_it_is_about():
     event = make()[0].parse_event(raw("dispute_create_event.json"))
     assert (event.kind, event.reference, event.provider_tx_id) == (

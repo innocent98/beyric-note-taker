@@ -123,6 +123,7 @@ class FakeProvider:
                 "currency": event.currency,
                 "payer_email": event.payer_email,
                 "card_token": event.card_token,
+                "refund_failed": event.refund_failed,
             }
         ).encode()
 
@@ -154,6 +155,7 @@ class FakeProvider:
                 currency=data["currency"],
                 payer_email=data.get("payer_email"),
                 card_token=data.get("card_token"),
+                refund_failed=data.get("refund_failed") is True,
             )
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise BadEvent("unreadable event") from exc

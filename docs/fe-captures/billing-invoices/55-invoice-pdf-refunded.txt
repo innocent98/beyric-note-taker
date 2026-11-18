@@ -1,6 +1,6 @@
  Invoice
- BN-2026-000004
- Issued 17 November 2026
+ BN-T-2026-000004
+ Issued 18 November 2026
 
 
 
@@ -9,7 +9,7 @@
 
 
 
-   REFUNDED on 17 November 2026: this payment was refunded in full.
+   REFUNDED on 18 November 2026: this payment was refunded in full.
 
 
  FROM                                            BILLED TO
@@ -21,25 +21,25 @@
  billing-placeholder@example.test
 
 
- DESCRIPTION                                                                AMOUNT
+ DESCRIPTION                                                                 AMOUNT
 
 
  20 hours a month                                                                      USD 18.00
- 17 November 2026 to 17 December 2026
+ 18 November 2026 to 18 December 2026
 
 
 
                                                                    Total paid (USD)   USD 18.00
 
 
- Payment reference: bn-4-334fea36b549e82b
+ Payment reference: bn-4-13c16fbca080c23e
 
- Paid 17 November 2026
+ Paid 18 November 2026
 
  No VAT is charged on this invoice.
 
 
 
 
-Beyrichq LTD - invoice BN-2026-000004                                                         1/1
+Beyrichq LTD - invoice BN-T-2026-000004                                                       1/1
 

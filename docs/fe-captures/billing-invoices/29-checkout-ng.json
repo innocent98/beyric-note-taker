@@ -21,17 +21,17 @@
     },
     "body": {
       "payment": {
-        "reference": "bn-3-a6c1cb2ff62e3413",
+        "reference": "bn-3-fda99da00ec7145f",
         "kind": "plan",
         "status": "pending",
         "currency": "NGN",
         "amount_minor": 2500000,
-        "created_at": "2026-11-17T19:37:46.689405Z",
+        "created_at": "2026-11-18T11:33:20.489361Z",
         "paid_at": null,
-        "pay_url": "https://fake.test/pay/bn-3-a6c1cb2ff62e3413",
+        "pay_url": "https://fake.test/pay/bn-3-fda99da00ec7145f",
         "invoice_number": null
       },
-      "checkout_url": "https://fake.test/pay/bn-3-a6c1cb2ff62e3413"
+      "checkout_url": "https://fake.test/pay/bn-3-fda99da00ec7145f"
     }
   }
 }

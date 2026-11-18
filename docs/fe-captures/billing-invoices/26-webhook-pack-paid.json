@@ -11,12 +11,13 @@
     "body": {
       "id": "evt-charge_succeeded-fake-tx-2",
       "kind": "charge_succeeded",
-      "reference": "bn-2-d592b81d2ca126ab",
+      "reference": "bn-2-34d466e2c08231bd",
       "tx_id": "fake-tx-2",
       "amount_minor": 1000,
       "currency": "USD",
       "payer_email": null,
-      "card_token": null
+      "card_token": null,
+      "refund_failed": false
     }
   },
   "response": {

@@ -396,6 +396,7 @@ class FlutterwaveProvider:
             provider_tx_id=str(tx_id),
             amount_minor=amount if type(amount) is int else 0,
             currency="",
+            refund_failed=isinstance(status, str) and status.strip().lower() == "failed",
         )
 
     def fetch_transaction(self, provider_tx_id: str) -> ProviderTransaction:

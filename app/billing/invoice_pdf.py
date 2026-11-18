@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # The seller's zone: Lagos (UTC+1, no daylight saving). Invoice years and dates are read in it.
 SELLER_ZONE = ZoneInfo("Africa/Lagos")
 TIME_LIMIT_SECONDS = 30  # below nginx's 60 s, like the meeting export
-_one_at_a_time = threading.Semaphore(2)
+_slots = threading.Semaphore(2)  # at most two builds at once in this process
 
 # Plain-text amounts: no symbol a PDF font or a mail client could garble.
 _MINOR = 100
@@ -40,7 +40,8 @@ class InvoiceFailed(Exception):
 
 
 def money(amount_minor: int, currency: str) -> str:
-    return f"{currency} {amount_minor / _MINOR:,.2f}"
+    whole, cents = divmod(abs(amount_minor), _MINOR)  # integers: no float on a money record
+    return f"{'-' if amount_minor < 0 else ''}{currency} {whole:,}.{cents:02d}"
 
 
 def _date(at: datetime) -> str:
@@ -126,7 +127,7 @@ def document(invoice: Invoice, payment: Payment, refunded_at: datetime | None = 
 def build_pdf(doc: dict) -> bytes:
     """The PDF for `doc`. Raises `InvoiceBusy` when the process is already building two (the caller
     answers 503) and `InvoiceFailed` when the child fails or runs past the time limit."""
-    if not _one_at_a_time.acquire(blocking=False):
+    if not _slots.acquire(blocking=False):
         raise InvoiceBusy()
     try:
         try:
@@ -147,4 +148,4 @@ def build_pdf(doc: dict) -> bytes:
             raise InvoiceFailed(f"the render exited with status {done.returncode}")
         return done.stdout
     finally:
-        _one_at_a_time.release()
+        _slots.release()

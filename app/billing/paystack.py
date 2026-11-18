@@ -297,6 +297,7 @@ class PaystackProvider:
             amount_minor=amount if _whole_number(amount) else 0,
             currency=_event_currency(data.get("currency")),
             payer_email=_text(_dig(data, "customer", "email")),
+            refund_failed=name == "refund.failed",
         )
 
     def _dispute_event(self, name: str, data: object, raw_body: bytes) -> ProviderEvent:

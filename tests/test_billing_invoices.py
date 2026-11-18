@@ -113,6 +113,7 @@ def test_the_year_is_read_in_lagos_time():
     assert invoices.invoice_year(datetime(2026, 12, 31, 22, 59, tzinfo=UTC)) == 2026
     assert invoices.invoice_year(datetime(2026, 12, 31, 23, 0, tzinfo=UTC)) == 2027  # midnight WAT
     assert invoices.number_text(2026, 123) == "BN-2026-000123"
+    assert invoices.number_text(2026, 123, test=True) == "BN-T-2026-000123"
 
 
 # ---- which payments get an invoice, and what is on it ----------------------------------------
@@ -134,7 +135,7 @@ def test_a_first_plan_is_invoiced_once_with_a_number_and_snapshots(session, ada,
 
     [invoice] = all_invoices(session)
     payment = session.scalars(select(Payment)).one()
-    assert invoice.number == "BN-2026-000001"
+    assert invoice.number == "BN-T-2026-000001"
     assert invoice.payment_id == payment.id and invoice.payer_user_id == ada.id
     assert (invoice.currency, invoice.total_minor) == ("USD", 1800)
     assert (invoice.vat_rate_bp, invoice.vat_minor, invoice.subtotal_minor) == (0, 0, 1800)
@@ -215,7 +216,7 @@ def test_every_kind_of_used_payment_is_invoiced_in_order(session, ada, providers
     pay(session, providers.usd, started.payment, T0 + timedelta(days=1))
 
     rows = all_invoices(session)
-    assert [r.number for r in rows] == ["BN-2026-000001", "BN-2026-000002", "BN-2026-000003"]
+    assert [r.number for r in rows] == ["BN-T-2026-000001", "BN-T-2026-000002", "BN-T-2026-000003"]
     assert [r.line["kind"] for r in rows] == ["plan", "renewal", "pack"]
     assert rows[2].line["description"] == "Ten hours"
     paid = [p.amount_minor for p in session.scalars(select(Payment).order_by(Payment.id))]
@@ -289,7 +290,7 @@ def test_the_invoice_handler_never_stops_the_hours_and_the_sweeper_issues_it_lat
     monkeypatch.setattr(invoices, "issue", real)
     assert invoices.issue_missing(session, T0 + timedelta(minutes=3)) == 1
     assert invoices.issue_missing(session, T0 + timedelta(minutes=4)) == 0  # nothing left to do
-    assert [i.number for i in all_invoices(session)] == ["BN-2026-000001"]
+    assert [i.number for i in all_invoices(session)] == ["BN-T-2026-000001"]
 
 
 def test_issue_missing_skips_a_payment_nothing_could_use(session, ada, providers):
@@ -349,9 +350,9 @@ def test_two_payments_settled_at_the_same_moment_get_two_different_numbers(
         t.start()
     for t in threads:
         t.join(15)
-    assert numbers == {"first": "BN-2026-000001", "second": "BN-2026-000002"}
+    assert numbers == {"first": "BN-T-2026-000001", "second": "BN-T-2026-000002"}
     assert waited["seconds"] >= 0.3  # it really waited for the other connection's lock
-    assert [i.number for i in all_invoices(session)] == ["BN-2026-000001", "BN-2026-000002"]
+    assert [i.number for i in all_invoices(session)] == ["BN-T-2026-000001", "BN-T-2026-000002"]
 
 
 def test_eight_connections_issuing_at_once_never_share_a_number(session, engine, ada, providers):
@@ -383,7 +384,7 @@ def test_eight_connections_issuing_at_once_never_share_a_number(session, engine,
         t.join(20)
     assert errors == []
     numbers = sorted(i.number for i in all_invoices(session))
-    assert numbers == [f"BN-2026-{n:06d}" for n in range(1, 9)]  # 8 distinct, no gap
+    assert numbers == [f"BN-T-2026-{n:06d}" for n in range(1, 9)]  # 8 distinct, no gap
 
 
 def test_a_rolled_back_invoice_gives_its_number_back(session, engine, ada, providers):
@@ -394,7 +395,7 @@ def test_a_rolled_back_invoice_gives_its_number_back(session, engine, ada, provi
     with Session(engine) as db:
         number = invoices.issue(db, db.get(Payment, ids[1]), T0).number
         db.commit()
-    assert number == "BN-2026-000001"  # no gap
+    assert number == "BN-T-2026-000001"  # no gap
 
 
 def test_each_year_counts_from_one_and_the_unique_index_is_the_second_line(session, ada, providers):
@@ -404,7 +405,7 @@ def test_each_year_counts_from_one_and_the_unique_index_is_the_second_line(sessi
     # a payment in the next Lagos year starts that year's count
     assert invoices.next_number(session, 2027) == "BN-2027-000001"
     assert invoices.next_number(session, 2027) == "BN-2027-000002"
-    assert session.get(InvoiceCounter, 2026).last_number == 1
+    assert session.get(InvoiceCounter, -2026).last_number == 1  # the test series, by negative year
     # a duplicate number or a second invoice for one payment is refused by the database itself
     clone = Invoice(
         number=first.number,
@@ -430,7 +431,7 @@ def test_the_database_refuses_parts_that_do_not_add_up(session, ada, providers):
     session.commit()
     session.add(
         Invoice(
-            number="BN-2026-000099",
+            number="BN-T-2026-000099",
             payment_id=payment.id,
             issued_at=T0,
             currency="USD",
@@ -478,10 +479,10 @@ def test_the_receipt_is_built_when_sent_with_the_pdf_attached(session, ada, prov
     message = mail_templates.prepare(
         session, "billing_receipt", {"invoice_id": invoice.id}, "ada@example.test", settings(), T0
     )
-    assert message.subject == "Your receipt BN-2026-000001"
-    assert "BN-2026-000001" in message.text and "USD 18.00" in message.text
+    assert message.subject == "Your receipt BN-T-2026-000001"
+    assert "BN-T-2026-000001" in message.text and "USD 18.00" in message.text
     [attachment] = message.attachments
-    assert attachment.filename == "invoice-BN-2026-000001.pdf"
+    assert attachment.filename == "invoice-BN-T-2026-000001.pdf"
     assert attachment.content.startswith(b"%PDF-") and len(attachment.content) > 3000
 
 
@@ -594,7 +595,7 @@ def test_the_pdf_is_a_real_pdf_with_what_the_invoice_says(session, ada, provider
     assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
     assert len(pdf) > 5000  # fonts embedded: a real page, not an empty file
     wanted = [
-        "BN-2026-000001",
+        "BN-T-2026-000001",
         "Ada Works Ltd",
         "1 Marina Road, Lagos",
         "TAX-PLACEHOLDER-1",
@@ -656,3 +657,70 @@ def test_a_grant_of_the_payment_is_unchanged_by_the_invoice(session, ada, provid
     grant = session.scalars(select(HourGrant).where(HourGrant.kind == "plan_period")).one()
     assert grant.seconds == P20 and grant.expires_at > grant.starts_at
     assert HOUR == 3600
+
+
+# ---- the test series, one date, integer money --------------------------------------------------
+
+
+def test_test_purchases_never_use_up_the_live_numbers(session, ada, providers):
+    """Payments made with test keys have their own series (`BN-T-`): the first LIVE invoice of a
+    year is `BN-<year>-000001` however many test purchases came before it."""
+    from app.models import Payment
+
+    buy_plan(session, ada, providers.usd)  # test mode: BILLING_LIVE is off
+    bob = make_user(session, "bob@example.test")
+    buy_plan(session, bob, providers.usd, country="US")
+    assert [i.number for i in all_invoices(session)] == ["BN-T-2026-000001", "BN-T-2026-000002"]
+    assert all(i.test_mode for i in all_invoices(session))
+
+    # the same payments issued as LIVE invoices start the live series at one
+    payments = list(session.scalars(select(Payment).order_by(Payment.id)))
+    session.query(Invoice).delete()
+    session.flush()
+    live = settings(billing_live=True)
+    first = invoices.issue(session, payments[0], T0, live)
+    second = invoices.issue(session, payments[1], T0, live)
+    assert (first.number, second.number) == ("BN-2026-000001", "BN-2026-000002")
+    assert not first.test_mode and not second.test_mode
+    assert session.get(InvoiceCounter, 2026).last_number == 2  # the live counter
+    assert session.get(InvoiceCounter, -2026).last_number == 2  # the test counter is untouched
+
+
+def test_a_late_invoice_has_one_date_the_payments(session, ada, providers):
+    """The sweeper may issue an invoice days later. Its number's year and its issue date both come
+    from the payment, so a 31 December payment is never a 2026 number with a 2027 date."""
+    from app.models import Payment
+
+    buy_plan(session, ada, providers.usd)
+    payment = session.scalars(select(Payment)).one()
+    session.query(Invoice).delete()
+    session.flush()
+    late = payment.paid_at + timedelta(days=40)
+    invoice = invoices.issue(session, payment, late)
+    assert invoice.issued_at == payment.paid_at
+    assert invoices.invoice_year(invoice.issued_at) == int(invoice.number.split("-")[-2])
+
+
+def test_the_pdf_writes_money_with_integers_only():
+    assert invoice_pdf.money(2_500_000, "NGN") == "NGN 25,000.00"
+    assert invoice_pdf.money(99, "USD") == "USD 0.99"
+    assert invoice_pdf.money(1, "USD") == "USD 0.01"
+    assert invoice_pdf.money(0, "USD") == "USD 0.00"
+    # a float cannot hold this exactly (it would print ...00.00 or ...00.02)
+    assert invoice_pdf.money(10**17 + 1, "NGN") == "NGN 1,000,000,000,000,000.01"
+
+
+def test_the_number_pattern_survives_the_millionth_invoice_of_a_year():
+    from app.billing.invoices_api import NUMBER
+
+    for good in ("BN-2026-000001", "BN-T-2026-000001", "BN-2026-1000000", "BN-2026-123456789"):
+        assert NUMBER.fullmatch(good), good
+    for bad in (
+        "BN-2026-00001",
+        "bn-2026-000001",
+        "BN-2026-1234567890",
+        "BN-X-2026-000001",
+        "BN-2026-",
+    ):
+        assert not NUMBER.fullmatch(bad), bad
+    assert invoices.number_text(2026, 1_000_000) == "BN-2026-1000000"

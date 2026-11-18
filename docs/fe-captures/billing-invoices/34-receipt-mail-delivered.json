@@ -3,37 +3,37 @@
   "content": {
     "messages": [
       {
-        "subject": "Your receipt BN-2026-000001",
-        "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-2026-000001\n\n- Invoice (BN-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+        "subject": "Your receipt BN-T-2026-000001",
+        "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-T-2026-000001\n\n- Invoice (BN-T-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
         "attachments": [
           {
-            "filename": "invoice-BN-2026-000001.pdf",
+            "filename": "invoice-BN-T-2026-000001.pdf",
             "content_type": "application/pdf",
-            "bytes": 17324,
+            "bytes": 17388,
             "starts_with": "%PDF-1.7"
           }
         ]
       },
       {
-        "subject": "Your receipt BN-2026-000002",
-        "text": "Thank you for your payment\n\nUSD 10.00 paid, invoice BN-2026-000002\n\n- Invoice (BN-2026-000002)\n- 10 extra hours (USD 10.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+        "subject": "Your receipt BN-T-2026-000002",
+        "text": "Thank you for your payment\n\nUSD 10.00 paid, invoice BN-T-2026-000002\n\n- Invoice (BN-T-2026-000002)\n- 10 extra hours (USD 10.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
         "attachments": [
           {
-            "filename": "invoice-BN-2026-000002.pdf",
+            "filename": "invoice-BN-T-2026-000002.pdf",
             "content_type": "application/pdf",
-            "bytes": 17137,
+            "bytes": 17151,
             "starts_with": "%PDF-1.7"
           }
         ]
       },
       {
-        "subject": "Your receipt BN-2026-000003",
-        "text": "Thank you for your payment\n\nNGN 25,000.00 paid, invoice BN-2026-000003\n\n- Invoice (BN-2026-000003)\n- 20 hours a month (NGN 25,000.00)\n- VAT 7.5% included (NGN 1,744.19)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+        "subject": "Your receipt BN-T-2026-000003",
+        "text": "Thank you for your payment\n\nNGN 25,000.00 paid, invoice BN-T-2026-000003\n\n- Invoice (BN-T-2026-000003)\n- 20 hours a month (NGN 25,000.00)\n- VAT 7.5% included (NGN 1,744.19)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
         "attachments": [
           {
-            "filename": "invoice-BN-2026-000003.pdf",
+            "filename": "invoice-BN-T-2026-000003.pdf",
             "content_type": "application/pdf",
-            "bytes": 17647,
+            "bytes": 17656,
             "starts_with": "%PDF-1.7"
           }
         ]
