@@ -1,0 +1,26 @@
+{
+  "note": "The provider cannot be asked at all: the same 502 `provider_error`, nothing changes.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/payments/bn-1-48b086c63af5aaa2/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "provider_error",
+        "message": "We could not check this payment with the payment provider just now. Nothing was changed. Try again in a moment."
+      }
+    }
+  }
+}

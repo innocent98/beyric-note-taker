@@ -1,0 +1,29 @@
+{
+  "note": "The payer paid the OLD page after all and the provider's webhook arrives: the cancelled (`failed`) payment is still open to settlement, so it is paid and its hours are granted.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-5",
+      "kind": "charge_succeeded",
+      "reference": "bn-4-bb7af7f41149dde5",
+      "tx_id": "fake-tx-5",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null,
+      "refund_failed": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

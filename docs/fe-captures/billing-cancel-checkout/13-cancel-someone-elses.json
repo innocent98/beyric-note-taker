@@ -1,0 +1,26 @@
+{
+  "note": "Ben tries Ada's reference: the same plain 404 `not_found` as an unknown one. The payment is not touched and the provider is not asked.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/payments/bn-1-48b086c63af5aaa2/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

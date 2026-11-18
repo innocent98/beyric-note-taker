@@ -243,9 +243,17 @@ describe("a person with nothing to suggest", () => {
 });
 
 describe("what a saved country means", () => {
-  it("says a country can be changed freely until the first payment, and that it pays in dollars through Flutterwave", async () => {
+  it("says in the card's note what the country decides and that it can be changed until the first payment, and names the provider only in the statement", async () => {
     render(<PlansView />);
-    expect(await screen.findByText("Until your first payment you can change this country as often as you like.")).toBeTruthy();
+    const note = await screen.findByText(/Nigeria pays in naira; every other country pays in US dollars\./);
+    expect(note.textContent).toBe(
+      "Nigeria pays in naira; every other country pays in US dollars. Use the country your business is based in. You can change it until your first payment.",
+    );
+    // The provider names are not in the card's note (the statement under the plans and the pay page say them), and
+    // the old second line is gone while the country is not locked.
+    expect(note.textContent).not.toMatch(/Paystack|Flutterwave|established/);
+    expect(screen.queryByText("Until your first payment you can change this country as often as you like.")).toBeNull();
+    expect(screen.queryByText(/Since your first payment it can be changed once every 30 days/)).toBeNull();
     expect(screen.getAllByText("Prices in US dollars, paid through Flutterwave.").length).toBeGreaterThan(0);
     expect((screen.getByRole("button", { name: "Change country" }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -254,6 +262,7 @@ describe("what a saved country means", () => {
     mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true });
     render(<PlansView />);
     expect(await screen.findByText("Since your first payment it can be changed once every 30 days.")).toBeTruthy();
+    expect(screen.getAllByText(/You can change it until your first payment\./).length).toBe(1);
   });
 
   it("says the date and why when a change is not allowed yet", async () => {

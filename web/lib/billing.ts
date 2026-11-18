@@ -60,6 +60,11 @@ export type BillingPayment = {
   invoice_number?: string | null;
 };
 
+// POST /api/billing/payments/{reference}/cancel (docs/fe-integration-guide-billing.md, "Cancelling an unfinished
+// checkout"). `paid`: it had been paid after all and is settled, nothing was cancelled; `failed`: the provider says it
+// did not go through; `cancelled`: the provider says it was not paid and it is closed. `payment` is the row after.
+export type CancelPaymentResult = { result: "paid" | "failed" | "cancelled"; payment: BillingPayment };
+
 // GET /api/billing/invoices (docs/fe-integration-guide-billing.md, "Invoices, receipts and refunds").
 export type BillingInvoice = {
   number: string;
@@ -349,22 +354,27 @@ export function isPlanInactive(error: unknown): boolean {
 
 // ---- what the banner remembers for this browser tab ----
 // A 404 means billing is not available to this person; a healthy answer (no banner to show) is good for a minute.
-// Both are per tab (`sessionStorage`), and both are forgotten when this client signs someone in or out. A failure to
-// read or write them is never fatal: the banner then simply asks.
+// Both are per tab (`sessionStorage`), both carry the time they were learned and expire after a minute (a tab opened
+// before billing was switched on for this person must not hide the Billing link until a sign-out), and both are
+// forgotten when this client signs someone in or out. A failure to read or write them is never fatal: the banner
+// then simply asks.
 const UNAVAILABLE_KEY = "beyric.billing.unavailable";
 const HEALTHY_KEY = "beyric.billing.healthy";
 export const HEALTHY_FOR_MS = 60_000;
+export const ABSENT_FOR_MS = 60_000;
 
-export function billingKnownAbsent(): boolean {
+// An old tab may hold the flag "1" from before it carried a time: as a time it is 1970, so it is expired.
+export function billingKnownAbsent(now: number = Date.now()): boolean {
   try {
-    return window.sessionStorage.getItem(UNAVAILABLE_KEY) === "1";
+    const at = Number(window.sessionStorage.getItem(UNAVAILABLE_KEY));
+    return at > 0 && now - at < ABSENT_FOR_MS;
   } catch {
     return false;
   }
 }
-export function rememberBillingAbsent(): void {
+export function rememberBillingAbsent(now: number = Date.now()): void {
   try {
-    window.sessionStorage.setItem(UNAVAILABLE_KEY, "1");
+    window.sessionStorage.setItem(UNAVAILABLE_KEY, String(now));
   } catch {
     // asking again next time is only a wasted request
   }

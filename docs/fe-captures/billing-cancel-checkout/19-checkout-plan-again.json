@@ -1,0 +1,37 @@
+{
+  "note": "A new payment (the cancelled one is `failed`, so it is not reused).",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-2-708d954d0c366d18",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-18T16:22:25.934167Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-2-708d954d0c366d18",
+        "invoice_number": null
+      },
+      "checkout_url": "https://fake.test/pay/bn-2-708d954d0c366d18"
+    }
+  }
+}

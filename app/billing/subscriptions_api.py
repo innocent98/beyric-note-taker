@@ -13,6 +13,7 @@ written: there is no route that takes another person's id.
 | `POST /api/billing/checkout` | start a hosted checkout for a plan or a pack |
 | `GET /api/billing/payments` | their payments, newest first (the billing history) |
 | `GET /api/billing/payments/{reference}` | one payment's state (the return page polls it) |
+| `POST /api/billing/payments/{reference}/cancel` | put away an unfinished plan or pack checkout |
 | `POST /api/billing/subscription/cancel` | stop the renewal; access to the period's end |
 | `POST /api/billing/subscription/resume` | take the cancel back |
 | `GET /api/billing/subscription/change-plan/preview` | what a change would cost, up front |
@@ -24,7 +25,8 @@ granted by a verified payment and nothing else** (`subscriptions.on_payment_succ
 
 Errors, in the API's one shape (`{"error": {"code", "message"}}`): 404 `not_found` (billing off or
 not allowed, or no such payment or plan or pack); 409 `already_subscribed`, `plan_required`,
-`no_subscription`, `not_canceled`, `payment_overdue`, `same_plan`, `nothing_due`,
+`cannot_cancel`, `payment_in_progress`, `refund_pending`, `no_subscription`, `not_canceled`,
+`payment_overdue`, `same_plan`, `nothing_due`,
 `not_an_upgrade`, `period_over`, `period_almost_over`; 422 `billing_country_missing`,
 `billing_country_invalid`, `billing_country_unsupported`, `price_not_available`,
 `validation_error`; 502 `provider_error`; 503 `provider_unavailable`.
@@ -40,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from app import entitlements, services
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
-from app.billing import plans, renewals, routing, states, subscriptions
+from app.billing import cancel_checkout, plans, renewals, routing, states, subscriptions
 from app.billing.profile_api import RouteOut, billing_user
 from app.db import get_session
 from app.models import Invoice, Payment, Plan, PlanPrice, Subscription, User
@@ -143,6 +145,13 @@ class CheckoutIn(Body):
 class CheckoutOut(BaseModel):
     payment: PaymentOut
     checkout_url: str  # send the person here; it is the provider's hosted page
+
+
+class CancelPaymentOut(BaseModel):
+    # `paid` (it had been paid after all: it is settled, nothing is cancelled), `failed` (the
+    # provider says it did not go through) or `cancelled` (the provider says it is unpaid: closed).
+    result: str
+    payment: PaymentOut
 
 
 class PlanChangeIn(Body):
@@ -402,6 +411,48 @@ def read_payment(
     if row is None:
         raise HTTPException(404, "Not found.")
     return _payment_out(row, _invoice_numbers(db, [row]).get(row.id))
+
+
+@router.post(
+    "/payments/{reference}/cancel",
+    responses={
+        404: {
+            "model": ErrorResponse,
+            "description": "`not_found`: billing off, or not your payment",
+        },
+        409: {
+            "model": ErrorResponse,
+            "description": "`cannot_cancel` (not a plan or pack checkout), `payment_in_progress`, "
+            "`refund_pending`",
+        },
+        502: {"model": ErrorResponse, "description": "`provider_error`: nothing was changed"},
+    },
+)
+def cancel_payment(
+    reference: str,
+    request: Request,
+    db: Session = Depends(get_session),
+    user: User = Depends(billing_user),
+) -> CancelPaymentOut:
+    """Put away the caller's own unfinished plan or pack checkout. The provider is asked about the
+    reference first: a page that was paid is settled and answered `paid` (never cancelled), one it
+    says failed is marked failed, one it says is unpaid is marked failed (`cancelled`). A provider
+    that cannot be asked is a 502 and nothing changes. See `cancel_checkout`."""
+    try:
+        done = cancel_checkout.cancel_checkout(
+            db, user, reference, request.app.state.settings, datetime.now(UTC)
+        )
+    except subscriptions.Refused as exc:
+        db.rollback()
+        raise _refused(exc) from None
+    out = CancelPaymentOut(
+        result=done.result,
+        payment=_payment_out(
+            done.payment, _invoice_numbers(db, [done.payment]).get(done.payment.id)
+        ),
+    )
+    db.commit()
+    return out
 
 
 def _own_state(db: Session, user: User, sub: Subscription, now: datetime) -> SubscriptionOut:

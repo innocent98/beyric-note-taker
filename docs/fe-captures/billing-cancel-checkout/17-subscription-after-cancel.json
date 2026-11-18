@@ -1,0 +1,29 @@
+{
+  "note": "`pending_payment` is null: the banner is gone. Nothing was granted.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "none",
+      "hours": {
+        "seconds_left": 0,
+        "holdings_seconds": 0,
+        "warning": null
+      },
+      "subscription": null,
+      "pending_payment": null
+    }
+  }
+}

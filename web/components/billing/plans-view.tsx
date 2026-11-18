@@ -19,6 +19,7 @@ import {
 import { countryName } from "@/lib/countries";
 import { goTo } from "@/lib/navigate";
 import { BillingCountry } from "./billing-country";
+import { CancelPayment, cancelNotice } from "./cancel-payment";
 import { billingErrorMessage, billingUnavailable } from "./common";
 import { usePageRestore } from "./use-page-restore";
 
@@ -49,6 +50,8 @@ export function PlansView() {
   // The country in front of the person that is not saved yet (BillingCountry reports it): priced as a preview.
   const [candidate, setCandidate] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
+  // What a cancelled checkout says about itself (it was cancelled, or it had been paid after all).
+  const [cancelled, setCancelled] = useState<string | null>(null);
   const load = useCallback(() => {
     setLoadError(null);
     setReads((n) => n + 1);
@@ -184,9 +187,18 @@ export function PlansView() {
             <Button href={`/billing/return?reference=${encodeURIComponent(waiting.reference)}`} kind="quiet">
               Check this payment
             </Button>
+            <CancelPayment
+              payment={waiting}
+              onDone={(result) => {
+                setCancelled(result ? cancelNotice(result).text : null);
+                load();
+              }}
+            />
           </div>
         </Alert>
       ) : null}
+
+      {cancelled ? <Alert kind="info">{cancelled}</Alert> : null}
 
       <BillingCountry profile={profile} onChange={() => load()} onCandidate={setCandidate} />
 

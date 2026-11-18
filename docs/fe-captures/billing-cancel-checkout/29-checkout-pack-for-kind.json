@@ -1,0 +1,37 @@
+{
+  "note": "A pack checkout whose KIND this capture then changes by SQL (to `upgrade`), only to show the refusal: no upgrade checkout is made here.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "pack",
+      "code": "pack_10h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-5-13bac59bd51dd847",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1000,
+        "created_at": "2026-11-18T16:22:26.180615Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-5-13bac59bd51dd847",
+        "invoice_number": null
+      },
+      "checkout_url": "https://fake.test/pay/bn-5-13bac59bd51dd847"
+    }
+  }
+}
