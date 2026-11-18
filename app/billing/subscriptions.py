@@ -54,6 +54,7 @@ from app.billing.types import BillingError, ProviderError, ProviderTransaction
 from app.config import Settings
 from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
+    BillingCountryChange,
     HourGrant,
     Payment,
     PaymentMethod,
@@ -406,6 +407,22 @@ def _plan_paid(db: Session, payment: Payment) -> None:
     if price is None or payer is None or payer.status != "active":
         # (a checkout paid after the account was deleted makes no plan for a ghost)
         return needs_refund(db, payment, "the plan is gone or the account is not active")
+    # The checkout was opened under a billing country and priced in its currency. If the country was
+    # changed afterwards the open checkouts were closed (`profiles.supersede_open_plan_checkouts`),
+    # so this page was paid after being closed: a plan sold on a route the profile no longer shows
+    # would renew on the wrong route with no warning. Take no plan; a person refunds it.
+    changed_since = db.scalar(
+        select(BillingCountryChange.id)
+        .where(
+            BillingCountryChange.user_id == payer.id,
+            BillingCountryChange.created_at > payment.created_at,
+        )
+        .limit(1)
+    )
+    if changed_since is not None:
+        return needs_refund(
+            db, payment, "the billing country was changed after this checkout was opened"
+        )
     plan = db.get(Plan, price.plan_code)
     start = payment.paid_at
     sub = Subscription(

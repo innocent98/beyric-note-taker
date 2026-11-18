@@ -1003,3 +1003,6 @@
 @media (max-width: 560px) { .bill-card, .bill-plan { padding: var(--space-4); } .bill-flush-head { padding: 16px var(--space-4) 6px; } .bill-empty { padding: 0 var(--space-4) var(--space-4); } .bill-history .pl-row { padding-inline: var(--space-4); } }
 .bill-card .pl-controls { flex-wrap: wrap; }
 .bill-card [tabindex="-1"]:focus, [aria-live] [tabindex="-1"]:focus { outline: none; }
+/* The suggested billing country: one confirmable line (components/billing/billing-country.tsx). */
+.bill-suggest { display: flex; flex-direction: column; gap: var(--space-2); padding: 14px 16px; border: 1px solid var(--teal-line); border-radius: 9px; background: var(--teal-wash); }
+.bill-suggest .pl-row-sub { margin: 0; }

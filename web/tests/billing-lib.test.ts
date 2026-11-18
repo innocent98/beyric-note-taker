@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { COUNTRY_CODES, countryName, countryOptions } from "@/lib/countries";
+import {
+  COMMON_COUNTRY_CODES,
+  COUNTRY_CODES,
+  countryName,
+  countryOptions,
+  filterCountryOptions,
+  regionFromLanguages,
+} from "@/lib/countries";
 import {
   GATE_HOURS_MARK,
   GATE_PLAN_MARK,
@@ -104,5 +111,32 @@ describe("the sentences the gate links hang on", () => {
     ).response.body.error;
     expect(noHours.code).toBe("hours_cap_reached");
     expect(noHours.message).toContain(GATE_HOURS_MARK);
+  });
+});
+
+describe("the country suggestion and the picker", () => {
+  it("reads the region of the first browser language tag that has one, and nothing from a bare language", () => {
+    expect(regionFromLanguages(["en-NG", "en"])).toBe("NG");
+    expect(regionFromLanguages(["en", "fr-CA"])).toBe("CA");
+    expect(regionFromLanguages(["en"])).toBeNull();
+    expect(regionFromLanguages([])).toBeNull();
+    expect(regionFromLanguages(["not a tag", "es-419"])).toBeNull(); // 419 is not a country
+    expect(regionFromLanguages(["en-ZZ"])).toBeNull(); // not a country the server accepts
+  });
+
+  it("puts Nigeria first among the common countries, all of which the server accepts", () => {
+    expect(COMMON_COUNTRY_CODES[0]).toBe("NG");
+    for (const code of COMMON_COUNTRY_CODES) expect(COUNTRY_CODES).toContain(code);
+    const { common, all } = filterCountryOptions("");
+    expect(common[0]).toEqual(["NG", "Nigeria"]);
+    expect(all.length).toBe(COUNTRY_CODES.length);
+  });
+
+  it("searches by name or code, in name order, without the common list", () => {
+    const found = filterCountryOptions("niger");
+    expect(found.common).toEqual([]);
+    expect(found.all.map(([code]) => code)).toEqual(["NE", "NG"]);
+    expect(filterCountryOptions("gb").all.map(([code]) => code)).toContain("GB");
+    expect(filterCountryOptions("zzzz").all).toEqual([]);
   });
 });

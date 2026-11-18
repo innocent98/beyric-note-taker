@@ -19,7 +19,7 @@ from app.billing import routing
 from app.billing.profile import CHANGE_WINDOW, CountryChangeRefused, LiveSubscription
 from app.db import get_session
 from app.main import create_app
-from app.models import Base, BillingCountryChange, BillingProfile, User
+from app.models import Base, BillingCountryChange, BillingProfile, Payment, User
 from tests.test_web import PASSWORD, make_settings, make_user
 
 CSRF = auth.CSRF_HEADER
@@ -60,6 +60,25 @@ def set_country(session, user, country, now=NOW, **kw):
     change = profiles.change_country(session, user, country, now=now, **kw)
     session.commit()
     return change
+
+
+def has_paid(session, user, *, at=NOW - timedelta(days=200), status="succeeded"):
+    """The person has paid once (a succeeded payment on record), so the change rules apply: until
+    then the country changes freely (`profiles.country_lock`)."""
+    session.add(
+        Payment(
+            payer_user_id=user.id,
+            provider="flutterwave",
+            reference=f"bn-{user.id}-{at:%Y%m%d%H%M%S}-{status}",
+            kind="plan",
+            currency="USD",
+            amount_minor=1800,
+            status=status,
+            paid_at=at if status != "pending" else None,
+            created_at=at,
+        )
+    )
+    session.commit()
 
 
 def seed_country(session, user, country, *, asked_at=NOW - timedelta(days=100)):
@@ -309,6 +328,7 @@ def test_the_crossing_is_judged_on_the_route_the_subscription_was_sold_on(
 
 
 def test_one_change_in_30_days_and_not_a_minute_sooner(session, person):
+    has_paid(session, person)
     seed_country(session, person, "NG", asked_at=NOW - timedelta(days=100))
     set_country(session, person, "US", now=NOW)
 
@@ -333,6 +353,7 @@ def person_profile_id(session, user) -> int:
 
 
 def test_the_first_choice_is_not_a_change_so_one_fix_is_allowed_straight_after(session, person):
+    has_paid(session, person)
     set_country(session, person, "NG", now=NOW)  # picked the wrong country by mistake
     assert profiles.country_change_allowed_at(session, person.id, NOW) is None
 
@@ -492,6 +513,9 @@ EMPTY = {
     "pending_effective_at": None,
     "route": None,
     "country_change_allowed_at": None,
+    "country_locked": False,
+    "suggested_country": None,
+    "suggested_route": None,
 }
 
 
@@ -630,6 +654,12 @@ def test_any_other_country_pays_dollars_through_flutterwave(ada):
 
 
 def test_a_second_change_is_applied_once_and_the_third_is_refused_for_30_days(session, ada):
+    # The rule is for people who have paid; before that the country is free.
+    has_paid(
+        session,
+        session.scalar(select(User).where(User.email == "ada@example.test")),
+        at=datetime.now(UTC) - timedelta(days=200),
+    )
     ada.put(f"{API}/profile/country", {"billing_country": "NG"})
     second = ada.put(f"{API}/profile/country", {"billing_country": "US"})
     assert second.status_code == 200 and second.json()["result"] == "applied"
@@ -865,6 +895,7 @@ def test_two_simultaneous_changes_cannot_both_pass_the_30_day_rule(engine):
     with Session(engine) as setup:
         user = make_user(setup, "race@example.test")
         user_id = user.id
+        has_paid(setup, user)
         seed_country(setup, user, "NG")
     a, b = Session(engine), Session(engine)
     outcome: dict = {}

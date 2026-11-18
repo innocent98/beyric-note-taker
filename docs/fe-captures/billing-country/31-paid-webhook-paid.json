@@ -1,0 +1,28 @@
+{
+  "note": "The genuine webhook: the payment is verified and the plan starts. From here the person's billing country is locked (`country_locked` true).",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-1",
+      "kind": "charge_succeeded",
+      "reference": "bn-1-4255a19c7112eb2f",
+      "tx_id": "fake-tx-1",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

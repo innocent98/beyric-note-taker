@@ -23,7 +23,14 @@ vi.mock("@/lib/api/browser", () => ({
 }));
 vi.mock("@/lib/navigate", () => ({ goTo: mocks.goTo }));
 
+// The browser's language tags: "en" has no region, so nothing is suggested from it (a test sets another to see one).
+function setLanguages(languages: string[]) {
+  Object.defineProperty(window.navigator, "languages", { value: languages, configurable: true });
+  Object.defineProperty(window.navigator, "language", { value: languages[0], configurable: true });
+}
+
 beforeEach(() => {
+  setLanguages(["en"]);
   window.sessionStorage.clear();
   mocks.plans.mockResolvedValue(cap("12-plans-us.json"));
   mocks.state.mockResolvedValue(cap("09-subscription-never.json"));
@@ -122,6 +129,156 @@ describe("a person who has not chosen a billing country", () => {
     render(<PlansView />);
     await screen.findByText(/once every 30 days/);
     expect(screen.getByText(/the change waits until your paid month ends/)).toBeTruthy();
+  });
+});
+
+const NG_ROUTE = { currency: "NGN", provider: "paystack" };
+const USD_ROUTE = { currency: "USD", provider: "flutterwave" };
+
+describe("a person whose time zone points to a country", () => {
+  const lagos = { ...PROFILE_NONE, suggested_country: "NG", suggested_route: NG_ROUTE };
+
+  beforeEach(() => {
+    mocks.profile.mockResolvedValue(lagos);
+    mocks.plans.mockResolvedValue(cap("69-plans-ng.json"));
+  });
+
+  it("shows the suggested country with what it pays with as one line to confirm, and saves nothing by itself", async () => {
+    render(<PlansView />);
+    expect(await screen.findByRole("button", { name: "Use Nigeria" })).toBeTruthy();
+    expect(screen.getAllByText("Prices in naira, paid through Paystack.").length).toBeGreaterThan(0);
+    expect(screen.getByText(/We picked this from your time zone/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not Nigeria? Change" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Billing country" })).toBeNull();
+    // the plans are priced for the suggestion as a preview; no country is saved
+    await waitFor(() => expect(mocks.plans).toHaveBeenCalledWith("NG"));
+    expect(mocks.setCountry).not.toHaveBeenCalled();
+    expect(screen.getByText(/Choosing a plan saves Nigeria as your billing country/)).toBeTruthy();
+  });
+
+  it("saves the country first when they go on to a plan, then starts the checkout", async () => {
+    mocks.setCountry.mockResolvedValue({ result: "applied", profile: { ...PROFILE_US, billing_country: "NG", route: NG_ROUTE } });
+    const started = cap<{ payment: Record<string, unknown> }>("17-checkout-plan.json");
+    const price = cap<{ plans: Array<{ price: { currency: string; amount_minor: number } }> }>("69-plans-ng.json").plans[0].price;
+    mocks.checkout.mockResolvedValue({ ...started, payment: { ...started.payment, ...price } }); // the naira price the preview showed
+    render(<PlansView />);
+    await waitFor(() => expect(mocks.plans).toHaveBeenCalledWith("NG"));
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[0]);
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalled());
+    expect(mocks.setCountry).toHaveBeenCalledWith("NG");
+    expect(mocks.setCountry.mock.invocationCallOrder[0]).toBeLessThan(mocks.checkout.mock.invocationCallOrder[0]);
+  });
+
+  it("does not start a checkout when saving the country is refused", async () => {
+    mocks.setCountry.mockRejectedValue(new ApiError(409, "country_change_too_soon", "Since your first payment your billing country can be changed once every 30 days."));
+    render(<PlansView />);
+    await waitFor(() => expect(mocks.plans).toHaveBeenCalledWith("NG"));
+    await userEvent.click((await screen.findAllByRole("button", { name: "Choose this plan" }))[0]);
+    expect(await screen.findByText(/changed once every 30 days/)).toBeTruthy();
+    expect(mocks.checkout).not.toHaveBeenCalled();
+  });
+
+  it("saves it on the Use button", async () => {
+    mocks.setCountry.mockResolvedValue({ result: "applied", profile: { ...PROFILE_US, billing_country: "NG", route: NG_ROUTE } });
+    render(<PlansView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Use Nigeria" }));
+    await waitFor(() => expect(mocks.setCountry).toHaveBeenCalledWith("NG"));
+  });
+
+  it("opens the picker on the suggestion when it is changed, and the change is saved only on Save", async () => {
+    mocks.routeFor.mockResolvedValue({ ...USD_ROUTE, billing_country: "GH" });
+    mocks.setCountry.mockResolvedValue({ result: "applied", profile: { ...PROFILE_US, billing_country: "GH" } });
+    render(<PlansView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Not Nigeria? Change" }));
+    const select = (await screen.findByRole("combobox", { name: "Billing country" })) as HTMLSelectElement;
+    expect(select.value).toBe("NG");
+    await userEvent.selectOptions(select, "GH");
+    expect(await screen.findByText("Prices in US dollars, paid through Flutterwave.")).toBeTruthy();
+    expect(mocks.setCountry).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Save country" }));
+    await waitFor(() => expect(mocks.setCountry).toHaveBeenCalledWith("GH"));
+  });
+});
+
+describe("a person whose browser language has a region and whose account has no time zone", () => {
+  it("suggests the region once the server says what it pays with", async () => {
+    setLanguages(["en-GH", "en"]);
+    mocks.profile.mockResolvedValue(PROFILE_NONE);
+    mocks.routeFor.mockResolvedValue({ ...USD_ROUTE, billing_country: "GH" });
+    render(<PlansView />);
+    expect(await screen.findByRole("button", { name: "Use Ghana" })).toBeTruthy();
+    expect(screen.getByText(/We picked this from your browser's language/)).toBeTruthy();
+    expect(mocks.routeFor).toHaveBeenCalledWith("GH");
+    expect(mocks.setCountry).not.toHaveBeenCalled();
+  });
+
+  it("shows the picker instead when that region cannot be routed", async () => {
+    setLanguages(["en-KP"]);
+    mocks.profile.mockResolvedValue(PROFILE_NONE);
+    mocks.routeFor.mockRejectedValue(new ApiError(422, "billing_country_unsupported", "unsupported"));
+    render(<PlansView />);
+    expect(await screen.findByRole("combobox", { name: "Billing country" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
+  });
+});
+
+describe("a person with nothing to suggest", () => {
+  it("sees the picker with Nigeria first, the common countries on top, and a search", async () => {
+    mocks.profile.mockResolvedValue(PROFILE_NONE);
+    render(<PlansView />);
+    const select = (await screen.findByRole("combobox", { name: "Billing country" })) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    const common = Array.from(select.querySelectorAll("optgroup"))[0];
+    expect(common.label).toBe("Common");
+    expect(common.querySelectorAll("option")[0].value).toBe("NG");
+    expect(mocks.setCountry).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search countries" }), "ghana");
+    const shown = Array.from(select.querySelectorAll("option")).map((option) => option.value);
+    expect(shown).toEqual(["", "GH"]);
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Search countries" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search countries" }), "zzzz");
+    expect(screen.getByText("No country matches")).toBeTruthy();
+  });
+});
+
+describe("what a saved country means", () => {
+  it("says a country can be changed freely until the first payment, and that it pays in dollars through Flutterwave", async () => {
+    render(<PlansView />);
+    expect(await screen.findByText("Until your first payment you can change this country as often as you like.")).toBeTruthy();
+    expect(screen.getAllByText("Prices in US dollars, paid through Flutterwave.").length).toBeGreaterThan(0);
+    expect((screen.getByRole("button", { name: "Change country" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("says the 30-day rule applies once they have paid", async () => {
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true });
+    render(<PlansView />);
+    expect(await screen.findByText("Since your first payment it can be changed once every 30 days.")).toBeTruthy();
+  });
+
+  it("says the date and why when a change is not allowed yet", async () => {
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true, country_change_allowed_at: "2999-01-01T00:00:00Z" });
+    render(<PlansView />);
+    expect(await screen.findByText(/Since your first payment it can be changed once every 30 days\. You can change it again on/)).toBeTruthy();
+  });
+
+  it("says the date and why when a change is waiting for the end of the paid month", async () => {
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true, pending_billing_country: "NG", pending_effective_at: "2999-01-01T00:00:00Z" });
+    render(<PlansView />);
+    expect(await screen.findByText(/because your plan was bought on that route/)).toBeTruthy();
+  });
+
+  it("shows the server's sentence, with its date, when a change is refused", async () => {
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true });
+    mocks.routeFor.mockResolvedValue({ currency: "NGN", provider: "paystack", billing_country: "NG" });
+    mocks.setCountry.mockRejectedValue(
+      new ApiError(409, "country_change_too_soon", "Since your first payment your billing country can be changed once every 30 days. You can change it again on 20 December 2026."),
+    );
+    render(<PlansView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Change country" }));
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Billing country" }), "NG");
+    await userEvent.click(screen.getByRole("button", { name: "Save country" }));
+    expect(await screen.findByText(/You can change it again on 20 December 2026\./)).toBeTruthy();
   });
 });
 

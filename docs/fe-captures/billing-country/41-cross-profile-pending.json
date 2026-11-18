@@ -1,0 +1,36 @@
+{
+  "note": "`pending_billing_country` and `pending_effective_at` say what waits and when.",
+  "client": "cross",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/profile",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": null,
+      "address": null,
+      "tax_id": null,
+      "billing_email": null,
+      "billing_country": "US",
+      "pending_billing_country": "NG",
+      "pending_effective_at": "2026-12-17T19:32:26.730497Z",
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "country_change_allowed_at": "2026-12-17T19:32:26.747944Z",
+      "country_locked": true,
+      "suggested_country": null,
+      "suggested_route": null
+    }
+  }
+}

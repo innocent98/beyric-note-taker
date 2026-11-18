@@ -1,0 +1,26 @@
+{
+  "note": "The person's own saved time zone (the existing Settings route).",
+  "client": "lagos",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "time_zone": "Africa/Lagos"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "time_zone": "Africa/Lagos",
+      "is_set": true
+    }
+  }
+}

@@ -6,15 +6,22 @@
         "user": "ada@example.test",
         "old_country": null,
         "new_country": "NG",
-        "effective_at": "2026-11-16T22:02:15.185316+00:00",
-        "created_at": "2026-11-16T22:02:15.185316+00:00"
+        "effective_at": "2026-11-17T19:32:29.770140+00:00",
+        "created_at": "2026-11-17T19:32:29.770140+00:00"
       },
       {
         "user": "ada@example.test",
         "old_country": "NG",
         "new_country": "GB",
-        "effective_at": "2026-11-16T22:02:15.248161+00:00",
-        "created_at": "2026-11-16T22:02:15.248161+00:00"
+        "effective_at": "2026-11-17T19:32:29.796697+00:00",
+        "created_at": "2026-11-17T19:32:29.796697+00:00"
+      },
+      {
+        "user": "ada@example.test",
+        "old_country": "GB",
+        "new_country": "FR",
+        "effective_at": "2026-11-17T19:32:29.807001+00:00",
+        "created_at": "2026-11-17T19:32:29.807001+00:00"
       }
     ]
   }
