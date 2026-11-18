@@ -364,7 +364,8 @@ def change_country(
         if live is not None and live.period_end > now and live.route != new_route:
             scheduled_for = live.period_end
 
-    supersede_open_plan_checkouts(db, user.id)
+    if old is not None:  # a checkout exists only under a saved country, so a first choice has none
+        supersede_open_plan_checkouts(db, user.id)
     db.add(
         BillingCountryChange(
             user_id=user.id,

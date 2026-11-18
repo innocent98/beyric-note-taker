@@ -155,6 +155,32 @@ def test_a_person_with_no_saved_zone_gets_the_date_in_utc(session, person):
     assert "20 December 2026" in raised.value.message
 
 
+def test_the_first_choice_leaves_a_pending_payment_alone_and_a_later_change_closes_it(
+    session, person
+):
+    """Only a change from a saved country closes the person's open plan checkouts: a checkout exists
+    only under a saved country, so a first choice has none to close."""
+    from app.billing.payments import new_payment
+
+    payment = new_payment(
+        session,
+        payer=person,
+        provider="flutterwave",
+        kind="plan",
+        currency="USD",
+        amount_minor=1800,
+    )
+    session.commit()
+
+    set_country(session, person, "US", now=NOW)
+    session.refresh(payment)
+    assert payment.status == "pending"
+
+    set_country(session, person, "NG", now=NOW + timedelta(minutes=1))
+    session.refresh(payment)
+    assert payment.status == "failed"
+
+
 # ---- the suggestion ---------------------------------------------------------------------------
 
 
