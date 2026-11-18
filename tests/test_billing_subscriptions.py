@@ -847,6 +847,62 @@ def test_a_checkout_paid_after_the_account_was_deleted_makes_nothing_for_a_ghost
     assert notices(session, admin, "admin.billing_refund_needed")
 
 
+def test_changing_the_country_closes_the_open_plan_checkout_and_the_next_is_in_the_new_currency(
+    session, ada, providers
+):
+    choose_country(session, ada, "US")
+    usd = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+
+    choose_country(session, ada, "NG", now=T0 + timedelta(minutes=5))
+    naira = subs.start_plan_checkout(session, ada, "p20", settings(), T0 + timedelta(minutes=6))
+
+    session.expire_all()
+    rows = {p.id: p for p in payments(session)}
+    assert rows[usd.payment.id].status == "failed"  # nothing was bought on that page
+    assert (rows[naira.payment.id].status, rows[naira.payment.id].currency) == ("pending", "NGN")
+    assert [p.currency for p in rows.values() if p.status == "pending"] == ["NGN"]  # one currency
+
+
+def test_a_closed_checkout_page_paid_anyway_makes_no_plan_and_asks_for_a_refund(
+    session, ada, admin, providers
+):
+    choose_country(session, ada, "US")
+    usd = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+    choose_country(session, ada, "NG", now=T0 + timedelta(minutes=5))
+
+    pay(session, providers.usd, usd.payment, T0 + timedelta(minutes=10))
+
+    session.expire_all()
+    assert session.scalar(select(func.count()).select_from(Subscription)) == 0
+    assert grants(session, ada) == []
+    assert notices(session, admin, "admin.billing_refund_needed")
+
+
+def test_a_checkout_paid_with_no_change_of_country_in_between_still_makes_the_plan(
+    session, ada, providers
+):
+    choose_country(session, ada, "US")
+    usd = subs.start_plan_checkout(session, ada, "p20", settings(), T0)
+
+    pay(session, providers.usd, usd.payment, T0 + timedelta(minutes=10))
+
+    assert live(session, ada) is not None
+
+
+def test_a_change_of_country_leaves_a_paid_payment_and_an_open_pack_checkout_alone(
+    session, ada, providers
+):
+    buy_plan(session, ada, providers.usd)
+    pack = subs.start_pack_checkout(session, ada, "pack10", settings(), T0 + timedelta(days=1))
+
+    choose_country(session, ada, "GB", now=T0 + timedelta(days=1, hours=1))  # the one fix
+
+    session.expire_all()
+    statuses = {p.kind: p.status for p in payments(session)}
+    assert statuses == {"plan": "succeeded", "pack": "pending"}
+    assert pack.payment.status == "pending"
+
+
 def test_asking_for_the_same_plan_twice_returns_the_first_page(session, ada, providers):
     choose_country(session, ada, "US")
     first = subs.start_plan_checkout(session, ada, "p20", settings(), T0)

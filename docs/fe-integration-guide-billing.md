@@ -1648,8 +1648,7 @@ One change is allowed (here GB to FR, the same dollar route, so `applied`); it s
 }
 ```
 
-The next one is refused. **The message carries the date in UTC in plain words; show the server's sentence as it comes**, and
-use `country_change_allowed_at` for the date in the person's time zone:
+The next one is refused. **The message carries the date in plain words, in the person's saved time zone (UTC when none), the zone the screen shows dates in; show the server's sentence as it comes**:
 
 ```json
 // 409  (capture billing-country/34-paid-country-too-soon.json)
@@ -1700,6 +1699,10 @@ to 42):
 }
 ```
 
+### Open plan checkouts are closed by a change
+
+A change of country that takes effect (`applied`, or `scheduled`) turns the person's unpaid first-plan payments from `pending` to `failed` (in `GET /payments` they read "Did not go through"; nothing was bought). `GET /subscription`'s `pending_payment` is then null for them. The plans screen already starts a fresh checkout on the new route. If a closed page is paid anyway the person gets no plan and is refunded by the operator (admin alert); this is covered by tests (`tests/test_billing_subscriptions.py`), not captured.
+
 ### What the FE must surface
 
 * **Always say what the country means, from the server's words:** "Prices in US dollars, paid through Flutterwave." Read
@@ -1723,6 +1726,8 @@ to 42):
 | Browser-language fallback and the picker (Nigeria first, search) | browser run against a local app (`scripts/dev_billing_stack.py`) at 1440 and 390 px, and vitest; the browser language is read in the browser, so there is no HTTP capture |
 | Zones with no country (`UTC`, `Etc/GMT+1`) suggest nothing; a country with no route is not suggested | tests only (`tests/test_billing_country_flow.py`) |
 | A refunded or partly refunded payment locks the country; a pending or failed one does not | tests only |
+| An open first-plan checkout is closed by a country change; a closed page paid anyway makes no plan and asks for a refund; packs and paid payments are left alone | tests only (`tests/test_billing_subscriptions.py`) |
+| A refusal's date is in the person's saved time zone | tests only (`tests/test_billing_country_flow.py`); the captures' people have no zone, so theirs read in UTC |
 | A real Paystack or Flutterwave | not involved |
 
 ## Verification

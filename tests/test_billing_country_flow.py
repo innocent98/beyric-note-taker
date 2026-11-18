@@ -125,6 +125,36 @@ def test_a_waiting_change_is_refused_with_the_date_it_takes_effect(session, pers
     assert f"{PERIOD_END.day} {PERIOD_END:%B %Y}" in raised.value.message
 
 
+def test_a_refusal_names_its_date_in_the_persons_saved_time_zone(session, person):
+    """30 days after a change at 05:00 UTC is 19:00 the day before in Honolulu: the sentence says
+    the day the card shows, not the UTC one."""
+    session.add(UserSettings(user_id=person.id, time_zone="Pacific/Honolulu"))
+    session.commit()
+    has_paid(session, person, at=NOW - timedelta(days=60))
+    set_country(session, person, "NG", now=NOW - timedelta(days=50))
+    changed_at = NOW.replace(hour=5)
+    set_country(session, person, "US", now=changed_at)  # the one change
+
+    with pytest.raises(CountryChangeRefused) as raised:
+        set_country(session, person, "GB", now=changed_at + timedelta(days=1))
+
+    due = changed_at + CHANGE_WINDOW  # 20 December 05:00 UTC, 19 December 19:00 in Honolulu
+    assert due.day == 20
+    assert "19 December 2026" in raised.value.message and "20 December" not in raised.value.message
+
+
+def test_a_person_with_no_saved_zone_gets_the_date_in_utc(session, person):
+    has_paid(session, person, at=NOW - timedelta(days=60))
+    set_country(session, person, "NG", now=NOW - timedelta(days=50))
+    changed_at = NOW.replace(hour=5)
+    set_country(session, person, "US", now=changed_at)
+
+    with pytest.raises(CountryChangeRefused) as raised:
+        set_country(session, person, "GB", now=changed_at + timedelta(days=1))
+
+    assert "20 December 2026" in raised.value.message
+
+
 # ---- the suggestion ---------------------------------------------------------------------------
 
 

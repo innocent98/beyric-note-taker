@@ -26,6 +26,15 @@ writes it.
   of the paid period. The profile keeps the old country until then and
   `pending_billing_country` holds the new one.
 
+**An open plan checkout is closed by any change** (`supersede_open_plan_checkouts`): it is priced in
+the currency of the country it was opened under, so it must not stay open beside another country
+(two currencies open at once, or a plan that stays on naira while the profile says dollars). If the
+old page is paid anyway, `_plan_paid` in `subscriptions.py` makes no plan and tells the admins to
+refund it. Packs and upgrades are paid on the route the subscription was sold on, so they are
+not touched.
+**Dates in the refusals** are written in the person's saved time zone (UTC when none), the one the
+card shows.
+
 Every applied or scheduled change writes one `billing_country_changes` row. A scheduled change takes
 effect through `apply_due_pending` (called when the profile is read or changed, and by the renewal
 of stage S8); it writes no second row, the first already carries `effective_at`.
@@ -41,8 +50,9 @@ replace it with a stub for a particular branch.
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -246,8 +256,37 @@ def country_change_allowed_at(db: Session, user_id: int, now: datetime) -> datet
     return allowed if allowed > now else None
 
 
-def _day(moment: datetime) -> str:
-    return f"{moment.astimezone(UTC).day} {moment.astimezone(UTC):%B %Y}"
+def _zone_of(db: Session, user_id: int) -> ZoneInfo | None:
+    """The person's saved time zone, or None (UTC): the zone the card shows dates in."""
+    name = db.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user_id))
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return None
+
+
+def _day(moment: datetime, zone: ZoneInfo | None) -> str:
+    """`17 December 2026` in the person's time zone (UTC when none is saved)."""
+    local = moment.astimezone(zone or UTC)
+    return f"{local.day} {local:%B %Y}"
+
+
+def supersede_open_plan_checkouts(db: Session, user_id: int) -> int:
+    """Close the person's unpaid PLAN checkouts (status `failed`: nothing was bought). Called when a
+    change of country takes effect. Packs and upgrades are not touched: they are paid on the route
+    the subscription was sold on, whatever the country says. Flushed, not committed."""
+    result = db.execute(
+        update(Payment)
+        .where(
+            Payment.payer_user_id == user_id,
+            Payment.kind == "plan",
+            Payment.status == "pending",
+        )
+        .values(status="failed")
+    )
+    return result.rowcount or 0
 
 
 def save_details(
@@ -291,13 +330,18 @@ def change_country(
     new_route = routing.provider_for(country, routes_text)
     profile = _locked_profile(db, user)
     apply_due_pending(profile, now)
+    zone = _zone_of(db, user.id)
 
     if profile.pending_billing_country is not None:
         raise CountryChangeRefused(
             409,
             "country_change_pending",
             "A change of billing country is already waiting for the end of your paid period"
-            + (f" ({_day(profile.pending_effective_at)})." if profile.pending_effective_at else ".")
+            + (
+                f" ({_day(profile.pending_effective_at, zone)})."
+                if profile.pending_effective_at
+                else "."
+            )
             + " It cannot be changed again until then.",
         )
     old = profile.billing_country
@@ -313,13 +357,14 @@ def change_country(
                 409,
                 "country_change_too_soon",
                 "Since your first payment your billing country can be changed once every 30 days. "
-                f"You can change it again on {_day(allowed_at)}.",
+                f"You can change it again on {_day(allowed_at, zone)}.",
             )
         live = live_subscription(db, user.id, now)
         # Crossing is judged against the route the subscription was sold on, not today's table.
         if live is not None and live.period_end > now and live.route != new_route:
             scheduled_for = live.period_end
 
+    supersede_open_plan_checkouts(db, user.id)
     db.add(
         BillingCountryChange(
             user_id=user.id,

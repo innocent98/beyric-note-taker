@@ -434,9 +434,7 @@ PUT /api/billing/profile/country
 
 A third change before any payment is applied as well (capture `23-country-third-free.json`; same shape as above).
 The refusal exists only **after the person has paid** (the 30-day rule counts the changes made since the first
-payment; the ones made while it was free do not count). It writes nothing, and the message carries the date
-(UTC) in plain words; read `country_change_allowed_at` from the profile to show the date in the person's own
-time zone:
+payment; the ones made while it was free do not count). It writes nothing, and the message carries the date in plain words, in the person's saved time zone (UTC when none):
 
 ```
 PUT /api/billing/profile/country
