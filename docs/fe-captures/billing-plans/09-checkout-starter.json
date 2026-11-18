@@ -1,0 +1,36 @@
+{
+  "note": "Each plan has its own checkout: the plan's code and the price in the person's route.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-1-9df3b2e7f4da9d13",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-17T19:55:03.201302Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-1-9df3b2e7f4da9d13"
+      },
+      "checkout_url": "https://fake.test/pay/bn-1-9df3b2e7f4da9d13"
+    }
+  }
+}

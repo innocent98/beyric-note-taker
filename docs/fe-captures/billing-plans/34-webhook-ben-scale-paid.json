@@ -1,0 +1,28 @@
+{
+  "note": "Verified.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-6",
+      "kind": "charge_succeeded",
+      "reference": "bn-6-239c9ca88f1979e2",
+      "tx_id": "fake-tx-6",
+      "amount_minor": 6199,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

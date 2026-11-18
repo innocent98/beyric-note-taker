@@ -1,0 +1,63 @@
+{
+  "note": "Every payment of the journey: the plan, the two upgrades and the renewal.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payments": [
+        {
+          "reference": "bn-4-a20d63557872aad5",
+          "kind": "renewal",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 4000,
+          "created_at": "2026-11-17T19:55:03.442530Z",
+          "paid_at": "2026-11-17T19:55:03.442530Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-3-845f0c7916d53776",
+          "kind": "upgrade",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 3999,
+          "created_at": "2026-11-17T19:55:03.344904Z",
+          "paid_at": "2026-11-17T19:55:03.362060Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-2-af5aabe8031bfbf3",
+          "kind": "upgrade",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 2199,
+          "created_at": "2026-11-17T19:55:03.292150Z",
+          "paid_at": "2026-11-17T19:55:03.308645Z",
+          "pay_url": null
+        },
+        {
+          "reference": "bn-1-9df3b2e7f4da9d13",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-17T19:55:03.201302Z",
+          "paid_at": "2026-11-17T19:55:03.228124Z",
+          "pay_url": null
+        }
+      ]
+    }
+  }
+}

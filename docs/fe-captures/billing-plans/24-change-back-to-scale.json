@@ -1,0 +1,45 @@
+{
+  "note": "Choosing the plan you are on takes the waiting downgrade back: `cleared`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/change-plan",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "plan_code": "plan_100h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "result": "cleared",
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_100h",
+        "plan_name": "Scale",
+        "currency": "USD",
+        "amount_minor": 8000,
+        "current_period_start": "2026-11-17T19:55:03.228124Z",
+        "current_period_end": "2026-12-17T19:55:03.228124Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "payment": null,
+      "checkout_url": null
+    }
+  }
+}

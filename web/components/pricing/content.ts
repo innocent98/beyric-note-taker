@@ -11,6 +11,7 @@
 //     with a live plan (spec 4.3);
 //   * hours belong to the PERSON, not to a team (a team is only a place to share); unused plan hours do not roll
 //     over (spec 3.3).
+// Three plans are on sale (20, 50 and 100 hours; decided 2026-11-17) and one pack.
 // ADDING A PLAN OR A PACK: add its seed row by migration, then add ONE entry to CATALOG below. The cards, the
 // comparison table's columns, the questions, the page description, llms.txt and the JSON-LD offers are all built
 // from CATALOG, and the test checks every entry against the seed, so nothing else is edited.
@@ -27,6 +28,20 @@
 // badge and the seat FAQ. See docs/sop/2026-11-14-landing-v2-and-pricing.md.
 
 export const TRIAL = { hours: 3, days: 14 } as const;
+
+// The names of the two bigger plans, in ONE place here (Pro and Scale are the lead's proposal, 2026-11-17).
+// The seed of alembic/versions/0054_more_plans.py holds the same two names, and the seed test fails if they differ:
+// renaming is these two lines plus a migration that updates `plans.name` for a database that already has them.
+const PRO_NAME = "Pro";
+const SCALE_NAME = "Scale";
+
+// The list every monthly plan shows under its button.
+const PLAN_INCLUDES = [
+  "Unused plan hours do not roll over to the next month",
+  "Cancel any time: the plan keeps working until the period you paid for ends",
+  "Extra-hour packs when you need more",
+  "Every feature in the table below",
+] as const;
 
 // What can be bought: monthly plans and extra-hour packs, as the seed holds them (whole dollars and whole naira:
 // the seed's minor units divided by 100, 1800 cents and 2,500,000 kobo for the first plan).
@@ -54,12 +69,27 @@ export const CATALOG: ReadonlyArray<Sellable> = [
     usdMajor: 18,
     ngnMajor: 25_000,
     tagline: "For people whose meetings turn into work.",
-    includes: [
-      "Unused plan hours do not roll over to the next month",
-      "Cancel any time: the plan keeps working until the period you paid for ends",
-      "Extra-hour packs when you need more",
-      "Every feature in the table below",
-    ],
+    includes: PLAN_INCLUDES,
+  },
+  {
+    kind: "plan",
+    code: "plan_50h",
+    name: PRO_NAME,
+    hours: 50,
+    usdMajor: 40,
+    ngnMajor: 56_000,
+    tagline: "For a heavier meeting month.",
+    includes: PLAN_INCLUDES,
+  },
+  {
+    kind: "plan",
+    code: "plan_100h",
+    name: SCALE_NAME,
+    hours: 100,
+    usdMajor: 80,
+    ngnMajor: 112_000,
+    tagline: "For the busiest meeting calendars.",
+    includes: PLAN_INCLUDES,
   },
   {
     kind: "pack",

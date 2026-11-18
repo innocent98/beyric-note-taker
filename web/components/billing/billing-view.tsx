@@ -162,10 +162,14 @@ function WaitingPayment({ payment }: { payment: BillingPayment }) {
 }
 
 // The latest price a person was charged for a plan month (the first payment or a renewal): what the next
-// renewal is compared with, so a price that changed is said and not shown silently.
+// renewal is compared with, so a price that changed is said and not shown silently. With several plans, the latest
+// plan payment can be an UPGRADE (the prorated difference, for a plan the person chose): the plan, and so its price,
+// changed on purpose, and "the price changed" would be wrong, so there is nothing to compare with until a renewal.
 function lastPlanAmount(payments: BillingPayment[], currency: string): number | null {
-  const paid = payments.find((p) => p.status === "succeeded" && (p.kind === "plan" || p.kind === "renewal") && p.currency === currency);
-  return paid ? paid.amount_minor : null;
+  const paid = payments.find(
+    (p) => p.status === "succeeded" && (p.kind === "plan" || p.kind === "renewal" || p.kind === "upgrade") && p.currency === currency,
+  );
+  return paid && paid.kind !== "upgrade" ? paid.amount_minor : null;
 }
 
 function PlanCard({

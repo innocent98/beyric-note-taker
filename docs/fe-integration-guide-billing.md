@@ -1730,6 +1730,311 @@ A change of country that takes effect (`applied`, or `scheduled`) turns the pers
 | A refusal's date is in the person's saved time zone | tests only (`tests/test_billing_country_flow.py`); the captures' people have no zone, so theirs read in UTC |
 | A real Paystack or Flutterwave | not involved |
 
+## More plans: the 20-hour plan, Pro and Scale (migration 0054)
+
+**What it is.** Three monthly plans now exist, all read from the database by the routes already described above; **no route, field or error is new**. In `GET /api/billing/plans` they come in `sort_order`: the first plan (`plan_20h`, name "20 hours a month"), **Pro** (`plan_50h`, 50 hours) and **Scale** (`plan_100h`, 100 hours), then the pack. The names are data (`plans.name`): show `name` as it comes, never a name typed in the screens. Captured by `scripts/capture_billing_plans.py` against the real migrations (the plans and prices are the seeded rows) with a scripted payment provider, over real HTTP: `docs/fe-captures/billing-plans/`.
+
+| Plan | `code` | `monthly_seconds` | USD (`amount_minor`, cents) | NGN (kobo) |
+|---|---|---|---|---|
+| 20 hours a month | `plan_20h` | 72000 | 1800 | 2,500,000 |
+| Pro | `plan_50h` | 180000 | 4000 | 5,600,000 |
+| Scale | `plan_100h` | 360000 | 8000 | 11,200,000 |
+
+**Rules the screens already follow and that matter more now:**
+
+* `/billing/plans` lists every plan returned (three), each with its own **Choose this plan**: `POST /api/billing/checkout` with `{"kind": "plan", "code": <that plan's code>}`. Proven in a browser: Scale in dollars made a payment of 8000 USD cents and Pro in naira 5,600,000 kobo.
+* A change between any two plans is the same two calls: `GET .../change-plan/preview?plan_code=` then `POST .../change-plan`. **More hours is an upgrade** (charged now, prorated), **fewer hours is a downgrade** (applied at the renewal): Starter to Pro, Starter to Scale, Pro to Scale are upgrades; Scale to Pro, Scale to Starter, Pro to Starter are downgrades. The server decides; the screens never compare prices.
+* A downgrade shows `amount_minor` = the smaller plan's monthly price on the subscription (what the renewal charges), while `plan_code` is still the bigger plan until the renewal (capture 23).
+* After an upgrade the person's last plan payment is a `kind: "upgrade"` (the prorated difference): the billing page must not say "the price changed" for it (fixed in this change: it compares only with a plan or renewal payment, and says nothing when the latest is an upgrade).
+
+### The catalog, in dollars and in naira
+
+Capture `04-plans-us` (GET /api/billing/plans, status 200):
+
+```json
+{
+  "route": {
+    "currency": "USD",
+    "provider": "flutterwave"
+  },
+  "plans": [
+    {
+      "code": "plan_20h",
+      "name": "20 hours a month",
+      "monthly_seconds": 72000,
+      "price": {
+        "currency": "USD",
+        "amount_minor": 1800
+      }
+    },
+    {
+      "code": "plan_50h",
+      "name": "Pro",
+      "monthly_seconds": 180000,
+      "price": {
+        "currency": "USD",
+        "amount_minor": 4000
+      }
+    },
+    {
+      "code": "plan_100h",
+      "name": "Scale",
+      "monthly_seconds": 360000,
+      "price": {
+        "currency": "USD",
+        "amount_minor": 8000
+      }
+    }
+  ],
+  "packs": [
+    {
+      "code": "pack_10h",
+      "name": "10 extra hours",
+      "seconds": 36000,
+      "valid_months": 12,
+      "price": {
+        "currency": "USD",
+        "amount_minor": 1000
+      }
+    }
+  ]
+}
+```
+
+Capture `08-plans-ng` (GET /api/billing/plans, status 200):
+
+```json
+{
+  "route": {
+    "currency": "NGN",
+    "provider": "paystack"
+  },
+  "plans": [
+    {
+      "code": "plan_20h",
+      "name": "20 hours a month",
+      "monthly_seconds": 72000,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 2500000
+      }
+    },
+    {
+      "code": "plan_50h",
+      "name": "Pro",
+      "monthly_seconds": 180000,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 5600000
+      }
+    },
+    {
+      "code": "plan_100h",
+      "name": "Scale",
+      "monthly_seconds": 360000,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 11200000
+      }
+    }
+  ],
+  "packs": [
+    {
+      "code": "pack_10h",
+      "name": "10 extra hours",
+      "seconds": 36000,
+      "valid_months": 12,
+      "price": {
+        "currency": "NGN",
+        "amount_minor": 1500000
+      }
+    }
+  ]
+}
+```
+
+### Upgrade previews (a read: nothing is written)
+
+The clock ran during the capture, so the amounts are a second or two short of the whole-month difference (Pro 4000 - 1800 = 2200 cents; 50 - 20 = 30 hours = 108000 seconds).
+
+Capture `12-preview-starter-to-pro` (GET /api/billing/subscription/change-plan/preview?plan_code=plan_50h, status 200):
+
+```json
+{
+  "kind": "upgrade",
+  "plan_code": "plan_50h",
+  "currency": "USD",
+  "amount_minor": 2199,
+  "extra_seconds": 107640,
+  "takes_effect": "now"
+}
+```
+
+Capture `13-preview-starter-to-scale` (GET /api/billing/subscription/change-plan/preview?plan_code=plan_100h, status 200):
+
+```json
+{
+  "kind": "upgrade",
+  "plan_code": "plan_100h",
+  "currency": "USD",
+  "amount_minor": 6199,
+  "extra_seconds": 287640,
+  "takes_effect": "now"
+}
+```
+
+Capture `17-preview-pro-to-scale` (GET /api/billing/subscription/change-plan/preview?plan_code=plan_100h, status 200):
+
+```json
+{
+  "kind": "upgrade",
+  "plan_code": "plan_100h",
+  "currency": "USD",
+  "amount_minor": 3999,
+  "extra_seconds": 179640,
+  "takes_effect": "now"
+}
+```
+
+Capture `39-preview-ng-pro-to-scale` (GET /api/billing/subscription/change-plan/preview?plan_code=plan_100h, status 200):
+
+```json
+{
+  "kind": "upgrade",
+  "plan_code": "plan_100h",
+  "currency": "NGN",
+  "amount_minor": 5599997,
+  "extra_seconds": 179640,
+  "takes_effect": "now"
+}
+```
+
+### Downgrade preview, scheduling it, taking it back
+
+Capture `21-preview-scale-to-starter` (GET /api/billing/subscription/change-plan/preview?plan_code=plan_20h, status 200):
+
+```json
+{
+  "kind": "downgrade",
+  "plan_code": "plan_20h",
+  "currency": "USD",
+  "amount_minor": 1800,
+  "extra_seconds": null,
+  "takes_effect": "next_renewal"
+}
+```
+
+Capture `22-change-scale-to-starter` (POST /api/billing/subscription/change-plan, status 200):
+
+```json
+{
+  "result": "scheduled",
+  "payment": null,
+  "checkout_url": null,
+  "subscription": {
+    "plan_code": "plan_100h",
+    "plan_name": "Scale",
+    "amount_minor": 1800,
+    "pending_plan_code": "plan_20h",
+    "status": "active"
+  }
+}
+```
+
+Capture `23-subscription-downgrade-waiting` (GET /api/billing/subscription, status 200):
+
+```json
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 359280,
+    "holdings_seconds": 359280,
+    "warning": null
+  },
+  "pending_payment": null,
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_100h",
+    "plan_name": "Scale",
+    "currency": "USD",
+    "amount_minor": 1800,
+    "cancel_at_period_end": false,
+    "pending_plan_code": "plan_20h",
+    "can_change_plan": true
+  }
+}
+```
+
+Capture `24-change-back-to-scale` (POST /api/billing/subscription/change-plan, status 200):
+
+```json
+{
+  "result": "cleared",
+  "payment": null,
+  "checkout_url": null,
+  "subscription": {
+    "plan_code": "plan_100h",
+    "plan_name": "Scale",
+    "amount_minor": 8000,
+    "pending_plan_code": null,
+    "status": "active"
+  }
+}
+```
+
+### The renewal applies the downgrade (clock moved by SQL)
+
+Capture `25-change-scale-to-pro` (POST /api/billing/subscription/change-plan, status 200):
+
+```json
+{
+  "result": "scheduled",
+  "payment": null,
+  "checkout_url": null,
+  "subscription": {
+    "plan_code": "plan_100h",
+    "plan_name": "Scale",
+    "amount_minor": 4000,
+    "pending_plan_code": "plan_50h",
+    "status": "active"
+  }
+}
+```
+
+Capture `26-subscription-after-renewal` (GET /api/billing/subscription, status 200):
+
+```json
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 180000,
+    "holdings_seconds": 180000,
+    "warning": null
+  },
+  "pending_payment": null,
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_50h",
+    "plan_name": "Pro",
+    "currency": "USD",
+    "amount_minor": 4000,
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "can_change_plan": true
+  }
+}
+```
+
+Trimmed in the blocks above: the subscription objects keep only `id`, `status`, `plan_code`, `plan_name`, `currency`, `amount_minor`, `cancel_at_period_end`, `pending_plan_code`, `can_change_plan` (the rest of the shape is in "Subscriptions, packs and the lapse"); nothing else was changed.
+
+### What was proven in a browser (not only over HTTP)
+
+With the real app, the real Next.js screens and the scripted provider (`scripts/dev_billing_stack.py`; its dev-only second plan is gone, the real Pro and Scale rows are used): **Billing** as a person on the 20-hour plan: "See what changes" on Pro showed "You pay $21.99 today ... 29 hours 54 minutes extra", **Confirm and pay** went to the provider page, the payment went through, the return page and Billing showed Pro; then Pro to Scale the same way ($39.99); then Scale to the 20-hour plan showed "Nothing is charged now. You keep Scale and your hours until <date>. Then you move to 20 hours a month at $18.00 a month." and **Move to 20 hours a month at my next renewal** scheduled it ("You move to 20 hours a month on <date>") with **Keep Scale** to take it back. The database rows afterwards: plan payment 1800, upgrade 2199, upgrade 3999.
+
+**Not verified live:** a real provider's page for any of these amounts, and a naira upgrade in the browser (the naira preview is over HTTP only: capture 39).
+
 ## Where billing is reachable from the signed-in app (2026-11-17): no new payload
 
 No endpoint, field or error is new. Every entry point reads the answer of `GET /api/billing/subscription` already captured above (`docs/fe-captures/billing-subscriptions/09` never had a plan, `26` active, `50` grace, `61` lapsed) and nothing else:
@@ -2280,3 +2585,6 @@ By ids only, never an email or a provider's words. Capture 68 shows the administ
 | S8b: the screens (plans, return page, billing page, banner, Settings card, gate links) | driven in a browser against a local app with the scripted provider (`scripts/dev_billing_stack.py`) in 13 account states at 1440, 768 and 390 px, and by vitest on the captured bodies; **not** against a real provider's page or return address |
 | S8b: the return page's 5-minute "still confirming" | tests with fake timers and a browser run with the clock fast-forwarded; not waited in real time |
 | S8b: "abandoned" and "mismatch" as states of a payment | **not states of the API** (both are `pending`); the screens use the provider's `status=cancelled` in the return address as a hint for the words only |
+| Three plans in `GET /plans` (USD and NGN), each plan's own checkout, upgrades between all three, downgrades scheduled and taken back, a downgrade applied by the renewal | live over HTTP, provider scripted (`docs/fe-captures/billing-plans/`, captures 04 to 39) |
+| The same in the screens: plans list, per-plan checkout (Scale in dollars, Pro in naira), Starter to Pro and Pro to Scale paid through the scripted provider page, Scale to the 20-hour plan scheduled | driven in a browser against the local app (`scripts/dev_billing_stack.py`), 2026-11-18; rows checked in the database |
+| A naira upgrade or downgrade in the browser; any of this on a real provider's page | **not verified live** (naira preview over HTTP only, capture 39) |

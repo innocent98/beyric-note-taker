@@ -176,7 +176,7 @@ describe("the pricing page against the seed", () => {
 describe("the pricing page says what is decided and nothing else", () => {
   it("has the trial, the monthly plans and the packs, and no plan that does not exist", () => {
     expect(PLANS.map((p) => p.name)).toEqual(["Trial", ...CATALOG.map((s) => s.name)]);
-    expect(PLANS.map((p) => p.name)).toEqual(["Trial", "20 hours a month", "10 extra hours"]);
+    expect(PLANS.map((p) => p.name)).toEqual(["Trial", "20 hours a month", "Pro", "Scale", "10 extra hours"]);
     expect(page).not.toMatch(/team plus|to be announced|no plan is on sale|not yet|start with the trial/i);
     expect(page).not.toMatch(/business|\bfree\b|unlimited|forever|hubspot|jira|asana|most teams pick/i);
     expect(pageHtml.match(/class="ld-plan"|class="ld-plan ld-plan-main"/g)).toHaveLength(PLANS.length);

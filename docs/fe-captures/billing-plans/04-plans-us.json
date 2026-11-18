@@ -1,0 +1,66 @@
+{
+  "note": "The catalog in dollars (`amount_minor` is cents), in `sort_order`: the 20-hour plan (1800), Pro (4000, 50 hours) and Scale (8000, 100 hours), then the 10-hour pack (1000). These are the seeded rows of migrations 0052 and 0054.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/plans",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "plans": [
+        {
+          "code": "plan_20h",
+          "name": "20 hours a month",
+          "monthly_seconds": 72000,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 1800
+          }
+        },
+        {
+          "code": "plan_50h",
+          "name": "Pro",
+          "monthly_seconds": 180000,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 4000
+          }
+        },
+        {
+          "code": "plan_100h",
+          "name": "Scale",
+          "monthly_seconds": 360000,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 8000
+          }
+        }
+      ],
+      "packs": [
+        {
+          "code": "pack_10h",
+          "name": "10 extra hours",
+          "seconds": 36000,
+          "valid_months": 12,
+          "price": {
+            "currency": "USD",
+            "amount_minor": 1000
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "note": "On Pro (`plan_name` \"Pro\"): `amount_minor` 4000 for the next renewal; the hours held grew by the prorated extra.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 179640,
+        "holdings_seconds": 179640,
+        "warning": null
+      },
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_50h",
+        "plan_name": "Pro",
+        "currency": "USD",
+        "amount_minor": 4000,
+        "current_period_start": "2026-11-17T19:55:03.228124Z",
+        "current_period_end": "2026-12-17T19:55:03.228124Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": null
+    }
+  }
+}

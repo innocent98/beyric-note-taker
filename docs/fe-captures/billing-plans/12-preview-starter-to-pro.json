@@ -1,0 +1,27 @@
+{
+  "note": "An upgrade: `amount_minor` is what is charged NOW (the price difference, 4000 - 1800, for the days left), `extra_seconds` the hours added to this period (30 hours for the whole month), `takes_effect` `now`. A read: nothing is written.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription/change-plan/preview?plan_code=plan_50h",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "upgrade",
+      "plan_code": "plan_50h",
+      "currency": "USD",
+      "amount_minor": 2199,
+      "extra_seconds": 107640,
+      "takes_effect": "now"
+    }
+  }
+}

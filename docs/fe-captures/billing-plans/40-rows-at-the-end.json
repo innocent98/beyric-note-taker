@@ -1,0 +1,122 @@
+{
+  "note": "What the database holds after the calls, in the words of the tables.",
+  "content": {
+    "subscriptions": [
+      {
+        "plan": "plan_50h",
+        "status": "active",
+        "currency": "USD",
+        "provider": "flutterwave",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "retry_count": 0
+      },
+      {
+        "plan": "plan_100h",
+        "status": "active",
+        "currency": "USD",
+        "provider": "flutterwave",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "retry_count": 0
+      },
+      {
+        "plan": "plan_50h",
+        "status": "active",
+        "currency": "NGN",
+        "provider": "paystack",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "retry_count": 0
+      }
+    ],
+    "hour_grants": [
+      {
+        "kind": "plan_period",
+        "seconds": 72000,
+        "source_payment_id": 1
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 107640,
+        "source_payment_id": 2
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 179640,
+        "source_payment_id": 3
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 180000,
+        "source_payment_id": 4
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 72000,
+        "source_payment_id": 5
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 287640,
+        "source_payment_id": 6
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 180000,
+        "source_payment_id": 7
+      }
+    ],
+    "payments": [
+      {
+        "kind": "plan",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1800,
+        "currency": "USD"
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 2199,
+        "currency": "USD"
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 3999,
+        "currency": "USD"
+      },
+      {
+        "kind": "renewal",
+        "status": "succeeded",
+        "attempt": 0,
+        "amount_minor": 4000,
+        "currency": "USD"
+      },
+      {
+        "kind": "plan",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 1800,
+        "currency": "USD"
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 6199,
+        "currency": "USD"
+      },
+      {
+        "kind": "plan",
+        "status": "succeeded",
+        "attempt": null,
+        "amount_minor": 5600000,
+        "currency": "NGN"
+      }
+    ]
+  }
+}

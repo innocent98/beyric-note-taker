@@ -70,6 +70,15 @@ describe("an active plan", () => {
     expect(screen.queryByText(/the price changed/)).toBeNull();
   });
 
+  it("does not call a plan the person upgraded to 'a price that changed' (the latest plan payment is the upgrade)", async () => {
+    const upgrade = { ...(history.at(-1) as Json), kind: "upgrade", amount_minor: 2199, reference: "bn-9-up" };
+    show({ ...active, subscription: sub({ plan_name: "Pro", plan_code: "plan_50h", amount_minor: 4000 }) }, { payments: [upgrade, { ...(history.at(-1) as Json) }] });
+    render(<BillingView />);
+    await screen.findByText("Pro");
+    expect(screen.getByText(/The next charge is/)).toBeTruthy();
+    expect(screen.queryByText(/the price changed/)).toBeNull();
+  });
+
   it("asks before cancelling and says what cancelling means, then cancels", async () => {
     mocks.cancel.mockResolvedValue(cap("36-cancel.json"));
     render(<BillingView />);

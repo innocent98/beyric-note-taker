@@ -1,0 +1,54 @@
+{
+  "note": "Confirming the upgrade: a hosted checkout for the prorated difference. The plan changes only when that payment is verified.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/subscription/change-plan",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "plan_code": "plan_50h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "result": "checkout",
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_20h",
+        "plan_name": "20 hours a month",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "current_period_start": "2026-11-17T19:55:03.228124Z",
+        "current_period_end": "2026-12-17T19:55:03.228124Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "payment": {
+        "reference": "bn-2-af5aabe8031bfbf3",
+        "kind": "upgrade",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 2199,
+        "created_at": "2026-11-17T19:55:03.292150Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-2-af5aabe8031bfbf3"
+      },
+      "checkout_url": "https://fake.test/pay/bn-2-af5aabe8031bfbf3"
+    }
+  }
+}
