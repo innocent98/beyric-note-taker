@@ -19,6 +19,7 @@ import {
 import { countryName } from "@/lib/countries";
 import { goTo } from "@/lib/navigate";
 import { BillingCountry } from "./billing-country";
+import { CancelNotice, CancelPayment, cancelNotice } from "./cancel-payment";
 import { billingErrorMessage, billingUnavailable } from "./common";
 import { usePageRestore } from "./use-page-restore";
 
@@ -27,7 +28,7 @@ type Loaded = { plans: Plans; state: BillingState; profile: BillingProfile };
 // "Choose a plan" (billing stage S8b, part A). LEAD-DESIGNED from the existing components: no billing
 // design exists. The page reads GET /plans (what can be bought, priced in the person's route), the
 // state and the billing profile; the person picks a billing country first, reads the plain statement
-// ("Prices in naira, paid through Paystack."), then a plan button starts the hosted checkout
+// ("Prices in naira."), then a plan button starts the hosted checkout
 // (POST /checkout) and the browser goes to the provider's page. Nothing is granted by pressing a button
 // or by coming back: the return page waits for a verified payment (components/billing/return-view.tsx).
 // A person who has not saved a billing country sees the country we suggest (or the one they pick) priced as
@@ -49,6 +50,8 @@ export function PlansView() {
   // The country in front of the person that is not saved yet (BillingCountry reports it): priced as a preview.
   const [candidate, setCandidate] = useState<string | null>(null);
   const [reads, setReads] = useState(0);
+  // What a cancelled checkout says about itself (it was cancelled, or it had been paid after all).
+  const [cancelled, setCancelled] = useState<string | null>(null);
   const load = useCallback(() => {
     setLoadError(null);
     setReads((n) => n + 1);
@@ -80,6 +83,7 @@ export function PlansView() {
       return;
     }
     setStartOver(null);
+    setCancelled(null);
     setBusy(plan.code);
     setError(null);
     try {
@@ -184,9 +188,18 @@ export function PlansView() {
             <Button href={`/billing/return?reference=${encodeURIComponent(waiting.reference)}`} kind="quiet">
               Check this payment
             </Button>
+            <CancelPayment
+              payment={waiting}
+              onDone={(result) => {
+                setCancelled(result ? cancelNotice(result).text : null);
+                load();
+              }}
+            />
           </div>
         </Alert>
       ) : null}
+
+      {cancelled ? <CancelNotice text={cancelled} onDismiss={() => setCancelled(null)} /> : null}
 
       <BillingCountry profile={profile} onChange={() => load()} onCandidate={setCandidate} />
 

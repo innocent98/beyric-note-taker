@@ -10,8 +10,8 @@ import { countryName, filterCountryOptions, regionFromLanguages } from "@/lib/co
 import { billingErrorMessage } from "./common";
 
 // The "Billing country" card (LEAD-DESIGNED, no billing design exists: it reuses the Settings card, the
-// standard select and buttons). The country decides what a person pays in and through whom (Nigeria: naira
-// through Paystack; anywhere else: US dollars through Flutterwave), and the result is always stated in words,
+// standard select and buttons). The country decides what a person pays in (Nigeria: naira; anywhere
+// else: US dollars; the card does not name the payment provider), and the result is always stated in words,
 // read from the server (GET /api/billing/route or the profile's route), never from a table in this file.
 //
 // The country is SUGGESTED, never asked cold and never saved by a guess (docs/fe-integration-guide-billing.md,
@@ -141,8 +141,7 @@ export function BillingCountry({
           Billing country
         </h2>
         <p className="set-sub">
-          This decides what you pay in and through whom: Nigeria pays in naira through Paystack, any other country pays
-          in US dollars through Flutterwave. Use the country you, or your company, are established in.
+          This sets your currency. Use the country your business is based in.
         </p>
       </div>
 

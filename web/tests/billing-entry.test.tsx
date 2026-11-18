@@ -8,7 +8,7 @@ import { BillingNavLink, SidebarHours } from "@/components/billing/sidebar-billi
 import { HoursReasonLink, isHoursReason } from "@/components/billing/hours-reason-link";
 import { forgetBillingEntry } from "@/components/billing/use-billing-state";
 import { ApiError } from "@/lib/api/client";
-import { billingEntryHref, forgetBillingTabState } from "@/lib/billing";
+import { ABSENT_FOR_MS, billingEntryHref, billingKnownAbsent, forgetBillingTabState, rememberBillingAbsent } from "@/lib/billing";
 import { cap, stateWith } from "./billing-fixtures";
 import { read, REPO } from "./helpers";
 
@@ -113,12 +113,57 @@ describe("the sidebar's Billing link and hours card", () => {
     await waitFor(() => expect(mocks.state).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 20));
     expect(container.textContent).toBe("");
-    expect(window.sessionStorage.getItem("beyric.billing.unavailable")).toBe("1");
+    // It is remembered with the time it was learned, so it can expire (see the test below).
+    expect(Number(window.sessionStorage.getItem("beyric.billing.unavailable"))).toBeGreaterThan(Date.now() - 5_000);
     cleanup();
     forgetBillingEntry();
     render(<BillingNavLink current={false} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.state).toHaveBeenCalledTimes(1);
+  });
+
+  it("ask again once the remembered 'not available' is a minute old, so a tab opened before billing was switched on gets the link", async () => {
+    mocks.state.mockRejectedValue(NOT_FOUND());
+    render(<BillingNavLink current={false} />);
+    await waitFor(() => expect(mocks.state).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    cleanup();
+    forgetBillingEntry();
+    // 30 seconds later: still believed, no new request.
+    window.sessionStorage.setItem("beyric.billing.unavailable", String(Date.now() - 30_000));
+    render(<BillingNavLink current={false} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.state).toHaveBeenCalledTimes(1);
+    cleanup();
+    forgetBillingEntry();
+    // 61 seconds later: billing has been switched on meanwhile, and the link appears without a sign-out.
+    window.sessionStorage.setItem("beyric.billing.unavailable", String(Date.now() - 61_000));
+    mocks.state.mockResolvedValue(ACTIVE());
+    render(<BillingNavLink current={false} />);
+    expect((await screen.findByRole("link", { name: "Billing" })).getAttribute("href")).toBe("/billing");
+    expect(mocks.state).toHaveBeenCalledTimes(2);
+  });
+
+  it("treat the old flag '1' that an open tab may hold as expired, and tolerate storage that throws", () => {
+    window.sessionStorage.setItem("beyric.billing.unavailable", "1");
+    expect(billingKnownAbsent()).toBe(false);
+    rememberBillingAbsent(1_000_000);
+    expect(billingKnownAbsent(1_000_000 + ABSENT_FOR_MS - 1)).toBe(true);
+    expect(billingKnownAbsent(1_000_000 + ABSENT_FOR_MS)).toBe(false);
+    // a time in the future (a clock set back) is not believed past the minute
+    expect(billingKnownAbsent(1_000_000 - 1)).toBe(false);
+    forgetBillingTabState();
+    expect(window.sessionStorage.getItem("beyric.billing.unavailable")).toBeNull();
+    const blocked = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(billingKnownAbsent()).toBe(false);
+    blocked.mockRestore();
+    const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("full");
+    });
+    expect(() => rememberBillingAbsent()).not.toThrow();
+    full.mockRestore();
   });
 
   it("draw nothing for a failure that is not a 404, and ask again on the next page", async () => {

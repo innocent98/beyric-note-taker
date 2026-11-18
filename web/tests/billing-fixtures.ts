@@ -39,3 +39,9 @@ export const PROFILE_NONE = {
 export function capInvoices<T>(file: string): T {
   return JSON.parse(readFileSync(join(REPO, "docs/fe-captures/billing-invoices", file), "utf8")).response.body as T;
 }
+
+// A response body captured by scripts/capture_billing_cancel_checkout.py (docs/fe-captures/billing-cancel-checkout/<file>;
+// the payment provider in those captures is a scripted double).
+export function capCancel<T>(file: string): T {
+  return JSON.parse(readFileSync(join(REPO, "docs/fe-captures/billing-cancel-checkout", file), "utf8")).response.body as T;
+}

@@ -828,6 +828,7 @@ def test_no_billing_route_takes_a_persons_id(web):
         f"{API}/invoices/{{number}}/pdf",
         f"{API}/payments",
         f"{API}/payments/{{reference}}",
+        f"{API}/payments/{{reference}}/cancel",
         f"{API}/plans",
         f"{API}/profile",
         f"{API}/profile/country",

@@ -90,6 +90,7 @@ import type {
   BillingPayment,
   BillingProfile,
   BillingState,
+  CancelPaymentResult,
   ChangePreview,
   ChangeResult,
   Checkout,
@@ -665,6 +666,10 @@ export function createApi(options: ApiOptions = {}) {
       payments: async () => (await request<{ payments: BillingPayment[] }>("GET", "/api/billing/payments")).payments,
       payment: (reference: string) =>
         request<BillingPayment>("GET", `/api/billing/payments/${encodeURIComponent(reference)}`),
+      // Put away a plan or pack checkout that was started and not finished. The server asks the provider first: a
+      // page that was paid is settled and answered `paid`, never cancelled.
+      cancelPayment: (reference: string) =>
+        request<CancelPaymentResult>("POST", `/api/billing/payments/${encodeURIComponent(reference)}/cancel`, { write: true }),
       // Invoices (stage S9): the list, and one as a PDF file built when asked and never stored.
       invoices: async () => (await request<{ invoices: BillingInvoice[] }>("GET", "/api/billing/invoices")).invoices,
       downloadInvoice: (number: string) => download(`/api/billing/invoices/${encodeURIComponent(number)}/pdf`, {}),

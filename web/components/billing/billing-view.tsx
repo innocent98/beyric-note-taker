@@ -11,10 +11,12 @@ import {
   type BillingPayment,
   type BillingProfile,
   type BillingState,
+  type CancelPaymentResult,
   type Plans,
   type Subscription,
 } from "@/lib/billing";
 import { BillingCountry } from "./billing-country";
+import { CancelNotice, CancelPayment, cancelNotice } from "./cancel-payment";
 import { ChangePlan } from "./change-plan";
 import { billingErrorMessage, billingUnavailable } from "./common";
 import { Headline } from "./headline";
@@ -35,6 +37,8 @@ export function BillingView() {
   const [data, setData] = useState<Loaded | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // What a cancelled checkout says about itself (it was cancelled, or it had been paid after all).
+  const [cancelled, setCancelled] = useState<string | null>(null);
 
   // `reads` counts the times the page asked again (after a change, on focus, "Try again"): the effect below
   // reads when it changes, and the data on screen stays until the new answer arrives.
@@ -125,8 +129,15 @@ export function BillingView() {
         </Alert>
       ) : null}
       {state.pending_payment && state.pending_payment.kind !== "renewal" ? (
-        <WaitingPayment payment={state.pending_payment} />
+        <WaitingPayment
+          payment={state.pending_payment}
+          onCancelled={(result) => {
+            setCancelled(result ? cancelNotice(result).text : null);
+            load();
+          }}
+        />
       ) : null}
+      {cancelled ? <CancelNotice text={cancelled} onDismiss={() => setCancelled(null)} /> : null}
       <PlanCard state={state} plans={plans} payments={payments} onChanged={() => load()} />
       <HoursCard state={state} />
       {live && sub?.can_change_plan ? <ChangePlan sub={sub} plans={plans} onChanged={() => load()} /> : null}
@@ -140,7 +151,13 @@ export function BillingView() {
   );
 }
 
-function WaitingPayment({ payment }: { payment: BillingPayment }) {
+function WaitingPayment({
+  payment,
+  onCancelled,
+}: {
+  payment: BillingPayment;
+  onCancelled: (result: CancelPaymentResult["result"] | null) => void;
+}) {
   return (
     <Alert kind="notice">
       <p className="alert-text">
@@ -156,6 +173,7 @@ function WaitingPayment({ payment }: { payment: BillingPayment }) {
         <Button href={`/billing/return?reference=${encodeURIComponent(payment.reference)}`} kind="quiet">
           Check this payment
         </Button>
+        <CancelPayment payment={payment} onDone={onCancelled} />
       </div>
     </Alert>
   );

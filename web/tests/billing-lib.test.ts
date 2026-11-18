@@ -22,11 +22,11 @@ import { join } from "node:path";
 
 describe("the words", () => {
   it("states the route before payment from the route it is given", () => {
-    expect(routeStatement({ currency: "NGN", provider: "paystack" })).toBe("Prices in naira, paid through Paystack.");
+    expect(routeStatement({ currency: "NGN", provider: "paystack" })).toBe("Prices in naira.");
     expect(routeStatement({ currency: "USD", provider: "flutterwave" })).toBe(
-      "Prices in US dollars, paid through Flutterwave.",
+      "Prices in US dollars.",
     );
-    expect(routeStatement({ currency: "GHS", provider: "other" })).toBe("Prices in GHS, paid through Other.");
+    expect(routeStatement({ currency: "GHS", provider: "other" })).toBe("Prices in GHS.");
   });
 
   it("writes minor units as money and never as a decimal field", () => {

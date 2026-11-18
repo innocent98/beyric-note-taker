@@ -36,7 +36,14 @@ from app.billing.flutterwave import (
 from app.billing.payments import new_payment
 from app.billing.provider import PROVIDER_FACTORIES, provider_named
 from app.billing.routing import provider_for
-from app.billing.types import BadEvent, BillingError, IgnoredEvent, ProviderError, WebhookRejected
+from app.billing.types import (
+    BadEvent,
+    BillingError,
+    IgnoredEvent,
+    NoRecord,
+    ProviderError,
+    WebhookRejected,
+)
 from app.db import get_session
 from app.main import create_app
 from app.models import BillingEvent, Payment
@@ -761,6 +768,39 @@ def test_a_charge_that_times_out_and_cannot_be_found_is_an_unknown_outcome():
         wire.provider().charge_saved_method(
             "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
         )
+
+
+NO_TRANSACTION = '{"status":"error","message":"No transaction was found for this id","data":null}'
+
+
+@pytest.mark.parametrize("code", [400, 404, 422])
+def test_a_lookup_that_flutterwave_answers_with_no_transaction_is_no_record(code):
+    """Flutterwave makes a transaction only when the payer tries to pay, so a hosted page nobody
+    opened has nothing under our reference. That is `NoRecord` (a `ProviderError`, so every other
+    caller is unchanged), not a failure to ask. (The vendor's exact answer for it is read from the
+    adapter's refusal rule, not captured live: see the SOP.)"""
+    wire = Wire(reply(NO_TRANSACTION, code))
+    with pytest.raises(NoRecord) as raised:
+        wire.provider().fetch_by_reference(REF)
+    assert isinstance(raised.value, ProviderError)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        reply('{"status":"error","message":"bad key"}', 401),
+        reply('{"status":"error","message":"forbidden"}', 403),
+        reply("{}", 429),
+        reply("x", 500),
+        reply("x", 503),
+        httpx.ReadTimeout("slow"),
+    ],
+)
+def test_a_lookup_that_could_not_be_asked_is_not_no_record(answer):
+    wire = Wire(answer)
+    with pytest.raises(ProviderError) as raised:
+        wire.provider().fetch_by_reference(REF)
+    assert not isinstance(raised.value, NoRecord)
 
 
 # ---------------------------------------------------------------- refund

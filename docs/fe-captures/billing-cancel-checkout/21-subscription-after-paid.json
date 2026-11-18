@@ -1,0 +1,46 @@
+{
+  "note": "The plan is active with its 20 hours; no waiting payment.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 72000,
+        "holdings_seconds": 72000,
+        "warning": null
+      },
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_20h",
+        "plan_name": "20 hours a month",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "current_period_start": "2026-11-18T16:55:52.059444Z",
+        "current_period_end": "2026-12-18T16:55:52.059444Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": null
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "note": "Only a plan or a pack checkout can be cancelled: 409 `cannot_cancel`.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/payments/bn-5-b57fa20eff642dd8/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "cannot_cancel",
+        "message": "This payment cannot be cancelled here."
+      }
+    }
+  }
+}

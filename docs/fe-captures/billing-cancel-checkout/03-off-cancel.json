@@ -1,0 +1,26 @@
+{
+  "note": "`BILLING_ENABLED` false: 404 `not_found`, and nothing is asked of any provider.",
+  "client": "ada flag-off",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/payments/any-reference/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

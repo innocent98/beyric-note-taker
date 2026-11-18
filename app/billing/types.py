@@ -31,6 +31,13 @@ class ProviderError(BillingError):
     have moved money. (A money call that got no answer is `OutcomeUnknown`, never this.)"""
 
 
+class NoRecord(ProviderError):
+    """The provider understood a lookup by our reference and says it has nothing under it (a hosted
+    page nobody tried to pay: some providers make a transaction only when the payer attempts one).
+    A `ProviderError` still, so every caller that treats "no answer" as no answer is unchanged; only
+    a caller that may read it as "not paid" (cancelling an unfinished checkout) tells it apart."""
+
+
 class OutcomeUnknown(BillingError):
     """A call that moves money (a charge, a refund) got no answer: it may or may not have happened.
     Deliberately NOT a `ProviderError`: a handler that retries on `ProviderError` must not catch

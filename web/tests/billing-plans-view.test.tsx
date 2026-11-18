@@ -46,7 +46,7 @@ describe("a person with a country and no plan", () => {
     mocks.checkout.mockResolvedValue(cap("17-checkout-plan.json"));
     render(<PlansView />);
     expect(await screen.findByText("20 hours a month")).toBeTruthy();
-    expect(screen.getAllByText("Prices in US dollars, paid through Flutterwave.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Prices in US dollars.").length).toBeGreaterThan(0);
     expect(screen.getByText("$18.00")).toBeTruthy();
     expect(screen.getByText("$34.00")).toBeTruthy();
     await userEvent.click(screen.getAllByRole("button", { name: "Choose this plan" })[0]);
@@ -83,7 +83,7 @@ describe("a person billed from Nigeria", () => {
     mocks.profile.mockResolvedValue({ ...PROFILE_US, billing_country: "NG", route: { currency: "NGN", provider: "paystack" } });
     render(<PlansView />);
     expect(await screen.findByText("20 hours a month")).toBeTruthy();
-    expect(screen.getAllByText(/Prices in naira, paid through Paystack\./).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Prices in naira\./).length).toBeGreaterThan(0);
     expect(screen.getByText(/25,000\.00/)).toBeTruthy();
     expect(screen.getAllByText(/not on sale in naira yet/).length).toBe(1);
     const buttons = screen.getAllByRole("button", { name: "Choose this plan" }) as HTMLButtonElement[];
@@ -118,7 +118,7 @@ describe("a person who has not chosen a billing country", () => {
     render(<PlansView />);
     const select = await screen.findByRole("combobox", { name: "Billing country" });
     await userEvent.selectOptions(select, "NG");
-    expect(await screen.findByText("Prices in naira, paid through Paystack.")).toBeTruthy();
+    expect(await screen.findByText("Prices in naira.")).toBeTruthy();
     expect(mocks.routeFor).toHaveBeenCalledWith("NG");
     await userEvent.click(screen.getByRole("button", { name: "Save country" }));
     await waitFor(() => expect(mocks.setCountry).toHaveBeenCalledWith("NG"));
@@ -146,7 +146,7 @@ describe("a person whose time zone points to a country", () => {
   it("shows the suggested country with what it pays with as one line to confirm, and saves nothing by itself", async () => {
     render(<PlansView />);
     expect(await screen.findByRole("button", { name: "Use Nigeria" })).toBeTruthy();
-    expect(screen.getAllByText("Prices in naira, paid through Paystack.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Prices in naira.").length).toBeGreaterThan(0);
     expect(screen.getByText(/We picked this from your time zone/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Not Nigeria? Change" })).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Billing country" })).toBeNull();
@@ -193,7 +193,7 @@ describe("a person whose time zone points to a country", () => {
     const select = (await screen.findByRole("combobox", { name: "Billing country" })) as HTMLSelectElement;
     expect(select.value).toBe("NG");
     await userEvent.selectOptions(select, "GH");
-    expect(await screen.findByText("Prices in US dollars, paid through Flutterwave.")).toBeTruthy();
+    expect(await screen.findByText("Prices in US dollars.")).toBeTruthy();
     expect(mocks.setCountry).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Save country" }));
     await waitFor(() => expect(mocks.setCountry).toHaveBeenCalledWith("GH"));
@@ -243,17 +243,35 @@ describe("a person with nothing to suggest", () => {
 });
 
 describe("what a saved country means", () => {
-  it("says a country can be changed freely until the first payment, and that it pays in dollars through Flutterwave", async () => {
+  it("says in the card's note that the country sets the currency, keeps the change rule on the row, and does not name the provider", async () => {
     render(<PlansView />);
+    const note = await screen.findByText(/This sets your currency\./);
+    expect(note.textContent).toBe("This sets your currency. Use the country your business is based in.");
+    // No provider names and no change rule inside the note (the statement under the plans names the currency only).
+    expect(note.textContent).not.toMatch(/Paystack|Flutterwave|established|change/);
     expect(await screen.findByText("Until your first payment you can change this country as often as you like.")).toBeTruthy();
-    expect(screen.getAllByText("Prices in US dollars, paid through Flutterwave.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Prices in US dollars.").length).toBeGreaterThan(0);
     expect((screen.getByRole("button", { name: "Change country" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not name a payment provider anywhere on the plans screen, for either currency", async () => {
+    render(<PlansView />);
+    await screen.findByText("20 hours a month");
+    expect(document.body.textContent).not.toMatch(/Paystack|Flutterwave/);
+    expect(screen.getAllByText(/You pay on the next page, on the provider's own site\./).length).toBeGreaterThan(0);
+    cleanup();
+    mocks.plans.mockResolvedValue(cap("12-plans-us.json"));
+    mocks.profile.mockResolvedValue({ ...PROFILE_US, billing_country: "NG", route: { currency: "NGN", provider: "paystack" } });
+    render(<PlansView />);
+    await screen.findByText("Prices in naira.");
+    expect(document.body.textContent).not.toMatch(/Paystack|Flutterwave/);
   });
 
   it("says the 30-day rule applies once they have paid", async () => {
     mocks.profile.mockResolvedValue({ ...PROFILE_US, country_locked: true });
     render(<PlansView />);
     expect(await screen.findByText("Since your first payment it can be changed once every 30 days.")).toBeTruthy();
+    expect(screen.queryByText("Until your first payment you can change this country as often as you like.")).toBeNull();
   });
 
   it("says the date and why when a change is not allowed yet", async () => {
@@ -350,7 +368,7 @@ describe("the plan button", () => {
     mocks.setCountry.mockResolvedValue({ result: "applied", profile: PROFILE_US });
     render(<PlansView />);
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Billing country" }), "US");
-    await screen.findByText("Prices in US dollars, paid through Flutterwave.");
+    await screen.findByText("Prices in US dollars.");
     mocks.plans.mockRejectedValue(new ApiError(502, "gateway_error", "slow"));
     await userEvent.click(screen.getByRole("button", { name: "Save country" }));
     expect(await screen.findByText(/What you see may be out of date/)).toBeTruthy();

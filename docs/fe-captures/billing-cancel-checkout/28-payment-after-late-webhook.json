@@ -1,0 +1,30 @@
+{
+  "note": "`succeeded`: nothing was lost by cancelling.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments/bn-4-9788721010342c3e",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "reference": "bn-4-9788721010342c3e",
+      "kind": "pack",
+      "status": "succeeded",
+      "currency": "USD",
+      "amount_minor": 1000,
+      "created_at": "2026-11-18T16:55:52.214795Z",
+      "paid_at": "2026-11-18T16:55:52.238053Z",
+      "pay_url": null,
+      "invoice_number": "BN-T-2026-000002"
+    }
+  }
+}
