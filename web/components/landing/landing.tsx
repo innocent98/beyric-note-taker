@@ -10,7 +10,6 @@ import {
   PLATFORMS,
   SECURITY,
   SECURITY_TITLE,
-  SIGNUP_NOTE,
   TEAMS,
   TOOLS,
   TOOLS_LABEL,
@@ -34,17 +33,6 @@ function Glyph({ d, size, stroke = 1.9 }: { d: string; size: number; stroke?: nu
 
 const CHECK = "m5 12 5 5 9-10";
 
-// One line telling a visitor that sign-up is by invitation, with the way in for everyone else.
-export function SignupNote({ className = "" }: { className?: string }) {
-  return (
-    <p className={`ld-signup-note ${className}`.trim()}>
-      {SIGNUP_NOTE.before}
-      <AppLink href="/signup">{SIGNUP_NOTE.link}</AppLink>
-      {SIGNUP_NOTE.after}
-    </p>
-  );
-}
-
 function Pill({ tone, children }: { tone: "ok" | "warn" | "danger" | "muted" | "teal"; children: ReactNode }) {
   return <span className={`ld-status ld-status-${tone}`}>{children}</span>;
 }
@@ -67,7 +55,6 @@ function Hero() {
             <Icon name="arrow" size={16} stroke={2.2} />
           </Button>
         </div>
-        <SignupNote />
         <div className="ld-platforms">
           <span>Joins calls on</span>
           <span className="ld-chips">
@@ -463,7 +450,6 @@ function Closing() {
         <div className="ld-closing-copy">
           <h2 className="ld-h2 ld-h2-md">{CLOSING.title}</h2>
           <p>{CLOSING.body}</p>
-          <SignupNote className="ld-signup-note-on-teal" />
         </div>
         <div className="ld-closing-actions">
           <AppLink className="btn btn-xl ld-create" href="/signup">

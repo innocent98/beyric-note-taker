@@ -7,7 +7,7 @@
 //    "unlimited", no brief "to every attendee", no "Hiring teams" card;
 //  * no claim of encryption of recordings or notes at rest, none of end-to-end encryption, and training is
 //    worded as the Privacy Policy words it (what we do, and what our providers say);
-//  * no "free" wording, and sign-up is invite-only for now, said plainly (SIGNUP_NOTE below).
+//  * no "free" wording.
 
 export const PLATFORMS = ["Google Meet", "Microsoft Teams", "Zoom"] as const;
 
@@ -15,14 +15,6 @@ export const PLATFORMS = ["Google Meet", "Microsoft Teams", "Zoom"] as const;
 // "Joins on its own" card say so); Slack and Linear are one-way (task updates out, nothing back).
 export const TOOLS_LABEL = "Works with";
 export const TOOLS = ["Google Calendar", "Outlook calendar", "Slack", "Linear"] as const;
-
-// Sign-up is by invitation for now. One place, so the day sign-up opens it is one edit (the
-// sign-up page itself already shows the right screen: the form, or the waiting list).
-export const SIGNUP_NOTE = {
-  before: "Sign-up is invite-only for now. If you have an invitation, create your account; if not, ",
-  link: "join the waiting list",
-  after: ".",
-} as const;
 
 export const HERO = {
   pill: "The note taker that follows through",

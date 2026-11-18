@@ -27,12 +27,11 @@ describe("the landing security card", () => {
 });
 
 describe("llms.txt and the structured data", () => {
-  it("llms.txt describes a limited pilot, not 'no public sign-up', and does not call the calendar 'coming soon'", async () => {
+  it("llms.txt says sign-up is open, not 'no public sign-up', and does not call the calendar 'coming soon'", async () => {
     const text = await llms().text();
     expect(text).not.toMatch(/no public sign-up|private pilot|coming soon|free/i);
-    expect(text).toContain("sign-up is invite-only for now");
-    expect(text).toContain("a pilot with a limited number of accounts");
-    expect(text).toContain("waiting list");
+    expect(text).toContain("Sign-up is open at /signup");
+    expect(text).not.toMatch(/invite-only|waiting list|limited number of accounts/i);
     expect(text).toContain("Connect Google Calendar so the note taker joins the meetings your rules choose by itself.");
     expect(text).not.toMatch(OVERCLAIM);
   });

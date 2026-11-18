@@ -1,5 +1,5 @@
 import { AppLink } from "@/components/ui";
-import { FaqList, SignupNote } from "@/components/landing/landing";
+import { FaqList } from "@/components/landing/landing";
 import { BILLING_PLANS_HREF } from "@/lib/billing";
 import {
   CLOSING_TITLE,
@@ -96,7 +96,6 @@ export function Pricing({ signedIn = false, billingOn = false }: { signedIn?: bo
         <span className="ld-eyebrow">{HERO.eyebrow}</span>
         <h1>{HERO.title}</h1>
         <p>{HERO.body}</p>
-        <SignupNote />
       </section>
       <section className="ld-plans" aria-label="Plans">
         {PLANS.map((plan) => (
@@ -113,7 +112,6 @@ export function Pricing({ signedIn = false, billingOn = false }: { signedIn?: bo
         <div className="ld-closing-in">
           <div className="ld-closing-copy">
             <h2 className="ld-h2">{CLOSING_TITLE}</h2>
-            <SignupNote className="ld-signup-note-on-teal" />
           </div>
           <AppLink className="btn btn-xl ld-create" href={entry.href}>
             {entry.closing}
