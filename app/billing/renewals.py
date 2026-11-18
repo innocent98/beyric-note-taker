@@ -809,6 +809,11 @@ def pay_link(
     if sub is None or states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
         session.rollback()
         raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
+    try:  # asked again under THIS lock: a refund may have started while the first was released
+        subscriptions._refuse_while_refunding(session, sub)
+    except subscriptions.Refused:
+        session.rollback()
+        raise
 
     sold = subscriptions.sold_route(sub)
     route = sold
