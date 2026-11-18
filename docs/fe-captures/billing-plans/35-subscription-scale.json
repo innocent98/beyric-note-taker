@@ -1,0 +1,46 @@
+{
+  "note": "On Scale after one upgrade: 100 hours less what the proration gave, in total `hours.holdings_seconds`.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 359640,
+        "holdings_seconds": 359640,
+        "warning": null
+      },
+      "subscription": {
+        "id": 2,
+        "status": "active",
+        "plan_code": "plan_100h",
+        "plan_name": "Scale",
+        "currency": "USD",
+        "amount_minor": 8000,
+        "current_period_start": "2026-11-17T19:55:03.583032Z",
+        "current_period_end": "2026-12-17T19:55:03.583032Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": null
+    }
+  }
+}

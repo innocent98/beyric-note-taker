@@ -1,0 +1,28 @@
+{
+  "note": "Verified: the plan becomes Scale.",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-3",
+      "kind": "charge_succeeded",
+      "reference": "bn-3-845f0c7916d53776",
+      "tx_id": "fake-tx-3",
+      "amount_minor": 3999,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

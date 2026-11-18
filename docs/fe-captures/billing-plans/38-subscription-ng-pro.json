@@ -1,0 +1,46 @@
+{
+  "note": "Pro in naira: `currency` NGN, `amount_minor` 5,600,000.",
+  "client": "ngozi billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 180000,
+        "holdings_seconds": 180000,
+        "warning": null
+      },
+      "subscription": {
+        "id": 3,
+        "status": "active",
+        "plan_code": "plan_50h",
+        "plan_name": "Pro",
+        "currency": "NGN",
+        "amount_minor": 5600000,
+        "current_period_start": "2026-11-17T19:55:03.660226Z",
+        "current_period_end": "2026-12-17T19:55:03.660226Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": null
+    }
+  }
+}

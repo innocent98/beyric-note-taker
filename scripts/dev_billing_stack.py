@@ -67,7 +67,6 @@ from app.models import (  # noqa: E402
     HourGrant,
     Meeting,
     Payment,
-    Plan,
     PlanPrice,
     Subscription,
     Template,
@@ -84,7 +83,7 @@ API = f"http://127.0.0.1:{API_PORT}"
 PASSWORD = "-".join(["dev", "screens", "password"])  # a placeholder, scratch database only
 PEOPLE = [
     "new", "us", "ng", "active", "cancel", "downgrade", "pastdue", "threeds", "lapsed", "canceled",
-    "low", "out", "pending", "ngactive",
+    "low", "out", "pending", "ngactive", "pro", "scale", "ngpro",
 ]  # fmt: skip
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -213,7 +212,10 @@ SCENARIOS = {
     "ng": "billing country NG chosen, no plan (naira; /dev/ngn-prices?on=0 takes the prices away)",
     "active": "an active plan, 20 hours",
     "cancel": "an active plan with an extra-hours pack",
-    "downgrade": "a 40-hour plan with a downgrade to 20 hours waiting for the renewal",
+    "downgrade": "Pro (50 hours) with a downgrade to the 20-hour plan waiting for the renewal",
+    "pro": "an active Pro plan (50 hours a month)",
+    "scale": "an active Scale plan (100 hours a month)",
+    "ngpro": "billed from Nigeria: an active Pro plan in naira",
     "pastdue": "the renewal failed an hour ago: the 3 days of grace",
     "threeds": "the renewal's charge waits for the bank (3-D Secure): the grace",
     "lapsed": "the grace ended unpaid",
@@ -260,8 +262,18 @@ def scenario(name: str):
             "canceled",
             "low",
             "out",
+            "pro",
+            "scale",
         ):
-            buy(session, user, "capture_40h" if name == "downgrade" else "plan_20h")
+            buy(
+                session,
+                user,
+                {"downgrade": "plan_50h", "pro": "plan_50h", "scale": "plan_100h"}.get(
+                    name, "plan_20h"
+                ),
+            )
+        if name == "ngpro":
+            buy(session, user, "plan_50h", "NG")
         if name == "ngactive":
             buy(session, user, "plan_20h", "NG")
             pack(session, user)
@@ -289,7 +301,7 @@ def scenario(name: str):
 @router.get("/ngn-prices")
 def ngn_prices(on: int = 1):
     """The naira prices are seeded; this switches them off (a person billed from Nigeria then sees
-    every plan as not on sale) or back on. The dev-only second plan never had one."""
+    every plan as not on sale) or back on."""
     with SessionLocal() as session:
         value = None if on else datetime.now(UTC)
         session.execute(
@@ -406,12 +418,7 @@ def main() -> None:
                     email_verified_at=datetime.now(UTC),
                 )
             )
-        session.add(
-            Plan(code="capture_40h", name="40 hours a month", monthly_seconds=144000, sort_order=2)
-        )
-        session.flush()
-        session.add(PlanPrice(plan_code="capture_40h", currency="USD", amount_minor=3400))
-        session.commit()
+        session.commit()  # the plans are the real seeded rows (0052 and 0054): no dev-only plan
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=API_PORT, log_level="warning")
     )

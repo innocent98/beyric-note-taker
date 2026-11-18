@@ -1,0 +1,27 @@
+{
+  "note": "Pro to Scale: the difference is 8000 - 4000, the extra hours 50 for the days left.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription/change-plan/preview?plan_code=plan_100h",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "upgrade",
+      "plan_code": "plan_100h",
+      "currency": "USD",
+      "amount_minor": 3999,
+      "extra_seconds": 179640,
+      "takes_effect": "now"
+    }
+  }
+}

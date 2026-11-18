@@ -1,0 +1,36 @@
+{
+  "note": "Pro in naira: `amount_minor` 5,600,000 kobo, `currency` NGN.",
+  "client": "ngozi billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_50h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-7-9249a27856bb54a7",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "NGN",
+        "amount_minor": 5600000,
+        "created_at": "2026-11-17T19:55:03.645741Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-7-9249a27856bb54a7"
+      },
+      "checkout_url": "https://fake.test/pay/bn-7-9249a27856bb54a7"
+    }
+  }
+}

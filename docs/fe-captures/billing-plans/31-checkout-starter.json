@@ -1,0 +1,36 @@
+{
+  "note": "Starter.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-5-0725d2ebb1ee3eeb",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "created_at": "2026-11-17T19:55:03.568737Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-5-0725d2ebb1ee3eeb"
+      },
+      "checkout_url": "https://fake.test/pay/bn-5-0725d2ebb1ee3eeb"
+    }
+  }
+}

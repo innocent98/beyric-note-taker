@@ -1,0 +1,27 @@
+{
+  "note": "A smaller plan: `takes_effect` is `next_renewal`, `amount_minor` is what the renewal will charge (1800), no extra hours.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription/change-plan/preview?plan_code=plan_20h",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "downgrade",
+      "plan_code": "plan_20h",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "extra_seconds": null,
+      "takes_effect": "next_renewal"
+    }
+  }
+}

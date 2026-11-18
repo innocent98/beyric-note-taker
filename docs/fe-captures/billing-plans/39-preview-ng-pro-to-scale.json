@@ -1,0 +1,27 @@
+{
+  "note": "An upgrade in naira: the difference 11,200,000 - 5,600,000 kobo for the days left.",
+  "client": "ngozi billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription/change-plan/preview?plan_code=plan_100h",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "upgrade",
+      "plan_code": "plan_100h",
+      "currency": "NGN",
+      "amount_minor": 5599997,
+      "extra_seconds": 179640,
+      "takes_effect": "now"
+    }
+  }
+}
