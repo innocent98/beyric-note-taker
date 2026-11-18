@@ -192,9 +192,12 @@ def test_a_longer_spelling_of_the_same_name_is_the_same_person():
 
 
 def test_the_moved_line_takes_the_spelling_a_tag_already_uses_for_that_person():
-    # Meet shows "Bo Example"; tag 2 is named "Bo": the line joins that person's turns as "Bo"
+    # Meet shows "Bo Example"; tag 2 is spelt "BO example": the line joins that person's turns
+    tags = TAGS | {"2": {"name": "BO example", "how": "given", "note": ""}}
+    assert moves([seg("1", 70, 120)], tags=tags) == {0: "BO example"}
+    # a tag that is only "Bo" is not the same name: the line stays rather than borrow it
     tags = TAGS | {"2": {"name": "Bo", "how": "given", "note": ""}}
-    assert moves([seg("1", 70, 120)], tags=tags) == {0: "Bo"}
+    assert moves([seg("1", 70, 120)], tags=tags) == {}
 
 
 def test_an_unnamed_tag_with_one_person_lit_is_credited_to_them():
@@ -271,27 +274,55 @@ def test_whole_words_are_matched_without_regard_to_case_accents_or_punctuation()
     assert speaker_correction.same_person("ada obi", "Obi, Ada")
 
 
-def test_a_one_word_name_and_a_two_word_name_are_one_person_when_the_word_is_shared():
+def test_a_one_word_name_and_a_two_word_name_are_one_person_only_for_leaving_a_line_alone():
+    """`same_person` decides "this segment already carries that person" (a false yes leaves a
+    line where it is); it never picks a destination."""
     assert speaker_correction.same_person("Ada", "Ada Obi")
     assert speaker_correction.same_person("Ada Obi", "Obi")
     assert not speaker_correction.same_person("Ada Obi", "Ada Eze")
     assert not speaker_correction.same_person("Ada", "Adaeze")
     assert not speaker_correction.same_person("", "Ada")
-    # Meet's "Ada Obi" is lit over a segment under "Bo": it goes to the tag called "Ada"
-    got, outcome = scene("Ada Obi", "Bo Example", ["Ada"])
-    assert got.moves == {0: "Ada"} and outcome == "move"
-    # and a segment under "Ada" with "Ada Obi" lit agrees
+    # a segment under "Ada" with "Ada Obi" lit agrees: it stays
     got, outcome = scene("Ada Obi", "Ada")
     assert got.moves == {} and outcome == "agrees"
 
 
-def test_two_names_that_are_equally_the_lit_person_move_nothing():
-    # Meet's "Ada Obi" fits both the tag "Ada" and the tag "Obi": which is unknown
-    got, outcome = scene("Ada Obi", "Bo Example", ["Ada", "Obi"])
+@pytest.mark.parametrize(
+    ("lit", "known"),
+    [
+        ("Obi", ["Ada Obi", "Tunde Bello"]),  # the review's case: a surname that is also a name
+        ("Ada", ["Ada Obi", "Tunde Bello"]),  # a first name shared with a different person
+        ("Ade", ["Zoë Obi-Ade", "Tunde Bello"]),  # a word inside a hyphenated name
+        ("Ada Obi", ["Ada", "Obi"]),  # the other way round: the lit name is the longer one
+        ("Ada Obi", ["Ada", "Tunde Bello"]),
+        ("Femi Ola", ["Ola Femi Bello"]),
+    ],
+)
+def test_the_destination_is_an_exact_name_never_a_name_that_merely_contains_the_lit_one(lit, known):
+    """Meet lights `lit` alone over a segment under Tunde's tag. No tag is called that, only a
+    name that shares a word: the line stays under Tunde, it is not handed to that other person."""
+    got, outcome = scene(lit, "Tunde Bello", known)
     assert got.moves == {} and outcome == "unmatched"
-    # an exact spelling wins over the near ones
+
+
+def test_an_exact_name_is_the_destination_even_beside_names_that_share_a_word():
+    got, outcome = scene("Obi", "Tunde Bello", ["Ada Obi", "Obi"])
+    assert got.moves == {0: "Obi"} and outcome == "move"
     got, outcome = scene("Ada Obi", "Bo Example", ["Ada", "Obi", "Ada Obi"])
     assert got.moves == {0: "Ada Obi"}
+
+
+def test_the_clock_check_gathers_a_persons_light_by_the_exact_name_too():
+    # a segment named "Obi" must not be fitted against Ada Obi's light
+    items = [seg("1", 0, 60)]
+    tags = {"1": {"name": "Obi", "how": "given", "note": ""}}
+    only_ada_obi = {"Ada Obi": [(0.0, 60.0)]}
+    fit = speaker_correction.clock_check(items, tags, only_ada_obi)
+    assert (
+        fit.basis == "all"
+    )  # no named segment found its person: the fallback, not Ada Obi's light
+    tags = {"1": {"name": "Ada Obi", "how": "given", "note": ""}}
+    assert speaker_correction.clock_check(items, tags, only_ada_obi).basis == "named"
 
 
 # ---- when nothing may move at all ----
@@ -326,8 +357,8 @@ def test_a_clock_that_fits_better_a_few_seconds_away_moves_nothing():
     assert set(speaker_correction.correct(items, TAGS, right, OWN).moves) == set(range(5))
 
 
-@pytest.mark.parametrize("offset", [1.0, 2.0, 3.0, -1.0, -2.0, -3.0, 10.0])
-def test_a_steady_offset_of_a_second_or_more_is_flagged_and_nothing_moves(offset):
+@pytest.mark.parametrize("offset", [2.0, 3.0, -2.0, -3.0, 10.0])
+def test_a_steady_offset_of_two_seconds_or_more_is_flagged_and_nothing_moves(offset):
     case = meeting_40()
     shifted = shifted_events(case.events, offset)
     got = speaker_correction.correct(case.items, tags_of(case), shifted, OWN)
@@ -338,14 +369,23 @@ def test_a_steady_offset_of_a_second_or_more_is_flagged_and_nothing_moves(offset
     assert summary["clock_shift"] == -offset and summary["clock_gain"] > 0.1
 
 
-@pytest.mark.parametrize("lag", [0.0, 0.3])
-def test_the_indicator_lag_of_a_third_of_a_second_does_not_stop_the_correction(lag):
+@pytest.mark.parametrize("lag", [0.0, 0.3, 0.5, 1.0, -0.5, -1.0, 1.5])
+def test_the_indicators_normal_lag_does_not_stop_the_correction(lag):
+    """The light follows speech by about half a second to a second: a consistent lag of that size
+    is not a wrong clock (flagging it would stop the correction on every meeting)."""
     case = meeting_40()
     got = speaker_correction.correct(
         case.items, tags_of(case), shifted_events(case.events, lag), OWN
     )
     assert got.refused is None and got.moved_segments > 0
-    assert abs(got.clock.best) <= 0.5 and got.clock.gain <= 0.1
+    assert abs(got.clock.best) < speaker_correction.CLOCK_MIN_SHIFT
+
+
+@pytest.mark.parametrize("make", [meeting_38, meeting_39, meeting_40])
+def test_the_clean_looking_fixtures_do_not_trip_the_clock_check(make):
+    case = make()
+    got = speaker_correction.correct(case.items, tags_of(case), case.events, OWN)
+    assert got.refused is None and got.clock.best == 0.0
 
 
 def shifted_events(events, seconds):

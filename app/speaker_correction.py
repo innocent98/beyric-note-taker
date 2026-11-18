@@ -16,13 +16,14 @@ to person P when ALL hold:
   named for (a hard gate: a shifted clock moves nothing, and the best shift is recorded);
 * P was lit for at least `MIN_SECONDS` over the segment and no runner-up reached `AMBIGUOUS_RATIO`
   of P's seconds (a runner-up under `MIN_SECONDS` never counts);
-* P is not the person the segment already carries (every word of one name is among the other's,
-  never a part of a word: "Ada" is "Ada Obi", "Ann" is not "Joanne");
+* P is not the person the segment already carries (`same_person`: every word of one name is among
+  the other's, never a part of a word; this looser test is only ever used to LEAVE a line alone,
+  never to choose where it goes);
 * P is a person: the note taker takes part in the ranking (lit beside a person it makes the
   segment ambiguous; alone on top the segment stays) but is never a destination; a blank or
   "Unknown speaker" participant is skipped;
-* a name already in the meeting is P (`resolve_label`: exactly one known name, never a part of a
-  word and never one of two); a line is not moved to a name nobody in the meeting is called by;
+* a name already in the meeting is exactly P (`resolve_label`: the same words, nothing looser:
+  "Obi" is not "Ada Obi"); a line is not moved to a name nobody in the meeting is called by;
 * the segment has a tag and usable times.
 
 Otherwise it stays as it is: two or more lit (ambiguous), nobody lit (no signal), the note taker
@@ -50,9 +51,16 @@ AMBIGUOUS_RATIO = 0.25  # a runner-up with this share of the top's seconds makes
 UNKNOWN = "Unknown speaker"  # the label of a line credited to no one (`app/notes.py`)
 # The clock gate: the best shift of Meet's clock must not raise the agreement of the segments with
 # the people they are named for by more than this factor. 10% is what the naming rule's own check
-# uses; this one measures who-agrees-with-whom, so it sees a steady 1 to 3 s offset too (see
-# `clock_check`).
+# uses; this one measures who-agrees-with-whom, so it sees a steady offset of a couple of seconds
+# too (see `clock_check`).
 CLOCK_GAIN = meet_timeline.CLOCK_GAIN
+# ...and the best shift must be at least this many seconds. The indicator itself lags by about half
+# a second to a second (the light follows speech late), so a consistent shift under 2 s is normal
+# lag, not a wrong clock: flagging it would stop the correction on every meeting. A shift of 2 s or
+# more that also gains clearly is an offset: it puts the first seconds of every turn under the
+# previous speaker. Chosen from the lag sizes above, not measured on a real meeting (nothing has
+# run on real evidence yet): the first live log lines (`clock best shift`) will say if it is wrong.
+CLOCK_MIN_SHIFT = 2.0
 
 # Why nothing was moved in a meeting at all (`Correction.refused`).
 NO_EVENTS = "no_events"  # nothing kept (Teams, Zoom, a failed fetch): an exact no-op
@@ -80,7 +88,9 @@ def name_words(name: str) -> frozenset[str]:
 def same_person(a: str, b: str) -> bool:
     """One name's words are all among the other's ("Ada" and "Ada Obi", "Obi Ada"), never a part of
     a word: "Ann" is not "Joanne", "Tomi" is not "Tomiwa", "Ade" is not "Adebayo". Two names that
-    share one word each and differ in another ("Ada Obi", "Ada Eze") are two people."""
+    share one word each and differ in another ("Ada Obi", "Ada Eze") are two people. This is the
+    test for "the segment already carries this person", where a false yes only leaves a line where
+    it is; it is NEVER used to pick a destination (`resolve_label` wants the same words)."""
     wa, wb = name_words(a), name_words(b)
     return bool(wa and wb) and (wa <= wb or wb <= wa)
 
@@ -93,16 +103,18 @@ def known_names(tags: dict, items: list[dict]) -> list[str]:
 
 def resolve_label(person: str, known: list[str]) -> str | None:
     """The label a line moved to `person` takes: the spelling a tag or segment already uses for
-    exactly that name, else the one known name that is the same person (so the line joins that
-    person's turns), else None. None when no known name is that person or when several are:
-    a line is never moved to a name nobody in the meeting is called by, because that can be a
-    respelling of the person it is already under, nor to one of two equally good names."""
+    EXACTLY that name (the same words, whatever the case, accents or punctuation), else None.
+    Nothing looser: "Obi" is not "Ada Obi" and "Ada" is not "Ada Obi", because the lit person
+    may be someone else who shares a word (a surname, a first name), and moving a line to the
+    wrong person is worse than leaving it where it is. A name nobody in the meeting is called
+    by also stays unmoved (it can be a respelling of the person the line is already under).
+    Tag names come from the same Meet names (Skribby's own and its candidate names), so the same
+    person's spelling normally matches exactly."""
     words = name_words(person)
+    if not words:
+        return None
     exact = [name for name in known if name_words(name) == words]
-    if exact:
-        return exact[0]
-    near = sorted({name for name in known if same_person(name, person)})
-    return near[0] if len(near) == 1 else None
+    return exact[0] if exact else None
 
 
 Index = tuple[list[tuple[float, float]], list[float]]  # merged intervals and their end times
@@ -218,7 +230,7 @@ class ClockFit:
 
     @property
     def fine(self) -> bool:
-        return not (self.best != 0 and self.there > self.here * CLOCK_GAIN)
+        return not (abs(self.best) >= CLOCK_MIN_SHIFT and self.there > self.here * CLOCK_GAIN)
 
     @property
     def gain(self) -> float:
@@ -238,13 +250,14 @@ def clock_check(
     items: list[dict], tags: dict, people: dict[str, list[tuple[float, float]]]
 ) -> ClockFit:
     """Does Meet's clock fit the segments' clock? Each timed segment that is named is compared with
-    the speaking time of the person it is named for: the seconds that person was lit over it, summed
-    over the meeting, for each shift of Meet's clock (`SHIFTS`). A steady offset of a second or two
-    moves a lot of that agreement (turns are a few seconds long), where the union of everyone's
-    light, which the naming rule compares, barely changes in a conversation without gaps. With no
-    named segment it falls back to the union against all segments. A steady lag of the indicator
-    itself looks like an offset, so a lag of a second or more stops the correction for the meeting:
-    the safe side. Ties go to no shift."""
+    the speaking time of the person it is named for (the same exact name): the seconds that person
+    was lit over it, summed over the meeting, for each shift of Meet's clock (`SHIFTS`). A steady
+    offset of a couple of seconds moves a lot of that agreement (turns are a few seconds long),
+    where the union of everyone's light, which the naming rule compares, barely changes in a
+    conversation without gaps. With no named segment it falls back to the union against all
+    segments. The meeting is flagged only when the best shift is at least `CLOCK_MIN_SHIFT` (the
+    indicator's own lag of up to about a second is normal) and gains more than `CLOCK_GAIN`. Ties
+    go to no shift."""
     union = _index(meet_timeline.merge([span for v in people.values() for span in v]))
     own_cache: dict[str, Index | None] = {}
     named: list[tuple[float, float, Index]] = []
@@ -259,7 +272,8 @@ def clock_check(
         if not current:
             continue
         if current not in own_cache:
-            matching = [v for n, v in people.items() if same_person(current, n)]
+            words = name_words(current)  # the same person by the same exact test as a destination
+            matching = [v for n, v in people.items() if name_words(n) == words]
             own_cache[current] = _index(meet_timeline.merge([i for v in matching for i in v]))
         if own_cache[current][0]:
             named.append((a, b, own_cache[current]))

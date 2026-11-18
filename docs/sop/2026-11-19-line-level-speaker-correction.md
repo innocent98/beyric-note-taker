@@ -25,13 +25,11 @@ only 4 of 15 sampled moves reached 80% lit, yet all four he checked were right).
 
 | Condition | Value |
 |---|---|
-| Meet's events exist, are readable, are placed on the transcript's clock and no shift of Meet's clock makes the segments agree clearly better with the people they are named for | `speaker_correction.clock_check`, a **hard gate**: for each shift (whole seconds up to 30 either way, half seconds up to 5) it sums the seconds each named segment's person was lit over it; a shift that raises that by more than 10% (`CLOCK_GAIN`) means the clock is off and **nothing moves in that meeting** (`clock_shifted`). It sees a steady 1 to 3 s offset, which the naming rule's union-of-everyone check does not (tests: 1, 2, 3, -1, -2, -3 and 10 s are flagged, a 0.3 s lag is not). A steady indicator lag of a second or more looks like an offset and also stops the correction for the meeting: the safe side, visible in the log as `refused: clock_shifted` with the best shift. With no named segment it falls back to the union against all segments. The best shift and its gain are in the evidence summary and the log line |
+| Meet's events exist, are readable, are placed on the transcript's clock and no shift of Meet's clock makes the segments agree clearly better with the people they are named for | `speaker_correction.clock_check`, a **hard gate**: for each shift (whole seconds up to 30 either way, half seconds up to 5) it sums the seconds each named segment's person (matched by the same exact name) was lit over it. The meeting is flagged (`clock_shifted`, **nothing moves in it**) only when the best shift is **at least `CLOCK_MIN_SHIFT` = 2 s AND** raises that agreement by more than 10% (`CLOCK_GAIN`). **Why 2 s:** the indicator itself lags by about half a second to a second, so a consistent shift under 2 s is normal lag, and flagging it would stop the correction on every meeting; 2 s is the first size that is clearly not lag, and it puts the first seconds of every turn under the previous speaker. It is a judgement from those lag sizes, **not measured on a real meeting**: the first live log lines (`clock best shift`) will say if it is wrong. The naming rule's union-of-everyone check cannot see an offset of a couple of seconds in a conversation without gaps; this one can. Tests: offsets of 2, 3, -2, -3 and 10 s are flagged; lags of 0, 0.3, 0.5, 1, -0.5, -1 and 1.5 s are not; the 38/39/40-like fixtures are not. A smaller steady offset (under 2 s) is NOT caught and is read as lag. With no named segment it falls back to the union against all segments. The best shift and its gain are in the evidence summary and the log line |
 | P was lit at least | `MIN_SECONDS = 1.0` s over the segment |
 | No runner-up reaches | `AMBIGUOUS_RATIO = 0.25` of P's seconds (a runner-up under `MIN_SECONDS` never counts) |
-| P differs from the person the segment carries now | the segment's own `speaker_name`, else its tag's name, else nobody ("Unknown speaker", which a clear speaker moves to somebody). **Names are compared by whole words only** (case, accents and punctuation ignored; `name_words`): every word of one name must be among the other's, so "Ada" is "Ada Obi", but "Ann" is not "Joanne", "Tomi" is not "Tomiwa", "Ade" is not "Adebayo" and "Ada Obi" is not "Ada Eze". (An earlier build used a raw substring and could hand Ann's line to Joanne: found in review, fixed) |
-| P is a name already in the meeting | `resolve_label`: the spelling a tag or segment already uses for exactly that name, else the **one** known name that is the same person, so the moved line joins that person's turns. **No known name, or several, means the line is not moved** (`unmatched`): a name nobody in the meeting is called by can be a respelling of the person the line is already under, and two equally good names cannot be chosen between. Cost: a person who has no tag name at all (voice merged into others' tags) is not given their lines |
-| P is a person | the note taker **takes part in the ranking**: lit beside one person it makes the segment ambiguous (a consent line spoken by the bot while someone's light is on), alone on top the segment stays (`bot`); it is never a destination. A blank or "Unknown speaker" participant is skipped. The report and production go through the same `assess`, so they agree (test) |
-| The segment has a tag and usable times | else it stays ("not timed") |
+| P differs from the person the segment carries now | the segment's own `speaker_name`, else its tag's name, else nobody ("Unknown speaker", which a clear speaker moves to somebody). **Names are compared by whole words** (case, accents and punctuation ignored; `name_words`): `same_person` says yes when every word of one name is among the other's. It is used ONLY to decide that a segment already carries the lit person (a false yes leaves a line where it is, the safe direction), **never to choose where a line goes**. "Ann" is not "Joanne", "Tomi" is not "Tomiwa", "Ade" is not "Adebayo" |
+| P is a name already in the meeting | `resolve_label`: the destination takes an **EXACT** match only: the same words as a name a tag or segment already uses (case, accents, punctuation ignored), and it takes that spelling so the moved line joins that person's turns. **Anything else is `unmatched` and the line stays**, including a name that merely *contains* the lit one: if Meet lights "Obi" and the tags are "Ada Obi" and "Tunde Bello", the line stays under Tunde, it is not handed to Ada Obi (a second review finding: a first version took a subset match in any word position). Same for "Ada" against "Ada Obi" and "Ade" against "Zoë Obi-Ade". Exact matching loses little: tag names come from the same Meet names, so the same person's spelling normally matches. Cost: a person with no tag name at all, or whose tag is spelt differently ("Bo" against "Bo Example"), is not given their lines |
 
 Never moves: two or more lit (**ambiguous**), nobody lit (**no signal**), the note taker on top (**bot**), a lit person with no matching name here (**unmatched**), not timed. A participant who left and rejoined
 is one person (same grouping as naming). The label a moved line gets is the spelling a tag already uses for that person
@@ -110,7 +108,7 @@ and `tests/test_skribby_evidence.py`. No `docs/fe-integration-guide-*.md` change
 Bounded, on the Mac, against a scratch Postgres database (removed afterwards): `ruff check`, `ruff format --check` (the
 pinned 0.17.3), and the named files: `test_speaker_correction`, `test_speaker_reattribution_report`,
 `test_rebuild_meeting_from_evidence`, `test_skribby_evidence`, `test_meet_timeline_naming`, `test_skribby_provider`,
-`test_transcript_source`, `test_dockerfile_scripts` (571 tests), plus `test_provider_contract`, `test_bot_name`,
+`test_transcript_source`, `test_dockerfile_scripts` (584 tests), plus `test_provider_contract`, `test_bot_name`,
 `test_skribby_live_check`, `test_skribby_e2e` (293). CI runs the whole suite on the pushed head (its result is on the PR).
 
 What the tests prove. **Read this first: the 40, 39 and 38 tests are not real evidence.** Their fixtures are synthetic
@@ -126,11 +124,12 @@ meetings. Only the server dry run on real evidence does that.
 * **Edge cases:** one person lit moves; a tie and a 50% runner-up stay (ambiguous); a 3% runner-up (lag) still moves; a
   runner-up under 1 s never counts; under 1 s lit is no signal; the note taker alone on top stays (`bot`), beside one
   person makes it ambiguous, and the report agrees; blank and "Unknown speaker" participants are skipped; untimed or
-  untagged segments stay; **whole-word names: Ann/Joanne, Tomi/Tomiwa, Ade/Adebayo, Ada/Adaeze and Ada Obi/Ada Eze never
-  match, accents and case do, "Ada" and "Ada Obi" do, two equally good names move nothing, an unknown name moves
-  nothing**; a moved line takes the spelling a tag already uses; an unnamed tag is credited; a segment's own name is what
-  is compared; a rejoin is one person; a 60 s segment lit for 9 s still moves; a steady clock offset of 1, 2, 3, -1, -2,
-  -3 and 10 s moves nothing and is flagged with its best shift, a 0.3 s lag does not; a 2,000-segment meeting is read in
+  untagged segments stay; **names: Ann/Joanne, Tomi/Tomiwa, Ade/Adebayo, Ada/Adaeze never match; the destination is an exact name
+  only (accents and case ignored): Obi lit with tags "Ada Obi" and "Tunde Bello" stays under Tunde, "Ada" does not go to
+  "Ada Obi", "Ade" does not go to "Zoë Obi-Ade", an unknown name moves nothing; "Ada" under a tag and "Ada Obi" lit
+  agrees (the line stays)**; a moved line takes the spelling a tag already uses; an unnamed tag is credited; a segment's own name is what
+  is compared; a rejoin is one person; a 60 s segment lit for 9 s still moves; a steady clock offset of 2, 3, -2, -3 and
+  10 s moves nothing and is flagged with its best shift, a lag of up to 1.5 s does not; a 2,000-segment meeting is read in
   under 8 s.
 * **Off equals today:** with `SPEAKER_LINE_CORRECTION=false` the segments **and the stored text** are identical to a
   verbatim copy of the old code's output (kept in the test fixtures), on all three meetings; the same with
@@ -203,17 +202,18 @@ ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker py
   host's `stopped-speaking` is lost, so the host's span is dropped, and another person's 1 s laugh then moves the host's
   lines to them. A guard (treat a dropped interval's period as unknown and block moves inside it) is not built.
 * **One person under two Meet names is two speakers.** "Ada Obi" and "Ada's iPhone" are two keys. If only the phone is
-  lit over Ada's line, and the phone name matches a name in the meeting (whole words: "Ada" is in both), the line moves
-  to it; if it matches none it is `unmatched` and stays. Two different people who use the same display name are one
+  lit over Ada's line, the phone name is "Ada's iPhone" and a tag carries exactly that name, the line moves to it; if no
+  tag does it is `unmatched` and stays (the destination must be an exact name). Two different people who use the same display name are one
   person (same as the naming rule).
 * **Short lines and indicator lag** can be moved to the previous speaker (design note section 6): accepted, with the
   kill switch.
 * **The rebuild cannot see the name Skribby reports for the bot in its body** (the evidence does not keep it), so a bot
   under a display name other than the stored one or the account's name stays in the timeline there; it has no events
   in practice, so it is never lit, and the bot rule above is tested with the names the rebuild does know.
-* **A steady indicator lag of a second or more stops the correction for the whole meeting** (it looks like a clock
-  offset); the log says `refused: clock_shifted` and the best shift. False refusals would show up as that line on
-  meetings that need no shift; none has been seen because nothing has run on real evidence yet.
+* **A steady clock offset under 2 s is not caught** (it is read as the indicator's normal lag); it puts the first
+  seconds of some turns under the previous speaker. An offset of 2 s or more stops the correction for the whole meeting
+  (`refused: clock_shifted` and the best shift in the log). The 2 s line is a judgement, not a measurement; read the first
+  live `clock best shift` values.
 * Expect the first real read to move fewer lines than the report's earlier numbers: the stricter name matching leaves
   a line alone when the lit person's name matches no tag name here.
 
