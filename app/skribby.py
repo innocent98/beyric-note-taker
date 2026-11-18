@@ -554,33 +554,88 @@ def _tag_names(
     return {tag: info["name"] for tag, info in resolved.items() if info["name"]}
 
 
-def _segments(
+def _correct_lines(
+    value: list[dict],
+    resolved: dict[str, dict[str, str]],
+    events: dict | None,
+    own_names: tuple[str, ...],
+    enabled: bool | None,
+):
+    """The line-level speaker correction (`app/speaker_correction.py`) of a meeting's transcript
+    items, or None when it does not run: switched off (`SPEAKER_LINE_CORRECTION`), not the
+    Skribby-transcript mode (`TRANSCRIPT_SOURCE=skribby`; `enabled` None reads both settings), or
+    no speaker events (Teams, Zoom, a failed fetch: an exact no-op). Never raises and never stops
+    a meeting: anything that goes wrong keeps the lines under their tags' names and is logged by
+    exception class only (the data holds names and words)."""
+    if enabled is None:
+        settings = get_settings()
+        enabled = settings.speaker_line_correction and settings.transcript_source == "skribby"
+    if not enabled or not events:
+        return None
+    try:
+        from app import speaker_correction  # here: that module reads this one's name helpers
+
+        return speaker_correction.correct(value, resolved, events, own_names)
+    except Exception as exc:
+        logger.warning(
+            "skribby: the speaker line correction failed (%s); lines keep their tags' names",
+            type(exc).__name__,
+        )
+        return None
+
+
+def _labelled(
     body: dict,
     own_names: tuple[str, ...] = (),
     by_elimination: bool | None = None,
     events: dict | None = None,
     by_timeline: bool | None = None,
-) -> list[dict[str, Any]]:
-    """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
-    labelling reads). Absent or null is none; any other shape means Skribby changed its response,
-    which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
-    diarization tag's name (see `_tag_names`; `own_names`, the bot's own, are never a speaker)."""
+    by_correction: bool | None = None,
+):
+    """`(segments, correction)`: `_segments`' answer and what the line correction did (None when
+    it did not run)."""
     value = body.get("transcript")
     if value is None:
-        return []
+        return [], None
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
-    by_tag = _tag_names(value, own_names, by_elimination, events, by_timeline)
+    if by_elimination is None:
+        by_elimination = get_settings().skribby_name_by_elimination
+    if by_timeline is None:
+        by_timeline = get_settings().name_by_meet_timeline
+    resolved = _resolve_tags(value, own_names, by_elimination, events, by_timeline)
+    by_tag = {tag: info["name"] for tag, info in resolved.items() if info["name"]}
+    correction = _correct_lines(value, resolved, events, own_names, by_correction)
+    moves = correction.moves if correction is not None else {}
     segments = []
-    for item in value:
+    for index, item in enumerate(value):
         text = item.get("transcript")
         if isinstance(text, str) and text.strip():
             name = _clean_name(item.get("speaker_name"))
             if not name:
                 tag = _tag(item.get("speaker"))
                 name = by_tag.get(tag, "") if tag is not None else ""
-            segments.append({"speaker": name, "text": text})
-    return segments
+            segments.append({"speaker": moves.get(index, name), "text": text})
+    return segments, correction
+
+
+def _segments(
+    body: dict,
+    own_names: tuple[str, ...] = (),
+    by_elimination: bool | None = None,
+    events: dict | None = None,
+    by_timeline: bool | None = None,
+    by_correction: bool | None = None,
+) -> list[dict[str, Any]]:
+    """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
+    labelling reads). Absent or null is none; any other shape means Skribby changed its response,
+    which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
+    diarization tag's name (see `_tag_names`; `own_names`, the bot's own, are never a speaker).
+    Last, a segment Meet's speaking timeline clearly shows another person speaking over moves to
+    that person (`app/speaker_correction.py`; `by_correction` None reads `SPEAKER_LINE_CORRECTION`
+    and `TRANSCRIPT_SOURCE`); without `events`, or switched off, the labels are exactly the
+    tags'."""
+    return _labelled(body, own_names, by_elimination, events, by_timeline, by_correction)[0]
 
 
 def _number(value: Any) -> float | None:
@@ -595,12 +650,17 @@ def _evidence(
     by_elimination: bool,
     events: dict | None = None,
     by_timeline: bool = False,
+    correction=None,
 ) -> dict[str, Any] | None:
     """What Skribby sent for a meeting, kept for a few days so a bad labelling can be diagnosed
     (`skribby_segment_evidence`): each transcript item as it came (`speaker` the diarization tag,
     `speaker_name`, the NAMES in `potential_speaker_names`, `start`, `end`, `text`) and, per tag,
     the name the app derived and why (`_resolve_tags`). None when there is no transcript. It
-    holds the words people said, so it is never logged or shown."""
+    holds the words people said, so it is never logged or shown. When the line correction ran
+    (`correction`, `_labelled`), an item it moved carries `corrected_to` (the label it now has;
+    `speaker` stays the original tag, so the effect can be audited and undone) and `correction`
+    holds its numbers (`speaker_correction.Correction.summary`). A meeting it did not run for has
+    neither key: the record is exactly what it was."""
     value = body.get("transcript")
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         return None
@@ -625,11 +685,16 @@ def _evidence(
                 "text": text if isinstance(text, str) else "",
             }
         )
-    return {
+    record = {
         "items": items,
         "tags": _resolve_tags(value, own_names, by_elimination, events, by_timeline),
         "by_elimination": by_elimination,
     }
+    if correction is not None and correction.ran:
+        for index, label in correction.moves.items():
+            items[index]["corrected_to"] = label
+        record["correction"] = correction.summary()
+    return record
 
 
 def _cap_events(record: dict[str, Any]) -> dict[str, Any]:
@@ -691,11 +756,12 @@ def _safe_evidence(
     by_elimination: bool,
     events: dict | None = None,
     by_timeline: bool = False,
+    correction=None,
 ) -> dict[str, Any] | None:
     """`_evidence`, which is only a record for diagnosis: whatever goes wrong in building it leaves
     it out (logged by exception class only) and never stops the meeting being read."""
     try:
-        return _evidence(body, own_names, by_elimination, events, by_timeline)
+        return _evidence(body, own_names, by_elimination, events, by_timeline, correction)
     except Exception as exc:
         logger.warning("skribby: could not keep the segment evidence (%s)", type(exc).__name__)
         return None
@@ -797,8 +863,8 @@ def map_bot(
     body's own `id` is the fallback). `own_names` are the names the bot itself goes by (a candidate
     speaker name that is one of them is never used). `speaker_events` is the meeting's
     speaker-events record (`speaker_events_record`), given by the caller for a finished bot when
-    `NAME_BY_MEET_TIMELINE` is on; without it the timeline rule names nothing. `vexa_id` is left
-    for the caller to set."""
+    `NAME_BY_MEET_TIMELINE` or `SPEAKER_LINE_CORRECTION` is on; without it the timeline names
+    nothing and no line moves. `vexa_id` is left for the caller to set."""
     raw = body.get("status")
     if not isinstance(raw, str):
         raise SkribbyError("get_meeting failed: 'status' is not a string")
@@ -814,10 +880,15 @@ def map_bot(
         url = _recording_url(body)
         handle = _handle_for(bot_id or body.get("id"))
         reason = _FINISHED_REASON[stop] if stop in _FINISHED_REASON else stop
+        segments, correction = _labelled(
+            body, own_names, by_elimination, speaker_events, by_timeline
+        )
         return BotMeeting(
             status="completed",
-            segments=_segments(body, own_names, by_elimination, speaker_events, by_timeline),
-            evidence=_safe_evidence(body, own_names, by_elimination, speaker_events, by_timeline),
+            segments=segments,
+            evidence=_safe_evidence(
+                body, own_names, by_elimination, speaker_events, by_timeline, correction
+            ),
             last_segment_end=_last_segment_end(body),
             recording_id=handle if url else None,
             media_id=handle if url else None,
@@ -1564,7 +1635,8 @@ class SkribbyProvider:
         return info
 
     def _events_for_naming(self, body: dict, bot_id: str, timeout: float | None):
-        """The speaker events the timeline naming reads (`NAME_BY_MEET_TIMELINE`), for a bot that
+        """The speaker events the timeline naming (`NAME_BY_MEET_TIMELINE`) and the line correction
+        (`SPEAKER_LINE_CORRECTION`, with `TRANSCRIPT_SOURCE=skribby`) read, for a bot that
         has finished with a transcript: the answer of a second request (`with-speaker-events`),
         because the plain one carries none. None for any other bot (one request per poll is
         enough while it is live), when the setting is off, or when the request fails or answers in
@@ -1575,9 +1647,13 @@ class SkribbyProvider:
         so a good answer is kept in this process (the last `EVENTS_KEPT` bots, as the sent codes
         are): one extra request per meeting and process, not per look. A failure is not kept, so
         the next look asks again. The events of a finished meeting do not change."""
+        settings = get_settings()
         if (
             body.get("status") != "finished"
-            or not get_settings().name_by_meet_timeline
+            or not (
+                settings.name_by_meet_timeline
+                or (settings.speaker_line_correction and settings.transcript_source == "skribby")
+            )
             or not isinstance(body.get("transcript"), list)
         ):
             return None

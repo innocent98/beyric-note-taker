@@ -468,6 +468,46 @@ def test_skribby_mode_keeps_the_evidence_and_the_events_in_one_row(session, skri
     assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]  # asked once, not again later
 
 
+def test_skribby_mode_logs_what_the_line_correction_did_and_keeps_its_markers(
+    session, skribby_meeting, mode, caplog
+):
+    """The provider's evidence carries the correction's marker and numbers (`skribby._evidence`);
+    the pipeline saves the marker with the row and writes one line saying how many segments moved:
+    numbers only, no name and no word (docs/sop/2026-11-19-line-level-speaker-correction.md)."""
+    mode()
+    moved = deepcopy(EVIDENCE)
+    moved["items"][1]["corrected_to"] = "Bo Example"
+    moved["correction"] = {
+        "moved_segments": 1,
+        "moved_seconds": 4.2,
+        "segments": 2,
+        "refused": None,
+    }
+    with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
+        run(session, skribby_meeting, FakeVexa(skribby_poll(moved)))
+    [row] = rows(session)
+    assert row.items[1]["corrected_to"] == "Bo Example" and row.items[1]["speaker"] == "2"
+    assert "corrected_to" not in row.items[0]
+    line = f"meeting {skribby_meeting.id}: speaker correction moved 1 of 2 segments (4.2 s)"
+    assert line in caplog.text
+    assert SECRET not in caplog.text and "Ada Example" not in caplog.text
+
+
+def test_a_refused_correction_is_logged_with_its_reason(session, skribby_meeting, mode, caplog):
+    mode()
+    refused = deepcopy(EVIDENCE)
+    refused["correction"] = {
+        "moved_segments": 0,
+        "moved_seconds": 0.0,
+        "segments": 2,
+        "refused": "clock_shifted",
+    }
+    with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
+        run(session, skribby_meeting, FakeVexa(skribby_poll(refused)))
+    assert "moved 0 of 2 segments (0.0 s); refused: clock_shifted" in caplog.text
+    assert SECRET not in caplog.text
+
+
 def test_the_skribby_mode_row_has_the_same_seven_day_retention_as_any_other(
     session, skribby_meeting, mode
 ):

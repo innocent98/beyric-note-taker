@@ -1,0 +1,183 @@
+# SOP: line-level speaker correction (a line follows Meet's timeline when exactly one person was lit)
+
+**What shipped.** A Skribby segment now moves to the person **Meet's own speaking timeline** shows speaking over it,
+when **exactly one person was lit** and that person is not the one its diarization tag says. It runs in the pipeline
+for Skribby transcripts (`TRANSCRIPT_SOURCE=skribby`), after the tag names are derived and before the speaker
+transcript and notes are built, and in the rebuild script. **ON by default** (Adebayo, 2026-11-19: no dark shipping,
+no trial scaffolding); one emergency kill switch, `SPEAKER_LINE_CORRECTION` (default `true`). Branch
+`feature/line-level-speaker-correction`; the PR number is on the checklist. **No migration, no new column, no endpoint,
+no screen.** Design note: `docs/superpowers/specs/2026-11-18-line-level-speaker-correction-design.md` (its section 4 is
+superseded by the rule below).
+
+## Why
+
+Naming a tag cannot fix a tag that holds other people's voices. Measured with
+`scripts/speaker_reattribution_report.py` (docs/sop/2026-11-18-speaker-reattribution-report.md), by Meet's own signal:
+meeting 40, 6% of the seconds sat under the wrong person (all of it the host's speech tagged to two other people in
+the first minutes); meeting 39, 62% (six of nine tags unnamed); meeting 38, clean, 0.2%. Adebayo checked by hand
+that the moved lines in 40 and four sampled lines in 39 were really said by the person Meet names.
+
+## The rule (Adebayo's decision 2, 2026-11-19)
+
+Not "a share of the line": a segment contains pauses, so Meet's light covers only part of a long one (in meeting 39
+only 4 of 15 sampled moves reached 80% lit, yet all four he checked were right). A segment moves to person P when
+**all** hold (`app/speaker_correction.py`, `assess` and `correct`):
+
+| Condition | Value |
+|---|---|
+| Meet's events exist, are readable, are placed on the transcript's clock and no shift of up to 30 s fits clearly better | the naming rule's own clock check (`meet_timeline.clock_is_fine`), a **hard gate**: a shifted clock moves nothing and is recorded as `clock_shifted` |
+| P was lit at least | `MIN_SECONDS = 1.0` s over the segment |
+| No runner-up reaches | `AMBIGUOUS_RATIO = 0.25` of P's seconds (a runner-up under `MIN_SECONDS` never counts) |
+| P differs from the person the segment carries now | the segment's own `speaker_name`, else its tag's name, else nobody ("Unknown speaker", which a clear speaker moves to somebody); compared equal after cleaning or one name inside the other, so "Ada" is not moved to "Ada Obi" |
+| P is a person | the note taker's names are left out of the timeline before anything is ranked (so the bot is never a destination and never makes a segment ambiguous); a blank or "Unknown speaker" participant is skipped |
+| The segment has a tag and usable times | else it stays ("not timed") |
+
+Never moves: two or more lit (**ambiguous**), nobody lit (**no signal**), not timed. A participant who left and rejoined
+is one person (same grouping as naming). The label a moved line gets is the spelling a tag already uses for that person
+(so it joins that person's turns instead of making a second spelling), else the name Meet shows.
+
+`MIN_SECONDS` and `AMBIGUOUS_RATIO` are the report's defaults and are **imported by the report from the same module**,
+so the measurement and production cannot drift. Dropped from the design note's section 4 by this decision (not built):
+the 2 s / 0.34 ratio start values, the 35%-of-the-line share, "protect people with no light", "at least 4 words" and
+the A-B-A-B smoothing. They were guesses meant to be tuned by the report; the decided rule replaces them.
+
+## How
+
+| Piece | What it does |
+|---|---|
+| `app/speaker_correction.py` | Pure functions, no database, no settings, no logging. `place` puts Meet's intervals on the transcript's clock (the bot left out); `assess` classifies each segment (`agrees`, `move`, `ambiguous`, `no_signal`, plus the `not_timed` count); `correct` applies the clock gate and returns a `Correction` (`moves` = item position to label, `refused`, counts, `summary()` numbers only) |
+| `app/skribby.py::_labelled` / `_segments` | `_resolve_tags` once, then `_correct_lines` (kill switch + `TRANSCRIPT_SOURCE=skribby` + events present, all wrapped so any exception keeps the tags' names and logs the exception class only), then the segments are built; a moved segment gets its label there. `map_bot` passes the same `Correction` to `_evidence` |
+| Evidence (`skribby_segment_evidence.items`, 7 days) | A moved item keeps `speaker` (the original tag) and gets `corrected_to` (the label); the evidence dict carries `correction` = `{moved_segments, moved_seconds, segments, refused}`. **Only when the correction ran** (events existed): a meeting with no events has neither key, so its evidence is byte-identical to before. Numbers and labels only, never text |
+| `app/pipeline.py::_log_correction` | One INFO line per meeting: `meeting N: speaker correction moved X of Y segments (S s)` plus `; refused: clock_shifted` when the clock check stopped it. Nothing is logged for a meeting it did not run for. This is the durable record (the evidence lives 7 days); `docker compose logs worker \| grep "speaker correction"` |
+| `app/skribby.py::_events_for_naming` | The second Skribby request (speaker events) is now made when **either** `NAME_BY_MEET_TIMELINE` is on **or** the correction is on with `TRANSCRIPT_SOURCE=skribby`, so turning naming off cannot silently turn the correction off |
+| `scripts/speaker_reattribution_report.py` | Imports the constants, `classify`, `assess` and `place` from the module. **Tag names are now read again with the current naming rules by default** (as production and the rebuild do); `--saved-names` reads the names saved with the evidence, which reproduces the first runs. Prints how many segments already carry a `corrected_to` marker |
+| `scripts/rebuild_meeting_from_evidence.py` | Applies the same correction (same `_labelled` call). The dry run prints the five outcomes with the same counts as the report (segments and seconds) and, per tag, how many move out. `--apply` prints the moved count. See "Existing meetings" |
+
+**Kept, rejected.** Kept: one kill switch, an exact no-op without events, failure isolation. Rejected, on Adebayo's
+rule: percent rollouts, a shadow mode, a default-off flag. Rejected for now: a per-meeting column for the moved counts
+(the evidence markers and the log line are enough and need no migration); a note on the page saying a line was moved.
+
+**Where it does not run.** Not for `TRANSCRIPT_SOURCE=own` (our own transcription with model-based labelling keeps its
+tags' names). If Skribby's text is not used for a meeting and the pipeline falls back to our own transcription, the
+corrected segments are still the hints the labelling step reads; harmless and unmeasured. Teams, Zoom and any meeting
+whose speaker events could not be fetched have no events: an exact no-op (proved by a test).
+
+## Existing meetings change only on an explicit rebuild
+
+`docker compose exec -T worker python scripts/rebuild_meeting_from_evidence.py <id>` (dry run), `--apply`,
+`--restore FILE --apply`. What changed for it:
+
+* **It is safe to run again, including on a meeting an earlier version already rebuilt (meeting 39).** The old guard
+  ("`skribby-rebuilt` means nothing to do") is replaced by comparing the **turns** (who, and how many words) of the
+  stored speaker transcript with the turns it would build: the same turns say "nothing to do"; different turns rebuild.
+  Names alone were not enough: a line moved to a neighbouring turn leaves the list of names unchanged. So meeting 39
+  rebuilds once more (its first rebuild had no correction), then is left alone; 38 and 40 rebuild once; a re-run of any
+  of them changes nothing, makes no model call and saves no second backup (tests).
+* **Restore** is unchanged: the backup is taken before every apply; `--restore` puts the previous text and notes back
+  (and `transcript_source`, so a restored 39 is `skribby-rebuilt` again and can be rebuilt again).
+* **A rebuilt meeting whose evidence has expired** still says "already rebuilt ... nothing to do" (exit 0), not a refusal.
+* **Citations and row numbers.** Nothing in the database stores a row number: Ask works out its row citations from the
+  displayed transcript at question time (`app/ask.py::transcript_rows`) and its answers are never stored; a task's or
+  decision's `quote` is a text quote, re-read from the **new** notes by the worker after the rebuild (quiet: no badge, no
+  mail). So after a rebuild nothing points at a stale row. The only thing that can still show old row numbers is a
+  browser tab with an Ask answer from before the rebuild (client side, gone on reload). Turn boundaries do change
+  (moved lines can split or merge turns), so row numbers of the displayed transcript differ from before: that is the
+  point of the rebuild.
+* **Kill switch and rebuild.** With `SPEAKER_LINE_CORRECTION=false` the rebuild builds without the correction and the
+  dry run says "not applied: switched off".
+* Meeting 40's evidence is deleted around **2026-11-25**; 39 around 11-24; 38 around 11-23.
+
+## What's involved
+
+`app/speaker_correction.py` (new), `app/skribby.py` (`_correct_lines`, `_labelled`, `_segments`, `_evidence`,
+`_safe_evidence`, `map_bot`, `_events_for_naming`), `app/pipeline.py` (`_log_correction`, one call), `app/config.py`
+(`speaker_line_correction`), `.env.example`, `deploy/README.md`, `scripts/speaker_reattribution_report.py`,
+`scripts/rebuild_meeting_from_evidence.py`. Tests: `tests/test_speaker_correction.py` (new, 53),
+`tests/speaker_correction_fixtures.py` (new, shared builder), additions in `tests/test_rebuild_meeting_from_evidence.py`
+and `tests/test_skribby_evidence.py`. No `docs/fe-integration-guide-*.md` change: the transcript is the same string of
+`[Name]: words` turns, no field, endpoint or status code changed, only which name a moved line carries.
+
+## Verification
+
+Bounded, on the Mac, against a scratch Postgres database (removed afterwards): `ruff check`, `ruff format --check` (the
+pinned 0.17.3), and the named files: `test_speaker_correction`, `test_speaker_reattribution_report`,
+`test_rebuild_meeting_from_evidence`, `test_skribby_evidence`, `test_meet_timeline_naming`, `test_skribby_provider`,
+`test_transcript_source`, `test_dockerfile_scripts` (541 tests), plus `test_provider_contract`, `test_bot_name`,
+`test_skribby_live_check`, `test_skribby_e2e` (293). CI runs the whole suite on the pushed head (its result is on the PR).
+
+What the tests prove (fixtures are **scaled synthetic evidence**: invented names and words laid out from the reports'
+numbers, `tests/speaker_correction_fixtures.py`):
+
+* **Meeting 40's numbers:** 170 agree / 32 move / 19 ambiguous / 181 no signal (402 segments), and exactly the 32 built
+  moves are made, to the person built. **Meeting 39:** 128 moves out of three unnamed tags (the other counts of this
+  fixture are invented; the timeline cannot name those tags, so only the correction credits them). **Meeting 38 (clean
+  control):** 2 moves of 347 segments, the transcript differs from today's in exactly those two lines and every word is
+  still there in the same order.
+* **Edge cases:** one person lit moves; a tie and a 50% runner-up stay (ambiguous); a 3% runner-up (lag) still moves; a
+  runner-up under 1 s never counts; under 1 s lit is no signal; the bot is never a destination nor a runner-up; blank and
+  "Unknown speaker" participants are skipped; untimed or untagged segments stay; a longer spelling is the same person; a
+  moved line takes the spelling a tag already uses; an unnamed tag is credited; a segment's own name is what is compared;
+  a rejoin is one person; a 60 s segment lit for 9 s still moves; a shifted clock moves nothing.
+* **Off equals today:** with `SPEAKER_LINE_CORRECTION=false` the segments **and the stored text** are identical to a
+  verbatim copy of the old code's output (kept in the test fixtures), on all three meetings; the same with
+  `TRANSCRIPT_SOURCE=own`.
+* **No events is an exact no-op:** segments and evidence equal the output without the feature (no `correction` key, no
+  marker), for no record and an empty one.
+* **Failure isolation:** a correction that raises keeps the uncorrected segments, the meeting is still `completed`, the
+  log holds only the exception class (no word, no name); garbage events never stop a meeting.
+* **Report parity:** the report script's own `report()` and the rebuild dry run print the same counts and seconds for
+  all five outcomes on all three meetings; the dry run prints no name and no word.
+* **Rebuild:** apply on 40 moves 32 and a second run does nothing; a meeting already `skribby-rebuilt` without
+  correction (39) rebuilds once (128 moved) then does nothing, restores, and rebuilds again; 38 changes two lines; off
+  equals the old text byte for byte; no events and a shifted clock are said in a line and move nothing.
+
+**Not verified:** nothing has run against real evidence on the server (none is on the Mac) or live in a meeting; the
+"128 moves" of meeting 39 was measured with the names saved at processing time, so the report now (current names) will
+print **fewer** for 39: tags the timeline can now name are not "Unknown speaker -> X" any more. Compare with
+`--saved-names` to reproduce 128. The Meet clock placement is still the same not-proven-live assumption as the naming
+rule (the clock gate is the guard).
+
+## Operate / roll back
+
+* **Deploy:** merge; the deploy restarts the containers and the correction is on (default). No `.env` change.
+* **After deploy, read meetings 38, 39, 40 (oldest first), one combined command** (the report's counts and the
+  rebuild's dry-run counts must match, line for line; both read names with the current rules):
+
+```bash
+ssh haven-respite 'bash -s' <<'EOF'
+cd /opt/beyric-note-taker
+for id in 38 39 40; do
+  echo "=============== meeting $id: report ==============="
+  docker compose exec -T web python scripts/speaker_reattribution_report.py $id
+  echo "=============== meeting $id: rebuild dry run ==============="
+  docker compose exec -T worker python scripts/rebuild_meeting_from_evidence.py $id
+done
+EOF
+```
+
+* **Rebuild 40 (before 2026-11-25), and undo it:**
+
+```bash
+ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker python scripts/rebuild_meeting_from_evidence.py 40 --apply'
+# it prints the backup path; to put the old text and notes back:
+ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker python scripts/rebuild_meeting_from_evidence.py --restore <the path it printed> --apply'
+```
+
+  The backup holds what people said (private, audio volume): delete it once the result is checked.
+* **After each new live meeting:** `docker compose logs worker | grep "speaker correction"` (numbers only), or the report
+  on the meeting within 7 days ("Already applied when this meeting was processed").
+* **Kill switch (emergency only):** `SPEAKER_LINE_CORRECTION=false` in `.env`, then
+  `docker compose up -d --force-recreate web worker scheduler` (a restart does not re-read `.env`). New meetings keep
+  their tags' names; meetings already corrected stay as they are until restored with the rebuild's `--restore`. A value
+  that is not `true` or `false` stops web, worker and scheduler at startup.
+* **Revert the PR** to remove the feature entirely (no migration to undo).
+
+## Follow-ups
+
+* Adebayo reads the first real meeting after deploy (the log line and the report) and judges a few moved lines by hand,
+  as he did for 39 and 40; the rule has not been judged on a live meeting with this exact code.
+* If a shared Meet account or a room mic shows a remote person's line pulled into the room's name, the design note's
+  "protect people with no light" rule is the first thing to add back (it was dropped by decision).
+* Outcome counts per meeting are not queryable after the evidence expires (7 days); the log line is the record. Add a
+  column only if that proves too thin.
+* The report's `--saved-names` flag exists to reproduce the earlier numbers; delete it when nobody needs them.

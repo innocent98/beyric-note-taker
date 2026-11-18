@@ -469,6 +469,15 @@ class Settings(BaseSettings):
     # request to Skribby and no name from the timeline. Independent of the elimination switch. A
     # value that is not a boolean stops startup, like the other switches.
     name_by_meet_timeline: bool = True
+    # Whether a Skribby segment moves to the person Meet's speaking timeline shows speaking over
+    # it, when exactly one person was lit and that person is not the one its tag says
+    # (`app/speaker_correction.py`; docs/sop/2026-11-19-line-level-speaker-correction.md). ON by
+    # default; this is the one emergency switch, not a rollout dial. It acts only with
+    # TRANSCRIPT_SOURCE=skribby, only on a meeting whose speaker events were kept (Teams, Zoom and
+    # a failed fetch change nothing), only after the same clock check the timeline naming uses,
+    # and it never stops a meeting. OFF: every line keeps its tag's name, as before it existed; the
+    # rebuild script then rebuilds without it as well. A value that is not a boolean stops startup.
+    speaker_line_correction: bool = True
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.

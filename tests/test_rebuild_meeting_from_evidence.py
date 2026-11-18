@@ -1067,6 +1067,7 @@ def test_with_the_switch_off_a_rebuild_does_not_use_the_events(
         audio_dir=str(backups.parent / "audio"),
         skribby_name_by_elimination=True,
         name_by_meet_timeline=False,
+        speaker_line_correction=False,
     )
     monkeypatch.setattr(rebuild, "get_settings", lambda: off)
     meeting = make_meeting(
@@ -1096,3 +1097,254 @@ def test_a_rebuild_of_evidence_with_no_events_is_what_it_was(
     code, _, _ = apply(session, meeting, backups, capsys)
     assert code == 0
     assert "[Ada Example]" not in stored(session, meeting).speaker_transcript
+
+
+# ---- the line-level speaker correction (docs/sop/2026-11-19-line-level-speaker-correction.md) ----
+# Meetings built from the numbers of the three reports (tests/speaker_correction_fixtures.py).
+
+
+def case_meeting(session, owner, template, case, *, source="skribby", events=True, **fields):
+    from tests.speaker_correction_fixtures import BOT as CASE_BOT
+
+    meeting = make_meeting(
+        session,
+        owner,
+        template,
+        recorded_seconds=600,
+        transcript_source=source,
+        bot_name=CASE_BOT,
+        **fields,
+    )
+    keep_evidence(
+        session,
+        meeting,
+        case.evidence_items(),
+        events=case.events if events else None,
+    )
+    return meeting
+
+
+def old_text(case):
+    """The text today's code builds from this case: no line moved."""
+    from tests.speaker_correction_fixtures import BOT as CASE_BOT
+    from tests.speaker_correction_fixtures import old_segments
+
+    return transcript_source.candidate(
+        old_segments(case.body, (CASE_BOT,), True, case.events, True),
+        skribby._last_segment_end(case.body),
+    ).text
+
+
+def new_text(case):
+    from tests.speaker_correction_fixtures import BOT as CASE_BOT
+
+    return transcript_source.candidate(
+        skribby._segments(case.body, (CASE_BOT,), True, case.events, True, True),
+        skribby._last_segment_end(case.body),
+    ).text
+
+
+def counts_in(text, pattern):
+    """`(segments, seconds)` of the first line matching `pattern`: the rebuild's dry run prints
+    `label  N segments  S s`, the report `label  N  S` (both after the same label)."""
+    import re
+
+    line = next(line for line in text.splitlines() if pattern in line)
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", line.split(pattern, 1)[1])
+    return int(numbers[0]), float(numbers[1])
+
+
+LABELS = (
+    "agrees with the tag's name",
+    "WOULD MOVE to another person",
+    "ambiguous (2+ lit): stays",
+    "no Meet signal: stays",
+    "not timed or no tag: stays",
+)
+
+
+@pytest.mark.parametrize("name", ["meeting_38", "meeting_39", "meeting_40"])
+def test_the_dry_run_counts_are_the_reports_counts(session, owner, template, backups, capsys, name):
+    import tests.speaker_correction_fixtures as fixtures
+    from tests.test_speaker_reattribution_report import _script
+
+    case = getattr(fixtures, name)()
+    meeting = case_meeting(session, owner, template, case)
+    code, client, out = go([str(meeting.id)], backups, capsys=capsys)
+    assert code == 0 and "DRY RUN" in out and client.chats == 0
+    printed = _script().report(
+        session, meeting.id
+    )  # what `docker compose exec web python ...` prints
+    for label in LABELS:
+        ours = counts_in(out, label)
+        theirs = counts_in(printed, label)
+        assert ours[0] == theirs[0], label
+        assert ours[1] == pytest.approx(theirs[1], abs=0.05), label
+    assert counts_in(out, LABELS[1])[0] == len(case.moved_to)
+    assert "Example" not in out and "w1" not in out  # counts only: no name, no word
+
+
+def test_apply_on_meeting_40_moves_the_lines_and_a_second_run_does_nothing(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    case = meeting_40()
+    meeting = case_meeting(session, owner, template, case)
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "Lines moved to the person Meet's timeline showed: 32 segments" in out
+    row = stored(session, meeting)
+    assert row.transcript == row.speaker_transcript == new_text(case) != old_text(case)
+    assert row.transcript_source == "skribby-rebuilt"
+    first = snapshot(row)
+    runs = session.scalars(select(AiRun)).all()
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "already rebuilt" in out
+    assert snapshot(stored(session, meeting)) == first
+    assert client.chats == 0 and session.scalars(select(AiRun)).all() == runs
+    assert len(backup_files(backups)) == 1
+
+
+def test_a_meeting_rebuilt_before_the_correction_existed_is_rebuilt_once_more_then_left_alone(
+    session, owner, template, backups, capsys
+):
+    """Meeting 39's state: `skribby-rebuilt`, names from Meet's timeline, no line moved."""
+    from tests.speaker_correction_fixtures import meeting_39
+
+    case = meeting_39()
+    before = old_text(case)
+    meeting = case_meeting(
+        session,
+        owner,
+        template,
+        case,
+        source="skribby-rebuilt",
+        transcript=before,
+        speaker_transcript=before,
+    )
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)  # the dry run says what changes
+    assert code == 0 and "DRY RUN" in out and "already rebuilt" not in out
+    assert counts_in(out, "WOULD MOVE to another person")[0] == 128
+
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "Lines moved to the person Meet's timeline showed: 128 segments" in out
+    row = stored(session, meeting)
+    assert row.speaker_transcript == new_text(case) != before
+    assert row.transcript_source == "skribby-rebuilt"  # unchanged: it was already that
+    assert client.chats >= 1 and len(backup_files(backups)) == 1
+
+    # a third run finds the same turns and does nothing
+    done_once = snapshot(row)
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "already rebuilt" in out and client.chats == 0
+    assert snapshot(stored(session, meeting)) == done_once
+    assert len(backup_files(backups)) == 1
+
+
+def test_the_second_rebuild_of_meeting_39_can_be_restored_and_redone(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_39
+
+    case = meeting_39()
+    before = old_text(case)
+    meeting = case_meeting(
+        session,
+        owner,
+        template,
+        case,
+        source="skribby-rebuilt",
+        transcript=before,
+        speaker_transcript=before,
+    )
+    apply(session, meeting, backups, capsys)
+    [backup] = backup_files(backups)
+    code, _, out = go(["--restore", str(backup), "--apply"], backups, capsys=capsys)
+    assert code == 0 and "RESTORED" in out
+    restored = stored(session, meeting)
+    assert restored.speaker_transcript == before and restored.notes == OLD_NOTES
+    assert restored.transcript_source == "skribby-rebuilt"
+    code, _, out = apply(session, meeting, backups, capsys)  # and the rebuild works again
+    assert code == 0 and "APPLIED" in out
+    assert stored(session, meeting).speaker_transcript == new_text(case)
+
+
+def test_meeting_38_the_clean_control_changes_two_lines_only(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_38
+
+    case = meeting_38()
+    meeting = case_meeting(session, owner, template, case)
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "Lines moved to the person Meet's timeline showed: 2 segments" in out
+    new = stored(session, meeting).speaker_transcript
+    assert new == new_text(case)
+    assert len(rebuild._turns(new)) - len(rebuild._turns(old_text(case))) in range(-2, 5)
+    # all the words are still there, in the same order
+    assert rebuild._spoken(new).split() == rebuild._spoken(old_text(case)).split()
+
+
+def test_with_the_switch_off_a_rebuild_is_what_it_was_before_the_correction_existed(
+    session, owner, template, backups, capsys, monkeypatch
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    off = Settings(
+        audio_dir=str(backups.parent / "audio"),
+        skribby_name_by_elimination=True,
+        speaker_line_correction=False,
+    )
+    monkeypatch.setattr(rebuild, "get_settings", lambda: off)
+    case = meeting_40()
+    meeting = case_meeting(session, owner, template, case)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)
+    assert code == 0 and "not applied: switched off (SPEAKER_LINE_CORRECTION=false)" in out
+    apply(session, meeting, backups, capsys)
+    assert stored(session, meeting).speaker_transcript == old_text(case)  # byte for byte
+
+
+def test_a_meeting_with_no_meet_events_is_rebuilt_exactly_as_before(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    case = meeting_40()
+    meeting = case_meeting(session, owner, template, case, events=False)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)
+    assert "no speaker events were kept for this meeting, so no line can move" in out
+    apply(session, meeting, backups, capsys)
+    # the names are the evidence's own; nothing moved
+    plain = transcript_source.candidate(
+        [{"speaker": i["speaker_name"] or "", "text": i["transcript"]} for i in case.items],
+        skribby._last_segment_end(case.body),
+    ).text
+    assert stored(session, meeting).speaker_transcript == plain
+
+
+def test_a_meeting_whose_meet_clock_does_not_fit_is_not_corrected_by_the_rebuild_either(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    case = meeting_40()
+    late = {
+        **case.events,
+        "participants": [
+            {**p, "events": [{**e, "timestamp": e["timestamp"] + 20_000} for e in p["events"]]}
+            for p in case.events["participants"]
+        ],
+    }
+    case.events = late
+    meeting = case_meeting(session, owner, template, case)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)
+    assert "not applied: clock_shifted" in out
+
+
+def test_the_turns_see_a_moved_line_that_the_list_of_names_does_not():
+    before = "[Ada]: one two\n[Bo]: three"
+    after = "[Ada]: one\n[Bo]: two three"  # the second line moved to Bo: the same two names
+    assert rebuild._labels(before) == rebuild._labels(after)
+    assert rebuild._turns(before) != rebuild._turns(after)
+    assert rebuild._turns(before) == [("Ada", 2), ("Bo", 1)]
+    assert rebuild._turns("no labels at all") == []

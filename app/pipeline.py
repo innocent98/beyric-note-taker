@@ -911,6 +911,24 @@ def _skribby_segments(
         return None
 
 
+def _log_correction(meeting_id: int, evidence: dict | None) -> None:
+    """One line per meeting saying what the line-level speaker correction did (docs/sop/
+    2026-11-19-line-level-speaker-correction.md): how many segments and seconds moved to the person
+    Meet's timeline showed, or why nothing could (a shifted clock). Numbers only: no name, no word.
+    Nothing is logged for a meeting it did not run for (no speaker events, or switched off)."""
+    summary = (evidence or {}).get("correction")
+    if not isinstance(summary, dict):
+        return
+    logger.info(
+        "meeting %s: speaker correction moved %s of %s segments (%s s)%s",
+        meeting_id,
+        summary.get("moved_segments"),
+        summary.get("segments"),
+        summary.get("moved_seconds"),
+        f"; refused: {summary['refused']}" if summary.get("refused") else "",
+    )
+
+
 def _record_shadow(
     session: Session,
     meeting_id: int,
@@ -1082,6 +1100,7 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
                     found.speakers,
                     found.unnamed_segments,
                 )
+                _log_correction(meeting_id, evidence)
                 # The same evidence the speakers step keeps when it labels (that step fetches
                 # nothing in this mode: the transcript already carries the names), from the data
                 # fetched above plus the speaker events. A savepoint inside: it can fail without

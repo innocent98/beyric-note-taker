@@ -1,9 +1,15 @@
 # Line-level speaker correction: should a line follow Meet's timeline when the tag disagrees?
 
-**Status:** design note, 2026-11-18. Nothing here is built. The only code that ships with it is the
-read-only measurement `scripts/speaker_reattribution_report.py` (SOP
-`docs/sop/2026-11-18-speaker-reattribution-report.md`), which changes nothing about how production
-attributes speakers.
+**Status:** design note, 2026-11-18. **BUILT 2026-11-19** (SOP `docs/sop/2026-11-19-line-level-speaker-correction.md`,
+branch `feature/line-level-speaker-correction`), with Adebayo's decisions overriding this note where they differ:
+**ON by default** with one emergency kill switch `SPEAKER_LINE_CORRECTION` (not default-off, no percent rollout or shadow
+mode; sections 2, 7 and the end of 9 are superseded); the rule is **"exactly one person lit, nobody else"** with the
+report's own defaults `--min-seconds 1` and `--ambiguous-ratio 0.25` as the production constants (the table in section 4
+is superseded: no share of the line, no 4-word minimum, no smoothing, no "protect people with no light"); it runs in the
+pipeline for `TRANSCRIPT_SOURCE=skribby` and in the rebuild script (section 5: not in `_segments` alone but through
+`skribby._labelled`, the evidence keeps `corrected_to`). Sections 1, 3, 6, 8 and 10 still describe the problem, the
+numbers, the risks and the alternative. Written first: the read-only measurement
+`scripts/speaker_reattribution_report.py` (SOP `docs/sop/2026-11-18-speaker-reattribution-report.md`).
 
 ## 1. The question
 
