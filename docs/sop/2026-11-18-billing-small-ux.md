@@ -1,6 +1,6 @@
 # SOP: three small billing fixes (cancel an unfinished checkout, absent answer expires, shorter country note)
 
-**What shipped.** One PR, branch `fix/billing-small-ux`, three changes Adebayo found on the billing screens. (1) **Cancel this payment**: a person can put away a plan or pack checkout they started and did not finish, with `POST /api/billing/payments/{reference}/cancel`. (2) The "billing is not available to you" answer a browser tab remembers now **expires after 60 seconds**, so the Billing link and the hours card appear without a sign-out once billing is switched on. (3) The billing country card's note is shorter and states the change rule once. PR: see the PR for this branch (not merged by the author; the lead merges on Adebayo's word after an Opus review of change 1).
+**What shipped.** One PR, branch `fix/billing-small-ux`, three changes Adebayo found on the billing screens. (1) **Cancel this payment**: a person can put away a plan or pack checkout they started and did not finish, with `POST /api/billing/payments/{reference}/cancel`. (2) The "billing is not available to you" answer a browser tab remembers now **expires after 60 seconds**, so the Billing link and the hours card appear without a sign-out once billing is switched on. (3) The billing country card's note is shorter. PR: see the PR for this branch (not merged by the author; the lead merges on Adebayo's word after an Opus review of change 1).
 
 ## 1. Cancel this payment (the money part)
 
@@ -64,7 +64,7 @@ No setting, no migration. Revert the PR to remove the button and the route; paym
 
 ## 3. The country note
 
-`web/components/billing/billing-country.tsx`: the paragraph under "Billing country" is now "Nigeria pays in naira; every other country pays in US dollars. Use the country your business is based in. You can change it until your first payment." The provider names stay out of this card (the statement under the plans and the pay page say them). Because the note states the change rule, the line "Until your first payment you can change this country as often as you like." is gone while the country is not locked; the 30-day line stays when it is locked (the note then also says "until your first payment", which is true of the free changes). The picker's own list of rules is unchanged. Test: `web/tests/billing-plans-view.test.tsx`.
+`web/components/billing/billing-country.tsx`: the paragraph under "Billing country" is now "This sets your currency. Use the country your business is based in." (lead's wording, 2026-11-18). No provider names and no change rule inside it; the statement under the plans ("Prices in naira, paid through Paystack.") and the pay page keep saying the provider. The lines under the chosen country are unchanged: "Until your first payment you can change this country as often as you like." while it is not locked, and the 30-day line when it is locked. Test: `web/tests/billing-plans-view.test.tsx`.
 
 ## Verification (all three, local)
 

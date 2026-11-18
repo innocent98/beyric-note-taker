@@ -141,8 +141,7 @@ export function BillingCountry({
           Billing country
         </h2>
         <p className="set-sub">
-          Nigeria pays in naira; every other country pays in US dollars. Use the country your business is based in. You can
-          change it until your first payment.
+          This sets your currency. Use the country your business is based in.
         </p>
       </div>
 
@@ -150,10 +149,13 @@ export function BillingCountry({
         <div className="bill-current">
           <div className="pl-row-title">{countryName(chosen)}</div>
           {profile.route ? <div className="pl-row-sub">{routeStatement(profile.route)}</div> : null}
-          {/* The note under the title already says it can be changed until the first payment: only a locked country needs a line here. */}
-          {profile.country_locked && !(tooSoon && allowedAt) ? (
-            <div className="pl-row-sub">Since your first payment it can be changed once every 30 days.</div>
-          ) : null}
+          <div className="pl-row-sub">
+            {!profile.country_locked
+              ? "Until your first payment you can change this country as often as you like."
+              : tooSoon && allowedAt
+                ? null
+                : "Since your first payment it can be changed once every 30 days."}
+          </div>
         </div>
       ) : null}
 
