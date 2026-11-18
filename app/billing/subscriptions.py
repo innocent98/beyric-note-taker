@@ -123,8 +123,8 @@ def _refuse_while_refunding(db: Session, sub: Subscription) -> None:
         raise Refused(
             409,
             "refund_pending",
-            "A refund of your plan is being processed, so the plan cannot be changed until it "
-            "is done.",
+            "A refund of your plan is being processed, so the plan cannot be changed or paid "
+            "until it is done.",
         )
 
 

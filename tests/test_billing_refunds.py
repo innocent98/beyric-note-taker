@@ -706,6 +706,7 @@ def test_a_late_success_after_the_refund_was_closed_as_not_made_changes_nothing_
         select(Notification).where(Notification.kind == "admin.billing_refund_late")
     ).all()
     assert result.reference in alert.body and "Nothing was changed" in alert.body
+    assert "Do not start another refund" in alert.body
 
 
 def test_a_late_answer_does_not_crash_when_a_new_refund_is_already_live(
@@ -872,3 +873,29 @@ def test_a_double_charged_payment_with_an_earlier_date_does_not_hide_the_real_fi
     duplicate.paid_at = first.paid_at - timedelta(days=1)  # sorts before the real one
     session.commit()
     assert ask(session, first, "first_plan_7d", admin, T0 + DAY).status == "submitted"
+
+
+def test_no_pay_link_is_made_for_a_plan_with_an_unsettled_refund(session, ada, admin, providers):
+    from app.billing import renewals
+
+    sub = buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+    session.execute(  # the plan is in its grace: a pay link would normally be offered
+        update(Subscription)
+        .where(Subscription.id == sub.id)
+        .values(
+            status="past_due",
+            current_period_end=T0 + timedelta(hours=1),
+            grace_ends_at=T0 + timedelta(hours=73),
+        )
+    )
+    session.commit()
+    checkouts = len(providers.usd.checkouts)
+
+    with pytest.raises(subs.Refused) as refused_:
+        renewals.pay_link(session, ada, settings(), T0 + DAY)
+
+    assert (refused_.value.status, refused_.value.code) == (409, "refund_pending")
+    assert len(providers.usd.checkouts) == checkouts  # no page was made

@@ -1740,7 +1740,7 @@ A first plan payment within 7 days with no hours used (capture 48, `200`):
 | `hours_used` | an hour of what this payment bought was used | 45 |
 | `not_first_payment` | not the person's first plan payment ever | tests only |
 | `plan_changed` | the plan was upgraded or renewed since | tests only |
-| `refund_pending` (on `POST /subscription/change-plan` and its preview, for the person) | a refund of the plan is `pending` or `unknown`: the plan cannot be changed until it is settled; the sentence is written for the person | tests only |
+| `refund_pending` (on `POST /subscription/change-plan`, its preview and `POST /subscription/pay-link`, for the person) | a refund of the plan is `pending` or `unknown`: the plan cannot be changed or paid until it is settled; the sentence is written for the person | tests only |
 | `recording_in_progress` | the person has a recording running or being prepared | tests only |
 | `payer_gone` | the account was deleted | tests only |
 | `not_used_for_hours`, `no_provider_transaction` | nothing was granted / no provider transaction on record | tests only |

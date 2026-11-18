@@ -789,6 +789,13 @@ def pay_link(
     if states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
         session.rollback()
         raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
+    # Stage S9: while a refund of the plan's first payment is `pending` or `unknown` the plan may
+    # be about to end: nothing new is charged on it, a pay link included.
+    try:
+        subscriptions._refuse_while_refunding(session, sub)
+    except subscriptions.Refused:
+        session.rollback()
+        raise
     # Anything already open for this period is asked about FIRST, by our reference, at the
     # provider: a person must never be given a second page while a first one can still be paid
     # (that is a double charge). Nothing new is made until the provider says every open one is

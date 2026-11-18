@@ -209,6 +209,10 @@ def assess(
         raise _refuse("hours_used", "Hours from this payment were used: it cannot be refunded.")
     sub = None
     if wanted_kind == "plan":
+        # the subscription first (its row lock orders us against a renewal or an upgrade being
+        # settled), then count what was paid on it
+        query = select(Subscription).where(Subscription.id == payment.subscription_id)
+        sub = db.scalars(query.with_for_update() if lock else query).first()
         later = db.scalar(
             select(func.count())
             .select_from(Payment)
@@ -224,8 +228,6 @@ def assess(
                 "plan_changed",
                 "The plan was changed or renewed since this payment: refund it by hand.",
             )
-        query = select(Subscription).where(Subscription.id == payment.subscription_id)
-        sub = db.scalars(query.with_for_update() if lock else query).first()
     return Assessment(reason, grant, sub)
 
 
@@ -425,7 +427,8 @@ def _late_answer(
         + (f" (provider refund id {answer})" if answer else "")
         + f". Nothing was changed. Look in the provider's dashboard for the reference "
         f"{refund.reference}: if the money really went back and the refund was closed as not made, "
-        "the hours are back with the person and the payment is not marked refunded.",
+        "the hours are back with the person and the payment is not marked refunded. Do not start "
+        "another refund: settle it by hand with the accountant.",
     )
 
 
@@ -436,15 +439,20 @@ def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetim
     way out of `unknown`; nothing here calls the provider."""
     if outcome not in ("made", "not_made"):
         raise Refused(422, "validation_error", "The outcome is `made` or `not_made`.")
-    refund = db.scalars(select(Refund).where(Refund.id == refund_id).with_for_update()).first()
-    if refund is None:
+    # Lock order everywhere: the payment, then the refund (as `request`'s last step does).
+    payment_id = db.scalar(select(Refund.payment_id).where(Refund.id == refund_id))
+    if payment_id is None:
         raise Refused(404, "not_found", "No such refund.")
+    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
+    refund = db.scalars(
+        select(Refund)
+        .where(Refund.id == refund_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
     waiting_too_long = refund.status == "pending" and now - refund.created_at >= STUCK_AFTER
     if refund.status != "unknown" and not waiting_too_long:
         raise _refuse("not_unresolved", "This refund is not waiting for a person to resolve it.")
-    payment = db.scalars(
-        select(Payment).where(Payment.id == refund.payment_id).with_for_update()
-    ).one()
     refund.resolved_by = admin.id
     if outcome == "made":
         _accepted(db, refund, payment, refund.provider_refund_id, now)
