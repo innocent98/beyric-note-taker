@@ -8,7 +8,7 @@ are the ISO codes the `payments` table allows.
 from dataclasses import dataclass, field
 
 # What a webhook can tell us. `charge_succeeded` and `charge_failed` move a payment; `refund` and
-# `dispute` are stored and marked decided (stage S9): a failed refund or a dispute alerts the admins.
+# `dispute` are stored and marked decided (stage S9); a failed refund or a dispute alerts admins.
 EVENT_KINDS = ("charge_succeeded", "charge_failed", "refund", "dispute")
 # What the provider says about one payment when we ask it directly.
 TRANSACTION_STATUSES = ("successful", "failed", "pending")
