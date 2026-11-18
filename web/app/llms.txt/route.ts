@@ -10,7 +10,7 @@ export function GET() {
 
 > ${SITE_DESCRIPTION}
 
-${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a pilot with a limited number of accounts, and sign-up is invite-only for now. Each account has an hours limit. The sign-up page says whether places are open; when the pilot is full or closed there is a waiting list.
+${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. Sign-up is open at /signup. Each account has a number of recorded hours: a short trial, then a monthly plan. Plans and prices are on /pricing.
 
 ## What it does
 

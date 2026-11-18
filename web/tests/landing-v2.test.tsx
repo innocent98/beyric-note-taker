@@ -36,9 +36,8 @@ describe("the landing page: what is cut", () => {
     expect(landing.replace("Mon 9 Nov, 14:00", "").replace("Jira and Asana are not supported", "")).not.toMatch(pattern);
   });
 
-  it("says plainly that sign-up is invite-only, with the way in for everyone else", () => {
-    expect(landing).toContain("Sign-up is invite-only for now.");
-    expect(landing).toContain("join the waiting list");
+  it("does not say sign-up is by invitation: it is open", () => {
+    expect(landing).not.toMatch(/invite-only|by invitation|waiting list/i);
   });
 
   it("keeps our entity and mailbox in the footer", () => {
