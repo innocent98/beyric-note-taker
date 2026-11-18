@@ -1730,6 +1730,20 @@ A change of country that takes effect (`applied`, or `scheduled`) turns the pers
 | A refusal's date is in the person's saved time zone | tests only (`tests/test_billing_country_flow.py`); the captures' people have no zone, so theirs read in UTC |
 | A real Paystack or Flutterwave | not involved |
 
+## Where billing is reachable from the signed-in app (2026-11-17): no new payload
+
+No endpoint, field or error is new. Every entry point reads the answer of `GET /api/billing/subscription` already captured above (`docs/fe-captures/billing-subscriptions/09` never had a plan, `26` active, `50` grace, `61` lapsed) and nothing else:
+
+| Entry point | Reads | Rule |
+|---|---|---|
+| **Billing** link (Configure) and the sidebar **hours card** | `state`, `hours.seconds_left`, `hours.holdings_seconds`, `hours.warning`, `subscription.status`, `subscription.plan_name` | drawn only on a 200; a 404 `not_found` draws nothing and is remembered for the tab; any other failure draws nothing this time |
+| Where the card leads | `subscription.status` | `active` or `past_due`: `/billing`; anything else (`subscription` null, `lapsed`, `canceled`, `ended`, a trial or pilot with no plan): `/billing/plans` |
+| Card text | `hours` | `holdings_seconds` 0: "No recorded hours"; `warning` `out` or nothing left: "Out of hours" (and "Add hours" with a live plan); else "<hours> left" with the bar; `seconds_left` or `holdings_seconds` null (no limit): no card |
+| Notification links | the notice's `kind` (`usage.hours_low`, `usage.hours_out`, `pilot.expiry`) | the same rule for where it leads; a notice about a meeting still links to the meeting |
+| "Not recorded" hours link | the calendar's `reason_text` | only for the two sentences "Your recording hours are used up." and "You have no recording hours at the moment." (pinned to `app/calendar_text.py` by a test) |
+
+Trap: the card's `state` words are the **person's** state (`trial`, `pilot`, `none`, ...), not the subscription's `status`; a person in a trial has `subscription: null`. Verified live against the local app with the scripted provider (trial, no plan, active, lapsed, 90% used, all used); the "Not recorded" link only by tests, with the server's real sentence.
+
 ## Verification
 
 | Behaviour | Verified |

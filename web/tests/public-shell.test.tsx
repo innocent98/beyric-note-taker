@@ -43,7 +43,7 @@ const OWNER_FOOTER = "<footer class=\"ld-footer\"><div class=\"ld-footer-in\"><d
 const PAGES: ReadonlyArray<{ name: string; path: string; render: () => Promise<string> }> = [
   { name: "the landing page at /", path: "/", render: async () => renderPublic((await HomePage()) as ReactElement) },
   { name: "/welcome", path: "/welcome", render: () => renderInPublicLayout(WelcomePage()) },
-  { name: "/pricing", path: "/pricing", render: () => renderInPublicLayout(PricingPage()) },
+  { name: "/pricing", path: "/pricing", render: async () => renderInPublicLayout(await PricingPage()) },
   { name: "/privacy", path: "/privacy", render: () => renderInPublicLayout(PrivacyPage()) },
   { name: "/terms", path: "/terms", render: () => renderInPublicLayout(TermsPage()) },
   { name: "the 404 page", path: "/no-such-page", render: () => renderPublic(NotFound() as ReactElement) },

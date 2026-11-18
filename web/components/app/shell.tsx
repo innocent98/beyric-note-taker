@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import { BillingBanner } from "@/components/billing/billing-banner";
+import { BillingNavLink, SidebarHours } from "@/components/billing/sidebar-billing";
 import { ActiveTeamSync } from "@/components/app/active-team-sync";
 import { ShellNav } from "@/components/app/shell-nav";
 import { TeamNavLink } from "@/components/app/team-nav-link";
@@ -10,7 +11,7 @@ import { SHELL_DEFAULT_TEAM, SHELL_MARK } from "@/lib/active-team";
 import type { TeamSummary } from "@/lib/api/types";
 import { initials } from "@/lib/format";
 
-export type NavSection = "meetings" | "ask" | "tasks" | "projects" | "decisions" | "review" | "team" | "teams" | "notifications" | "templates" | "vocabulary" | "settings";
+export type NavSection = "meetings" | "ask" | "tasks" | "projects" | "decisions" | "review" | "team" | "teams" | "notifications" | "templates" | "vocabulary" | "settings" | "billing";
 
 export type ShellUser = { name: string | null; email: string };
 
@@ -85,7 +86,9 @@ export function AppShell({
           <NavLink href="/templates" label="Templates" current={current === "templates"} />
           <NavLink href="/vocabulary" label="Vocabulary" current={current === "vocabulary"} />
           {scoped("/settings", "Settings", "settings")}
+          <BillingNavLink current={current === "billing"} />
         </nav>
+        <SidebarHours />
         <div className="sidebar-user">
           {user ? (
             <>
