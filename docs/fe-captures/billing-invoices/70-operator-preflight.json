@@ -1,0 +1,25 @@
+{
+  "note": "The runbook's preflight for step 1, read-only, now with a note about the seller's details.",
+  "content": {
+    "exit": 1,
+    "output": [
+      "  [ok] BILLING_ENABLED is true",
+      "  [ok] BILLING_ALLOWED_EMAILS is not empty: every account",
+      "  [ok] BILLING_LIVE is false (test keys only)",
+      "  [ok] TOKEN_ENC_KEY is set (saved cards are encrypted with it)",
+      "  [FAIL] the Paystack secret key is set",
+      "  [note] the Paystack webhook secret is set: without it the older signature header is used",
+      "  [note] the Flutterwave secret key is set: dollars cannot be bought without it",
+      "  [ok] migration 0052 is applied",
+      "  [ok] migration 0053 is applied (invoices and refunds)",
+      "  [note] BILLING_SELLER_ADDRESS is set (the seller's line on every invoice): empty: the line is left off the invoice, never invented",
+      "  [note] BILLING_SELLER_REGISTRATION_NO is set (the seller's line on every invoice): empty: the line is left off the invoice, never invented",
+      "  [note] BILLING_SELLER_TAX_ID is set (the seller's line on every invoice): empty: the line is left off the invoice, never invented",
+      "  [ok] BILLING_VAT_RATE_BP: 0 basis points of VAT INCLUDED in the price (0: no VAT line; the accountant decides)",
+      "  [ok] an active plan has a price: NGN, USD",
+      "  [ok] a price in USD",
+      "  [ok] a price in NGN",
+      "  [note] the billing clock runs in the scheduler process: recreate it after the change"
+    ]
+  }
+}

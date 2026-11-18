@@ -12,7 +12,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import api, auth, edge, limits, logging_setup, mail, ratelimit, skribby, web
+from app.billing import admin_api as billing_admin_api
 from app.billing import api as billing_api
+from app.billing import invoices_api as billing_invoices_api
 from app.billing import profile_api as billing_profile_api
 from app.billing import subscriptions_api as billing_subscriptions_api
 from app.config import Settings, get_settings
@@ -139,5 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(billing_api.router)
     app.include_router(billing_profile_api.router)
     app.include_router(billing_subscriptions_api.router)
+    app.include_router(billing_invoices_api.router)
+    app.include_router(billing_admin_api.router)
     app.include_router(web.router)
     return app

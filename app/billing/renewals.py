@@ -52,7 +52,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import alerts
-from app.billing import plans, routing, settle, states, subscriptions
+from app.billing import invoices, plans, refunds, routing, settle, states, subscriptions
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
@@ -62,6 +62,7 @@ from app.models import (
     BillingEvent,
     HourGrant,
     Payment,
+    Refund,
     Subscription,
     User,
 )
@@ -108,8 +109,22 @@ def run_due(session: Session, now: datetime, settings: Settings) -> int:
             ),
         ),
     )
+    # Stage S9: a plan whose first payment has a refund still `pending` or `unknown` is not charged,
+    # retried or lapsed until a person settles the refund (`made` ends the plan, `not_made` lets
+    # the clock catch up and charge once, as after any pause).
+    waiting_refund = (
+        select(Refund.id)
+        .join(Payment, Payment.id == Refund.payment_id)
+        .where(
+            Payment.subscription_id == Subscription.id, Refund.status.in_(("pending", "unknown"))
+        )
+        .exists()
+    )
     ids = session.scalars(
-        select(Subscription.id).where(due).order_by(Subscription.current_period_end).limit(BATCH)
+        select(Subscription.id)
+        .where(due, ~waiting_refund)
+        .order_by(Subscription.current_period_end)
+        .limit(BATCH)
     ).all()
     for sub_id in ids:
         try:
@@ -522,6 +537,59 @@ def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime)
 def sweep(session: Session, now: datetime, settings: Settings) -> None:
     _sweep_events(session, now, settings)
     _sweep_payments(session, now, settings)
+    for after_money in (_issue_missing_invoices, _alert_stuck_refunds, _alert_old_pending):
+        try:  # one failing check must not stop the others (or the next pass)
+            after_money(session, now)
+        except Exception as exc:
+            session.rollback()
+            logger.error(
+                "billing sweep step %s failed: %s", after_money.__name__, type(exc).__name__
+            )
+
+
+def _issue_missing_invoices(session: Session, now: datetime) -> None:
+    """Stage S9: a used payment with no invoice (its handler failed, or it was settled before the
+    stage) gets one now, with its receipt mail."""
+    invoices.issue_missing(session, now)
+
+
+def _alert_stuck_refunds(session: Session, now: datetime) -> None:
+    """Stage S9: a refund left `pending` by a process that died: the admins look at the provider."""
+    refunds.alert_stuck(session, now)
+
+
+STUCK_BAND = (timedelta(hours=24), timedelta(hours=48))
+STUCK_IDS_SHOWN = 15
+
+
+def _alert_old_pending(session: Session, now: datetime) -> None:
+    """Stage S9: payments that waited more than a day for a result (an abandoned or refused
+    checkout, a webhook that never came and a provider that says nothing). One digest a day, ids
+    only: each payment is in the band of 24 to 48 hours for a day, so it is named once or twice,
+    never for ever. The sweeper already settled any the provider says succeeded."""
+    young, old = STUCK_BAND
+    rows = session.scalars(
+        select(Payment.id)
+        .where(
+            Payment.status == "pending",
+            Payment.created_at <= now - young,
+            Payment.created_at > now - old,
+        )
+        .order_by(Payment.id)
+    ).all()
+    if not rows:
+        return
+    shown = ", ".join(str(i) for i in rows[:STUCK_IDS_SHOWN])
+    more = f" and {len(rows) - STUCK_IDS_SHOWN} more" if len(rows) > STUCK_IDS_SHOWN else ""
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_pending_old:{now:%Y-%m-%d}",
+        "Payments have waited more than a day",
+        f"{len(rows)} payment(s) were started more than a day ago and have no result yet: "
+        f"{shown}{more}. Most are checkouts nobody finished; a refused or lost payment looks the "
+        "same, so look at the provider's dashboard for any you expect.",
+    )
+    session.commit()
 
 
 def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
@@ -721,6 +789,13 @@ def pay_link(
     if states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
         session.rollback()
         raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
+    # Stage S9: while a refund of the plan's first payment is `pending` or `unknown` the plan may
+    # be about to end: nothing new is charged on it, a pay link included.
+    try:
+        subscriptions._refuse_while_refunding(session, sub)
+    except subscriptions.Refused:
+        session.rollback()
+        raise
     # Anything already open for this period is asked about FIRST, by our reference, at the
     # provider: a person must never be given a second page while a first one can still be paid
     # (that is a double charge). Nothing new is made until the provider says every open one is
@@ -734,6 +809,11 @@ def pay_link(
     if sub is None or states.effective_status(subscriptions.snapshot(sub), now) != states.PAST_DUE:
         session.rollback()
         raise subscriptions.Refused(409, "nothing_due", "There is nothing to pay right now.")
+    try:  # asked again under THIS lock: a refund may have started while the first was released
+        subscriptions._refuse_while_refunding(session, sub)
+    except subscriptions.Refused:
+        session.rollback()
+        raise
 
     sold = subscriptions.sold_route(sub)
     route = sold

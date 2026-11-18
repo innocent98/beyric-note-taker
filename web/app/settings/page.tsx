@@ -11,9 +11,10 @@ import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { SettingsRemovedRecurring } from "@/components/app/settings-removed-recurring";
 import { SettingsBilling } from "@/components/billing/settings-billing";
+import { SettingsBillingAdmin } from "@/components/billing/settings-billing-admin";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireTeamOwner, getShellTeams } from "@/lib/api/server";
+import { getReviewOpen, getSession, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireTeamOwner, getShellTeams } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
 import type { CalendarState, Template } from "@/lib/api/types";
 
@@ -60,6 +61,7 @@ export default async function SettingsPage({
   // Per person, only while the switch is on: the team this person's new meetings are shared to (null: none).
   const autoShare = teams ? await api.settings.autoShare.get().catch(() => null) : null;
   const noIntegrations = teams !== null && team?.is_personal === true;
+  const session = await getSession();
   const [email, language, timeZone, botName, yourName] = await Promise.all([
     load(api.settings.email.get()),
     load(api.settings.language.get()),
@@ -81,6 +83,7 @@ export default async function SettingsPage({
         <SettingsBotName initial={botName} />
         <SettingsLanguage initial={language.default_language} />
         <SettingsBilling />
+        {session?.user?.is_admin ? <SettingsBillingAdmin /> : null}
         <EmailSettingsSection email={email} />
       </div>
     </AppShell>

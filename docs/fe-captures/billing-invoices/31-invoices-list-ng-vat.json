@@ -1,0 +1,37 @@
+{
+  "note": "VAT INCLUDED at 750 basis points: `vat_minor` 174419 and `subtotal_minor` 2325581 add up to `total_minor` 2500000, rounded half up in whole kobo. The default rate is 0: no VAT line.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "invoices": [
+        {
+          "number": "BN-T-2026-000003",
+          "issued_at": "2026-11-18T11:33:20.504041Z",
+          "currency": "NGN",
+          "subtotal_minor": 2325581,
+          "vat_rate_bp": 750,
+          "vat_minor": 174419,
+          "total_minor": 2500000,
+          "description": "20 hours a month",
+          "payment_reference": "bn-3-fda99da00ec7145f",
+          "payment_status": "succeeded",
+          "refunded_at": null,
+          "test_mode": true
+        }
+      ]
+    }
+  }
+}

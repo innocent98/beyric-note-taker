@@ -1,0 +1,39 @@
+{
+  "note": "The billing profile is the BUYER on the invoice: its name, address and tax number are copied onto each invoice when it is issued (a snapshot: a later edit never changes an old invoice).",
+  "client": "ada billing-on",
+  "request": {
+    "method": "PUT",
+    "path": "/api/billing/profile",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "name_or_company": "Ada Works Ltd (placeholder)",
+      "address": "1 Placeholder Road, Lagos",
+      "tax_id": "BUYER-TAX-PLACEHOLDER",
+      "billing_email": "ada@example.test"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name_or_company": "Ada Works Ltd (placeholder)",
+      "address": "1 Placeholder Road, Lagos",
+      "tax_id": "BUYER-TAX-PLACEHOLDER",
+      "billing_email": "ada@example.test",
+      "billing_country": "US",
+      "pending_billing_country": null,
+      "pending_effective_at": null,
+      "route": {
+        "currency": "USD",
+        "provider": "flutterwave"
+      },
+      "country_change_allowed_at": null
+    }
+  }
+}

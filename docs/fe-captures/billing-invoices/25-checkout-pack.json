@@ -1,0 +1,37 @@
+{
+  "note": "An extra-hours pack on the plan's route.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "pack",
+      "code": "pack_10h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-2-34d466e2c08231bd",
+        "kind": "pack",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 1000,
+        "created_at": "2026-11-18T11:33:20.425792Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-2-34d466e2c08231bd",
+        "invoice_number": null
+      },
+      "checkout_url": "https://fake.test/pay/bn-2-34d466e2c08231bd"
+    }
+  }
+}

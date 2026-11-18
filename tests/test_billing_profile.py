@@ -817,11 +817,15 @@ def test_only_the_person_reads_and_changes_their_own_profile(session, engine, ad
 
 def test_no_billing_route_takes_a_persons_id(web):
     """Nothing in the API can aim at someone else's row: no path names a person, and the one path
-    with a parameter (stage S8's `/payments/{reference}`) takes a payment reference that the route
-    only answers for the payer who owns it (`test_billing_subscriptions_api.py`)."""
+    with a parameter (stage S8's `/payments/{reference}`, stage S9's `/invoices/{number}/pdf`) takes
+    a payment reference or an invoice number that the route only answers for the payer who owns it
+    (`test_billing_subscriptions_api.py`, `test_billing_invoices_api.py`). The admin's own routes
+    (`/api/admin/billing/...`, stage S9) are admin-only and listed in `test_admin.py`."""
     paths = [p for p in web.app.openapi()["paths"] if p.startswith(API) and "webhooks" not in p]
     assert sorted(paths) == [
         f"{API}/checkout",
+        f"{API}/invoices",
+        f"{API}/invoices/{{number}}/pdf",
         f"{API}/payments",
         f"{API}/payments/{{reference}}",
         f"{API}/plans",
@@ -836,7 +840,7 @@ def test_no_billing_route_takes_a_persons_id(web):
         f"{API}/subscription/resume",
     ]
     parameters = {part.strip("{}") for p in paths for part in p.split("/") if part.startswith("{")}
-    assert parameters == {"reference"}
+    assert parameters == {"reference", "number"}
 
 
 def test_only_allow_listed_accounts_use_billing_when_there_is_a_list(engine, session):

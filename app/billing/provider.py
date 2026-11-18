@@ -65,14 +65,13 @@ class PaymentProvider(Protocol):
         ignores it."""
         ...
 
-    def refund(
-        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
-    ) -> str:
-        """Refund `amount_minor` of a payment; returns the provider's refund id. `reference` is
-        our own idempotency key for this refund (made from the refund row): a provider that takes
-        one refuses a retry with the same key instead of refunding twice. A caller must pass one.
-        No answer may raise `OutcomeUnknown`: never retry it blind, a second refund can pay twice
-        wherever the provider has no idempotency key (Flutterwave v3 has none)."""
+    def refund(self, provider_tx_id: str, amount_minor: int, *, reference: str) -> str:
+        """Refund `amount_minor` of a payment; returns the provider's refund id. `reference` is our
+        own idempotency key for this refund (made from the refund row) and is MANDATORY: a provider
+        that takes one refuses a retry with the same key instead of refunding twice. A call that
+        got no answer (a timeout, a 5xx, an answer we cannot read, a conflict that says the refund
+        already exists) raises `OutcomeUnknown`: never retry it blind, a second refund can pay
+        twice wherever the provider has no idempotency key (Flutterwave v3 has none)."""
         ...
 
 

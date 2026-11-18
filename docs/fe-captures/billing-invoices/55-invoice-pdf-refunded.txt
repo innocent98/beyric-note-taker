@@ -1,0 +1,45 @@
+ Invoice
+ BN-T-2026-000004
+ Issued 18 November 2026
+
+
+
+
+   TEST INVOICE: paid with test keys, no real money moved. Not a tax document.
+
+
+
+   REFUNDED on 18 November 2026: this payment was refunded in full.
+
+
+ FROM                                            BILLED TO
+ Beyrichq LTD                                    Country US
+ PLACEHOLDER ADDRESS (not real), Lagos,          cy@example.test
+ Nigeria
+ Registration no. RC-PLACEHOLDER-NOT-REAL
+ Tax ID TIN-PLACEHOLDER-NOT-REAL
+ billing-placeholder@example.test
+
+
+ DESCRIPTION                                                                 AMOUNT
+
+
+ 20 hours a month                                                                      USD 18.00
+ 18 November 2026 to 18 December 2026
+
+
+
+                                                                   Total paid (USD)   USD 18.00
+
+
+ Payment reference: bn-4-13c16fbca080c23e
+
+ Paid 18 November 2026
+
+ No VAT is charged on this invoice.
+
+
+
+
+Beyrichq LTD - invoice BN-T-2026-000004                                                       1/1
+

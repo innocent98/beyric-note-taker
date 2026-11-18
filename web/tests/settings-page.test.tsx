@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   slackOn: false,
   linearOn: false,
   autoShare: null as number | null,
+  admin: false,
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -72,6 +73,7 @@ vi.mock("@/lib/api/server", () => {
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getShellUser: async () => null,
+  getSession: async () => ({ user: { is_admin: state.admin } }),
   getShellTeams: async () => state.teams?.teams ?? null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
@@ -292,6 +294,27 @@ describe("Slack and Linear belong to a team (multi-team)", () => {
     const html = await render();
     expect(html).toContain("Post tasks to Slack");
     expect(html).toContain("Sync with your project tool");
+  });
+});
+
+describe("Refunds (billing stage S9, administrators only)", () => {
+  afterEach(() => {
+    state.admin = false;
+  });
+
+  it("is drawn for an administrator, with the way into the refund screen", async () => {
+    state.answer = async () => connected;
+    state.admin = true;
+    const html = await render();
+    expect(html).toContain("Payments and refunds, for the administrator.");
+    expect(html).toContain('href="/admin/billing"');
+  });
+
+  it("is not drawn for anyone else", async () => {
+    state.answer = async () => connected;
+    const html = await render();
+    expect(html).not.toContain("for the administrator");
+    expect(html).not.toContain("/admin/billing");
   });
 });
 

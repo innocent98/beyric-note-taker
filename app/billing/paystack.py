@@ -55,8 +55,10 @@ import httpx
 from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
+    BillingError,
     Checkout,
     IgnoredEvent,
+    OutcomeUnknown,
     ProviderError,
     ProviderEvent,
     ProviderTransaction,
@@ -263,7 +265,8 @@ class PaystackProvider:
             card_token=_reusable_token(_dig(data, "authorization")),
         )
 
-    # Refund and dispute events are stored and left for the refund stage (S9): nothing here is read
+    # Refund and dispute events are stored and marked decided (S9; a failed refund or a dispute only
+    # alerts the admins, see `settle._record_refund_notice`): nothing here is read
     # to move money, so a field Paystack leaves null (the processor's refund reference on a
     # `refund.pending`, a dispute's refund amount) must never turn a genuine event into a 400 that
     # is resent for 72 hours and lost. Only a body that is not an object is unreadable. The claims
@@ -295,6 +298,7 @@ class PaystackProvider:
             amount_minor=amount if _whole_number(amount) else 0,
             currency=_event_currency(data.get("currency")),
             payer_email=_text(_dig(data, "customer", "email")),
+            refund_failed=name == "refund.failed",
         )
 
     def _dispute_event(self, name: str, data: object, raw_body: bytes) -> ProviderEvent:
@@ -411,39 +415,52 @@ class PaystackProvider:
             raise ProviderError("Paystack's answer does not match the charge we asked for")
         return tx
 
-    def refund(
-        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
-    ) -> str:
+    def refund(self, provider_tx_id: str, amount_minor: int, *, reference: str) -> str:
         """`POST /refund`: refund `amount_minor` kobo; returns Paystack's refund id. The refund is
         queued, not done: `refund.processed` arrives later as an event. `reference` is OUR key for
-        this refund (Paystack: unique, 8 to 64 letters, digits, `_` and `-`): a retry after a
-        timeout with the same reference is refused by Paystack as a conflict (HTTP 409) instead of
-        refunding twice, so the caller (S9) must pass one made from its own refund row. Without it
-        a retried partial refund can refund twice."""
+        this refund and is MANDATORY (Paystack: unique, 8 to 64 letters, digits, `_` and `-`): a
+        retry with the same reference is refused by Paystack as a conflict (HTTP 409) instead of
+        refunding twice, and a caller must pass one made from its own refund row.
+
+        **No answer is `OutcomeUnknown`, never a `ProviderError`** (stage S9): a timeout, a
+        transport failure, a 5xx, a conflict (a refund with this reference already exists), an
+        answer that is not Paystack's shape, an answer without a refund id, or one for another
+        amount than we asked: the refund may well exist, so the caller looks at the dashboard and
+        never retries blind. A `ProviderError` here means Paystack refused the request and nothing
+        moved (a bad key, a 4xx, a refund it reports as failed)."""
         if not isinstance(provider_tx_id, str) or not _TRANSACTION_ID.fullmatch(provider_tx_id):
             raise ProviderError("that is not a Paystack transaction id")
         if not _whole_number(amount_minor) or amount_minor <= 0:
             raise ProviderError("the amount must be a positive whole number of kobo")
-        body: dict = {"transaction": provider_tx_id, "amount": amount_minor}
-        if reference is not None:
-            if not isinstance(reference, str) or not _REFUND_REFERENCE.fullmatch(reference):
-                raise ProviderError("a refund reference is 8 to 64 letters, digits, _ and -")
-            body["reference"] = reference
-        data = self._call("POST", "/refund", body)
+        if not isinstance(reference, str) or not _REFUND_REFERENCE.fullmatch(reference):
+            raise ProviderError("a refund reference is 8 to 64 letters, digits, _ and -")
+        body: dict = {"transaction": provider_tx_id, "amount": amount_minor, "reference": reference}
+        data = self._call("POST", "/refund", body, money=True)
         refund_id = data.get("id")
         if not _u64(refund_id):
-            raise ProviderError("Paystack gave no refund id")
+            raise OutcomeUnknown(
+                "Paystack answered the refund without a usable refund id: it may have been made, "
+                "look it up in the dashboard before asking again"
+            )
         if data.get("status") == "failed":
             raise ProviderError("Paystack reports the refund as failed")
-        if data.get("amount") != amount_minor:  # a different amount was refunded: say so loudly
-            raise ProviderError("Paystack's refund is not for the amount we asked")
+        if data.get("amount") != amount_minor:  # a different amount may have been refunded
+            raise OutcomeUnknown(
+                "Paystack's refund is not for the amount we asked: look at the dashboard before "
+                "asking again"
+            )
         return str(refund_id)
 
-    def _call(self, method: str, path: str, body: dict | None = None) -> dict:
+    def _call(
+        self, method: str, path: str, body: dict | None = None, *, money: bool = False
+    ) -> dict:
         """One call to Paystack; returns its `data` object. Raises `NotConfigured` before any
         connection when the key is missing or of the wrong kind, and `ProviderError` for a
         transport failure, a timeout, any non-success answer or an answer that is not Paystack's
-        shape. No message holds the key, an address, a body or an email."""
+        shape. With `money=True` (a call that moves money: the refund) a lost answer is
+        `OutcomeUnknown` instead: a timeout, a transport failure, a 5xx, a 409 conflict, an answer
+        that is not Paystack's shape. No message holds the key, an address, a body or an email."""
+        lost = OutcomeUnknown if money else ProviderError
         wanted = "sk_live_" if self._live else "sk_test_"
         if not self._secret_key:
             raise NotConfigured("Paystack is not configured: PAYSTACK_SECRET_KEY is not set")
@@ -469,32 +486,39 @@ class PaystackProvider:
                     },
                 )
         except httpx.TimeoutException:
-            raise ProviderError("Paystack did not answer in time") from None
+            raise lost("Paystack did not answer in time") from None
         except httpx.HTTPError as exc:  # its text can hold the address: only the type is kept
-            raise ProviderError(f"the Paystack request failed ({type(exc).__name__})") from None
-        return _data(response)
+            raise lost(f"the Paystack request failed ({type(exc).__name__})") from None
+        return _data(response, lost)
 
 
-def _data(response: httpx.Response) -> dict:
+def _data(response: httpx.Response, lost: type[BillingError] = ProviderError) -> dict:
+    """The `data` of a Paystack answer. `lost` is what a missing or unreadable answer is: a
+    `ProviderError` for a read, `OutcomeUnknown` for a call that moves money."""
     code = response.status_code
     if code == 401:
         raise ProviderError("Paystack refused the secret key (401)")
-    if code == 429 or code >= 500:
-        raise ProviderError(f"Paystack answered {code}")
+    if code == 429:
+        raise ProviderError(f"Paystack answered {code}")  # rate limited: not processed
+    if code >= 500:
+        raise lost(f"Paystack answered {code}")
+    if code == 409 and lost is OutcomeUnknown:
+        # a refund with this reference already exists: an earlier try went through
+        raise lost("Paystack says a refund with this reference already exists")
     if code >= 400:
         raise ProviderError(f"Paystack refused the request ({code}){_reason(response)}")
     if code not in (200, 201):
-        raise ProviderError(f"Paystack answered with an unexpected status ({code})")
+        raise lost(f"Paystack answered with an unexpected status ({code})")
     try:
         payload = response.json()
     except ValueError:
-        raise ProviderError(f"Paystack answered {code} with something that is not JSON") from None
+        raise lost(f"Paystack answered {code} with something that is not JSON") from None
     if (
         not isinstance(payload, dict)
         or payload.get("status") is not True
         or not isinstance(payload.get("data"), dict)
     ):
-        raise ProviderError("Paystack answered with an unexpected shape")
+        raise lost("Paystack answered with an unexpected shape")
     return payload["data"]
 
 

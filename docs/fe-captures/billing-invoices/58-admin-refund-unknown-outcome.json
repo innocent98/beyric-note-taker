@@ -1,0 +1,38 @@
+{
+  "note": "The provider gave NO answer (scripted here; a real timeout in production). `status` `unknown`, `needs_resolution` true: it may or may not exist, so NOTHING asks again. The hours stay removed meanwhile.",
+  "client": "root billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/9/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 4,
+      "payment_id": 9,
+      "payer_email": "gus@example.test",
+      "reference": "bnrf-9-b97948e95308900c",
+      "reason": "first_plan_7d",
+      "status": "unknown",
+      "currency": "USD",
+      "amount_minor": 1800,
+      "provider_refund_id": null,
+      "note": null,
+      "error": "no_answer",
+      "created_at": "2026-11-18T11:33:24.707648Z",
+      "resolved_at": null,
+      "needs_resolution": true
+    }
+  }
+}

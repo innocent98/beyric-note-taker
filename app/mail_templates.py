@@ -362,6 +362,20 @@ def notes_template(name: str) -> Callable[[NotesBuilder], NotesBuilder]:
     return register
 
 
+# Account mail built from the database at send time (ids only in the payload), like a notes
+# template but NOT counted as notes mail: not held by the daily notes caps and not stopped by an
+# unsubscribe. The receipt of a payment is one (`app/billing/receipt_mail.py`).
+SESSION_TEMPLATES: dict[str, NotesBuilder] = {}
+
+
+def session_template(name: str) -> Callable[[NotesBuilder], NotesBuilder]:
+    def register(builder: NotesBuilder) -> NotesBuilder:
+        SESSION_TEMPLATES[name] = builder
+        return builder
+
+    return register
+
+
 def check_id_payload(payload: dict) -> None:
     """ValueError unless every value is an integer id: a notes template never carries text."""
     for key, value in payload.items():
@@ -376,6 +390,8 @@ def prepare(
     without its link). ValueError: a message that could not be built safely."""
     if template in NOTES_TEMPLATES:
         return NOTES_TEMPLATES[template](session, payload, to, settings, now)
+    if template in SESSION_TEMPLATES:
+        return SESSION_TEMPLATES[template](session, payload, to, settings, now)
     return render_link(template, payload, to, settings)
 
 
@@ -826,3 +842,4 @@ def _notes_shared(
 # The agenda and reminder mails of recurring meetings register themselves here (W8). Last, because
 # that module imports the helpers above.
 from app import series_mail  # noqa: E402,F401
+from app.billing import receipt_mail  # noqa: E402,F401  (registers the receipt template)

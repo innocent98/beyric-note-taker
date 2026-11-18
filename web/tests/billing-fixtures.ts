@@ -33,3 +33,9 @@ export const PROFILE_NONE = {
   billing_country: null,
   route: null,
 };
+
+// A response body captured by scripts/capture_billing_invoices.py (docs/fe-captures/billing-invoices/<file>;
+// the payment provider in those captures is a scripted double, and the seller's numbers are placeholders).
+export function capInvoices<T>(file: string): T {
+  return JSON.parse(readFileSync(join(REPO, "docs/fe-captures/billing-invoices", file), "utf8")).response.body as T;
+}

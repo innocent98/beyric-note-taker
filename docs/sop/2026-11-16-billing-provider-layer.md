@@ -89,4 +89,4 @@ Decisions and where I departed from the spec's wording:
 | Save the reusable card token (encrypted, `app/vault.py` purpose) from the first payment | S8 |
 | The nginx/Next.js path for the raw body, the rate-limit exemption and a body limit at the edge | S6 test-mode run |
 | Card-country mismatch flag (`payments.country_mismatch` is created, never set) | S5 |
-| Refund and dispute events are stored and left waiting (`error` says so) | S9 |
+| Refund and dispute events are stored and left waiting (`error` says so) | **DONE in S9**: they are stored and marked decided (`error` is `recorded: a refund notice`); a failed refund and a dispute alert the admins (`docs/sop/2026-11-17-billing-invoices-refunds.md`) |

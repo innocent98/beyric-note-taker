@@ -1,0 +1,37 @@
+{
+  "note": "NGN 25,000.00 (2,500,000 kobo), decided 2026-11-17.",
+  "client": "ben billing-on",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/checkout",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "kind": "plan",
+      "code": "plan_20h"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payment": {
+        "reference": "bn-3-fda99da00ec7145f",
+        "kind": "plan",
+        "status": "pending",
+        "currency": "NGN",
+        "amount_minor": 2500000,
+        "created_at": "2026-11-18T11:33:20.489361Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-3-fda99da00ec7145f",
+        "invoice_number": null
+      },
+      "checkout_url": "https://fake.test/pay/bn-3-fda99da00ec7145f"
+    }
+  }
+}

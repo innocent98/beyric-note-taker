@@ -224,6 +224,10 @@ def _is_suppressed(session: Session, row: MailOutbox) -> bool:
         return False
     # An unsubscribe is about notes and reminders: the mail that lets a person into their own
     # account (verify, reset) is not stopped by it. A bounce or complaint stops everything.
+    if row.template in mail_templates.SESSION_TEMPLATES:
+        return (
+            reason in HARD_REASONS
+        )  # a receipt is the record of a payment: only a bounce stops it
     return reason in HARD_REASONS or row.template not in LINK_TEMPLATES
 
 
@@ -233,7 +237,7 @@ def _is_suppressed(session: Session, row: MailOutbox) -> bool:
 def enqueue(session: Session, to: str, template: str, payload: dict) -> MailOutbox:
     """Queue a mail in the caller's transaction (no commit: it stands or falls with the action
     that asked for it). A notes template's payload must be ids only: ValueError otherwise."""
-    if template in NOTES_TEMPLATES:
+    if template in NOTES_TEMPLATES or template in mail_templates.SESSION_TEMPLATES:
         mail_templates.check_id_payload(payload)
     row = MailOutbox(to_email=to.strip().lower(), template=template, payload=payload)
     session.add(row)

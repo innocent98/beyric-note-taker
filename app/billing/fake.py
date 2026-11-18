@@ -50,7 +50,10 @@ class FakeProvider:
         self.checkouts: list[str] = []  # the reference of every hosted checkout started
         self.fetched: list[str] = []
         self.charges: list[tuple[str, int, str, str]] = []
-        self.refunds: list[tuple[str, int]] = []
+        self.refunds: list[tuple[str, int]] = []  # refunds that EXIST at the fake provider
+        self.refund_calls: list[tuple[str, int, str]] = []  # every call, with its reference
+        self.refund_error: Exception | None = None
+        self.refund_acts_on_error: bool = False
         self.charge_outcome = "successful"  # or "failed", "pending", "error"
         self.payer_action_url = "https://fake.test/3ds/open-charge"
         self.charge_token: str | None = None  # a token the charges' transactions carry back
@@ -120,6 +123,7 @@ class FakeProvider:
                 "currency": event.currency,
                 "payer_email": event.payer_email,
                 "card_token": event.card_token,
+                "refund_failed": event.refund_failed,
             }
         ).encode()
 
@@ -151,6 +155,7 @@ class FakeProvider:
                 currency=data["currency"],
                 payer_email=data.get("payer_email"),
                 card_token=data.get("card_token"),
+                refund_failed=data.get("refund_failed") is True,
             )
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise BadEvent("unreadable event") from exc
@@ -220,8 +225,17 @@ class FakeProvider:
                 return tx
         raise ProviderError(f"no transaction under reference {reference}")
 
-    def refund(
-        self, provider_tx_id: str, amount_minor: int, *, reference: str | None = None
-    ) -> str:
+    def refund(self, provider_tx_id: str, amount_minor: int, *, reference: str) -> str:
+        """Scriptable: `refund_error` (an exception to raise: `ProviderError` for a refusal,
+        `OutcomeUnknown` for a call that got no answer; raised AFTER the call is recorded, like a
+        provider that did the work and lost the answer, which is what `refund_acts_on_error` says)
+        and `refund_acts_on_error` (the refund exists although the call raised)."""
+        if not isinstance(reference, str) or not reference:
+            raise ProviderError("a refund reference is mandatory")
+        self.refund_calls.append((provider_tx_id, amount_minor, reference))
+        if self.refund_error is not None:
+            if self.refund_acts_on_error:
+                self.refunds.append((provider_tx_id, amount_minor))
+            raise self.refund_error
         self.refunds.append((provider_tx_id, amount_minor))
         return f"fake-refund-{len(self.refunds)}"

@@ -1,0 +1,41 @@
+ Invoice
+ BN-T-2026-000001
+ Issued 18 November 2026
+
+
+
+
+   TEST INVOICE: paid with test keys, no real money moved. Not a tax document.
+
+
+ FROM                                            BILLED TO
+ Beyrichq LTD                                    Ada Works Ltd (placeholder)
+ PLACEHOLDER ADDRESS (not real), Lagos,          1 Placeholder Road, Lagos
+ Nigeria                                         Country US
+ Registration no. RC-PLACEHOLDER-NOT-REAL        Tax ID BUYER-TAX-PLACEHOLDER
+ Tax ID TIN-PLACEHOLDER-NOT-REAL                 ada@example.test
+ billing-placeholder@example.test
+
+
+ DESCRIPTION                                                                 AMOUNT
+
+
+ 20 hours a month                                                                      USD 18.00
+ 18 November 2026 to 18 December 2026
+
+
+
+                                                                 Total paid (USD)     USD 18.00
+
+
+ Payment reference: bn-1-90d00af0acad327f
+
+ Paid 18 November 2026
+
+ No VAT is charged on this invoice.
+
+
+
+
+Beyrichq LTD - invoice BN-T-2026-000001                                                       1/1
+
