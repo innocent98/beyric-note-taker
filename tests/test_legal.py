@@ -78,6 +78,14 @@ def test_the_terms_say_the_pilot_has_a_limited_number_of_accounts(anon_client):
     assert "Each pilot account has a limit on recorded hours, shown in the app" in page
 
 
+def test_the_terms_do_not_say_the_service_is_free_and_point_to_the_pricing_page(anon_client):
+    page = text(anon_client, TERMS)
+    assert "free during the pilot" not in page
+    assert "If we introduce paid plans" not in page
+    assert "Paid plans, their prices and extra hours are on the pricing page" in page
+    assert "nothing will be charged without your agreement" in page
+
+
 def test_the_policy_says_what_is_read_from_outlook_and_how_to_disconnect(anon_client):
     """Outlook phase O, M7: merged only at switch-on, so the policy never runs ahead."""
     page = text(anon_client, PRIVACY)
