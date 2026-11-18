@@ -56,6 +56,7 @@ from app.speaker_correction import (  # noqa: E402
     UNKNOWN,
     assess,
     classify,
+    clock_check,
     place,
     same_person,
     skribby_body,
@@ -83,10 +84,12 @@ def analyse(
     spans: dict[str, list[tuple[float, float]]],
     min_seconds: float = MIN_SECONDS,
     ambiguous_ratio: float = AMBIGUOUS_RATIO,
+    bot: frozenset[str] | set[str] = frozenset(),
 ) -> dict[str, Any]:
     """Every number of the report. `spans` is each participant's merged speaking intervals already
-    on the transcript's clock (the bot left out)."""
-    assessed, not_timed = assess(items, tags, spans, min_seconds, ambiguous_ratio)
+    on the transcript's clock, the note taker's included (named in `bot`: it takes part in the
+    ranking but is never a destination)."""
+    assessed, not_timed = assess(items, tags, spans, min_seconds, ambiguous_ratio, bot)
     segments = [
         {
             "tag": a.tag,
@@ -101,7 +104,8 @@ def analyse(
         }
         for a in assessed
     ]
-    return {"segments": segments, "not_timed": not_timed, "people": _people(spans, segments, tags)}
+    people = {n: v for n, v in spans.items() if n not in bot}
+    return {"segments": segments, "not_timed": not_timed, "people": _people(people, segments, tags)}
 
 
 def _people(spans: dict, segments: list[dict], tags: dict) -> dict[str, dict]:
@@ -152,6 +156,8 @@ def render(header: str, result: dict[str, Any], knobs: tuple[float, float]) -> s
         ("move", "WOULD MOVE to another person"),
         ("ambiguous", "ambiguous (2+ lit): stays"),
         ("no_signal", "no Meet signal: stays"),
+        ("bot", "note taker on top: stays"),
+        ("unmatched", "lit person has no name here: stays"),
     ]
     for key, label in labels:
         rows = [s for s in segments if s["outcome"] == key]
@@ -246,18 +252,21 @@ def build_report(
     header += f"\n  {placed.how}; Meet times shifted by {offset:+.0f} s."
     if record.get("truncated"):
         header += f"\n  (events were cut to fit the size cap: {record['truncated']})"
-    heard = meet_timeline.heard_by_tag(items, tag_of)
-    if not spans or not heard:
+    people = placed.people
+    if not people or not meet_timeline.heard_by_tag(items, tag_of):
         return f"{header}\n  Nobody to compare, or no timed segment.\n"
-    best, here, there = meet_timeline.clock_fit(spans, heard)
-    if meet_timeline.clock_is_fine(best, here, there):
-        header += "\n  Clock check: no shift of up to 30 s fits the segments clearly better."
+    fit = clock_check(items, tags, people)
+    if fit.fine:
+        header += (
+            f"\n  Clock check: no shift of Meet's clock makes the segments agree clearly better "
+            f"(best {fit.best:+g} s, gain {fit.gain:.0%}; compared on {fit.basis} segments)."
+        )
     else:
         header += (
-            f"\n  CLOCK WARNING: moving Meet's times {best:+d} s would raise the overlap from "
-            f"{here:.0f} s to {there:.0f} s; the numbers below may be off, and production would "
-            f"move nothing in this meeting. "
-            f"Re-run with --offset {offset + best:g} to see them shifted."
+            f"\n  CLOCK WARNING: moving Meet's times {fit.best:+g} s would raise the agreement "
+            f"from {fit.here:.0f} s to {fit.there:.0f} s ({fit.gain:.0%}); the numbers below may "
+            f"be off, and production would move nothing in this meeting. "
+            f"Re-run with --offset {offset + fit.best:g} to see them shifted."
         )
     applied = [item for item in items if item.get("corrected_to")]
     if applied:
@@ -266,7 +275,7 @@ def build_report(
             f"carry a corrected_to marker (the production rule, so they should be the moves "
             f"below when the defaults are used)."
         )
-    result = analyse(items, tags, spans, min_seconds, ambiguous_ratio)
+    result = analyse(items, tags, spans, min_seconds, ambiguous_ratio, placed.bot)
     return render(header, result, (min_seconds, ambiguous_ratio))
 
 
@@ -275,7 +284,8 @@ def report(session: Session, meeting_id: int, current_names: bool = True, **knob
     read again now with the current naming rules, exactly as production and the rebuild read them
     (a tag the timeline can name today was "Unknown speaker" when meeting 39 was processed, and
     its lines are not moves any more); `current_names=False` reads the names saved with the
-    evidence instead, which reproduces the first runs (meeting 39: 128 moves)."""
+    evidence instead (not verified to reproduce the first runs' numbers exactly, e.g. meeting 39's
+    128 moves: a segment's own name and whole-word name matching are used now)."""
     row = session.scalar(
         select(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
     )
@@ -300,7 +310,11 @@ def report(session: Session, meeting_id: int, current_names: bool = True, **knob
         names = "read again now with the current naming rules (the rebuild reads them the same way)"
     else:
         tags = dict(row.tags or {})
-        names = "as saved when the meeting was processed (--saved-names)"
+        names = (
+            "as saved when the meeting was processed (--saved-names; the numbers of the first runs "
+            "are not guaranteed to come out the same: a segment's own name and whole-word name "
+            "matching are used now)"
+        )
     return build_report(
         meeting_id,
         items,

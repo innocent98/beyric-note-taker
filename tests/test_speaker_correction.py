@@ -72,7 +72,14 @@ TAGS = {
 EVENTS = record((ADA, (0, 60), (200, 230)), (BO, (60, 130), (230, 260)))
 
 
+# One segment Meet agrees with, beside the one under test: the clock check compares each named
+# segment with the person it is named for, and a meeting where nothing agrees cannot be checked
+# (it is refused, the safe side).
+ANCHOR = seg("1", 2, 58)
+
+
 def moves(items, tags=TAGS, events=EVENTS, own=OWN):
+    items = items + [ANCHOR] if events is EVENTS else items
     return speaker_correction.correct(items, tags, events, own).moves
 
 
@@ -89,8 +96,8 @@ def test_a_segment_the_tag_already_has_right_stays():
 
 def test_two_people_lit_is_ambiguous_and_stays():
     # 50-80: Ada 10 s, Bo 20 s: the runner-up has half the top's seconds
-    got = speaker_correction.correct([seg("1", 50, 80)], TAGS, EVENTS, OWN)
-    assert got.moves == {} and [a.outcome for a in got.assessments] == ["ambiguous"]
+    got = speaker_correction.correct([seg("1", 50, 80), ANCHOR], TAGS, EVENTS, OWN)
+    assert got.moves == {} and [a.outcome for a in got.assessments] == ["ambiguous", "agrees"]
 
 
 def test_two_people_lit_for_the_same_seconds_is_a_tie_and_stays():
@@ -123,14 +130,47 @@ def test_nobody_lit_stays():
     assert got.moves == {} and [a.outcome for a in got.assessments] == ["agrees", "no_signal"]
 
 
-def test_the_note_taker_is_never_a_destination_and_never_makes_a_segment_ambiguous():
-    # the bot is "lit" over the whole of Ada's segment: it is left out before anything is ranked
-    events = record((ADA, (0, 60)), (BOT, (0, 60)), (BO, (0, 0.5)))
-    assert moves([seg("1", 5, 30)], events=events) == {}  # Ada alone: agrees
-    # and where only the bot is lit there is no signal, so nothing moves to it
+def test_the_note_taker_is_never_a_destination():
+    """It is ranked like anyone (so it can be the one on top) but a segment it is on top of stays:
+    the report and production read this the same way (both go through `assess`)."""
     events = record((BOT, (0, 60)), (BO, (100, 120)))
     got = speaker_correction.correct([seg("1", 5, 30)], TAGS, events, OWN)
-    assert got.moves == {} and got.assessments[0].outcome == "no_signal"
+    assert got.moves == {} and got.assessments[0].outcome == "bot"
+
+
+def test_the_note_taker_lit_beside_one_person_makes_the_segment_ambiguous_and_it_stays():
+    # a consent line spoken by the bot while Bo's light is on: two lit, so nothing moves to Bo
+    events = record((ADA, (0, 60)), (BOT, (70, 90)), (BO, (70, 90)))
+    got = speaker_correction.correct([seg("1", 70, 90), ANCHOR], TAGS, events, OWN)
+    assert got.moves == {} and got.assessments[0].outcome == "ambiguous"
+    # the bot lit a little (lag, under the ratio) beside Bo: Bo is still the one lit
+    events = record((ADA, (0, 60)), (BOT, (70, 70.5)), (BO, (70, 90)))
+    assert speaker_correction.correct([seg("1", 70, 90), ANCHOR], TAGS, events, OWN).moves[0] == BO
+
+
+def test_the_report_reads_the_note_taker_exactly_as_production_does():
+    mod = report_script()
+    events = record((ADA, (0, 60)), (BOT, (70, 90)), (BO, (70, 90)), (BOT, (100, 120)))
+    items = [
+        {"speaker": "1", "start": 70, "end": 90, "text": "x"},
+        {"speaker": "1", "start": 100, "end": 120, "text": "x"},
+        {"speaker": "1", "start": 5, "end": 30, "text": "x"},
+    ]
+    text = mod.build_report(40, items, TAGS, events, (BOT,))
+    got = speaker_correction.correct(
+        [{**i, "transcript": i["text"]} for i in items], TAGS, events, OWN
+    )
+    assert [a.outcome for a in got.assessments] == ["ambiguous", "bot", "agrees"]
+    assert mod.analyse is not None and "note taker on top: stays" in text
+    assert counts_in_report(text, "note taker on top: stays") == 1
+    assert counts_in_report(text, "ambiguous (2+ lit): stays") == 1
+    assert counts_in_report(text, "WOULD MOVE to another person") == 0
+
+
+def counts_in_report(text, label):
+    import re
+
+    return int(re.search(re.escape(label) + r"\s+(\d+)", text).group(1))
 
 
 def test_a_participant_who_is_blank_or_unknown_speaker_is_not_a_person():
@@ -181,6 +221,79 @@ def test_a_long_segment_lit_for_only_part_of_it_still_moves():
     assert moves([seg("1", 0, 60)], events=events) == {0: BO}
 
 
+# ---- names are matched by whole words, never by a part of a word ----
+
+
+def scene(lit, under, known=(), *, seconds=(70, 120)):
+    """Meet lights `lit` alone over a segment whose tag is named `under`; `known` are more names
+    tags carry. One segment everybody agrees with is beside it so the clock can be checked."""
+    tags = {
+        "1": {"name": under, "how": "given", "note": ""},
+        "8": {"name": "Zed Anchor", "how": "given", "note": ""},
+    } | {str(9 + i): {"name": name, "how": "given", "note": ""} for i, name in enumerate(known)}
+    events = record((lit, seconds), ("Zed Anchor", (200, 260)))
+    items = [seg("1", *seconds), seg("8", 200, 260)]
+    got = speaker_correction.correct(items, tags, events, OWN)
+    return got, got.assessments[0].outcome
+
+
+@pytest.mark.parametrize(
+    ("lit", "under", "known"),
+    [
+        ("Ann", "Bo Example", ["Joanne"]),  # Ann is not inside Joanne
+        ("Ann", "Joanne", []),
+        ("Tomi", "Bo Example", ["Tomiwa Ade"]),
+        ("Tomi", "Tomiwa Ade", []),
+        ("Ade", "Bo Example", ["Adebayo"]),
+        ("Adebayo", "Ade Obi", []),
+        ("Ada", "Bo Example", ["Adaeze"]),
+        ("Ada Obi", "Bo Example", ["Ada Eze"]),  # one word in common is not enough
+    ],
+)
+def test_a_part_of_a_word_is_never_the_same_person_so_nothing_moves_to_a_look_alike(
+    lit, under, known
+):
+    got, outcome = scene(lit, under, known)
+    assert got.moves == {} and outcome == "unmatched"
+
+
+def test_a_line_is_never_given_to_a_person_nobody_in_the_meeting_is_called():
+    # Ann is lit alone; no tag is named Ann: the line stays (it could be a respelling of the
+    # person it is already under) and the report calls it unmatched, not a move
+    got, outcome = scene("Ann", "Bo Example", ["Cy Example"])
+    assert got.moves == {} and outcome == "unmatched"
+
+
+def test_whole_words_are_matched_without_regard_to_case_accents_or_punctuation():
+    got, outcome = scene("Zoë Obi-Ade", "Bo Example", ["ZOE obi ade"])
+    assert got.moves == {0: "ZOE obi ade"} and outcome == "move"
+    assert speaker_correction.same_person("Zoë", "Zoe Obi")
+    assert speaker_correction.same_person("ada obi", "Obi, Ada")
+
+
+def test_a_one_word_name_and_a_two_word_name_are_one_person_when_the_word_is_shared():
+    assert speaker_correction.same_person("Ada", "Ada Obi")
+    assert speaker_correction.same_person("Ada Obi", "Obi")
+    assert not speaker_correction.same_person("Ada Obi", "Ada Eze")
+    assert not speaker_correction.same_person("Ada", "Adaeze")
+    assert not speaker_correction.same_person("", "Ada")
+    # Meet's "Ada Obi" is lit over a segment under "Bo": it goes to the tag called "Ada"
+    got, outcome = scene("Ada Obi", "Bo Example", ["Ada"])
+    assert got.moves == {0: "Ada"} and outcome == "move"
+    # and a segment under "Ada" with "Ada Obi" lit agrees
+    got, outcome = scene("Ada Obi", "Ada")
+    assert got.moves == {} and outcome == "agrees"
+
+
+def test_two_names_that_are_equally_the_lit_person_move_nothing():
+    # Meet's "Ada Obi" fits both the tag "Ada" and the tag "Obi": which is unknown
+    got, outcome = scene("Ada Obi", "Bo Example", ["Ada", "Obi"])
+    assert got.moves == {} and outcome == "unmatched"
+    # an exact spelling wins over the near ones
+    got, outcome = scene("Ada Obi", "Bo Example", ["Ada", "Obi", "Ada Obi"])
+    assert got.moves == {0: "Ada Obi"}
+
+
 # ---- when nothing may move at all ----
 
 
@@ -211,6 +324,64 @@ def test_a_clock_that_fits_better_a_few_seconds_away_moves_nothing():
     # the same events on the right clock do move them
     right = record((BO, *[(100 + 100 * n, 140 + 100 * n) for n in range(5)]))
     assert set(speaker_correction.correct(items, TAGS, right, OWN).moves) == set(range(5))
+
+
+@pytest.mark.parametrize("offset", [1.0, 2.0, 3.0, -1.0, -2.0, -3.0, 10.0])
+def test_a_steady_offset_of_a_second_or_more_is_flagged_and_nothing_moves(offset):
+    case = meeting_40()
+    shifted = shifted_events(case.events, offset)
+    got = speaker_correction.correct(case.items, tags_of(case), shifted, OWN)
+    assert got.refused == "clock_shifted" and got.moves == {}
+    assert got.clock.best == -offset  # moving Meet's times back by the offset fits best
+    assert got.clock.gain > 0.1
+    summary = got.summary()
+    assert summary["clock_shift"] == -offset and summary["clock_gain"] > 0.1
+
+
+@pytest.mark.parametrize("lag", [0.0, 0.3])
+def test_the_indicator_lag_of_a_third_of_a_second_does_not_stop_the_correction(lag):
+    case = meeting_40()
+    got = speaker_correction.correct(
+        case.items, tags_of(case), shifted_events(case.events, lag), OWN
+    )
+    assert got.refused is None and got.moved_segments > 0
+    assert abs(got.clock.best) <= 0.5 and got.clock.gain <= 0.1
+
+
+def shifted_events(events, seconds):
+    return {
+        **events,
+        "participants": [
+            {
+                **p,
+                "events": [
+                    {**e, "timestamp": e["timestamp"] + int(seconds * 1000)} for e in p["events"]
+                ],
+            }
+            for p in events["participants"]
+        ],
+    }
+
+
+def test_the_clock_fit_on_a_large_meeting_takes_seconds_not_tens_of_seconds():
+    """A three-hour meeting with 2,000 segments and eight people (the biggest this sees) is read
+    in well under the budget: the end times are worked out once, not at every overlap."""
+    import time
+
+    from tests.speaker_correction_fixtures import build
+
+    people = [f"{n} Example" for n in "ABCDEFGH"]
+    case = build(
+        {str(i): p for i, p in enumerate(people)},
+        {"agrees": 1500, "move": 200, "ambiguous": 100, "no_signal": 200},
+        seed=7,
+    )
+    tags = tags_of(case)
+    started = time.perf_counter()
+    got = speaker_correction.correct(case.items, tags, case.events, OWN)
+    elapsed = time.perf_counter() - started
+    assert got.refused is None and got.moved_segments == 200
+    assert elapsed < 8.0, f"took {elapsed:.1f} s"
 
 
 def test_events_with_no_timed_segment_move_nothing():
@@ -331,7 +502,7 @@ def test_the_report_reads_current_names_by_default_and_saved_names_on_request():
     as_saved = mod.report(OneRow(case, saved), 39, current_names=False)
     assert "Tag names: read again now" in current and "as saved" in as_saved
     assert moves_printed(current) == 128
-    assert moves_printed(as_saved) > 128
+    assert moves_printed(as_saved) != 128  # saved names, a segment's own name: a different read
 
 
 def test_the_production_constants_are_the_reports_defaults():
@@ -444,7 +615,14 @@ def test_map_bot_hands_the_pipeline_the_corrected_segments_and_the_evidence(skri
 def test_the_evidence_and_its_summary_hold_no_word_and_no_name_beyond_the_labels(skribby_mode):
     case = meeting_40()
     summary = map_bot(finished(case), NOW, "x", OWN, case.events).evidence["correction"]
-    assert set(summary) == {"moved_segments", "moved_seconds", "segments", "refused"}
+    assert set(summary) == {
+        "moved_segments",
+        "moved_seconds",
+        "segments",
+        "refused",
+        "clock_shift",
+        "clock_gain",
+    }
     assert all(isinstance(v, int | float | type(None)) for v in summary.values())
 
 
@@ -506,6 +684,19 @@ def test_the_pipeline_log_line_is_numbers_only(skribby_mode, caplog):
     line = " ".join(r.getMessage() for r in caplog.records)
     assert "meeting 7: speaker correction moved 32 of 402 segments" in line
     assert not any(word in line for word in ("w0", ADA, BO, CY))
+
+
+def test_the_log_line_carries_the_best_clock_shift_and_can_never_raise(skribby_mode, caplog):
+    case = meeting_40()
+    info = map_bot(finished(case), NOW, "x", OWN, case.events)
+    with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
+        pipeline._log_correction(7, info.evidence)
+    assert "clock best shift +0 s" in caplog.text
+    for junk in (
+        {"correction": {"moved_segments": object(), "clock_shift": "x"}},
+        {"correction": 5},
+    ):
+        pipeline._log_correction(7, junk)  # a malformed record is not a failed meeting
 
 
 def test_nothing_is_logged_for_a_meeting_the_correction_did_not_run_for(skribby_mode, caplog):

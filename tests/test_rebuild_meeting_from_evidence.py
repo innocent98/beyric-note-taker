@@ -1159,6 +1159,8 @@ LABELS = (
     "WOULD MOVE to another person",
     "ambiguous (2+ lit): stays",
     "no Meet signal: stays",
+    "note taker on top: stays",
+    "lit person has no name here: stays",
     "not timed or no tag: stays",
 )
 
@@ -1345,6 +1347,85 @@ def test_the_turns_see_a_moved_line_that_the_list_of_names_does_not():
     before = "[Ada]: one two\n[Bo]: three"
     after = "[Ada]: one\n[Bo]: two three"  # the second line moved to Bo: the same two names
     assert rebuild._labels(before) == rebuild._labels(after)
-    assert rebuild._turns(before) != rebuild._turns(after)
-    assert rebuild._turns(before) == [("Ada", 2), ("Bo", 1)]
+    assert not rebuild.same_turns(before, after) and not rebuild.same_turns(after, before)
+    assert rebuild.same_turns(before, before)
+    assert rebuild._turns(before) == [("Ada", ["one", "two"]), ("Bo", ["three"])]
     assert rebuild._turns("no labels at all") == []
+
+
+def test_a_respelling_that_changes_the_word_count_is_the_same_turn_a_moved_line_is_not():
+    built = "[Ada]: we met bay rick today and then left\n[Bo]: fine"
+    stored = "[Ada]: we met Beyric today and then left\n[Bo]: fine"  # the vocabulary pass
+    assert rebuild.same_turns(stored, built)
+    # a different person or an extra turn is a difference
+    assert not rebuild.same_turns(stored.replace("[Bo]", "[Cy]"), built)
+    assert not rebuild.same_turns(stored + "\n[Ada]: more", built)
+    # words that moved out of a turn are a deletion there, whatever else changed
+    assert not rebuild.same_turns("[Ada]: we met Beyric\n[Bo]: today fine", built)
+
+
+def respell(text, *_):
+    """What the owner's vocabulary pass does to a text, in one place that changes the word count:
+    two words become one ("w0 w1" -> "Beyric", as "bay rick" -> "Beyric")."""
+    assert "w0 w1" in text
+    return text.replace("w0 w1", "Beyric", 1)
+
+
+def test_a_rebuild_for_an_owner_with_vocabulary_terms_is_done_once_not_every_time(
+    session, owner, template, backups, capsys, monkeypatch
+):
+    """The stored text has been through the vocabulary pass (a model call) and the text a rebuild
+    would build has not; the pass can change word counts, which must not make every run look like
+    a different meeting (a new notes call, new rows, a new backup each time)."""
+    from tests.speaker_correction_fixtures import meeting_40
+
+    monkeypatch.setattr(
+        rebuild.pipeline, "_apply_vocabulary", lambda session, meeting, text, client: respell(text)
+    )
+    case = meeting_40()
+    meeting = case_meeting(session, owner, template, case)
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "APPLIED" in out
+    stored_now = stored(session, meeting).speaker_transcript
+    assert "Beyric" in stored_now and stored_now != new_text(case)
+    assert len(stored_now.split()) < len(new_text(case).split())  # the count did change
+    runs = session.scalars(select(AiRun)).all()
+    first = snapshot(stored(session, meeting))
+    for _ in range(2):  # the dry run and --apply both say nothing to do
+        code, client, out = go([str(meeting.id)], backups, capsys=capsys)
+        assert code == 0 and "already rebuilt" in out and "DRY RUN" not in out
+        code, client, out = apply(session, meeting, backups, capsys)
+        assert code == 0 and "already rebuilt" in out and client.chats == 0
+    assert snapshot(stored(session, meeting)) == first
+    assert session.scalars(select(AiRun)).all() == runs
+    assert len(backup_files(backups)) == 1
+
+
+def test_a_live_meeting_whose_text_went_through_the_vocabulary_pass_is_left_alone(
+    session, owner, template, backups, capsys
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    case = meeting_40()
+    live = respell(new_text(case))  # as the live path stores it
+    meeting = case_meeting(session, owner, template, case, transcript=live, speaker_transcript=live)
+    code, client, out = go([str(meeting.id), "--apply"], backups, capsys=capsys)
+    assert code == 0 and "same speakers and turns" in out and client.chats == 0
+    assert backup_files(backups) == []
+
+
+def test_a_meeting_whose_lines_would_move_is_still_rebuilt_whatever_the_pass_did(
+    session, owner, template, backups, capsys, monkeypatch
+):
+    from tests.speaker_correction_fixtures import meeting_40
+
+    monkeypatch.setattr(
+        rebuild.pipeline, "_apply_vocabulary", lambda session, meeting, text, client: respell(text)
+    )
+    case = meeting_40()
+    before = respell(old_text(case))  # today's text, after the pass: nothing moved
+    meeting = case_meeting(
+        session, owner, template, case, transcript=before, speaker_transcript=before
+    )
+    code, client, out = apply(session, meeting, backups, capsys)
+    assert code == 0 and "APPLIED" in out and "32 segments" in out

@@ -914,19 +914,30 @@ def _skribby_segments(
 def _log_correction(meeting_id: int, evidence: dict | None) -> None:
     """One line per meeting saying what the line-level speaker correction did (docs/sop/
     2026-11-19-line-level-speaker-correction.md): how many segments and seconds moved to the person
-    Meet's timeline showed, or why nothing could (a shifted clock). Numbers only: no name, no word.
-    Nothing is logged for a meeting it did not run for (no speaker events, or switched off)."""
-    summary = (evidence or {}).get("correction")
-    if not isinstance(summary, dict):
-        return
-    logger.info(
-        "meeting %s: speaker correction moved %s of %s segments (%s s)%s",
-        meeting_id,
-        summary.get("moved_segments"),
-        summary.get("segments"),
-        summary.get("moved_seconds"),
-        f"; refused: {summary['refused']}" if summary.get("refused") else "",
-    )
+    Meet's timeline showed, or why nothing could (a shifted clock), and the best shift of Meet's
+    clock the check found (0 is the clock as placed). Numbers only: no name, no word. Nothing is
+    logged for a meeting it did not run for (no speaker events, or switched off). Never raises: a
+    log line must not be able to fail a meeting."""
+    try:
+        summary = (evidence or {}).get("correction")
+        if not isinstance(summary, dict):
+            return
+        shift = summary.get("clock_shift")
+        logger.info(
+            "meeting %s: speaker correction moved %s of %s segments (%s s)%s%s",
+            meeting_id,
+            summary.get("moved_segments"),
+            summary.get("segments"),
+            summary.get("moved_seconds"),
+            f"; refused: {summary['refused']}" if summary.get("refused") else "",
+            f"; clock best shift {shift:+g} s (gain {summary.get('clock_gain')})"
+            if isinstance(shift, int | float)
+            else "",
+        )
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: the correction log line failed (%s)", meeting_id, type(exc).__name__
+        )
 
 
 def _record_shadow(

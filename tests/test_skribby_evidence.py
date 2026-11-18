@@ -501,10 +501,13 @@ def test_a_refused_correction_is_logged_with_its_reason(session, skribby_meeting
         "moved_seconds": 0.0,
         "segments": 2,
         "refused": "clock_shifted",
+        "clock_shift": -2.0,
+        "clock_gain": 0.25,
     }
     with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
         run(session, skribby_meeting, FakeVexa(skribby_poll(refused)))
     assert "moved 0 of 2 segments (0.0 s); refused: clock_shifted" in caplog.text
+    assert "clock best shift -2 s (gain 0.25)" in caplog.text
     assert SECRET not in caplog.text
 
 

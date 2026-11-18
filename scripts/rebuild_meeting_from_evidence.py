@@ -53,6 +53,7 @@ checked.
 """
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -140,13 +141,32 @@ def _labels(text_: str | None) -> list[str]:
     return LABEL.findall(text_ or "")
 
 
-def _turns(text_: str | None) -> list[tuple[str, int]]:
-    """Each `[Name]:` turn as (name, words spoken). Two texts with the same turns say the same
-    people said the same amounts in the same order: a moved line that lands inside a turn changes
-    the words of two turns even when the list of names does not change, so names alone cannot
-    tell whether a meeting already has the correction."""
+def _turns(text_: str | None) -> list[tuple[str, list[str]]]:
+    """Each `[Name]:` turn as (name, the words spoken)."""
     parts = LABEL.split(text_ or "")  # [before, name, spoken, name, spoken, ...]
-    return [(parts[i], len(parts[i + 1].split())) for i in range(1, len(parts) - 1, 2)]
+    return [(parts[i], parts[i + 1].split()) for i in range(1, len(parts) - 1, 2)]
+
+
+def same_turns(stored: str | None, built: str | None) -> bool:
+    """Whether the stored speaker transcript says the same as the text a rebuild would store: the
+    same people in the same turns, saying the same words. The words may differ ONLY by respellings
+    to the owner's vocabulary: the stored text has been through that pass (a model call, so it
+    cannot be repeated for a comparison) and `built` has not, and the pass may turn "bay rick" into
+    "Beyric". Such an edit replaces words (`difflib` "replace"); a line that moved to another
+    person's turn is a pure insertion in one turn and a pure deletion in another, which the pass
+    can never do (`app/vocabulary_pass.py`: "a pure insertion or deletion is refused too"). So a
+    meeting rebuilt for an owner with vocabulary terms is "nothing to do" the second time, and a
+    meeting whose lines would move is not, whatever the pass did to the word counts."""
+    old, new = _turns(stored), _turns(built)
+    if [name for name, _ in old] != [name for name, _ in new]:
+        return False
+    for (_, before), (_, after) in zip(old, new, strict=True):
+        if before == after:
+            continue
+        matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
+        if any(tag in ("insert", "delete") for tag, *_ in matcher.get_opcodes()):
+            return False
+    return True
 
 
 def _body(items: list) -> dict:
@@ -257,9 +277,9 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     for item in items:
         tag = str(item.get("speaker")) if item.get("speaker") is not None else "(no tag)"
         plan.tag_segments[tag] = plan.tag_segments.get(tag, 0) + 1
-    if meeting.transcript_source in (transcript_source.SKRIBBY, REBUILT) and _turns(
-        meeting.speaker_transcript
-    ) == _turns(found.text):
+    if meeting.transcript_source in (transcript_source.SKRIBBY, REBUILT) and same_turns(
+        meeting.speaker_transcript, found.text
+    ):
         plan.already = (
             "already rebuilt from the saved evidence"
             if rebuilt
@@ -462,13 +482,21 @@ def _correction_lines(plan: Plan) -> list[str]:
         return [
             head,
             f"  not applied: {fix.refused} (the Meet clock or the events cannot be trusted for "
-            "this meeting, so no line moves)",
+            "this meeting, so no line moves)"
+            + (
+                f"; best shift of Meet's clock {fix.clock.best:+g} s, agreement "
+                f"{fix.clock.here:.0f} s now, {fix.clock.there:.0f} s there"
+                if fix.clock is not None
+                else ""
+            ),
         ]
     rows = [
         ("agrees", "agrees with the tag's name"),
         ("move", "WOULD MOVE to another person"),
         ("ambiguous", "ambiguous (2+ lit): stays"),
         ("no_signal", "no Meet signal: stays"),
+        ("bot", "note taker on top: stays"),
+        ("unmatched", "lit person has no name here: stays"),
     ]
     lines = [head]
     for key, label in rows:
@@ -643,7 +671,7 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
     if (
         meeting.transcript_source == REBUILT
         and plan.candidate is not None
-        and _turns(meeting.speaker_transcript) == _turns(plan.candidate.text)
+        and same_turns(meeting.speaker_transcript, plan.candidate.text)
     ):  # someone ran it between the look and the lock
         out(f"Meeting {meeting_id}: already rebuilt; nothing to do.")
         session.rollback()
