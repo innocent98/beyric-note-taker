@@ -271,6 +271,52 @@ def reserve_slot(
         raise PlacementRefused("bot_busy")
 
 
+def could_be_placed(
+    session: Session,
+    user: User,
+    *,
+    now: datetime,
+    settings: Settings | None = None,
+    expected_seconds: int | None = None,
+) -> bool:
+    """Whether `reserve_slot` would NOT refuse `user` for who they are: the account is active, the
+    hours rule lets a new recording start, and they are under their own bot limit. A read-only
+    prediction for another account (no lock, no shadow logging, nothing written): the organizer
+    rule (`app/organizer_bot.py`) asks it before a guest's bot waits for the organizer's, so a
+    guest never waits for a bot that placement would refuse. It leaves out the checks that are not
+    about the person (the code taken, the host full): those refuse the guest's bot just the same.
+
+    It must say what `reserve_slot` says for the same account and the same hours mode: a test
+    runs both over the same cases (`tests/test_organizer_bot.py`)."""
+    settings = settings or get_settings()
+    if session.scalar(select(User.status).where(User.id == user.id)) != "active":
+        return False
+    if settings.hours_mode == "enforce":
+        decision = entitlements.check_join(
+            session,
+            user,
+            now,
+            settings.max_poll_hours * 3600,
+            reserve_seconds=settings.hours_reserve_minutes * 60,
+            expected_seconds=expected_seconds,
+        )
+        if not decision.allowed:
+            return False
+    else:
+        cap = usage.effective_cap(session, user)
+        if (
+            cap is not None
+            and usage.hours_used(session, user, now, settings.max_poll_hours * 3600) >= cap
+        ):
+            return False
+    own = session.scalar(
+        select(func.count(Meeting.id)).where(
+            Meeting.owner_user_id == user.id, Meeting.status.in_(HOLDS_A_SLOT)
+        )
+    )
+    return own < settings.user_bot_limit
+
+
 def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int]:
     """The user and the template to write the notes with. A programming error (a caller that did
     not check) raises `ValueError`, never a refusal: nothing here is for a person to read."""

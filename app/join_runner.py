@@ -31,7 +31,11 @@ told again. A queued meeting is an unrecorded meeting, so nothing waits for a sl
 
 **Another account in the same meeting.** One bot per meeting code (Vexa has one API key): the first
 placement wins. The other user's row ends `skipped` with the neutral reason, and a plain notice
-that a note taker is already in that meeting. Nobody's bot is stopped or adopted.
+that a note taker is already in that meeting. Nobody's bot is stopped or adopted. Who is first is
+not left to a race when the event's ORGANIZER has an account that can place: a guest's row holds
+back for `ORGANIZER_BOT_WAIT_SECONDS` after its run time (`app/organizer_bot.py`, billing spec 2.5;
+`_hold_for_the_organizer`: a delay on the tick, not a sleep), and the organizer's rows are looked
+at first in each tick (`_due_ids`). With no such organizer nobody waits.
 
 Notifications go through `app/alerts.py` (once per row, or once per 30-minute bucket for the ones
 that repeat), with kinds that start `calendar.` so a disconnect deletes them. Admin text names the
@@ -45,12 +49,12 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, calendar_providers, calendar_states, hours, titles
+from app import alerts, calendar_providers, calendar_states, hours, organizer_bot, titles
 from app.bot_provider import BotProvider, BotProviderError, build_provider, describe_failure
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
@@ -177,7 +181,7 @@ def run_due_joins(
     outcomes: list[JoinOutcome] = []
     started = time.monotonic()
     _baseline(session, now)
-    for join_id in _due_ids(session, now):
+    for join_id in _due_ids(session, now, settings):
         if time.monotonic() - started > RUN_BUDGET_SECONDS:
             break
         try:
@@ -314,15 +318,15 @@ def _due_conditions(now: datetime):
     )
 
 
-def _due_ids(session: Session, now: datetime) -> list[int]:
-    ids = list(
-        session.scalars(
-            select(ScheduledJoin.id)
-            .where(_due_conditions(now))
-            .order_by(ScheduledJoin.run_at, ScheduledJoin.id)
-            .limit(BATCH)
-        )
-    )
+def _due_ids(session: Session, now: datetime, settings: Settings | None = None) -> list[int]:
+    query = select(ScheduledJoin.id).where(_due_conditions(now))
+    if settings is not None and settings.prefer_organizer_bot:
+        # The organizer's rows come first within a tick, so a crowd of guests holding back for them
+        # can never fill the batch ahead of the row they are waiting for (S12).
+        query = query.outerjoin(
+            CalendarEvent, CalendarEvent.id == ScheduledJoin.calendar_event_id
+        ).order_by(case((CalendarEvent.organizer_self.is_(True), 0), else_=1))
+    ids = list(session.scalars(query.order_by(ScheduledJoin.run_at, ScheduledJoin.id).limit(BATCH)))
     session.rollback()  # the read must not hold a snapshot while the rows are worked one by one
     return ids
 
@@ -613,6 +617,14 @@ def _place(
         # Another of the owner's rows on this code is live (back-to-back slots in one room): this
         # one waits; marking it `joined` or `no_capacity` too would break the one-live-join index.
         return _wait_for_the_code(session, join, now)
+    if join.state == "scheduled" and organizer_bot.guest_should_wait(
+        session,
+        join,
+        now,
+        settings,
+        connection_ok=lambda other: connection_state(session, other) == CONNECTED,
+    ):
+        return _hold_for_the_organizer(session, join, now, settings)
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     request = PlacementRequest(
         user_id=join.user_id,
@@ -665,6 +677,20 @@ def _place(
         logger.error("join %s cannot be placed (%s)", join_id, type(exc).__name__)
         return _fail(session, join_id, now, "no_template", NO_TEMPLATE_TEXT)
     return JoinOutcome(join_id, "joined", f"meeting {meeting.id}")
+
+
+def _hold_for_the_organizer(
+    session: Session, join: ScheduledJoin, now: datetime, settings: Settings
+) -> None:
+    """A guest's row waits for the organizer's bot (`app/organizer_bot.py`): nothing is sent and
+    nothing is said, the row stays `scheduled`, and the next look is after the retry gap or at the
+    end of the wait, whichever is first, so the row steps out of the due query between looks (a
+    crowd of waiting guests cannot starve the others) and the fallback is never late. The wait is
+    the clock, not a stored state: a restart reads the same time and places when it is up."""
+    join.attempts += 1
+    _touch(join, min(now, organizer_bot.wait_ends_at(join, settings) - RETRY_EVERY))
+    session.commit()
+    return None
 
 
 def _paste_for_this_event(session: Session, join: ScheduledJoin) -> int | None:
@@ -848,8 +874,9 @@ _NOTICES = {
     ),
     "meeting_has_note_taker": (
         "A note taker is already there",
-        'A note taker is already in "{name}", so yours did not join. Sharing notes between '
-        "accounts is not available yet.",
+        'A note taker is already in "{name}", so yours did not join. It belongs to someone else, '
+        "and its notes stay private to them unless they share or move the meeting to a team you "
+        "are in.",
     ),
 }
 
