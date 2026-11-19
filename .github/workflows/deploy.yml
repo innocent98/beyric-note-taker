@@ -19,7 +19,10 @@ jobs:
   deploy:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The server's docker build alone takes about 19 minutes, so 20 cancelled every deploy at this
+    # step while the server went on. GitHub must wait for the real end: the SSH client stays attached
+    # until deploy.sh prints `deployed <sha>` (or fails). See docs/sop/2026-11-19-deploy-step-timeout.md.
+    timeout-minutes: 45
     steps:
       - name: Deploy over SSH
         env:
