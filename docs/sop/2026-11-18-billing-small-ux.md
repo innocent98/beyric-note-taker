@@ -81,5 +81,6 @@ No setting, no migration. Revert the PR to remove the button and the route; paym
 | A `pending` row with no page (checkout creation failed, or Paystack says "reference not found") answers 502 for ever on cancel | rare; the sweeper's `NO_LINK_GRACE` logic covers renewals only |
 | An abandoned **upgrade** checkout has no cancel (only a plan or pack does), so its notice on the billing page stays until it is paid | decide with the lead whether to allow it |
 | The daily old-pending digest lists `pending` rows only (see the sweeper note above) | deliberate; revisit if cancelled-but-paid pages ever need a human |
+| A paid page whose grant fails on cancel only wrote a log line (the person got 409, no admin was told) | **done 2026-11-19**: one admin alert per payment, `docs/sop/2026-11-19-cancel-grant-failure-alert.md` |
 | Whether a signed-in buyer should see the provider's name before the hosted page | product decision; today only admin screens, the pricing page and `llms.txt` name it |
 | The screens were not driven in a browser | vitest on captured bodies only |

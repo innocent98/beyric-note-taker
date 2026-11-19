@@ -450,6 +450,69 @@ def test_a_grant_handler_that_fails_is_a_409_in_the_modules_shape_and_changes_no
     assert rows(session, HourGrant) == 0 and rows(session, Subscription) == 0
 
 
+def test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_409(
+    session, ada, providers, monkeypatch
+):
+    make_user(session, "admin@example.test", admin=True)
+    payment = start(ada)
+    row = stored(session, payment["reference"])
+    providers.usd.complete(row, card_token="tok-boom")
+
+    def boom(db, row):
+        raise RuntimeError("secret provider text ada@example.test 1999")
+
+    monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, boom])
+    key = f"admin.billing_cancel_grant_failed:{row.id}"
+
+    for _ in range(2):  # the second cancel must not make a second alert
+        out = cancel(ada, payment["reference"])
+        assert error(out, 409, "payment_in_progress")
+
+    session.expire_all()
+    alerts = list(session.scalars(select(Notification).where(Notification.dedupe_key == key)))
+    assert len(alerts) == 1 and alerts[0].kind == "admin.billing_cancel_grant_failed"
+    assert str(row.id) in alerts[0].body and "RuntimeError" in alerts[0].body
+    for leaked in ("secret", "ada@example.test", "1999"):
+        assert leaked not in alerts[0].body and leaked not in alerts[0].title
+    assert stored(session, payment["reference"]).status == "pending"
+    assert rows(session, HourGrant) == 0 and rows(session, Subscription) == 0
+
+
+def test_a_grant_failure_whose_alert_cannot_be_written_is_still_the_same_409(
+    session, ada, providers, monkeypatch
+):
+    payment = start(ada)
+    providers.usd.complete(stored(session, payment["reference"]), card_token="tok-boom")
+
+    def boom(db, row):
+        raise RuntimeError("a grant failed")
+
+    def no_alert(*args, **kwargs):
+        raise RuntimeError("the alert failed")
+
+    monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, boom])
+    monkeypatch.setattr(cancel_checkout.notify.alerts, "notify_admins", no_alert)
+
+    assert error(cancel(ada, payment["reference"]), 409, "payment_in_progress")
+    assert stored(session, payment["reference"]).status == "pending"
+
+
+def test_a_page_the_provider_says_failed_does_not_alert_when_a_handler_fails(
+    session, ada, providers, monkeypatch
+):
+    make_user(session, "admin@example.test", admin=True)
+    payment = start(ada)
+    providers.usd.complete(stored(session, payment["reference"]), status="failed")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("settling failed")
+
+    monkeypatch.setattr(settle, "settle_transaction", boom)
+
+    assert error(cancel(ada, payment["reference"]), 409, "payment_in_progress")
+    assert rows(session, Notification) == 0  # nothing was paid: nothing for an admin to chase
+
+
 def test_a_refund_that_starts_while_the_provider_answers_stops_a_pack_being_closed(
     session, ada, providers, monkeypatch
 ):

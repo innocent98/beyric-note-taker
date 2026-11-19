@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.billing import settle, subscriptions
+from app.billing import notify, settle, subscriptions
 from app.billing.provider import lookup_by_reference, provider_named
 from app.billing.types import NoRecord, ProviderError, ProviderTransaction, RetryLater
 from app.config import Settings
@@ -161,6 +161,8 @@ def _settle_reported(
     except Exception as exc:  # a grant handler failed: the transaction is undone, nothing was kept
         db.rollback()
         logger.error("cancel of payment %s could not settle it: %s", payment_id, type(exc).__name__)
+        if tx.status == "successful":
+            _tell_grant_failed(db, payment_id, exc)
         raise _refuse(
             409,
             "payment_in_progress",
@@ -186,3 +188,24 @@ def _settle_reported(
     if payment.status in PAID_STATUSES:
         return Cancelled("paid", payment)
     return Cancelled("failed", payment)
+
+
+def _tell_grant_failed(db: Session, payment_id: int, exc: Exception) -> None:
+    """The provider reports the page paid and granting its hours failed: a person who paid may be
+    left without hours, so the admins are told (once per payment). Ids and the exception TYPE only,
+    never its text or anything the provider said. Its own transaction, after the rollback, and
+    best effort: the person still gets the 409, never a 500 from the alert."""
+    notify.tell_admins(
+        db,
+        f"admin.billing_cancel_grant_failed:{payment_id}",
+        "A paid payment could not be granted",
+        f"The provider reports payment {payment_id} paid, but its hours were not granted "
+        f"({type(exc).__name__}). Look at it.",
+    )
+    try:
+        db.commit()
+    except Exception as commit_exc:
+        db.rollback()
+        logger.error(
+            "admin alert for payment %s not saved: %s", payment_id, type(commit_exc).__name__
+        )
