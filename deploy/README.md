@@ -350,6 +350,11 @@ Next.js), starts, and waits up to two minutes until all three checks pass: `127.
 `127.0.0.1:8021/health` (FastAPI directly). If the new version never turns healthy it starts the
 previous commit again (with `--remove-orphans`, so a commit from before `next` existed does not
 leave the `next` container holding port 8020) and the workflow fails.
+The deploy job waits up to 45 minutes (`timeout-minutes` in `deploy.yml`) because the server's
+image build alone takes about 19 minutes; the run turns green or red only when the script ends, and
+the `deployed <sha>` line in its log is the proof. Do not shorten it below the build time: GitHub
+cancels only the SSH client, the script keeps running on the server and holds `.deploy.lock`, and a
+re-run then says "another deploy is running" until it finishes.
 A failing `docker compose up` (compose exits non-zero when a dependency is unhealthy, for example a
 crash-looping `web`) does not stop the script: the health check decides, and the rollback runs when
 the services do not come up. A build that fails restores the previous checkout and starts nothing.
