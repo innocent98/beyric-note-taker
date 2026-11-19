@@ -25,7 +25,7 @@ A guest's row waits (and only then) when **all** of these hold; every "no" means
 |---|---|---|
 | The switch is on and `now` is before the guest's `run_at` + wait | `guest_should_wait`, `wait_ends_at` | the wait is bounded by the clock, whatever the organizer does |
 | The guest's own event is a calendar one and `organizer_self` is **not true** (false, or unknown) | same | an organizer never waits; an event with no organizer flag is "not known to be mine" |
-| Another account holds the same event: same platform and code, start within **5 minutes**, that account's event says `organizer_self = true`, status confirmed, and its join row is `scheduled`, `dispatching` or `no_capacity` | same, `BEFORE_THE_BOT`, `SAME_EVENT_START_TOLERANCE` | `joined` means its bot is in (placement refuses the guest by itself); `skipped`, `cancelled`, `failed`, `completed` will not place. The code alone is not enough: a recurring series or a personal Zoom room reuses one code |
+| Another account holds the same event: same platform and code, start within **5 minutes**, that account's event says `organizer_self = true`, status confirmed, its join row is **due no later than the end of this guest's wait** (`run_at <= wait_end`: an organizer copy that starts minutes later cannot beat the guest, so waiting would cost the guest time and still lose the slot), and the row is `scheduled`, `dispatching` or `no_capacity` | same, `BEFORE_THE_BOT`, `SAME_EVENT_START_TOLERANCE` | `joined` means its bot is in (placement refuses the guest by itself); `skipped`, `cancelled`, `failed`, `completed` will not place. The code alone is not enough: a recurring series or a personal Zoom room reuses one code |
 | That account is **active**, its calendar connection is good, and its join rule and event still say "join" (the runner's own `will_join` decision) | `_can_place` | auto-join off, an override off, a decline, a cancel, a suspended or disconnected organizer never cause a wait |
 | Placement would not refuse that account for its **hours, plan or trial, or its own bot limit** | `placement.could_be_placed` (`app/placement.py:274`) | the same entitlement rule `reserve_slot` applies (`HOURS_MODE` off or enforce, admins unlimited, trial grants), read without a lock or shadow logging |
 
@@ -42,8 +42,8 @@ waits and the first placed bot records exactly as today. **Hours are charged to 
 | **Nothing is stored that a restart could lose** | the wait is the clock (`run_at` + wait), read from the database row every time. A runner that dies and comes back at the end of the wait places (tested with a fresh session and with the organizer's runner held busy) |
 | The hold **steps the row out of the due query** | each hold adds 1 to `attempts` and stamps `updated_at` with `min(now, wait_end - 15 s)`, so the row is not due again for the 15 s retry gap and is due **exactly when the wait ends**, never a gap late. Without this a crowd of waiting guests (an all-hands with 200 accounts) would fill the 25-row batch every tick and starve other rows |
 | The **organizer's rows come first** in each tick | `_due_ids` (`:321`) orders `organizer_self` rows ahead of the rest while the switch is on, so the guests can never fill the batch ahead of the row they wait for. Tested with the organizer's row made last by id and a batch of 2 |
-| The loser of a race is as today | after the wait, organizer and guest both try; the placement lock and `uq_scheduled_joins_live_code` (`app/models.py:655`) let one in and the other gets `meeting_has_note_taker`, final, with the notice (a threaded test with a 0.2 s send) |
-| **The notice** | `_NOTICES["meeting_has_note_taker"]` (`app/join_runner.py:875`): "A note taker is already in "{name}", so yours did not join. It belongs to someone else, and its notes stay private to them unless they share or move the meeting to a team you are in." Words reuse the app's own ("private", "share or move ... to a team": Terms, `web/components/legal`, the meeting page's "Share with a team"). It does not say "teammate": the other account may not be in the person's team, and nobody is named |
+| The loser of a race is as today | after the wait, organizer and guest both try; **the placement lock plus the in-the-call check in `reserve_slot`** (`app/placement.py`, the `meeting_has_note_taker` refusal) let one in and the other gets `meeting_has_note_taker`, final, with the notice (a threaded test with a 0.2 s send). `uq_scheduled_joins_live_code` (`app/models.py`) is **per user** and does not separate two accounts; it only stops one account having two live joins on a code |
+| **The notice** | `_NOTICES["meeting_has_note_taker"]` (`app/join_runner.py:875`): "A note taker is already in "{name}", so yours did not join. It belongs to someone else, and you can read its notes only if they share the meeting with a team you are in, or move it to one." Words reuse the app's own ("share", "move ... to a team": Terms, `web/components/legal`, the meeting page). Sharing includes the recorder's automatic team share ("New meetings are shared with this team when their notes are ready", Settings), so "share" is accurate for it. It does not say "teammate": the other account may not be in the person's team, and nobody is named |
 | Settings | `app/config.py:499` `prefer_organizer_bot: bool = True` (a value that is not `true`/`false` stops startup, like `SPEAKER_LINE_CORRECTION`); `:503` `organizer_bot_wait_seconds = 120`, validated 0 to 600 at `:87` (above 600 could eat the 15-minute join window; outside the range stops startup; a blank line means the default) |
 | Outlook | `isOrganizer` is asked for (`app/graph_client.py:81`), parsed into `organizer_self` (`app/graph_events.py:176-182`) and stored by the same sync code as Google (`app/gcal_sync.py:315`): **already wired, nothing added**. A test runs two Outlook accounts through `apply_batch` |
 
@@ -62,13 +62,13 @@ waits and the first placed bot records exactly as today. **Hours are charged to 
 
 `app/organizer_bot.py` (new: `guest_should_wait`, `_can_place`), `app/join_runner.py` (`_place`, `_hold_for_the_organizer`,
 `_due_ids`, the notice), `app/placement.py` (`could_be_placed`), `app/config.py` (two settings and the range check),
-`.env.example`, `deploy/README.md` (next to `SPEAKER_LINE_CORRECTION`), `tests/test_organizer_bot.py` (new, 60 tests),
+`.env.example`, `deploy/README.md` (next to `SPEAKER_LINE_CORRECTION`), `tests/test_organizer_bot.py` (new),
 the billing spec 2.5 and S12 rows, the master checklist. **Not touched:** `app/billing/cancel_checkout.py`,
 `scripts/speaker_reattribution_report.py`, `.github/workflows/deploy.yml` (other PRs are in them).
 
 ## Verification
 
-* `tests/test_organizer_bot.py`, 60 tests, real Postgres, real `apply_batch`, `run_due_joins` and `place_bot`, fake clock
+* `tests/test_organizer_bot.py` (62 tests when written; the counts, the mutation checks and the 212 below are local runs, CI is the authority), real Postgres, real `apply_batch`, `run_due_joins` and `place_bot`, fake clock
   (the `now` of each run), three fake accounts, `HOURS_MODE=enforce`:
   the organizer records and both guests are told; guests **hold while the organizer's runner is busy** (row locked by
   another session) and stay out when it arrives inside the wait; the organizer **never arrives**: the first guest records
@@ -80,10 +80,10 @@ the billing spec 2.5 and S12 rows, the master checklist. **Not touched:** `app/b
   `cancelled`, `failed`, `completed`, at the bot limit, a different code, a start 10 minutes apart); a **trial**, an
   **admin** and a **`no_capacity`** organizer do cause a wait; a start 4 minutes apart is the same event; a guest with an
   **unknown flag** waits for a known organizer, and nobody waits when neither side knows; the batch-ordering test; the
-  **placement lock / unique index race** (two threads, 0.2 s send, exactly one bot, peak one in flight, final states
+  **placement lock / in-the-call check race** (two threads, 0.2 s send, exactly one bot, peak one in flight, final states
   `joined`, `skipped`, `skipped`); the notice words; Outlook end to end; the setting's parsing (`maybe`, empty, -1, 601 stop
   startup).
-* **Mutation checks:** making `guest_should_wait` always false fails 30 of the 60; turning the batch ordering off fails
+* **Mutation checks (local, not visible in CI):** making `guest_should_wait` always false fails 30 of the 60; turning the batch ordering off fails
   the end-to-end rule tests (the guests' rows have the lower ids on purpose).
 * Existing related tests unchanged and green: `tests/test_join_runner.py`, `tests/test_placement.py`,
   `tests/test_join_refusal.py` (212 passed). Those tests' calendars have two accounts that both say "I organize", which
@@ -118,3 +118,14 @@ the billing spec 2.5 and S12 rows, the master checklist. **Not touched:** `app/b
 * The held row's `attempts` counts holds (internal; nothing reads it but the retry gap).
 * Hours still follow the recorder, so an organizer whose bot records is charged even if a guest asked for the meeting.
   That is the decision, not a gap.
+* **A guest that ends up recording joins late:** about a minute after the start (the 60 s lead plus the 120 s wait: the
+  run time is 60 s before the start, the wait ends 60 s after it). That is the price of the wait when the organizer's bot
+  does not come; a meeting is never lost, but the first minute can be.
+* **The organizer's bot sent but not let in** (the lobby, Google refusing it): the guests were already finally skipped
+  when it was placed (`meeting_has_note_taker` is final), exactly as in today's race. The rule does not hand the meeting
+  back to a guest.
+* **The organizer flag is the other account's own claim** (`organizer_self` from its calendar) and is not cross-checked.
+  No new attack: a pasted link could already win the race for the slot.
+* **Hold count:** each hold adds 1 to `attempts` (about 8 per wait). Nothing reads a cap: `attempts` is read only as
+  `== 0` in the due query's retry gap, and the crash path counts by `last_error`, not by `attempts`. A test holds the guest on
+  every tick and it is still placed, never `failed`.

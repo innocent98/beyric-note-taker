@@ -14,7 +14,8 @@ the guest's bot goes now, exactly as it did before the rule existed:
 * the guest's own event is a calendar one and is not marked as organized by the guest
   (`organizer_self` is not true: false, or unknown, which is what an event with no organizer says);
 * another account holds the same event: same platform and meeting code, a start within
-  `SAME_EVENT_START_TOLERANCE`, that account's event says it is the organizer, and its join row
+  `SAME_EVENT_START_TOLERANCE`, that account's event says it is the organizer (its own claim, not
+  cross-checked), its join row is due no later than the end of the guest's wait, and the row
   is still ahead of its bot (`scheduled`, `dispatching` or `no_capacity`; a row that is `joined`
   has its bot in, `skipped`, `cancelled` and `failed` ones will not place);
 * that account CAN place: it is active, its calendar connection is good, its join rule and its
@@ -91,6 +92,9 @@ def guest_should_wait(
             ScheduledJoin.native_id == join.native_id,
             ScheduledJoin.state.in_(BEFORE_THE_BOT),
             ScheduledJoin.deadline_at >= now,
+            # An organizer whose own run time is after the end of this guest's wait cannot beat
+            # it: waiting for that row would cost the guest time and still lose the slot.
+            ScheduledJoin.run_at <= wait_ends_at(join, settings),
             ScheduledJoin.starts_at >= join.starts_at - SAME_EVENT_START_TOLERANCE,
             ScheduledJoin.starts_at <= join.starts_at + SAME_EVENT_START_TOLERANCE,
             CalendarEvent.organizer_self.is_(True),

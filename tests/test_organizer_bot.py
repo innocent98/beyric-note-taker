@@ -528,11 +528,45 @@ def test_the_organizer_may_be_on_a_trial_an_admin_or_a_busy_host(session, cal):
     assert waits(session, cast.ben_join)  # still waiting for room for the organizer's bot
 
 
-def test_a_start_a_few_minutes_apart_is_the_same_event(session, cal):
+def test_a_start_a_minute_apart_is_the_same_event_and_still_worth_waiting_for(session, cal):
+    """The organizer's row is due a minute after the guest's: inside the guest's two-minute wait."""
     cast = cast_of(session, cal)
-    session.get(ScheduledJoin, cast.ada_join.id).starts_at += timedelta(minutes=4)
+    ada = session.get(ScheduledJoin, cast.ada_join.id)
+    ada.starts_at += timedelta(minutes=1)
+    ada.run_at += timedelta(minutes=1)
     session.commit()
     assert waits(session, cast.ben_join)
+
+
+def test_an_organizer_due_after_the_guests_wait_ends_is_not_waited_for(session, host, cal):
+    """Same event, the organizer's copy starts 4 minutes later (inside the 5-minute tolerance), so
+    her run time is after the end of the guest's wait: waiting would cost the guest two minutes
+    and still lose the slot. The guest records at once."""
+    cast = cast_of(session, cal)
+    ada = session.get(ScheduledJoin, cast.ada_join.id)
+    ada.starts_at += timedelta(minutes=4)
+    ada.run_at += timedelta(minutes=4)
+    session.commit()
+    assert not waits(session, cast.ben_join)
+
+    run(session, host, cal, RUN_AT)
+
+    assert host.bots_sent == 1 and owners(session) == ["ben"]  # the first placed, as today
+
+
+def test_holding_many_times_never_fails_or_caps_the_guest(session, engine, host, cal):
+    """Each hold counts as an attempt; nothing reads a cap, so a guest held every look for the
+    whole wait is still placed when it ends (never `failed`)."""
+    cast = cast_of(session, cal)
+    with organizer_runner_is_busy(engine, cast.ada_join.id):
+        for seconds in range(0, 120, 10):  # a tick every 10 s from the run time
+            run(session, host, cal, RUN_AT + timedelta(seconds=seconds))
+        assert host.bots_sent == 0
+        held = session.get(ScheduledJoin, cast.ben_join.id)
+        session.refresh(held)
+        assert held.attempts >= 5 and held.state == "scheduled"
+        run(session, host, cal, WAIT_ENDS)
+    assert owners(session) == ["ben"] and state_of(session, cast.ben_join) == ("joined", None)
 
 
 # ---- the same checks placement uses ----
@@ -601,7 +635,7 @@ def test_could_be_placed_says_what_reserve_slot_says(session, mode, case):
     assert predicted is (not refused), (mode, case)
 
 
-# ---- ordering, the lock and the unique index ----
+# ---- ordering, the placement lock and the in-the-call check ----
 
 
 def test_a_crowd_of_guests_cannot_fill_the_batch_ahead_of_the_organizer(
@@ -667,9 +701,10 @@ def test_the_skipped_persons_notice_is_true_about_sharing(session, host, cal):
     assert "not available yet" not in notice.body
     assert "Sharing notes between accounts" not in notice.body
     assert "belongs to someone else" in notice.body
-    assert "private to them unless they share or move the meeting to a team you are in" in (
-        notice.body
-    )
+    assert (
+        "you can read its notes only if they share the meeting with a team you are in, "
+        "or move it to one"
+    ) in notice.body
     assert "ada" not in notice.body.lower().replace("already", "")  # nobody is named
 
 

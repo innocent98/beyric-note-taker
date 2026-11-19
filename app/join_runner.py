@@ -875,8 +875,8 @@ _NOTICES = {
     "meeting_has_note_taker": (
         "A note taker is already there",
         'A note taker is already in "{name}", so yours did not join. It belongs to someone else, '
-        "and its notes stay private to them unless they share or move the meeting to a team you "
-        "are in.",
+        "and you can read its notes only if they share the meeting with a team you are in, or "
+        "move it to one.",
     ),
 }
 
