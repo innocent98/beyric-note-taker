@@ -23,8 +23,11 @@ participant grouping (`app/meet_timeline.py`, `app/skribby.py`) the naming rule 
 * `not timed`: the segment has no tag or no usable times, so it cannot be read at all.
 
 A tag with no name counts as "Unknown speaker": a clear Meet speaker over it is a move (from nobody
-to somebody). Names are compared after cleaning, equal or one inside the other, the same relaxed
-test `skribby_segments_report.py` uses for its "ok", so a spelling difference is not called a move.
+to somebody). Whether a segment already carries the lit person is the live path's own test
+(`same_person`: every word of one name is among the other's, so "Ada" and "Ada Obi" are one person
+and a spelling difference is not called a move). The per-person table ("own tag", "other") asks a
+different question, whose tag is named for this person, and uses the exact test the correction
+moves a line by (`same_name`: the same words, so "Ann" is not "Joanne" and "Obi" is not "Ada Obi").
 The bot is never a candidate. A participant who left and rejoined is one person.
 
 The Meet clock is read as `skribby_segments_report.py` reads it (Unix milliseconds placed from the
@@ -58,7 +61,7 @@ from app.speaker_correction import (  # noqa: E402
     classify,
     clock_check,
     place,
-    same_person,
+    same_name,
     skribby_body,
     tag_of,
 )
@@ -70,7 +73,7 @@ TEXT_WIDTH = 200
 # `app/speaker_correction.py`: they are the production constants, so what this prints is what the
 # live path and the rebuild do. `--min-seconds` and `--ambiguous-ratio` only try other values.
 # Names other code (the tests) reads from this script.
-__all__ = ["_key_and_shown", "classify", "same_person"]
+__all__ = ["_key_and_shown", "classify", "same_name"]
 
 
 def _clock(seconds: float) -> str:
@@ -129,7 +132,7 @@ def _people(spans: dict, segments: list[dict], tags: dict) -> dict[str, dict]:
             if not named:
                 row["unnamed"] += seconds
                 label = UNKNOWN
-            elif same_person(named, person):
+            elif same_name(named, person):
                 row["own"] += seconds
                 continue
             else:

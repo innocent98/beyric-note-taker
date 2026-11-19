@@ -169,6 +169,34 @@ def test_per_person_seconds_split_own_other_unnamed_and_outside():
     assert bo["elsewhere"] == {ADA: 40.0}
 
 
+def _own_other(tag_name, lit_name):
+    """One tag named `tag_name` over 0-40 s, `lit_name` lit over all of it: the lit person's row."""
+    tags = {"1": {"name": tag_name, "how": "given", "note": ""}}
+    events = record((lit_name, (0, 40)))
+    return analysis([seg("1", 0, 40)], tags=tags, events=events)["people"][lit_name]
+
+
+def test_a_part_of_a_word_is_not_the_person_in_the_per_person_split():
+    # the tag is named "Joanne"; "Ann" was lit: "Ann" is not "Joanne", so it is not Ann's own tag
+    row = _own_other("Joanne", "Ann")
+    assert (row["own"], row["other"]) == (0.0, 40.0)
+    assert row["elsewhere"] == {"Joanne": 40.0}
+
+
+def test_a_surname_alone_is_not_the_full_name_in_the_per_person_split():
+    # the live correction never moves a line between "Obi" and "Ada Obi" (they may be two people),
+    # so neither tag is the other's own tag here, in either direction
+    for tag_name, lit in (("Obi", "Ada Obi"), ("Ada Obi", "Obi")):
+        row = _own_other(tag_name, lit)
+        assert (row["own"], row["other"]) == (0.0, 40.0), (tag_name, lit)
+
+
+def test_the_same_words_are_the_person_whatever_the_case_order_or_punctuation():
+    for tag_name, lit in (("ada obi", "Ada Obi"), ("Obi, Ada", "Ada Obi")):
+        row = _own_other(tag_name, lit)
+        assert (row["own"], row["other"]) == (40.0, 0.0), (tag_name, lit)
+
+
 # ---- the printed report ----
 
 
