@@ -84,6 +84,15 @@ class Settings(BaseSettings):
             raise ValueError(f"BILLING_COUNTRY_ROUTES is {value!r}: {exc}") from None
         return value
 
+    @field_validator("organizer_bot_wait_seconds")
+    @classmethod
+    def _organizer_wait_is_short(cls, value: int) -> int:
+        """A wait over ten minutes could eat the 15 minutes a meeting can still be joined; it
+        stops startup instead of quietly shortening recordings."""
+        if not 0 <= value <= 600:
+            raise ValueError(f"ORGANIZER_BOT_WAIT_SECONDS is {value}; it must be 0 to 600")
+        return value
+
     @field_validator("hours_mode", mode="before")
     @classmethod
     def _blank_hours_mode_is_off(cls, value):
@@ -108,6 +117,7 @@ class Settings(BaseSettings):
         "pilot_expiry_days",
         "pilot_expiry_notice_days",
         "pilot_expiry_min_notice_days",
+        "organizer_bot_wait_seconds",
         mode="before",
     )
     @classmethod
@@ -478,6 +488,19 @@ class Settings(BaseSettings):
     # and it never stops a meeting. OFF: every line keeps its tag's name, as before it existed; the
     # rebuild script then rebuilds without it as well. A value that is not a boolean stops startup.
     speaker_line_correction: bool = True
+    # Several accounts hold the same calendar event with the same meeting link: the ORGANIZER's bot
+    # records (billing spec 2.5, stage S12; docs/sop/2026-11-19-organizer-bot-preferred.md). A
+    # guest's join runner waits `organizer_bot_wait_seconds` after its run time before placing,
+    # but only while another account that is the organizer is known to hold the event and can
+    # place (it has an account, a live join, a good calendar, hours or a plan); a lone guest, an
+    # organizer with no account, no join, no hours or no plan never waits, so the first placed bot
+    # records as before. ON by default; this is the one emergency switch, not a rollout dial. OFF:
+    # the first placed bot wins, as before it existed. A value that is not a boolean stops startup.
+    prefer_organizer_bot: bool = True
+    # How long a guest's bot waits for the organizer's (a scheduling delay on the runner's 10 s
+    # tick, never a sleep). 0 to 600; anything else stops startup. Meaningless while
+    # PREFER_ORGANIZER_BOT is false.
+    organizer_bot_wait_seconds: int = 120
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
