@@ -21,6 +21,9 @@ a second ago:
   `provider_error`, and **nothing changes**.
 - paid, but our rules refuse it (a wrong amount, say): 409 `payment_in_progress`, an admin is told,
   nothing changes.
+- paid, but granting the hours fails (a grant handler raises): the transaction is undone, 409
+  `payment_in_progress`, an admin is told (`admin.billing_cancel_grant_failed:<id>`), nothing
+  changes.
 
 A payment that is already paid or refunded answers `paid` and changes nothing; asking again after a
 cancel asks the provider again (a `failed` payment can still be paid, below).
@@ -46,7 +49,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.billing import settle, subscriptions
+from app.billing import notify, settle, subscriptions
 from app.billing.provider import lookup_by_reference, provider_named
 from app.billing.types import NoRecord, ProviderError, ProviderTransaction, RetryLater
 from app.config import Settings
@@ -97,8 +100,9 @@ def _locked(db: Session, payment_id: int) -> Payment:
 
 def cancel_checkout(db: Session, user: User, reference: str, settings: Settings, now) -> Cancelled:
     """Put away the caller's own unfinished plan or pack checkout, after asking the provider. The
-    caller commits on a result and rolls back on a `subscriptions.Refused`. (One exception: the
-    refusal path of `_settle_reported` commits the admin alert it raised, then refuses.)"""
+    caller commits on a result and rolls back on a `subscriptions.Refused`. (Two exceptions in
+    `_settle_reported`: its refusal path and its grant-failure path each commit only the admin alert
+    they raised, then refuse.)"""
     payment = db.scalars(
         select(Payment).where(Payment.reference == reference, Payment.payer_user_id == user.id)
     ).one_or_none()
@@ -161,6 +165,8 @@ def _settle_reported(
     except Exception as exc:  # a grant handler failed: the transaction is undone, nothing was kept
         db.rollback()
         logger.error("cancel of payment %s could not settle it: %s", payment_id, type(exc).__name__)
+        if tx.status == "successful":
+            _tell_grant_failed(db, payment_id, exc)
         raise _refuse(
             409,
             "payment_in_progress",
@@ -186,3 +192,31 @@ def _settle_reported(
     if payment.status in PAID_STATUSES:
         return Cancelled("paid", payment)
     return Cancelled("failed", payment)
+
+
+def _tell_grant_failed(db: Session, payment_id: int, exc: Exception) -> None:
+    """The provider reports the page paid and granting its hours failed: a person who paid may be
+    left without hours, so the admins are told (once per payment). Ids and the exception TYPE only,
+    never its text or anything the provider said. Its own transaction, after the rollback, and
+    best effort: the person still gets the 409, never a 500 from the alert."""
+    notify.tell_admins(
+        db,
+        f"admin.billing_cancel_grant_failed:{payment_id}",
+        "A paid payment could not be granted",
+        f"The provider reports payment {payment_id} paid, but it could not be settled "
+        f"({type(exc).__name__}). Look at it.",
+    )
+    try:
+        db.commit()
+    except Exception as commit_exc:
+        logger.error(
+            "admin alert for payment %s not saved: %s", payment_id, type(commit_exc).__name__
+        )
+        try:
+            db.rollback()
+        except Exception as rollback_exc:  # a dead connection: still the person's 409, not a 500
+            logger.error(
+                "rollback after the alert for payment %s failed: %s",
+                payment_id,
+                type(rollback_exc).__name__,
+            )
