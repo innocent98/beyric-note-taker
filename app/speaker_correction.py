@@ -95,6 +95,15 @@ def same_person(a: str, b: str) -> bool:
     return bool(wa and wb) and (wa <= wb or wb <= wa)
 
 
+def same_name(a: str, b: str) -> bool:
+    """The exact test: both names have the same words, whatever the case, accents or punctuation
+    ("Ada Obi" and "Obi, Ada"), and nothing looser: "Obi" is not "Ada Obi", "Ann" is not "Joanne".
+    It is the test for WHO a line belongs to (a destination, the people a tag is named for, a
+    person's own tag in the report); `same_person` is only for leaving a line alone."""
+    words = name_words(a)
+    return bool(words) and words == name_words(b)
+
+
 def known_names(tags: dict, items: list[dict]) -> list[str]:
     """Every name already in use in the meeting: the tags' and the segments' own."""
     names = [info["name"] for info in tags.values() if info.get("name")]
@@ -110,10 +119,7 @@ def resolve_label(person: str, known: list[str]) -> str | None:
     by also stays unmoved (it can be a respelling of the person the line is already under).
     Tag names come from the same Meet names (Skribby's own and its candidate names), so the same
     person's spelling normally matches exactly."""
-    words = name_words(person)
-    if not words:
-        return None
-    exact = [name for name in known if name_words(name) == words]
+    exact = [name for name in known if same_name(name, person)]
     return exact[0] if exact else None
 
 
@@ -272,8 +278,8 @@ def clock_check(
         if not current:
             continue
         if current not in own_cache:
-            words = name_words(current)  # the same person by the same exact test as a destination
-            matching = [v for n, v in people.items() if name_words(n) == words]
+            # the same person by the same exact test as a destination
+            matching = [v for n, v in people.items() if same_name(n, current)]
             own_cache[current] = _index(meet_timeline.merge([i for v in matching for i in v]))
         if own_cache[current][0]:
             named.append((a, b, own_cache[current]))

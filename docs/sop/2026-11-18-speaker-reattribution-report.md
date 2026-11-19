@@ -72,7 +72,7 @@ matches its pattern). Reused: `app/meet_timeline.py`, `app/skribby.py` (`_clean_
 ## Verification
 
 Bounded, on the Mac: `ruff check`, `ruff format --check` (the project's pinned 0.17.3), and the two named test files
-(22 tests). The tests use a made-up timeline and placeholder words: each outcome (agrees, move, two lit, no signal, under the
+(25 tests). The tests use a made-up timeline and placeholder words: each outcome (agrees, move, two lit, no signal, under the
 minimum seconds, unnamed tag, spelling difference, untimed items), the bot excluded, a rejoin as one person, the per-person
 split (own, other, unnamed, outside), the printed tables, **only the first 15 moves print text and nothing else does**, a
 long text cut, a shifted clock called out, no events / unreadable events / unplaced clock each said in a line, and the
@@ -90,4 +90,12 @@ No cost: no network, no Skribby call.
   `SPEAKER_LINE_CORRECTION` (default off), or the model/diarization route.
 * The design note's "share of the line" rule is not a script option yet; the per-move line prints "lit a of b s" so a person
   can judge it. Add `--min-share` if the first real read says it matters.
+* Done 2026-11-19 (`fix/report-people-exact-name`): the per-person table ("own tag", "other", "unnamed") now uses
+  `speaker_correction.same_name`, the exact test the correction moves a line by (the same words: "Obi" is not "Ada Obi",
+  "Ann" is not "Joanne"), instead of the looser `same_person`, so the report cannot say a tag "belongs" to a person the
+  correction would never give a line to. `same_name` is now the one place that rule lives (`resolve_label` and the clock
+  gate call it too; no behaviour change there). The segment outcomes (`agrees`, `would move`, ...) are unchanged: they come
+  from `assess`, which keeps `same_person` only to LEAVE a line alone, as the live path does. Consequence to read: a person
+  "Ada" lit under a tag named "Ada Obi" is a segment that `agrees` but shows under "other" in the per-person table. Tests:
+  surname-alone in both directions, "Ann" vs "Joanne", and same words in another case or order.
 * The Meet clock placement is still not proven live (same caveat as the segments report).
