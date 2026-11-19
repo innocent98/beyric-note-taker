@@ -12,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 from app.billing import cancel_checkout, renewals, settle
 from app.billing.types import NoRecord, ProviderError, ProviderTransaction
@@ -478,23 +480,33 @@ def test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_4
     assert rows(session, HourGrant) == 0 and rows(session, Subscription) == 0
 
 
-def test_a_grant_failure_whose_alert_cannot_be_written_is_still_the_same_409(
+def test_a_grant_failure_whose_alert_cannot_be_saved_is_still_the_same_409(
     session, ada, providers, monkeypatch
 ):
+    make_user(session, "admin@example.test", admin=True)
     payment = start(ada)
     providers.usd.complete(stored(session, payment["reference"]), card_token="tok-boom")
+    failed = {"grant": False, "commit": 0}
 
     def boom(db, row):
+        failed["grant"] = True
         raise RuntimeError("a grant failed")
 
-    def no_alert(*args, **kwargs):
-        raise RuntimeError("the alert failed")
+    real_commit = Session.commit
+
+    def commit_fails_once_after_the_grant(self):
+        if failed["grant"] and not failed["commit"]:  # the helper's commit of the alert
+            failed["commit"] += 1
+            raise OperationalError("COMMIT", {}, Exception("connection lost"))
+        return real_commit(self)
 
     monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, boom])
-    monkeypatch.setattr(cancel_checkout.notify.alerts, "notify_admins", no_alert)
+    monkeypatch.setattr(Session, "commit", commit_fails_once_after_the_grant)
 
     assert error(cancel(ada, payment["reference"]), 409, "payment_in_progress")
+    assert failed["commit"] == 1  # the commit guard really ran
     assert stored(session, payment["reference"]).status == "pending"
+    assert rows(session, HourGrant) == 0 and rows(session, Notification) == 0
 
 
 def test_a_page_the_provider_says_failed_does_not_alert_when_a_handler_fails(
