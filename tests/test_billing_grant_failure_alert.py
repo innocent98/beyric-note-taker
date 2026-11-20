@@ -11,7 +11,7 @@ Real Postgres; the clock is the `now` each call is given; the provider is `FakeP
 """
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -23,7 +23,7 @@ from app.billing import notify, renewals, settle
 from app.billing import subscriptions as subs
 from app.billing.types import ProviderError, RetryLater
 from app.models import BillingEvent, HourGrant, Notification, Payment
-from tests.billing_support import T0, choose_country, deliver, make_catalog, settings
+from tests.billing_support import T0, buy_plan, choose_country, deliver, make_catalog, settings
 from tests.test_billing_cancel_checkout import cancel, start, stored
 from tests.test_billing_profile import api_client
 from tests.test_billing_subscriptions_api import Buyer
@@ -384,6 +384,120 @@ def test_an_alert_whose_commit_fails_does_not_stop_the_sweep(
     assert session.get(Payment, second.id).status == "pending"
     assert grant_alerts(session) == []
     assert "not saved: OperationalError" in caplog.text
+    assert_no_leak(caplog.text)
+
+
+# ---- the commit, old checkouts, other kinds, small guards ----------------------------------------
+
+
+def test_a_commit_that_fails_after_the_grants_is_a_paid_failure_and_alerts_once(
+    session, ada, admin, providers, monkeypatch, caplog
+):
+    """The grants ran, then the COMMIT that makes them durable failed: the same "paid and nothing
+    granted" as a raising handler, stored by type, the webhook answered 503 (RetryLater), alerted
+    once after the threshold. (It used to be a raw 500 with nothing stored and no alert.)"""
+    payment, tx = checkout(session, ada, providers)
+    body = webhook_body(providers, tx)
+    state = {"armed": False}
+
+    def grants_fine(db, row):
+        state["armed"] = True  # the next commit is the one that makes the grants durable
+
+    real_commit = Session.commit
+
+    def commit_fails_after_the_grants(self):
+        if state["armed"]:
+            state["armed"] = False
+            raise OperationalError("COMMIT", {}, Exception(SECRET))
+        return real_commit(self)
+
+    monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, grants_fine])
+    monkeypatch.setattr(Session, "commit", commit_fails_after_the_grants)
+    caplog.set_level(logging.DEBUG)
+
+    for minutes in (0, 10):
+        with pytest.raises(RetryLater):
+            deliver(session, providers.usd, body, T0 + minutes * MIN)
+    assert grant_alerts(session) == []  # still inside the threshold
+
+    for minutes in (31, 90):
+        with pytest.raises(RetryLater):
+            deliver(session, providers.usd, body, T0 + minutes * MIN)
+
+    [alert] = grant_alerts(session, payment.id)
+    assert alert.body.endswith("(OperationalError). Look at it.")
+    row = session.scalars(select(BillingEvent)).one()
+    assert row.error == "OperationalError" and row.processed_at is None
+    assert session.get(Payment, payment.id).status == "pending"
+    assert_no_leak(row.error, alert.body, caplog.text)
+    assert "was paid but could not be granted: OperationalError" in caplog.text
+
+
+def test_an_old_checkout_paid_just_now_waits_out_the_threshold_from_its_webhook(
+    session, ada, admin, providers, monkeypatch
+):
+    """The payment sweeper measures from the oldest undecided event of the payment when there is
+    one, not from the checkout's age: a page opened five hours ago and paid now is NOT "old"."""
+    payment, tx = checkout(session, ada, providers)  # the checkout was made at T0
+    paid_at = T0 + timedelta(hours=5)
+    failing_grant(monkeypatch)
+    monkeypatch.setattr(renewals, "_sweep_events", lambda *a: None)  # only the payment sweeper
+    with pytest.raises(RetryLater):
+        deliver(session, providers.usd, webhook_body(providers, tx), paid_at)
+
+    sweep(session, paid_at + 3 * MIN)  # a failed pass on a five-hour-old checkout
+    assert grant_alerts(session) == []
+    sweep(session, paid_at + 20 * MIN)
+    assert grant_alerts(session) == []
+    sweep(session, paid_at + 35 * MIN)  # 35 minutes after the webhook: persistent
+    sweep(session, paid_at + 70 * MIN)
+
+    assert len(grant_alerts(session, payment.id)) == 1
+
+
+def test_a_pack_whose_grant_keeps_failing_alerts_once_like_a_plan(
+    session, ada, admin, providers, monkeypatch
+):
+    buy_plan(session, ada, providers.usd)  # a pack needs a live plan
+    start_at = T0 + timedelta(days=3)
+    started = subs.start_pack_checkout(session, ada, "pack10", settings(), start_at)
+    pack_id = started.payment.id
+    assert started.payment.kind == "pack"
+    providers.usd.complete(started.payment)
+    failing_grant(monkeypatch, only_payment=pack_id)
+
+    sweep(session, start_at + 3 * MIN)
+    assert grant_alerts(session) == []
+    for minutes in (31, 35, 70):
+        sweep(session, start_at + minutes * MIN)
+
+    assert len(grant_alerts(session, pack_id)) == 1
+    assert session.get(Payment, pack_id).status == "pending"
+
+
+def test_a_time_that_cannot_be_compared_tells_the_admins_rather_than_raising(session, admin):
+    naive = datetime(2026, 12, 1, 9, 0)  # no time zone: it cannot be compared with an aware `now`
+
+    settle.alert_grant_failed(session, 4242, naive, RuntimeError(SECRET), T0)
+
+    assert len(grant_alerts(session, 4242)) == 1
+
+
+def test_a_provider_error_after_the_provider_said_paid_is_logged_by_type_and_never_alerts(
+    session, ada, admin, providers, monkeypatch, caplog
+):
+    payment, tx = checkout(session, ada, providers)
+
+    def provider_goes_away(*args, **kwargs):
+        raise ProviderError(SECRET)
+
+    monkeypatch.setattr(settle, "settle_transaction", provider_goes_away)
+    caplog.set_level(logging.DEBUG)
+
+    sweep(session, T0 + 40 * MIN)
+
+    assert grant_alerts(session) == []
+    assert "ProviderError after the provider reported it paid" in caplog.text
     assert_no_leak(caplog.text)
 
 

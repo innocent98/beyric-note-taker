@@ -458,7 +458,7 @@ Nothing new: the existing bodies. A person on a trial gets 200 from Ask (capture
 | `04-replay` | the same event again | `200` `{"status":"ok"}`; no second call to Paystack, still one event row (`05-replay-rows`) |
 | `06-tampered`, `08-unsigned`, `07-stale-timestamp` | one changed byte; no signature header; a correct signature 400 seconds old | `401` `{"error":{"code":"not_authenticated","message":"The signature is not valid."}}`; nothing stored, Paystack not asked |
 | `09-ping-ignored` | a genuine `ping` (also invoices, transfers, subscriptions) | `200` `{"status":"ignored"}`; stored nowhere |
-| `10-float-amount` | Paystack's answer says the amount is `150000.0` | `503` `{"error":{"code":"error","message":"Try again later."}}`; the payment stays `pending`, the event stays waiting (`11-float-amount-rows`: `decided` false, `error` `ProviderError: malformed Paystack answer: amount is not a whole number of kobo`) |
+| `10-float-amount` | Paystack's answer says the amount is `150000.0` | `503` `{"error":{"code":"error","message":"Try again later."}}`; the payment stays `pending`, the event stays waiting (`11-float-amount-rows`: `decided` false, `error` `ProviderError`: the exception TYPE only, never its text, re-captured 2026-11-20 after the change that stopped storing exception text) |
 | `12-retry-two-signatures` | Paystack's resend, two `v1` signatures (a secret rotation), a well-formed answer this time | `200` `{"status":"ok"}`; the payment is `succeeded` (`13-retry-rows`) |
 | `14-amount-too-low` | Paystack's answer says 149999 kobo for 150000 asked | `200` `{"status":"ok"}`; the payment stays `pending` and the event is decided with `error` `amount too low: asked 150000, provider reports 149999 NGN` (`15-amount-too-low-rows`) |
 

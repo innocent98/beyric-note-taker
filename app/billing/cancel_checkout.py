@@ -22,7 +22,7 @@ a second ago:
 - paid, but our rules refuse it (a wrong amount, say): 409 `payment_in_progress`, an admin is told,
   nothing changes.
 - paid, but granting the hours fails (a grant handler raises): the transaction is undone, 409
-  `payment_in_progress`, an admin is told (`admin.billing_cancel_grant_failed:<id>`), nothing
+  `payment_in_progress`, an admin is told (`admin.billing_grant_failed:<id>`), nothing
   changes.
 
 A payment that is already paid or refunded answers `paid` and changes nothing; asking again after a

@@ -33,7 +33,8 @@ handler (or the write around it) fails, the step is undone and the payment stays
 who paid has nothing. The first failure is only logged (a lock timeout or a deadlock that the next
 pass clears should not page anyone); once the failure has gone on for `GRANT_ALERT_AFTER` the admins
 are told once per payment (`notify.tell_grant_failed`, the key the cancel button shares). The
-clock is the event's `received_at` here, the payment's `created_at` in the sweeper
+clock is the event's `received_at` (the oldest undecided event of the payment, in the payment
+sweeper too), and only a payment with no stored event falls back to its `created_at`
 (`alert_grant_failed`). `billing_events.error` keeps only the exception TYPE for such a failure,
 never its text: the text can hold an email, an amount or the provider's own words.
 
@@ -92,14 +93,13 @@ OPEN_STATUSES = ("pending", "failed")  # a payment in one of these can still be 
 GRANT_ALERT_AFTER = timedelta(minutes=30)
 
 
-class _PaidButNotGranted(Exception):
-    """Internal to `process`: the provider reported the payment `successful`, the rules accepted it,
-    and then granting failed. The original exception is `__cause__`. Wrapped only so `process` can
-    tell this failure (a person who paid has nothing) from a provider or parse failure."""
+class _Step:
+    """What `_apply` learned that `process` needs once something raises: the payment the provider
+    reported `successful` and the rules accepted (set before its grants run, cleared if the rules
+    refuse it). Any failure after that, a grant handler OR the commit that makes the grants
+    durable, is "a person paid and has nothing"."""
 
-    def __init__(self, payment_id: int) -> None:
-        super().__init__(payment_id)
-        self.payment_id = payment_id
+    paid_payment_id: int | None = None
 
 
 def process(
@@ -107,32 +107,33 @@ def process(
 ) -> None:
     """Decide one stored event. Marks `row` decided, or raises `RetryLater` leaving it waiting."""
     row_id, received_at = row.id, row.received_at
+    step = _Step()
     try:
-        refusal = _apply(db, provider, row, event, now)
+        refusal = _apply(db, provider, row, event, now, step)
+        if refusal:
+            logger.warning("billing event %s refused: %s", row_id, refusal)
+            _alert_refusal(db, row, event, refusal)
+        db.commit()  # inside the try: a commit that fails after the grants is also a paid failure
     except RetryLater as exc:
         _park(db, row, str(exc))  # our own words (`_refuse_transaction`), never a provider's
         raise
-    except _PaidButNotGranted as failed:  # a paid payment whose grant failed: nothing is kept
-        cause = failed.__cause__ or failed
-        _log_failure(f"billing event {row_id} was paid but could not be granted", cause)
-        _park(db, row, type(cause).__name__)
-        alert_grant_failed(db, failed.payment_id, received_at, cause, now)
-        raise RetryLater("the event could not be applied") from cause
     except Exception as exc:  # a provider failure, or a step that failed: nothing is kept
-        _log_failure(f"billing event {row_id} could not be applied", exc)
+        paid_payment_id = step.paid_payment_id
+        what = "was paid but could not be granted" if paid_payment_id else "could not be applied"
+        _log_failure(f"billing event {row_id} {what}", exc)
         _park(db, row, type(exc).__name__)
+        if paid_payment_id is not None:  # a person who paid has nothing: told once it has lasted
+            alert_grant_failed(db, paid_payment_id, received_at, exc, now)
         raise RetryLater("the event could not be applied") from exc
-    if refusal:
-        logger.warning("billing event %s refused: %s", row.id, refusal)
-        _alert_refusal(db, row, event, refusal)
-    db.commit()
 
 
 def _log_failure(what: str, exc: BaseException) -> None:
     """Log a failure by exception TYPE and where it was raised, never its text (an email, an amount
     or a provider's words can be in it, and these lines are kept)."""
     frames = traceback.extract_tb(exc.__traceback__)
-    where = f"{os.path.basename(frames[-1].filename)}:{frames[-1].lineno}" if frames else "?"
+    ours = [f for f in frames if "/app/" in f.filename.replace(os.sep, "/")]
+    frame = (ours or frames or [None])[-1]  # the deepest frame of OUR code, else the deepest
+    where = f"{os.path.basename(frame.filename)}:{frame.lineno}" if frame else "?"
     logger.error("%s: %s at %s", what, type(exc).__name__, where)
 
 
@@ -144,9 +145,14 @@ def alert_grant_failed(
     system first had a reason to settle it: the event's `received_at`, or the payment's
     `created_at` when no event is involved) is at least `GRANT_ALERT_AFTER` old. Called only after
     the provider reported `successful`: a failed or pending payment, or a provider that could not
-    be asked, never reaches here. The caller has rolled back; this commits only the alert."""
-    if now - first_seen < GRANT_ALERT_AFTER:
-        return
+    be asked, never reaches here. The caller has rolled back; this commits only the alert. It never
+    raises: a time that cannot be compared (naive against aware) tells the admins rather than
+    staying silent."""
+    try:
+        if now - first_seen < GRANT_ALERT_AFTER:
+            return
+    except TypeError:
+        logger.error("grant alert for payment %s: its times cannot be compared", payment_id)
     notify.tell_grant_failed(db, payment_id, exc)
 
 
@@ -158,7 +164,12 @@ def _park(db: Session, row: BillingEvent, error: str) -> None:
 
 
 def _apply(
-    db: Session, provider: PaymentProvider, row: BillingEvent, event: ProviderEvent, now
+    db: Session,
+    provider: PaymentProvider,
+    row: BillingEvent,
+    event: ProviderEvent,
+    now,
+    step: _Step,
 ) -> str | None:
     """Apply the event inside the caller's transaction. Returns a refusal reason, or None."""
     if event.kind in ("refund", "dispute"):
@@ -168,18 +179,13 @@ def _apply(
     ).one_or_none()
     refusal = _refuse_payment(payment, provider)
     if refusal is None and payment.status in OPEN_STATUSES:
-        payment_id = payment.id
         tx = provider.fetch_transaction(event.provider_tx_id)
-        try:
-            refusal = _malformed(tx) or _decide(db, payment, event, tx, now)
-        except RetryLater:
-            raise
-        except Exception as exc:
-            # Only a `charge_succeeded` event whose transaction the provider reports `successful`
-            # reaches the grants (`_malformed` returned nothing, so `tx` is a usable report).
-            if event.kind == "charge_succeeded" and tx.status == "successful":
-                raise _PaidButNotGranted(payment_id) from exc
-            raise
+        refusal = _malformed(tx)
+        if refusal is None and event.kind == "charge_succeeded" and tx.status == "successful":
+            step.paid_payment_id = payment.id  # from here a failure is a paid payment not granted
+        refusal = refusal or _decide(db, payment, event, tx, now)
+        if refusal:
+            step.paid_payment_id = None  # refused by the rules: nothing was owed
     elif refusal is None and event.kind == "charge_succeeded":
         _check_second_payment(db, provider, payment, event)
     row.processed_at = now

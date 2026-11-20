@@ -620,7 +620,7 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
             settle.process(session, adapter, row, event, now)
         except RetryLater:
             continue  # parked by `process`, which also tells the admins of a paid grant that fails
-        except Exception as exc:  # the stored body would not parse: nothing was paid or granted
+        except Exception as exc:  # the stored body would not parse, or the database is gone
             session.rollback()
             logger.error("sweeping event %s failed: %s", row.id, type(exc).__name__)
 
@@ -699,13 +699,48 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
                     f"Payment {payment_id}: {refusal}. The provider reports it paid; look at it.",
                 )
             session.commit()
-        except (ProviderError, RetryLater):
+        except (ProviderError, RetryLater) as exc:
             session.rollback()
+            if paid:  # not expected after `successful`; never silent (type only, no text)
+                logger.warning(
+                    "sweeping payment %s: %s after the provider reported it paid",
+                    payment_id,
+                    type(exc).__name__,
+                )
         except Exception as exc:
             session.rollback()
             logger.error("sweeping payment %s failed: %s", payment_id, type(exc).__name__)
             if paid:  # a person who paid has nothing: told once, once it has gone on a while
-                settle.alert_grant_failed(session, payment_id, created_at, exc, now)
+                first_seen = _first_seen(session, adapter, reference, created_at, now)
+                settle.alert_grant_failed(session, payment_id, first_seen, exc, now)
+
+
+def _first_seen(session: Session, adapter, reference: str, created_at: datetime, now: datetime):
+    """When the system first had a reason to settle this payment: the `received_at` of its oldest
+    undecided `charge_succeeded` event (the webhook that said it was paid), else its `created_at`.
+    An old checkout paid just now would otherwise look old at its very first failure. Reads the
+    stored events of this provider that are still waiting (a handful, within the sweep lookback)
+    and matches the payment's reference from each body, as `_sweep_events` reads them; any
+    failure falls back to `created_at`, since this must never break the sweep."""
+    try:
+        waiting = session.scalars(
+            select(BillingEvent)
+            .where(
+                BillingEvent.provider == adapter.name,
+                BillingEvent.type == "charge_succeeded",
+                BillingEvent.processed_at.is_(None),
+                BillingEvent.received_at > now - SWEEP_LOOKBACK,
+            )
+            .order_by(BillingEvent.received_at.asc())
+            .limit(BATCH * 4)
+        ).all()
+        for row in waiting:
+            if adapter.parse_event(json.dumps(row.payload).encode()).reference == reference:
+                return row.received_at
+    except Exception as exc:
+        session.rollback()
+        logger.warning("first sight of a paid payment not read: %s", type(exc).__name__)
+    return created_at
 
 
 # ---- the pay link ----

@@ -3,7 +3,7 @@
   "content": {
     "payments": [
       {
-        "reference": "bn-1-a998653d76a2166a",
+        "reference": "bn-1-0d7de3531aedbcb9",
         "status": "succeeded",
         "provider_tx_id": "4099260516",
         "card_country": "NG",
