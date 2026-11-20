@@ -86,7 +86,7 @@ LAYOUT = [
         ["VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET", "VEXA_API_KEY", "VEXA_IMAGE_TAG", "BOT_NAME"],
     ),
     (
-        "Optional (defaults shown)",
+        "Optional",
         [
             "AUDIO_RETENTION_DAYS",
             "AUDIO_DIR",

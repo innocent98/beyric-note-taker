@@ -810,7 +810,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 ## Config cleanup for the production release (2026-11-20, branch `chore/env-and-nginx-cleanup`, PR open, **not merged**; no migration; SOP `docs/sop/2026-11-20-env-and-nginx-cleanup.md`)
 
 - [x] Audit of the 54 names on the server and every name in the old `.env.example` against `app/config.py`, `compose.yaml`, `deploy/`, `web/`, `scripts/`, `alembic/` (6 required, 3 Vexa-only, 2 first-install-only, 31 non-default by design, 12 default-capable of which 8 removable by value, **0 unused**)
-- [x] `.env.example` rewritten: section headers only, optional settings as one `# NAME=default` line each (a test keeps it equal to `Settings`)
+- [x] `.env.example` rewritten: section headers and the live variables only (59 lines); optional settings are documented with their defaults in `deploy/README.md`
 - [x] `deploy/nginx.conf` trimmed to six headers; code lines diffed identical to the old file; rationale moved to `deploy/README.md` section 6
 - [x] `scripts/clean_env.py` + `tests/test_clean_env.py` (105 tests): dry run by default, names only, backup, atomic 600 rewrite, refusals
 - [x] `deploy/README.md`: 25 variables that had no row now have one; "Cleaning the server `.env`" section

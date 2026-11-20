@@ -435,14 +435,14 @@ def test_the_new_file_would_never_drop_a_key_it_was_given():
 
 
 def example_layout():
-    """[(section title, [keys, commented or not])] read from .env.example."""
+    """[(section title, [keys])] read from .env.example: headers and live lines only."""
     sections: list[tuple[str, list[str]]] = []
     for line in (ROOT / ".env.example").read_text().splitlines():
         header = re.fullmatch(r"# ---- (.+) ----", line)
         if header:
             sections.append((header.group(1), []))
             continue
-        key = re.match(r"#? ?([A-Z][A-Z0-9_]*)=", line)
+        key = re.match(r"([A-Z][A-Z0-9_]*)=", line)
         if key:
             sections[-1][1].append(key.group(1))
         else:
@@ -450,8 +450,24 @@ def example_layout():
     return sections
 
 
-def test_the_cleaner_layout_is_the_env_example_layout():
-    assert clean_env.LAYOUT == example_layout()
+def _is_subsequence(part, whole):
+    rest = iter(whole)
+    return all(item in rest for item in part)
+
+
+def test_env_example_is_the_cleaner_layout_without_the_optional_settings():
+    """The cleaner orders by LAYOUT (every known name); the example shows only the live ones, in
+    the same sections and order, with no comment but the headers."""
+    layout = dict(clean_env.LAYOUT)
+    shown = example_layout()
+    assert _is_subsequence([title for title, _ in shown], [title for title, _ in clean_env.LAYOUT])
+    for title, keys in shown:
+        assert _is_subsequence(keys, layout[title]), title
+    text = (ROOT / ".env.example").read_text()
+    assert [line for line in text.splitlines() if line.startswith("#")] == [
+        f"# ---- {title} ----" for title, _ in shown
+    ]
+    assert len(text.splitlines()) <= 60
 
 
 def test_every_default_in_the_cleaner_is_the_code_default():
@@ -463,22 +479,12 @@ def test_every_default_in_the_cleaner_is_the_code_default():
         assert {"b": bool, "i": int, "s": str}[kind] is type(default), key
 
 
-def test_the_optional_section_shows_the_defaults_the_cleaner_removes():
-    optional = dict(
-        (m.group(1), m.group(2))
-        for m in (
-            re.match(r"# ([A-Z0-9_]+)=(.*)", line)
-            for line in (ROOT / ".env.example")
-            .read_text()
-            .split("# ---- Optional")[1]
-            .split("# ---- Local")[0]
-            .splitlines()
-        )
-        if m
-    )
+def test_readme_states_the_default_of_every_removable_setting():
+    rows = [line for line in (ROOT / "deploy" / "README.md").read_text().splitlines()]
     for key, (kind, default) in clean_env.DEFAULTS.items():
-        shown = optional[key]
-        assert shown == (str(default).lower() if kind == "b" else str(default)), key
+        shown = str(default).lower() if kind == "b" else str(default)
+        row = next(line for line in rows if line.startswith("|") and f"`{key}`" in line)
+        assert shown in row, f"{key}: the README row does not state its default {shown!r}"
 
 
 def test_compose_and_the_app_share_the_audio_retention_default():
@@ -494,8 +500,8 @@ def test_every_env_example_name_is_known_to_the_app_or_compose():
             assert key in fields or f"${{{key}" in compose or key == "DATABASE_URL", key
 
 
-def test_every_setting_has_a_line_in_env_example():
-    listed = {key for _title, keys in example_layout() for key in keys}
+def test_every_setting_is_known_to_the_cleaner():
+    listed = {key for _title, keys in clean_env.LAYOUT for key in keys}
     assert {name.upper() for name in Settings.model_fields} <= listed
 
 
@@ -514,12 +520,12 @@ def test_env_example_holds_no_real_looking_value():
     assert not re.search(r"sk-[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|FLWSECK-[A-Za-z0-9]{8,}", text)
 
 
-def test_deploy_readme_has_a_row_for_every_env_example_name():
+def test_deploy_readme_has_a_row_for_every_setting_the_cleaner_knows():
     readme = (ROOT / "deploy" / "README.md").read_text()
     named = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", readme))
-    for _title, keys in example_layout():
+    for _title, keys in clean_env.LAYOUT:
         for key in keys:
-            assert key in named, f"{key} is in .env.example but not in deploy/README.md"
+            assert key in named, f"{key} is a known setting but not in deploy/README.md"
 
 
 @pytest.mark.parametrize("key", sorted(clean_env.DEFAULTS))
