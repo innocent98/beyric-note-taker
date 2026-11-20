@@ -24,7 +24,7 @@
           "title": "Payments have waited more than a day",
           "body": "1 payment(s) were started more than a day ago and have no result yet: 13. Most are checkouts nobody finished; a refused or lost payment looks the same, so look at the provider's dashboard for any you expect.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:24.899286Z",
+          "created_at": "2026-11-20T22:02:31.596004Z",
           "read_at": null
         },
         {
@@ -34,7 +34,7 @@
           "title": "A payment was refused by the settlement rules",
           "body": "Payment 13: amount too low: asked 1000, provider reports 500 USD. The provider reports it paid; look at it.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:24.891220Z",
+          "created_at": "2026-11-20T22:02:31.588299Z",
           "read_at": null
         },
         {
@@ -44,7 +44,7 @@
           "title": "A payment was refused by the settlement rules",
           "body": "flutterwave reports a successful charge (event 14) that our rules refused: amount too low: asked 1000, provider reports 500 USD. Money may have moved. Look at it in the provider's dashboard.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:24.876333Z",
+          "created_at": "2026-11-20T22:02:31.572000Z",
           "read_at": null
         },
         {
@@ -54,7 +54,7 @@
           "title": "A payment was charged twice",
           "body": "Payment 8 was already paid, and flutterwave reports a second successful charge under the same reference (provider transaction id fx-second-charge). Nothing was granted for it. Refund the second one in the provider's dashboard.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:24.853901Z",
+          "created_at": "2026-11-20T22:02:31.550889Z",
           "read_at": null
         },
         {
@@ -62,9 +62,9 @@
           "kind": "admin.billing_refund_unknown",
           "severity": "warning",
           "title": "A refund got no answer from the provider",
-          "body": "Refund 4 of payment 9 (USD 18.00, flutterwave) got no answer. It may or may not exist. Look in the provider's dashboard for the reference bnrf-9-b97948e95308900c, then resolve it in the refunds list: do NOT ask for it again until you have looked.",
+          "body": "Refund 4 of payment 9 (USD 18.00, flutterwave) got no answer. It may or may not exist. Look in the provider's dashboard for the reference bnrf-9-c5f9b5407e31de80, then resolve it in the refunds list: do NOT ask for it again until you have looked.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:24.717300Z",
+          "created_at": "2026-11-20T22:02:31.400926Z",
           "read_at": null
         },
         {
@@ -74,7 +74,7 @@
           "title": "A payment needs a refund or a look",
           "body": "Payment 12 (plan, USD 18.00) succeeded but nothing can use it: the person already has a live plan. Refund it in the provider's dashboard.",
           "meeting_id": null,
-          "created_at": "2026-11-18T11:33:23.790730Z",
+          "created_at": "2026-11-20T22:02:30.504953Z",
           "read_at": null
         }
       ],

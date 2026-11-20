@@ -3,7 +3,7 @@
   "client": "ben billing-on",
   "request": {
     "method": "GET",
-    "path": "/api/billing/invoices/BN-T-2026-000001/pdf",
+    "path": "/api/billing/invoices/BN-2026-900001/pdf",
     "headers": {
       "Cookie": "device=<cookie>; session=<cookie>"
     },

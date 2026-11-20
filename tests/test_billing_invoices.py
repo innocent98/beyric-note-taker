@@ -32,6 +32,7 @@ from tests.billing_support import (  # noqa: F401  (fixtures used by name)
     HOUR,
     P20,
     T0,
+    assert_no_test_wording,
     buy_plan,
     choose_country,
     grants,
@@ -479,10 +480,12 @@ def test_the_receipt_is_built_when_sent_with_the_pdf_attached(session, ada, prov
     message = mail_templates.prepare(
         session, "billing_receipt", {"invoice_id": invoice.id}, "ada@example.test", settings(), T0
     )
-    assert message.subject == "Your receipt BN-T-2026-000001"
-    assert "BN-T-2026-000001" in message.text and "USD 18.00" in message.text
+    # stored `BN-T-2026-000001` (the internal series), shown as an ordinary number
+    assert message.subject == "Your receipt BN-2026-900001"
+    assert "BN-2026-900001" in message.text and "USD 18.00" in message.text
     [attachment] = message.attachments
-    assert attachment.filename == "invoice-BN-T-2026-000001.pdf"
+    assert attachment.filename == "invoice-BN-2026-900001.pdf"
+    assert_no_test_wording(message.subject, message.text, message.html, attachment.filename)
     assert attachment.content.startswith(b"%PDF-") and len(attachment.content) > 3000
 
 
@@ -595,7 +598,7 @@ def test_the_pdf_is_a_real_pdf_with_what_the_invoice_says(session, ada, provider
     assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
     assert len(pdf) > 5000  # fonts embedded: a real page, not an empty file
     wanted = [
-        "BN-T-2026-000001",
+        "BN-2026-900001",
         "Ada Works Ltd",
         "1 Marina Road, Lagos",
         "TAX-PLACEHOLDER-1",
@@ -604,17 +607,18 @@ def test_the_pdf_is_a_real_pdf_with_what_the_invoice_says(session, ada, provider
         "NGN 25,000.00",
         "1 December 2026 to 1 January 2027",
         payment.reference,
-        "TEST INVOICE",
         "No VAT is charged on this invoice.",
     ]
     layout = _layout_text(doc)
     for text in wanted:
         assert text in layout, text
+    assert_no_test_wording(layout, " ".join(doc["banners"]), doc["number"], doc["footer"])
     extracted = _pdf_text(pdf)  # a second opinion from a real PDF reader, where there is one
     if extracted is not None:
         flat = " ".join(extracted.split())
         for text in wanted:
             assert text in flat, text
+        assert_no_test_wording(flat)
 
 
 def test_the_pdf_shows_vat_and_a_refund_notice(session, ada, providers):
@@ -713,14 +717,115 @@ def test_the_pdf_writes_money_with_integers_only():
 def test_the_number_pattern_survives_the_millionth_invoice_of_a_year():
     from app.billing.invoices_api import NUMBER
 
-    for good in ("BN-2026-000001", "BN-T-2026-000001", "BN-2026-1000000", "BN-2026-123456789"):
+    for good in ("BN-2026-000001", "BN-2026-900001", "BN-2026-1000000", "BN-2026-123456789"):
         assert NUMBER.fullmatch(good), good
     for bad in (
         "BN-2026-00001",
         "bn-2026-000001",
         "BN-2026-1234567890",
         "BN-X-2026-000001",
+        "BN-T-2026-000001",  # the internal series is never a number a person is given
         "BN-2026-",
     ):
         assert not NUMBER.fullmatch(bad), bad
     assert invoices.number_text(2026, 1_000_000) == "BN-2026-1000000"
+
+
+# ---- no test-mode wording, one display number per row ----------------------------------------
+
+
+def test_the_internal_series_is_shown_as_an_ordinary_number():
+    from app.billing import invoice_number
+
+    assert invoice_number.shown("BN-2026-000123") == "BN-2026-000123"  # live: as stored
+    assert invoice_number.shown("BN-T-2026-000001") == "BN-2026-900001"
+    assert invoice_number.shown("BN-T-2026-000011") == "BN-2026-900011"
+    assert invoice_number.shown("BN-T-2027-100000") == "BN-2027-1000000"  # past six digits
+    assert invoice_number.shown("not a number") == "not a number"
+
+
+def test_a_shown_number_maps_back_to_the_one_row_it_came_from():
+    from app.billing import invoice_number
+
+    stored = [f"BN-T-{year}-{n:06d}" for year in (2026, 2027) for n in (1, 2, 99, 999_999)]
+    shown = [invoice_number.shown(s) for s in stored]
+    assert len(set(shown)) == len(stored)  # one-to-one: two rows never show the same number
+    for s, number in zip(stored, shown, strict=True):
+        assert "T" not in number
+        assert s in invoice_number.stored_candidates(number)  # and back again
+    # a live number is only itself: nothing in the live range reaches into the internal one
+    assert invoice_number.stored_candidates("BN-2026-000123") == ["BN-2026-000123"]
+    assert invoice_number.stored_candidates("BN-2026-899999") == ["BN-2026-899999"]
+
+
+def test_a_test_era_invoice_never_shows_the_same_number_as_a_live_one(session, ada, providers):
+    """Both series start at one in the database, but what is shown does not collide: the internal
+    series is shown from 900001 up, the live one from 000001."""
+    from app.billing import invoice_number
+
+    buy_plan(session, ada, providers.usd)
+    bob = make_user(session, "bob@example.test")
+    buy_plan(session, bob, providers.usd, country="US")
+    internal = [invoice_number.shown(i.number) for i in all_invoices(session)]
+    assert internal == ["BN-2026-900001", "BN-2026-900002"]
+
+    payments = list(session.scalars(select(Payment).order_by(Payment.id)))
+    session.query(Invoice).delete()
+    session.flush()
+    live = [invoices.issue(session, p, T0, settings(billing_live=True)) for p in payments]
+    shown_live = [invoice_number.shown(i.number) for i in live]
+    assert shown_live == ["BN-2026-000001", "BN-2026-000002"]
+    assert not set(internal) & set(shown_live)
+
+
+def test_a_test_mode_invoice_reads_exactly_like_a_live_one(session, ada, providers):
+    """The mail and the PDF of an invoice made in test mode and of the same payment made live say
+    the same things: no banner, no extra line, no mention of test keys. Only the number differs."""
+    from app import mail_templates
+    from app.billing import receipt_mail  # noqa: F401  (registers the template)
+
+    buy_plan(session, ada, providers.usd)
+    test_invoice = all_invoices(session)[0]
+    assert test_invoice.test_mode is True  # kept for the server only
+    payment = session.get(Payment, test_invoice.payment_id)
+    test_doc = invoice_pdf.document(test_invoice, payment)
+    args = ("ada@example.test", settings(), T0)
+    test_mail = mail_templates.prepare(
+        session, "billing_receipt", {"invoice_id": test_invoice.id}, *args
+    )
+    assert test_doc["banners"] == []
+    assert_no_test_wording(test_mail.subject, test_mail.text, test_mail.html)
+    assert "not a tax document" not in test_mail.text.lower()
+
+    session.query(Invoice).delete()
+    session.flush()
+    live_invoice = invoices.issue(session, payment, T0, settings(billing_live=True))
+    live_doc = invoice_pdf.document(live_invoice, payment)
+    live_mail = mail_templates.prepare(
+        session, "billing_receipt", {"invoice_id": live_invoice.id}, *args
+    )
+    assert live_invoice.test_mode is False
+    assert set(live_doc) == set(test_doc)
+    assert {k: v for k, v in live_doc.items() if k not in ("number", "footer")} == {
+        k: v for k, v in test_doc.items() if k not in ("number", "footer")
+    }
+    # the mails differ by the number alone
+    shown = {"test": "BN-2026-900001", "live": "BN-2026-000001"}
+    assert test_mail.text.replace(shown["test"], shown["live"]) == live_mail.text
+
+
+def test_the_live_series_numbers_exactly_as_before(session, ada, providers):
+    """Go-live: with BILLING_LIVE true the stored number, the shown number and the live counter are
+    the live series with no offset, and the internal counter is not touched."""
+    from app.billing import invoice_number
+
+    buy_plan(session, ada, providers.usd)
+    payment = session.scalars(select(Payment)).one()
+    session.query(Invoice).delete()
+    session.flush()
+    live = settings(billing_live=True)
+    first = invoices.issue(session, payment, T0, live)
+    assert first.number == "BN-2026-000001" and invoice_number.shown(first.number) == first.number
+    assert invoices.next_number(session, 2026) == "BN-2026-000002"
+    assert session.get(InvoiceCounter, 2026).last_number == 2
+    assert session.get(InvoiceCounter, -2026).last_number == 1  # the internal series stayed at 1

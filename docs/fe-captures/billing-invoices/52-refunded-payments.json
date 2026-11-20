@@ -18,15 +18,15 @@
     "body": {
       "payments": [
         {
-          "reference": "bn-4-13c16fbca080c23e",
+          "reference": "bn-4-b547fde9c44a07b2",
           "kind": "plan",
           "status": "refunded",
           "currency": "USD",
           "amount_minor": 1800,
-          "created_at": "2026-11-18T11:33:22.932171Z",
-          "paid_at": "2026-11-18T11:33:22.950242Z",
+          "created_at": "2026-11-20T22:02:29.665504Z",
+          "paid_at": "2026-11-20T22:02:29.679123Z",
           "pay_url": null,
-          "invoice_number": "BN-T-2026-000004"
+          "invoice_number": "BN-2026-900004"
         }
       ]
     }

@@ -18,18 +18,17 @@
     "body": {
       "invoices": [
         {
-          "number": "BN-T-2026-000004",
-          "issued_at": "2026-11-18T11:33:22.950242Z",
+          "number": "BN-2026-900004",
+          "issued_at": "2026-11-20T22:02:29.679123Z",
           "currency": "USD",
           "subtotal_minor": 1800,
           "vat_rate_bp": 0,
           "vat_minor": 0,
           "total_minor": 1800,
           "description": "20 hours a month",
-          "payment_reference": "bn-4-13c16fbca080c23e",
+          "payment_reference": "bn-4-b547fde9c44a07b2",
           "payment_status": "refunded",
-          "refunded_at": "2026-11-18T11:33:23.981540Z",
-          "test_mode": true
+          "refunded_at": "2026-11-20T22:02:30.691188Z"
         }
       ]
     }

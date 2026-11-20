@@ -29,6 +29,7 @@ from app import services
 from app.api_admin import require_admin
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
 from app.billing import refunds, subscriptions
+from app.billing.invoice_number import shown as shown_invoice_number
 from app.db import get_session
 from app.models import Invoice, Payment, Refund, User
 
@@ -148,6 +149,10 @@ def _option(db: Session, payment: Payment, now: datetime) -> RefundOption | None
     return RefundOption(reason=reason, allowed=True, message=None)
 
 
+def _shown_number(stored: str | None) -> str | None:
+    return shown_invoice_number(stored) if stored else None
+
+
 def _brief(row: Refund | None) -> RefundBrief | None:
     if row is None:
         return None
@@ -186,8 +191,8 @@ def list_payments(
                 created_at=payment.created_at,
                 paid_at=payment.paid_at,
                 needs_refund_reason=payment.needs_refund_reason,
-                invoice_number=db.scalar(
-                    select(Invoice.number).where(Invoice.payment_id == payment.id)
+                invoice_number=_shown_number(
+                    db.scalar(select(Invoice.number).where(Invoice.payment_id == payment.id))
                 ),
                 refund=_brief(newest),
                 refund_option=_option(db, payment, now),

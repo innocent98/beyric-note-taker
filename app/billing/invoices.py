@@ -11,12 +11,14 @@ needs_refund_reason` is set: a second payment for a period already paid, money f
 is NOT invoiced: no supply happened, and a person refunds it in full. Every other succeeded payment
 gets one invoice, exactly one (`invoices.payment_id` is unique).
 
-**The number.** `BN-<year>-<six digits>`, sequential within the year (payments made with test keys
-have their own series, `BN-T-<year>-...`, so test purchases never use up the live numbers), the
-year in Lagos time (the seller's). It comes from `invoice_counters` with one atomic upsert
-(`next_number`): the row lock lasts to the end of the issuing transaction, so two payments settled
-at the same moment queue on it and never get the same number, and a rollback gives its number back,
-so there are no gaps. The unique index on `invoices.number` is the second line behind it.
+**The number.** `BN-<year>-<six digits>`, sequential within the year (invoices made while
+`BILLING_LIVE` is false are counted apart and stored as `BN-T-<year>-...`, so purchases with the
+providers' test keys never use up the live numbers; that `T-` is internal and never shown, see
+`invoice_number.shown`), the year in Lagos time (the seller's). It comes from `invoice_counters`
+with one atomic upsert (`next_number`): the row lock lasts to the end of the issuing transaction,
+so two payments settled at the same moment queue on it and never get the same number, and a
+rollback gives its number back, so there are no gaps. The unique index on `invoices.number` is
+the second line behind it.
 
 **The money.** `total_minor` is what the person paid (the payment's amount). `BILLING_VAT_RATE_BP`
 is the VAT that price INCLUDES (default 0: no VAT line): `vat = round_half_up(total * rate /
@@ -78,14 +80,15 @@ def invoice_year(at: datetime) -> int:
 
 
 def number_text(year: int, n: int, *, test: bool = False) -> str:
-    """`BN-2026-000123`; a test-mode invoice has its own series, `BN-T-2026-000123`."""
+    """The stored number: `BN-2026-000123`; internal series (`test`): `BN-T-2026-000123`."""
     return f"BN-{'T-' if test else ''}{year}-{n:06d}"
 
 
 def next_number(db: Session, year: int, *, test: bool = False) -> str:
-    """The next invoice number of `year` in the live series, or in the TEST series (`test`: payments
-    made with test keys, `BN-T-...`, counted under the negative year) so test purchases never use
-    up the live numbers: the first real invoice is `BN-<year>-000001`. One atomic upsert: the row
+    """The next stored invoice number of `year` in the live series, or in the internal series
+    (`test`: invoices made while `BILLING_LIVE` is false, `BN-T-...`, counted under the negative
+    year) so those never use up the live numbers: the first live invoice is `BN-<year>-000001`.
+    The `T-` is never shown to anyone (`invoice_number.shown`). One atomic upsert: the row
     stays locked until the caller commits (or rolls back and gives the number back), so concurrent
     payments queue here."""
     n = db.execute(

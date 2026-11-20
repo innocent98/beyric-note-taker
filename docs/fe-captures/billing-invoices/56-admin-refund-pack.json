@@ -22,7 +22,7 @@
       "id": 2,
       "payment_id": 6,
       "payer_email": "dee@example.test",
-      "reference": "bnrf-6-455f1a72d989c121",
+      "reference": "bnrf-6-477f5ed89ec9713a",
       "reason": "pack_14d",
       "status": "submitted",
       "currency": "USD",
@@ -30,8 +30,8 @@
       "provider_refund_id": "fake-refund-2",
       "note": null,
       "error": null,
-      "created_at": "2026-11-18T11:33:24.659312Z",
-      "resolved_at": "2026-11-18T11:33:24.659312Z",
+      "created_at": "2026-11-20T22:02:31.349538Z",
+      "resolved_at": "2026-11-20T22:02:31.349538Z",
       "needs_resolution": false
     }
   }
