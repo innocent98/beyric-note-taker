@@ -119,7 +119,11 @@ def process(
         raise
     except Exception as exc:  # a provider failure, or a step that failed: nothing is kept
         paid_payment_id = step.paid_payment_id
-        what = "was paid but could not be granted" if paid_payment_id else "could not be applied"
+        what = (
+            "was paid but could not be granted"
+            if paid_payment_id is not None
+            else "could not be applied"
+        )
         _log_failure(f"billing event {row_id} {what}", exc)
         _park(db, row, type(exc).__name__)
         if paid_payment_id is not None:  # a person who paid has nothing: told once it has lasted
