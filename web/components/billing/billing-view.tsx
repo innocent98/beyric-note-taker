@@ -132,7 +132,7 @@ export function BillingView() {
         <WaitingPayment
           payment={state.pending_payment}
           onCancelled={(result) => {
-            setCancelled(result ? cancelNotice(result).text : null);
+            setCancelled(result ? cancelNotice(result, state.pending_payment?.kind).text : null);
             load();
           }}
         />

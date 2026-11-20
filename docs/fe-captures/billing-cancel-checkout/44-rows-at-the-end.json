@@ -23,14 +23,24 @@
         "amount_minor": 1000
       },
       {
-        "kind": "upgrade",
-        "status": "pending",
+        "kind": "renewal",
+        "status": "failed",
         "amount_minor": 1000
       },
       {
         "kind": "pack",
         "status": "failed",
         "amount_minor": 1000
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "amount_minor": 2199
+      },
+      {
+        "kind": "upgrade",
+        "status": "succeeded",
+        "amount_minor": 3999
       }
     ],
     "hour_grants": [
@@ -41,11 +51,19 @@
       {
         "kind": "pack",
         "seconds": 36000
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 107640
+      },
+      {
+        "kind": "plan_period",
+        "seconds": 179640
       }
     ],
     "subscriptions": [
       {
-        "plan": "plan_20h",
+        "plan": "plan_100h",
         "status": "active"
       }
     ]

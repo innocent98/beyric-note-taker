@@ -13,7 +13,7 @@ written: there is no route that takes another person's id.
 | `POST /api/billing/checkout` | start a hosted checkout for a plan or a pack |
 | `GET /api/billing/payments` | their payments, newest first (the billing history) |
 | `GET /api/billing/payments/{reference}` | one payment's state (the return page polls it) |
-| `POST /api/billing/payments/{reference}/cancel` | put away an unfinished plan or pack checkout |
+| `POST /api/billing/payments/{reference}/cancel` | put away an unfinished plan, pack or upgrade |
 | `POST /api/billing/subscription/cancel` | stop the renewal; access to the period's end |
 | `POST /api/billing/subscription/resume` | take the cancel back |
 | `GET /api/billing/subscription/change-plan/preview` | what a change would cost, up front |
@@ -422,8 +422,7 @@ def read_payment(
         },
         409: {
             "model": ErrorResponse,
-            "description": "`cannot_cancel` (not a plan or pack checkout), `payment_in_progress`, "
-            "`refund_pending`",
+            "description": "`cannot_cancel` (a renewal), `payment_in_progress`, `refund_pending`",
         },
         502: {"model": ErrorResponse, "description": "`provider_error`: nothing was changed"},
     },
@@ -434,10 +433,11 @@ def cancel_payment(
     db: Session = Depends(get_session),
     user: User = Depends(billing_user),
 ) -> CancelPaymentOut:
-    """Put away the caller's own unfinished plan or pack checkout. The provider is asked about the
-    reference first: a page that was paid is settled and answered `paid` (never cancelled), one it
-    says failed is marked failed, one it says is unpaid is marked failed (`cancelled`). A provider
-    that cannot be asked is a 502 and nothing changes. See `cancel_checkout`."""
+    """Put away the caller's own unfinished plan, pack or upgrade checkout. The provider is asked
+    about the reference first: a page that was paid is settled and answered `paid` (never
+    cancelled), one it says failed is marked failed, one it says is unpaid is marked failed
+    (`cancelled`). A provider that cannot be asked is a 502 and nothing changes. Cancelling an
+    upgrade closes its payment only: the plan is not touched. See `cancel_checkout`."""
     try:
         done = cancel_checkout.cancel_checkout(
             db, user, reference, request.app.state.settings, datetime.now(UTC)

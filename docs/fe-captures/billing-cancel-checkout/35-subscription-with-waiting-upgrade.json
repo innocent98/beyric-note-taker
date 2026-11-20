@@ -1,0 +1,56 @@
+{
+  "note": "`pending_payment` is the upgrade (`kind` `upgrade`): the billing page's banner 'You have a payment that is not finished'. `subscription.plan_code` is still the old plan.",
+  "client": "ada billing-on",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/subscription",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "active",
+      "hours": {
+        "seconds_left": 108000,
+        "holdings_seconds": 108000,
+        "warning": null
+      },
+      "subscription": {
+        "id": 1,
+        "status": "active",
+        "plan_code": "plan_20h",
+        "plan_name": "20 hours a month",
+        "currency": "USD",
+        "amount_minor": 1800,
+        "current_period_start": "2026-11-20T21:35:55.663087Z",
+        "current_period_end": "2026-12-20T21:35:55.663087Z",
+        "cancel_at_period_end": false,
+        "pending_plan_code": null,
+        "grace_ends_at": null,
+        "next_retry_at": null,
+        "can_cancel": true,
+        "can_resume": false,
+        "can_change_plan": true,
+        "can_pay_now": false
+      },
+      "pending_payment": {
+        "reference": "bn-7-6fba136ddc53baa5",
+        "kind": "upgrade",
+        "status": "pending",
+        "currency": "USD",
+        "amount_minor": 2199,
+        "created_at": "2026-11-20T21:35:55.870181Z",
+        "paid_at": null,
+        "pay_url": "https://fake.test/pay/bn-7-6fba136ddc53baa5",
+        "invoice_number": null
+      }
+    }
+  }
+}
