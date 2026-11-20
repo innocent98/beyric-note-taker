@@ -648,7 +648,8 @@ def test_compose_refuses_the_example_as_it_stands(tmp_path):
 
     refused = config()
     assert refused.returncode != 0
-    assert "POSTGRES_PASSWORD" in refused.stderr
+    # compose names ONE missing variable per run, and which one varies between runs
+    assert "required variable" in refused.stderr
     filled = (ROOT / ".env.example").read_text()
     for key in ("POSTGRES_PASSWORD", "VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET"):
         filled = filled.replace(f"\n{key}=\n", f"\n{key}=x\n")
