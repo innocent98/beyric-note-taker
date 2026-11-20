@@ -17,7 +17,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.billing import invoice_pdf
+from app.billing import invoice_number, invoice_pdf
 from app.billing.invoice_pdf import money
 from app.config import Settings
 from app.mail_layout import Block, Button, Heading, Meta, Para, Rows, render_html, render_text
@@ -45,10 +45,11 @@ def receipt(
         # refunded before the mail went: the receipt would be for money that came back
         return Skip("payment_not_paid")
     base = settings.public_base_url.rstrip("/")
+    number = invoice_number.shown(invoice.number)
     line = (invoice.line or {}).get("description") or "Beyric Note Taker"
     heading = "Thank you for your payment"
     rows: list[tuple[str, str]] = [
-        ("Invoice", invoice.number),
+        ("Invoice", number),
         (clean_line(line, 100), money(invoice.total_minor, invoice.currency)),
     ]
     if invoice.vat_rate_bp > 0:
@@ -61,7 +62,7 @@ def receipt(
     blocks: list[Block] = [
         Heading(heading, after=10),
         Meta(
-            f"{money(invoice.total_minor, invoice.currency)} paid, invoice {invoice.number}",
+            f"{money(invoice.total_minor, invoice.currency)} paid, invoice {number}",
             after=18,
         ),
         Rows(tuple(rows)),
@@ -84,12 +85,8 @@ def receipt(
             Para("You can download your invoice from your billing page.", muted=True, before=14)
         )
     blocks.append(Button("Open billing", f"{base}/billing"))
-    if invoice.test_mode:
-        blocks.append(
-            Para("Test mode: no real money moved. This is not a tax document.", muted=True)
-        )
     footer = "You received this because you made a payment to Beyric Note Taker."
-    subject = clean_line(f"Your receipt {invoice.number}", 120)
+    subject = clean_line(f"Your receipt {number}", 120)
     return Message(
         to=to,
         subject=subject,

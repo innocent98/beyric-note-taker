@@ -3,19 +3,19 @@
   "client": "cy billing-on",
   "request": {
     "method": "GET",
-    "path": "/api/billing/invoices/BN-T-2026-000004/pdf"
+    "path": "/api/billing/invoices/BN-2026-900004/pdf"
   },
   "response": {
     "status": 200,
     "headers": {
       "content-type": "application/pdf",
-      "content-disposition": "attachment; filename=\"invoice-BN-T-2026-000004.pdf\"; filename*=UTF-8''invoice-BN-T-2026-000004.pdf",
+      "content-disposition": "attachment; filename=\"invoice-BN-2026-900004.pdf\"; filename*=UTF-8''invoice-BN-2026-900004.pdf",
       "cache-control": "no-store"
     },
     "body": {
       "file": "55-invoice-pdf-refunded.pdf",
-      "bytes": 17808,
-      "sha256": "a3d8b8c815ab12233bacf45af080dd3087067d2078cf5de54eab9a012bef31c2",
+      "bytes": 17362,
+      "sha256": "bc414af20f145ff86e393a1168d3cb067c2a55ace1c8edfc50aacc13b7f2f224",
       "starts_with": "%PDF-1.7",
       "text_extracted_by_pdftotext": "55-invoice-pdf-refunded.txt"
     }

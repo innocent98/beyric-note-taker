@@ -1024,8 +1024,9 @@ class Invoice(Base):
     `buyer`) and `line` says what was bought. `total_minor` is what the person paid;
     `vat_minor` is the VAT that price INCLUDES at `vat_rate_bp` (default 0), `subtotal_minor` the
     rest, so `subtotal + vat = total` always (a check constraint holds it). The PDF is built when
-    asked and never stored (`app/billing/invoice_pdf.py`). `test_mode` records that the payment
-    was made with test keys: such an invoice is marked as not a tax document."""
+    asked and never stored (`app/billing/invoice_pdf.py`). `test_mode` records, for the server
+    only, that the invoice was made while `BILLING_LIVE` was false: it picks the number series
+    (`app/billing/invoices.py`) and is never shown or returned."""
 
     __tablename__ = "invoices"
     __table_args__ = (

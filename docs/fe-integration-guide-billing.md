@@ -2055,7 +2055,7 @@ Every body below is copied from `docs/fe-captures/billing-invoices/` (the file n
 
 ### What this is, in the person's terms
 
-When a payment succeeds and something was bought with it (a plan, a renewal, an upgrade, extra hours), Beyric makes **one invoice** for it, numbered `BN-<year>-<six digits>` (for example `BN-2026-000001`, sequential within the year, the year in Lagos time; **an invoice for a payment made with test keys is in its own series, `BN-T-2026-000001`**, so test purchases never use up the live numbers, and every number in the captures below is a `BN-T-` one because the capture machine runs in test mode) and mails a **receipt** with the invoice attached as a PDF. The person sees the invoice in their payment history and downloads it from there. A payment that nothing could use (a second payment for a plan already paid) gets **no invoice**: it is refunded in full.
+When a payment succeeds and something was bought with it (a plan, a renewal, an upgrade, extra hours), Beyric makes **one invoice** for it, numbered `BN-<year>-<six digits>` (for example `BN-2026-000001`, sequential within the year, the year in Lagos time) and mails a **receipt** with the invoice attached as a PDF. The person sees the invoice in their payment history and downloads it from there. A payment that nothing could use (a second payment for a plan already paid) gets **no invoice**: it is refunded in full.
 
 An administrator can **refund** a payment, in exactly three cases (spec 3.5): a **double charge**; a person's **first plan payment**, within 7 days, with no hours of it used; an **unused pack**, within 14 days. Whole payments only. Nobody else can refund: there is no self-service refund.
 
@@ -2079,25 +2079,24 @@ After a plan was paid (capture 17, `200`):
 {
   "invoices": [
     {
-      "number": "BN-T-2026-000001",
-      "issued_at": "2026-11-18T11:33:19.475597Z",
+      "number": "BN-2026-900001",
+      "issued_at": "2026-11-20T22:02:26.228138Z",
       "currency": "USD",
       "subtotal_minor": 1800,
       "vat_rate_bp": 0,
       "vat_minor": 0,
       "total_minor": 1800,
       "description": "20 hours a month",
-      "payment_reference": "bn-1-90d00af0acad327f",
+      "payment_reference": "bn-1-61a0710aa492f6e6",
       "payment_status": "succeeded",
-      "refunded_at": null,
-      "test_mode": true
+      "refunded_at": null
     }
   ]
 }
 ```
 
 - `total_minor` is what the person paid, in kobo or cents. `vat_minor` is the VAT that price **includes** at `vat_rate_bp` basis points (750 = 7.5%); `subtotal_minor + vat_minor = total_minor`. The default rate is **0**: no VAT line, `vat_minor` is `0`.
-- `test_mode` true: the payment was made with test keys, the number starts `BN-T-`, the PDF says "TEST INVOICE" and it is not a tax document. The number is `BN-` + optional `T-` + year + 6 to 9 digits: do not parse it, show it. Say so on screen if you show an invoice list of your own.
+- **There is no `test_mode` field** (it was removed 2026-11-20: nothing in the invoice list, the PDF or the mail says how the payment was made). The number is `BN-` + year + 6 to 9 digits: do not parse it, show it. The captures were made on a server that has not gone live, so their numbers are the high ones (`BN-2026-900001`, ...); a live server's start at `BN-2026-000001`. Both read the same.
 - `payment_status` is `succeeded`, or `refunded` once the payment was refunded; `refunded_at` is then set (capture 53).
 
 With VAT 7.5% included (the same route, a naira payment, capture 31 `200`, VAT configured only for that capture):
@@ -2106,18 +2105,17 @@ With VAT 7.5% included (the same route, a naira payment, capture 31 `200`, VAT c
 {
   "invoices": [
     {
-      "number": "BN-T-2026-000003",
-      "issued_at": "2026-11-18T11:33:20.504041Z",
+      "number": "BN-2026-900003",
+      "issued_at": "2026-11-20T22:02:27.224924Z",
       "currency": "NGN",
       "subtotal_minor": 2325581,
       "vat_rate_bp": 750,
       "vat_minor": 174419,
       "total_minor": 2500000,
       "description": "20 hours a month",
-      "payment_reference": "bn-3-fda99da00ec7145f",
+      "payment_reference": "bn-3-4fd8e12a847349ff",
       "payment_status": "succeeded",
-      "refunded_at": null,
-      "test_mode": true
+      "refunded_at": null
     }
   ]
 }
@@ -2137,18 +2135,17 @@ A refunded payment's invoice (capture 53, `200`): `payment_status` `refunded` an
 {
   "invoices": [
     {
-      "number": "BN-T-2026-000004",
-      "issued_at": "2026-11-18T11:33:22.950242Z",
+      "number": "BN-2026-900004",
+      "issued_at": "2026-11-20T22:02:29.679123Z",
       "currency": "USD",
       "subtotal_minor": 1800,
       "vat_rate_bp": 0,
       "vat_minor": 0,
       "total_minor": 1800,
       "description": "20 hours a month",
-      "payment_reference": "bn-4-13c16fbca080c23e",
+      "payment_reference": "bn-4-b547fde9c44a07b2",
       "payment_status": "refunded",
-      "refunded_at": "2026-11-18T11:33:23.981540Z",
-      "test_mode": true
+      "refunded_at": "2026-11-20T22:02:30.691188Z"
     }
   ]
 }
@@ -2162,14 +2159,14 @@ Every payment object gains `invoice_number` (string or `null`). **Field-nesting 
 {
   "payments": [
     {
-      "reference": "bn-1-90d00af0acad327f",
+      "reference": "bn-1-61a0710aa492f6e6",
       "kind": "plan",
       "status": "pending",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-18T11:33:19.400529Z",
+      "created_at": "2026-11-20T22:02:26.193121Z",
       "paid_at": null,
-      "pay_url": "https://fake.test/pay/bn-1-90d00af0acad327f",
+      "pay_url": "https://fake.test/pay/bn-1-61a0710aa492f6e6",
       "invoice_number": null
     }
   ]
@@ -2180,15 +2177,15 @@ Every payment object gains `invoice_number` (string or `null`). **Field-nesting 
 {
   "payments": [
     {
-      "reference": "bn-1-90d00af0acad327f",
+      "reference": "bn-1-61a0710aa492f6e6",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-18T11:33:19.400529Z",
-      "paid_at": "2026-11-18T11:33:19.475597Z",
+      "created_at": "2026-11-20T22:02:26.193121Z",
+      "paid_at": "2026-11-20T22:02:26.228138Z",
       "pay_url": null,
-      "invoice_number": "BN-T-2026-000001"
+      "invoice_number": "BN-2026-900001"
     }
   ]
 }
@@ -2205,13 +2202,13 @@ The same field is on `GET /api/billing/payments/{reference}` and on the payment 
   "status": 200,
   "headers": {
     "content-type": "application/pdf",
-    "content-disposition": "attachment; filename=\"invoice-BN-T-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-T-2026-000001.pdf",
+    "content-disposition": "attachment; filename=\"invoice-BN-2026-900001.pdf\"; filename*=UTF-8''invoice-BN-2026-900001.pdf",
     "cache-control": "no-store"
   },
   "body": {
     "file": "18-invoice-pdf.pdf",
-    "bytes": 17384,
-    "sha256": "a9f16b3eaaf23386edc888b2ffe1d09ee06ff82180c34ff85944245b4a2a92e4",
+    "bytes": 16246,
+    "sha256": "660ca86385c323264bb64113de79d7afbc77d155a0282dce7eafb9b64eb6cf4e",
     "starts_with": "%PDF-1.7",
     "text_extracted_by_pdftotext": "18-invoice-pdf.txt"
   }
@@ -2222,7 +2219,7 @@ Download it with a request that reads the bytes (the app's `api.billing.download
 
 | What | Status | Body (captures) |
 |---|---|---|
-| a number that is not shaped like `BN-2026-000123` or `BN-T-2026-000123` | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
+| a number that is not shaped like `BN-2026-000123` (`BN-`, four digits, `-`, six to nine digits) | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | an unknown number | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | **someone else's** number (it exists, it is not theirs) | 404, the same body | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
 | billing off, or an account not on the allow-list | 404 | ``{"error": {"code": "not_found", "message": "Not found."}}`` |
@@ -2238,13 +2235,13 @@ Queued when the payment succeeds, built and sent by the outbox worker (it holds 
 
 ```json
 {
-  "subject": "Your receipt BN-T-2026-000001",
-  "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-T-2026-000001\n\n- Invoice (BN-T-2026-000001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nTest mode: no real money moved. This is not a tax document.\n\nYou received this because you made a payment to Beyric Note Taker.",
+  "subject": "Your receipt BN-2026-900001",
+  "text": "Thank you for your payment\n\nUSD 18.00 paid, invoice BN-2026-900001\n\n- Invoice (BN-2026-900001)\n- 20 hours a month (USD 18.00)\n\nYour invoice is attached as a PDF.\n\nOpen billing:\nhttps://notes.example.test/billing\n\nYou received this because you made a payment to Beyric Note Taker.",
   "attachments": [
     {
-      "filename": "invoice-BN-T-2026-000001.pdf",
+      "filename": "invoice-BN-2026-900001.pdf",
       "content_type": "application/pdf",
-      "bytes": 17388,
+      "bytes": 16246,
       "starts_with": "%PDF-1.7"
     }
   ]
@@ -2259,22 +2256,22 @@ A receipt is account mail: an unsubscribe does not stop it, a bounce does. If th
 
 #### `GET /api/admin/billing/payments?only=all|needs_refund&limit=`
 
-Newest first. Each payment carries the **one** refund case that fits it and whether the rules allow it now: the server decides, the screen shows (capture 37, trimmed to three of the nine payments):
+Newest first. Each payment carries the **one** refund case that fits it and whether the rules allow it now: the server decides, the screen shows (capture 37, trimmed to two of the twelve payments):
 
 ```json
 {
   "payments": [
     {
       "id": 12,
-      "reference": "bn-12-2c2f31792de88796",
+      "reference": "bn-12-d92ddfde00cf4c99",
       "payer_email": "flo@example.test",
       "provider": "flutterwave",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-18T11:33:23.759318Z",
-      "paid_at": "2026-11-18T11:33:23.788693Z",
+      "created_at": "2026-11-20T22:02:30.470532Z",
+      "paid_at": "2026-11-20T22:02:30.502213Z",
       "needs_refund_reason": "the person already has a live plan",
       "invoice_number": null,
       "refund": null,
@@ -2286,17 +2283,17 @@ Newest first. Each payment carries the **one** refund case that fits it and whet
     },
     {
       "id": 11,
-      "reference": "bn-11-f66556ac25f67b3e",
+      "reference": "bn-11-c26ce81361df84e4",
       "payer_email": "ivy@example.test",
       "provider": "flutterwave",
       "kind": "plan",
       "status": "succeeded",
       "currency": "USD",
       "amount_minor": 1800,
-      "created_at": "2026-11-18T11:33:23.717059Z",
-      "paid_at": "2026-11-10T11:33:23.778562Z",
+      "created_at": "2026-11-20T22:02:30.433202Z",
+      "paid_at": "2026-11-12T22:02:30.491949Z",
       "needs_refund_reason": null,
-      "invoice_number": "BN-T-2026-000011",
+      "invoice_number": "BN-2026-900011",
       "refund": null,
       "refund_option": {
         "reason": "first_plan_7d",
@@ -2505,18 +2502,18 @@ By ids only, never an email or a provider's words. Capture 68 shows the administ
 1. **A refund ends the plan.** Before the confirm button, say what it does for the case (the admin screen does: the plan ends now, its hours are removed, the saved card is deleted) and that it cannot be undone.
 2. **`unknown` is not a failure and not a success.** Never show "refunded" for it and never offer a second "Refund" button: offer only "the refund exists" / "no refund exists" after the administrator has looked at the provider.
 3. **A refunded person sees `Refunded` in their payments and on the invoice, and their plan is gone** (`state` `none`). Their invoice can still be downloaded.
-4. **A test-mode invoice is not a tax document**; the PDF and the mail say so. Do not present it as one.
-5. **The PDF is built when asked** (a second or two): show "Preparing..." and one at a time; a `503 invoice_busy` is "try again in a few seconds".
-6. **After a refused refund, read again**: another administrator may have been first (the screen does).
-7. **The seller's registration and tax numbers are not in these captures** (placeholders) and are **empty on a real server until Adebayo supplies them**: an empty line is left off the invoice, never invented.
+4. **The PDF is built when asked** (a second or two): show "Preparing..." and one at a time; a `503 invoice_busy` is "try again in a few seconds".
+5. **After a refused refund, read again**: another administrator may have been first (the screen does).
+6. **The seller's registration and tax numbers are not in these captures** (placeholders) and are **empty on a real server until Adebayo supplies them**: an empty line is left off the invoice, never invented.
 
 ### Verification table (this section)
 
 | Behaviour | Verified |
 |---|---|
 | Invoice list, payments with `invoice_number`, the PDF route, 404s, 401, billing off | **live over HTTP** (captures 03, 06, 07, 10 to 24), provider scripted |
-| The PDF's real bytes and the text a PDF reader extracts (seller, buyer, line, total, payment reference, test notice, refunded notice, VAT lines) | **live**: the files `18-…`, `32-…`, `55-…` `.pdf` and `.txt`, opened with `pdftotext`; also downloaded by a real browser click through the Next.js proxy (file name `invoice-<number>.pdf`; that browser run was before the `BN-T-` test series was added, the PDF route is unchanged) |
+| The PDF's real bytes and the text a PDF reader extracts (seller, buyer, line, total, payment reference, refunded notice, VAT lines) | **live**: the files `18-…`, `32-…`, `55-…` `.pdf` and `.txt`, opened with `pdftotext`; also downloaded by a real browser click through the Next.js proxy (file name `invoice-<number>.pdf`; that browser run was made before the numbering change of 2026-11-20, which changed only the number text, not the route) |
 | Numbers sequential, unique under two connections and eight at once, no gap after a rollback | **tests on real Postgres** (`tests/test_billing_invoices.py`), two real connections |
+| No test wording anywhere a person sees (list, payments, PDF text, file name, receipt mail, admin page) and no `test_mode` field | **live**: re-captured 2026-11-20 (captures 17, 18, 31, 34, 37, 53; the `.txt` files are the PDFs' extracted text) and tests (`tests/test_billing_invoices*.py`, `web/tests/no-test-mode-wording.test.ts`) |
 | VAT arithmetic (included, half up, parts add up) | tests (`test_vat_split_*`); live captures 31 and 32 at 7.5% |
 | The receipt mail: queued with ids only, built at send time with the PDF attached | live: captures 33 and 34 (a recording mailer, **nothing was sent by a real mail provider**) |
 | The three refund cases, every 409 in the table marked with a capture | live over HTTP (captures 40 to 49, 56, 57); the others tests only, marked |
@@ -2595,6 +2592,8 @@ Every body below is pasted from `docs/fe-captures/billing-cancel-checkout/` (mad
 `scripts/capture_billing_cancel_checkout.py`: the real app under uvicorn, real HTTP, real migrations; the payment
 provider is a scripted double named `flutterwave`, so what a provider "reports" is scripted: see the table at the end).
 References and times are from the capture run; treat every time as an instant.
+
+**Captured before the invoice-number change of 2026-11-20 (not re-captured here, so as not to collide with the open change to this section's captures).** The `invoice_number` strings in these bodies read `BN-T-2026-0000NN`; the same payments now return the same number as `BN-2026-9000NN` (`BN-T-2026-000001` is `BN-2026-900001`) and nothing else in these bodies changed. A re-capture is queued for after that change lands.
 
 ### What this is, in the person's terms
 

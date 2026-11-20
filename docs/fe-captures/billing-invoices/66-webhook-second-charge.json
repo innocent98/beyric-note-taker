@@ -11,7 +11,7 @@
     "body": {
       "id": "evt-charge_succeeded-fx-second-charge",
       "kind": "charge_succeeded",
-      "reference": "bn-8-c4b9c5fd89322796",
+      "reference": "bn-8-550f12f31b55af71",
       "tx_id": "fx-second-charge",
       "amount_minor": 1800,
       "currency": "USD",

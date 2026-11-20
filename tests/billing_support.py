@@ -3,6 +3,7 @@ named after the real ones the route table picks, a way to "pay" a payment throug
 inbox and settlement, and a way to read what a person holds. Not a test module."""
 
 import base64
+import re
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -127,3 +128,18 @@ def notices(session, user, kind) -> list[Notification]:
             select(Notification).where(Notification.user_id == user.id, Notification.kind == kind)
         )
     )
+
+
+# Anything that tells a person a payment was made in test mode. The owner's rule (2026-11-20): the
+# app carries no such wording anywhere a person or an API client can see it, so the experience is
+# the same as in production. Every surface test runs its text through `assert_no_test_wording`.
+TEST_WORDING = re.compile(
+    r"test[ _-]?mode|test invoice|test keys?|sandbox|no real money|not a tax document|BN-T-",
+    re.IGNORECASE,
+)
+
+
+def assert_no_test_wording(*texts: str) -> None:
+    for text in texts:
+        found = TEST_WORDING.search(text)
+        assert found is None, f"test-mode wording {found.group(0)!r} shown in: {text[:300]!r}"

@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 from app import services
 from app.api_schemas import ErrorResponse, UtcDatetime
 from app.billing import invoice_pdf
+from app.billing.invoice_number import shown as shown_invoice_number
+from app.billing.invoice_number import stored_candidates
 from app.billing.profile_api import billing_user
 from app.db import get_session
 from app.models import Invoice, Payment, Refund, User
@@ -36,12 +38,12 @@ from app.notes_document import content_disposition
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 _NOT_FOUND = {404: {"model": ErrorResponse, "description": "billing is off for this account"}}
-NUMBER = re.compile(r"BN-(?:T-)?[0-9]{4}-[0-9]{6,9}")  # live, or the test series (`BN-T-`)
+NUMBER = re.compile(r"BN-[0-9]{4}-[0-9]{6,9}")  # the number as shown (`invoice_number.shown`)
 LIST_MAX = 50
 
 
 class InvoiceOut(BaseModel):
-    number: str  # `BN-2026-000123`; `BN-T-2026-000123` for a payment made with test keys
+    number: str  # `BN-2026-000123`
     issued_at: UtcDatetime
     currency: str  # `NGN` or `USD`
     # Whole minor units (kobo, cents). `total` is what the person paid; `vat` is the VAT that price
@@ -56,7 +58,6 @@ class InvoiceOut(BaseModel):
     )
     payment_status: str  # `succeeded`, or `refunded` once the payment was refunded
     refunded_at: UtcDatetime | None
-    test_mode: bool  # paid with test keys: not a tax document
 
 
 class InvoicesOut(BaseModel):
@@ -65,7 +66,7 @@ class InvoicesOut(BaseModel):
 
 def invoice_out(invoice: Invoice, payment: Payment, refunded_at: datetime | None) -> InvoiceOut:
     return InvoiceOut(
-        number=invoice.number,
+        number=shown_invoice_number(invoice.number),
         issued_at=invoice.issued_at,
         currency=invoice.currency,
         subtotal_minor=invoice.subtotal_minor,
@@ -76,7 +77,6 @@ def invoice_out(invoice: Invoice, payment: Payment, refunded_at: datetime | None
         payment_reference=payment.reference,
         payment_status=payment.status,
         refunded_at=refunded_at,
-        test_mode=invoice.test_mode,
     )
 
 
@@ -130,7 +130,7 @@ def download_invoice(
     row = db.execute(
         select(Invoice, Payment)
         .join(Payment, Payment.id == Invoice.payment_id)
-        .where(Invoice.number == number, Invoice.payer_user_id == user.id)
+        .where(Invoice.number.in_(stored_candidates(number)), Invoice.payer_user_id == user.id)
     ).first()
     if row is None:
         raise HTTPException(404, "Not found.")

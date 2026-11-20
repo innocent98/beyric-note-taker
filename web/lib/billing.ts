@@ -78,8 +78,6 @@ export type BillingInvoice = {
   payment_reference: string;
   payment_status: PaymentStatus;
   refunded_at: string | null;
-  // Paid with test keys: not a tax document.
-  test_mode: boolean;
 };
 
 // ---- the admin's refund screen (GET/POST /api/admin/billing/...) ----

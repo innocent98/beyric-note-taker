@@ -3,19 +3,19 @@
   "client": "ada billing-on",
   "request": {
     "method": "GET",
-    "path": "/api/billing/invoices/BN-T-2026-000001/pdf"
+    "path": "/api/billing/invoices/BN-2026-900001/pdf"
   },
   "response": {
     "status": 200,
     "headers": {
       "content-type": "application/pdf",
-      "content-disposition": "attachment; filename=\"invoice-BN-T-2026-000001.pdf\"; filename*=UTF-8''invoice-BN-T-2026-000001.pdf",
+      "content-disposition": "attachment; filename=\"invoice-BN-2026-900001.pdf\"; filename*=UTF-8''invoice-BN-2026-900001.pdf",
       "cache-control": "no-store"
     },
     "body": {
       "file": "18-invoice-pdf.pdf",
-      "bytes": 17384,
-      "sha256": "a9f16b3eaaf23386edc888b2ffe1d09ee06ff82180c34ff85944245b4a2a92e4",
+      "bytes": 16246,
+      "sha256": "660ca86385c323264bb64113de79d7afbc77d155a0282dce7eafb9b64eb6cf4e",
       "starts_with": "%PDF-1.7",
       "text_extracted_by_pdftotext": "18-invoice-pdf.txt"
     }

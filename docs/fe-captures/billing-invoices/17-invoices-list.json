@@ -1,5 +1,5 @@
 {
-  "note": "`subtotal_minor + vat_minor = total_minor`; `vat_rate_bp` 0 means no VAT line; `test_mode` true: paid with test keys, not a tax document.",
+  "note": "`subtotal_minor + vat_minor = total_minor`; `vat_rate_bp` 0 means no VAT line; the number is a plain `BN-<year>-<digits>`.",
   "client": "ada billing-on",
   "request": {
     "method": "GET",
@@ -18,18 +18,17 @@
     "body": {
       "invoices": [
         {
-          "number": "BN-T-2026-000001",
-          "issued_at": "2026-11-18T11:33:19.475597Z",
+          "number": "BN-2026-900001",
+          "issued_at": "2026-11-20T22:02:26.228138Z",
           "currency": "USD",
           "subtotal_minor": 1800,
           "vat_rate_bp": 0,
           "vat_minor": 0,
           "total_minor": 1800,
           "description": "20 hours a month",
-          "payment_reference": "bn-1-90d00af0acad327f",
+          "payment_reference": "bn-1-61a0710aa492f6e6",
           "payment_status": "succeeded",
-          "refunded_at": null,
-          "test_mode": true
+          "refunded_at": null
         }
       ]
     }
