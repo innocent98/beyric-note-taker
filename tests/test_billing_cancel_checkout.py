@@ -466,7 +466,7 @@ def test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_4
         raise RuntimeError("secret provider text ada@example.test 1999")
 
     monkeypatch.setattr(settle, "GRANT_HANDLERS", [*settle.GRANT_HANDLERS, boom])
-    key = f"admin.billing_cancel_grant_failed:{row.id}"
+    key = f"admin.billing_grant_failed:{row.id}"
 
     for _ in range(2):  # the second cancel must not make a second alert
         out = cancel(ada, payment["reference"])
@@ -474,7 +474,7 @@ def test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_4
 
     session.expire_all()
     alerts = list(session.scalars(select(Notification).where(Notification.dedupe_key == key)))
-    assert len(alerts) == 1 and alerts[0].kind == "admin.billing_cancel_grant_failed"
+    assert len(alerts) == 1 and alerts[0].kind == "admin.billing_grant_failed"
     assert str(row.id) in alerts[0].body and "RuntimeError" in alerts[0].body
     for leaked in ("secret", "ada@example.test", "1999"):
         assert leaked not in alerts[0].body and leaked not in alerts[0].title

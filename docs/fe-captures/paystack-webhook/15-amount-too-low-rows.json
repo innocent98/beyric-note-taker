@@ -3,21 +3,21 @@
   "content": {
     "payments": [
       {
-        "reference": "bn-1-a998653d76a2166a",
+        "reference": "bn-1-0d7de3531aedbcb9",
         "status": "succeeded",
         "provider_tx_id": "4099260516",
         "card_country": "NG",
         "country_mismatch": false
       },
       {
-        "reference": "bn-2-a10c835a624c5791",
+        "reference": "bn-2-912fb15602a48a85",
         "status": "succeeded",
         "provider_tx_id": "4099260999",
         "card_country": "NG",
         "country_mismatch": false
       },
       {
-        "reference": "bn-3-3dde9099d3c49520",
+        "reference": "bn-3-2fc7effc025acf1a",
         "status": "pending",
         "provider_tx_id": null,
         "card_country": null,
