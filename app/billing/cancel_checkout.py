@@ -40,9 +40,9 @@ A plan, a pack or an **upgrade** checkout can be cancelled here (a renewal belon
 it cannot: 409 `cannot_cancel`). Cancelling an upgrade closes only its payment: the subscription is
 not written (same plan, same period, same renewal date, same hours; a test compares the rows before
 and after). An upgrade page paid after the cancel is no new money path: it settles as any open
-upgrade does (`subscriptions._upgrade_paid`: applied if the period it was for is still running,
-else nothing is granted and the admins are told to refund it), and a lost webhook is found by the
-sweeper as it is for a plan or pack.
+upgrade does (`subscriptions._upgrade_paid`: applied if the period it was for is still running
+and the plan has not changed since, else nothing is granted and the admins are told to refund
+it), and a lost webhook is found by the sweeper as it is for a plan or pack.
 The payment row is locked only to write (the order everywhere is the payment,
 then the refund, then the subscription: this takes the payment and reads the refund), never across
 the call to the provider. While a refund of the plan is being settled nothing about the plan's
