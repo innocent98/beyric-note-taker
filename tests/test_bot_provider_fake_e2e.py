@@ -1,7 +1,7 @@
 """The whole bot path through `FakeProvider` (task B1): no the provider, no HTTP.
 
 `place_bot`, the join runner, the worker's poll loop and the pipeline all take the provider from the
-`BOT_PROVIDER` setting or as an argument, so a meeting can be driven from the send to its notes (or
+default provider name or as an argument, so a meeting can be driven from the send to its notes (or
 to its refusal) with a scripted bot. Real Postgres, the real worker pass (`worker.run_pass`), the
 real placement lock; the transcription and notes calls are `FakeOpenAI`, the audio step is the one
 `tests/test_pipeline.py` uses.
@@ -41,11 +41,11 @@ from tests.test_web import make_user
 
 @pytest.fixture
 def fake(monkeypatch, tmp_path):
-    """A FakeProvider chosen the way production chooses one: by `BOT_PROVIDER`, through
+    """A FakeProvider chosen the way production chooses one: by the default provider name, through
     `build_provider()`. Nothing is passed to the worker or the pipeline."""
     provider = FakeProvider()
     monkeypatch.setitem(PROVIDER_FACTORIES, "fake", lambda: provider)
-    monkeypatch.setenv("BOT_PROVIDER", "fake")
+    monkeypatch.setattr("app.bot_provider.DEFAULT_PROVIDER", "fake")
     get_settings.cache_clear()
     monkeypatch.setattr(pipeline, "get_settings", lambda: Settings(audio_dir=str(tmp_path / "a")))
     monkeypatch.setattr(

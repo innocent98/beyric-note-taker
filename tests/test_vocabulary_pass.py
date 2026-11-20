@@ -374,14 +374,6 @@ def test_own_mode_never_makes_the_call(session, skribby_meeting):
     assert openai.vocabulary_calls == 0 and ledger(session, skribby_meeting.id, "vocabulary") == []
 
 
-def test_a_provider_meeting_in_skribby_mode_never_makes_the_call(session, meeting, mode):
-    mode()
-    with_terms(session, meeting, "Alfa7")
-    openai = VocabularyModel()
-    run(session, meeting, FakeBot(done(long_segments())), openai)  # bot_provider is provider
-    assert meeting.transcript_source == "own" and openai.vocabulary_calls == 0
-
-
 def test_a_model_that_takes_the_vocabulary_is_not_asked_again(
     session, skribby_meeting, mode, monkeypatch
 ):

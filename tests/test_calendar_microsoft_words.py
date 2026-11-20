@@ -170,6 +170,9 @@ def test_a_dead_outlook_connection_says_microsoft_in_the_state_and_the_error(web
 
 
 def test_a_teams_event_is_cannot_join_while_teams_joining_is_off(web, session, owner):
+    web.client.app.state.settings.teams_join_enabled = (
+        False  # these tests are about Teams being off
+    )
     conn = add_conn(session, owner, last_sync_at=NOW)
     start = datetime.now(UTC) + timedelta(hours=2)
     session.add(

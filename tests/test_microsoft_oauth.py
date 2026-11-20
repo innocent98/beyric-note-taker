@@ -830,7 +830,7 @@ SECRET_FIELDS = (
     "edge_shared_secret",
     "resend_api_key",
     "openai_api_key",
-    "provider_api_key",
+    "skribby_api_key",
 )
 
 
@@ -844,12 +844,12 @@ def test_no_secret_setting_appears_in_the_repr_of_the_settings():
 
 
 def test_a_start_up_validation_error_never_prints_a_secret():
-    """A forced failure (`BOT_PROVIDER=skribby` with no key) used to print the whole input."""
+    """A forced failure (a bad Skribby account id) used to print the whole input."""
     sentinels = {name: f"SENTINEL-{name}-VALUE" for name in SECRET_FIELDS}
     with pytest.raises(Exception) as raised:
-        make_settings(**sentinels)
+        make_settings(skribby_account_id="not-a-uuid", **sentinels)
     shown = str(raised.value) + repr(raised.value)
-    assert "SKRIBBY_API_KEY" in shown  # the useful message is there
+    assert "SKRIBBY_ACCOUNT_ID" in shown  # the useful message is there
     for value in sentinels.values():
         assert value not in shown
 

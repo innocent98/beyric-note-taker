@@ -468,13 +468,10 @@ def test_a_failed_fetch_of_skribbys_transcript_falls_back_without_failing(
     assert "could not be fetched (BotProviderError)" in caplog.text
 
 
-def test_a_retired_providers_meeting_always_uses_our_transcription(session, meeting, mode):
+def test_a_retired_providers_meeting_never_uses_the_providers_transcript(session, meeting, mode):
     mode()
     meeting.bot_provider = "vexa"  # old data: a provider that no longer exists
-    session.commit()
-    openai = run(session, meeting, FakeBot(done(long_segments())))
-    assert meeting.transcript_source == "own"
-    assert openai.transcriptions == 1
+    assert pipeline._skribby_mode(meeting) is False
 
 
 def test_the_log_says_which_source_and_never_the_text(session, skribby_meeting, mode, caplog):

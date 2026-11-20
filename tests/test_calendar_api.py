@@ -313,6 +313,9 @@ def test_each_item_has_title_times_platform_and_the_join_answer(web, session, li
 
 
 def test_platforms_have_plain_labels_and_a_missing_link_says_so(web, session, linked):
+    web.client.app.state.settings.teams_join_enabled = (
+        False  # these tests are about Teams being off
+    )
     add_event(session, linked, 1, hours=1, platform="zoom", meeting_url=ZOOM_WITH_PASSCODE)
     add_event(session, linked, 2, hours=2, platform=None, meeting_url=None, native_id=None)
     add_event(session, linked, 3, hours=3, platform="teams")

@@ -963,15 +963,18 @@ def register_join_runner(
 ) -> bool:
     """Put the runner on the scheduler's dispatch loop (every tick, 10 s). Not registered while
     `AUTOJOIN_ENABLED` is false (the operator's emergency stop). The scheduler process shares its
-    source registry with the sync job, so the two share each provider's access-token cache."""
+    source registry with the sync job, so the two share each provider's access-token cache. The
+    provider is built when a tick first needs it, not here: the scheduler process has already
+    refused to start without the Skribby key (`skribby.require_configured`)."""
     settings = settings or get_settings()
     if not settings.autojoin_enabled:
         return False
-    provider = provider or build_provider()
     scheduler.register(
         "join_runner",
         1,
-        lambda session, now: run_due_joins(session, provider, source, now=now, settings=settings),
+        lambda session, now: run_due_joins(
+            session, provider or build_provider(), source, now=now, settings=settings
+        ),
         loop="dispatch",
     )
     return True

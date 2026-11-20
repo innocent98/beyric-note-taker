@@ -182,10 +182,9 @@ def test_own_names_are_the_stored_name_and_the_account_name():
 
 
 def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, session, owner):
-    # Under Skribby (the provider in production) the default is SKRIBBY_BOT_NAME; under Vexa,
-    # BOT_NAME.
+    # The default is SKRIBBY_BOT_NAME.
     app.state.settings = make_settings(
-        bot_provider="skribby", skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
+        skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
     )
     assert api.get(ROUTE).json() == {
         "bot_name": None,
@@ -370,7 +369,8 @@ def test_changing_the_setting_later_does_not_change_a_meeting_already_sent(sessi
     assert session.get(Meeting, meeting.id).bot_name == "First Name"
 
 
-def test_a_provider_that_takes_no_name_is_sent_none_and_stores_none(session, fake_bot):
+def test_a_provider_that_takes_no_name_is_sent_none_and_stores_none(session, fake_bot, monkeypatch):
+    monkeypatch.setattr(bot_names, "PROVIDERS_WITH_A_NAME", ())  # a future provider with none
     user = make_user(session, bot_name="Alex from Product")
     template = make_template(session, user)
     meeting = place_bot(

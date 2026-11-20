@@ -59,9 +59,7 @@ def test_names_are_one_plain_line_without_links_and_cut_short():
 
 def test_the_bot_name_comes_from_one_helper():
     settings = make_settings(skribby_bot_name="Service Desk")
-    assert (
-        chat_notice.notice_bot_name(settings) == settings.bot_name_for("skribby") == "Service Desk"
-    )
+    assert chat_notice.notice_bot_name(settings) == settings.shown_bot_name == "Service Desk"
     signed_in = make_settings(
         skribby_bot_name="Guest Name", skribby_account_id=OTHER, skribby_account_name="Signed In"
     )

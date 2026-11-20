@@ -3,6 +3,8 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-20: Vexa removed from the repo** (branch `chore/remove-vexa`, SOP `docs/sop/2026-11-20-remove-vexa.md`, no migration, Alembic head still 0054): `app/vexa.py`, the Vexa compose services, volumes and network, the deploy scripts, `.env.vexa`, every `VEXA_*` / `BOT_NAME` / `BOT_PROVIDER` setting and the Vexa fakes are gone; `BotProvider` seam and Skribby untouched. Old `'vexa'` meeting rows stay and are handled by a `RetiredProvider` stand-in (nothing is asked of anyone; an in-flight one is failed). The next deploy removes the stopped Vexa containers (`--remove-orphans`, containers only); deleting the Vexa volumes and images on the server is an optional step for Adebayo (README section 8). Not verified: the server.
+
 **Addendum 2026-11-19, about 22:00 WAT (`main` at `98bf8af4`, Alembic head 0054, not verified on the server):** merged and deployed since the 17:00 addendum: #226 S10 trial, #227 S8a subscriptions, #229 S8b billing screens, #232 real pricing page and billing nav, #233 billing country suggest-and-confirm, #234 S9 invoices, receipts and refunds, #235 Pro and Scale plans, #236 cancel an unfinished payment + Billing link expiry + shorter country note + no provider names on the plans screens, #237 invite-only note removed, #238 speaker reattribution report, #239 line-level speaker correction (ON by default, kill switch), #240 Terms no longer say "free during the pilot" (#230 was reverted by #231). **Billing is ON for everyone in test mode** (trial 3 h, hours rule and feature gates enforced). **Open and not done:** the speaker correction has not run on real evidence (his dry run on meetings 40/39/38, then the rebuild of 40 before about 2026-11-25), the dollar cancel test, live keys and one real payment per provider (S11), invoice seller numbers and VAT, the lawyer items (not blocking), the CD deploy-step 20-minute limit (every deploy needed a re-run; fix in PR `ci/deploy-step-timeout`, raised to 45, not verified until the next real deploy). Handoff: `docs/HANDOFF-master.md` first block.
 
 **Follow-up 2026-11-20, verification packs prepared (docs only, `docs/launch/`):** `google-oauth-verification.md` and `microsoft-publisher-verification.md` hold each vendor's requirements with the vendor page URL and read date, our scopes and data from the code, paste-ready submission text, the demo video script and a numbered "Adebayo does this himself" list; `verification-open-questions.md` has the 8 facts only he can give. **Nothing is submitted or verified yet**: Phase V (Google) and the Microsoft publisher verification stay open, Search Console and Partner Center are his steps. Found while preparing: the policy describes a Meet feature no screen requests; the narrower `calendar.events.owned.readonly` is untested; the domain file lives on `notes.` not the apex.
@@ -42,7 +44,7 @@
 
 Legend: `[x]` done and verified, `[ ]` not done, `[-]` obsolete or merged into another item (the line says which). Reconciliation rule (2026-11-07): a parent line is ticked when its own build is merged; children that need the live server, a real vendor call or Adebayo stay open under it.
 
-## Module 0: Vexa spike (done 2026-11-02, spend check open)
+## Module 0: Vexa spike (done 2026-11-02, spend check open; Vexa itself was removed from the repo on 2026-11-20, so every Vexa item below is history)
 
 Goal: decide whether self-hosted Vexa can be the bot layer.
 
@@ -95,7 +97,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
   - [x] Send summary, action items and a link to the meeting page; never the audio **[Reconciled 2026-11-07 checklist pass: `app/mail_templates.py:495` `notes_ready`: abridged notes plus a 'View full notes' link, `transcript=None`, no audio (#60, `docs/sop/2026-11-04-w03-mail-upgrade.md`)]**
   - [ ] A failed email must not fail the meeting; show it on the meeting page **[Reconciled 2026-11-07 checklist pass: the must-not-fail half is done (queued in a savepoint, #60); showing a failed mail on the meeting page is not built or not checked]**
 - [x] Notes model switched to `gpt-6-luna` after a side-by-side eval (2026-11-02, see SOP)
-- [ ] Try `gpt-4o-mini-transcribe` for Vexa's live speaker hints on one acceptance call; switch if speaker names hold up (saves about $0.18/hour)
+- [x] ~~Try `gpt-4o-mini-transcribe` for Vexa's live speaker hints~~ (moot: Vexa removed 2026-11-20)
 
 ## Found in live use (2026-11-02)
 
@@ -429,7 +431,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] B2 a hosted provider behind a flag. Adebayo chose Skribby over Recall on 2026-11-08 (bake-off: a signed-in bot was admitted in 20 to 27 s when invited and 39 to 46 s when not; Vexa did not get in). `SkribbyProvider` built 2026-11-09 on `feature/skribby-provider`, `BOT_PROVIDER=skribby`, Vexa stays the default and the way back: `app/skribby.py`, migration 0038 (`meetings.bot_provider`, so a meeting keeps the provider that ran it, and `provider_copy_deleted_at`: Skribby's copy is deleted as soon as the audio and speaker names are fetched, retried if it fails), per-meeting routing in the pipeline, deletion, cancel and end, `scripts/skribby_live_check.py`, 265 new test cases (the contract tests now also run for Skribby; a pretend Skribby end to end). SOP `docs/sop/2026-11-08-skribby-provider.md`. **Open:** not yet run against the real Skribby (his one-meeting live check, README of the SOP), then the server steps and the flip
     - [x] `SkribbyProvider`, settings and startup check, migration 0038, routing, tests, live-check script, SOP (2026-11-09)
     - [x] Vexa behind the compose profile `vexa`, so its containers can be stopped (data kept) and a deploy leaves them alone; the way back is one command (2026-11-09, `feature/vexa-compose-profile`, SOP `docs/sop/2026-11-09-vexa-compose-profile.md`, README section 8). Checked locally with the profile off; **not yet done on the server**
-    - [ ] Adebayo: after the flip, stop Vexa on the server (README steps) and decide what to do with Vexa recordings that outlive retention while it is stopped
+    - [x] Adebayo: after the flip, stop Vexa on the server (README steps) and decide what to do with Vexa recordings that outlive retention while it is stopped (stopped 2026-11-20, `vexa_copy_left = 0`; Vexa then removed from the repo, `docs/sop/2026-11-20-remove-vexa.md`)
     - [ ] Adebayo: run `scripts/skribby_live_check.py` once in a real meeting (guest and signed-in), then set `BOT_PROVIDER=skribby` in a no-meetings window
     - [x] Transcript comparison tool `scripts/transcript_compare.py` (Skribby's transcript and ours of one meeting side by side, HTML and text, offline re-run; no pipeline change), merged 2026-11-09 (#158 `4e4753f`), run once on a real Zoom call, SOP `docs/sop/2026-11-09-transcript-compare.md`
     - [x] Speaker names from Skribby's diarization tag and `potential_speaker_names` (a second Zoom speaker was "Unknown speaker"; 2026-11-09, merged as #161 `581e1b4`, no migration, no server step; not yet re-tested on a real Zoom call): a tag takes its one name, an unnamed tag takes its only remaining candidate, never two tags one name; SOP `docs/sop/2026-11-09-skribby-speaker-names.md`. Teams not confirmed live
@@ -817,7 +819,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 - [x] `scripts/clean_env.py` + `tests/test_clean_env.py` (105 tests): dry run by default, names only, backup, atomic 600 rewrite, refusals
 - [x] `deploy/README.md`: 25 variables that had no row now have one; "Cleaning the server `.env`" section
 - [ ] **Adebayo runs the cleaner on the server** (dry run, `--apply`, `docker compose up -d --force-recreate web worker scheduler`, health check, delete the backup): **not run on the real server**
-- [ ] When Vexa's cleanup is done: remove the `vexa` compose services, the two `${...:?}` checks, the Vexa section of `.env.example` and of `scripts/clean_env.py`
+- [x] When Vexa's cleanup is done: remove the `vexa` compose services, the two `${...:?}` checks, the Vexa section of `.env.example` and of `scripts/clean_env.py` (done 2026-11-20, `docs/sop/2026-11-20-remove-vexa.md`; the cleaner now also drops leftover `VEXA_*`, `BOT_NAME`, `BOT_PROVIDER` lines)
 - [ ] Decide whether to delete `OWNER_PASSWORD` from the server `.env` by hand (read only by migration 0006)
 
 ## Backlog
@@ -849,7 +851,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 - [ ] Choose a recording notice for meetings
 - [x] Decide how long to keep audio: 7 days (`audio_retention_days`), stated in the privacy policy (2026-11-02)
 - [x] Create a private GitHub repo for this app (not a Vexa fork) so CI runs (2026-11-02: innocent98/beyric-note-taker, PR #1, CI green)
-- [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
+- [x] ~~Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call~~ (moot: Vexa removed 2026-11-20)
 - [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)
 
 ## Known gaps recorded 2026-11-03 (found while reconciling the handoff; none block the pilot work, each has an owner)

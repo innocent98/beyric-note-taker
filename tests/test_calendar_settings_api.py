@@ -422,6 +422,9 @@ def test_override_after_disconnecting_is_404(web, session, linked):
 def test_override_on_declined_or_ended_or_teams_flag_off_is_409_not_joinable(
     web, session, linked, fields, hours, length, reason
 ):
+    web.client.app.state.settings.teams_join_enabled = (
+        False  # these tests are about Teams being off
+    )
     event = add_event(session, linked, 1, hours=hours, length=length, **fields)
     for value in (True, False, None):
         response = web.put(override_url(event.id), {"override": value})

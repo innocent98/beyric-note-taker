@@ -229,7 +229,8 @@ def test_paste_link_sends_bot(client, fake_bot, template, session):
     assert meeting.started_polling_at is not None
 
 
-def test_second_active_meeting_is_refused(client, fake_bot, template, session):
+def test_second_active_meeting_is_refused(client, app, fake_bot, template, session):
+    app.state.settings.bot_max_local = 1  # one slot
     add_meeting(session, template, status="processing", step="notes")
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 409
@@ -736,7 +737,8 @@ def test_bad_template_ids_in_forms_are_a_plain_error(client, template, session, 
     assert regen.status_code == 400
 
 
-def test_refused_submit_does_not_echo_a_zoom_password(client, template, session):
+def test_refused_submit_does_not_echo_a_zoom_password(client, app, template, session):
+    app.state.settings.bot_max_local = 1  # one slot
     add_meeting(session, template, status="bot_sent")
     response = post(client, "/meetings", {"url": ZOOM, "template_id": template.id})
     assert response.status_code == 409

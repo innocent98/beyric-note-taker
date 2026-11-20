@@ -731,9 +731,13 @@ def teams_meeting_to_retry(session, template):
     )
 
 
-def test_retry_of_a_teams_meeting_is_a_plain_refusal_while_the_provider_cannot_join_teams(
-    api, session, template, fake_bot
+def test_retry_of_a_teams_meeting_is_a_plain_refusal_while_teams_is_switched_off(
+    api, session, template, fake_bot, monkeypatch
 ):
+    from tests.test_web import make_settings
+
+    off = make_settings(teams_join_enabled=False)
+    monkeypatch.setattr(services, "get_settings", lambda: off)
     meeting = teams_meeting_to_retry(session, template)  # made while Skribby was the provider
     error = error_of(api.post(f"/api/meetings/{meeting.id}/retry"), 409, "unsupported_link")
     assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
@@ -859,9 +863,8 @@ def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_bot,
 TEAMS = "https://teams.microsoft.com/meet/1234567890123?p=placeholder"
 
 
-def test_create_refuses_a_teams_link_while_the_provider_cannot_join_teams(
-    api, template, fake_bot, session
-):
+def test_create_refuses_a_teams_link_while_teams_is_switched_off(api, template, fake_bot, session):
+    api.client.app.state.settings.teams_join_enabled = False
     error = error_of(create(api, template, url=TEAMS), 400, "unsupported_link")
     assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
     assert fake_bot.sent == [] and session.scalars(select(Meeting)).first() is None
@@ -936,9 +939,10 @@ def test_create_validates_the_body(api, template, fake_bot, body):
     assert fake_bot.sent == []
 
 
-def test_create_refuses_while_a_bot_is_active(api, template, session, fake_bot):
+def test_create_refuses_while_a_bot_is_active(api, app, template, session, fake_bot):
     """The user's own running meeting fills the one slot: a plain busy (the old, longer
     `bot_already_active` wording is retired with the lock it belonged to)."""
+    app.state.settings.bot_max_local = 1  # one slot: the user's own running meeting fills it
     add_meeting(session, template, status="processing", step="audio")
     error = error_of(create(api, template), 409, "bot_busy")
     assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
@@ -1045,10 +1049,11 @@ def test_create_into_a_meeting_another_user_has_a_note_taker_in_is_the_neutral_r
 
 
 def test_pasted_link_busy_answer_is_neutral_409_bot_busy_and_does_not_name_another_user(
-    api, template, session, fake_bot, stranger
+    api, app, template, session, fake_bot, stranger
 ):
     """Whoever holds the note taker, the answer is the same words: no name, no address, no id, no
     title, no hint that someone is recording (the stranger's meeting has a title to leak)."""
+    app.state.settings.bot_max_local = 1  # one slot: the user's own running meeting fills it
     theirs = Template(owner_user_id=stranger.id, name="Their template", instructions="x")
     session.add(theirs)
     session.commit()
@@ -1065,9 +1070,10 @@ def test_pasted_link_busy_answer_is_neutral_409_bot_busy_and_does_not_name_anoth
 
 
 def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
-    api, template, session, fake_bot, stranger
+    api, app, template, session, fake_bot, stranger
 ):
     """A capacity refusal must not say whose meeting holds the bot (or that anyone is recording)."""
+    app.state.settings.bot_max_local = 1  # one slot: the user's own running meeting fills it
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
     session.add(theirs)
     session.commit()

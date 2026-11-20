@@ -424,14 +424,14 @@ def test_the_default_ceiling_lets_many_people_record_at_once(session, ada):
         session, ada, platform="google_meet", native_id="new-aaaa-aaa", now=T0, settings=skribby
     )
     session.rollback()
-    with pytest.raises(PlacementRefused) as caught:  # the provider default is still one at a time
+    with pytest.raises(PlacementRefused) as caught:  # a ceiling of five is full with five running
         reserve_slot(
             session,
             ada,
             platform="google_meet",
             native_id="new-aaaa-aaa",
             now=T0,
-            settings=make_settings(),
+            settings=make_settings(bot_max_local=5),
         )
     session.rollback()
     assert caught.value.code == "bot_busy"
