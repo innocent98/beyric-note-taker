@@ -255,14 +255,16 @@ def test_an_unknown_reference_is_the_same_404(ada):
     error(cancel(ada, "pay_does_not_exist"), 404, "not_found")
 
 
-def test_a_renewal_or_an_upgrade_cannot_be_cancelled_here(session, ada, providers):
+def test_a_renewal_cannot_be_cancelled_here(session, ada, providers):
+    """A renewal belongs to the clock (the sweeper and the scheduler own it): 409, nothing asked."""
     payment = start(ada)
-    for kind in ("renewal", "upgrade"):
-        row = stored(session, payment["reference"])
-        row.kind = kind
-        session.commit()
-        error(cancel(ada, payment["reference"]), 409, "cannot_cancel")
-        assert stored(session, payment["reference"]).status == "pending"
+    row = stored(session, payment["reference"])
+    row.kind = "renewal"
+    session.commit()
+
+    error(cancel(ada, payment["reference"]), 409, "cannot_cancel")
+
+    assert stored(session, payment["reference"]).status == "pending"
     assert providers.usd.lookups == []
 
 
@@ -642,7 +644,7 @@ def test_the_sweeper_leaves_a_cancelled_page_alone_while_the_provider_says_unpai
 @pytest.mark.parametrize(
     ("change", "age"),
     [
-        ({"kind": "renewal"}, timedelta(hours=1)),  # not a plan or pack checkout
+        ({"kind": "renewal"}, timedelta(hours=1)),  # not a plan, pack or upgrade checkout
         ({"pay_url": None}, timedelta(hours=1)),  # no page was ever made
         ({}, timedelta(days=8)),  # older than the window
     ],
@@ -661,3 +663,351 @@ def test_the_sweeper_does_not_touch_other_failed_payments(session, ada, provider
 
     assert len(providers.usd.lookups) == lookups  # never asked
     assert stored(session, row.reference).status == "failed"
+
+
+# ---- an UPGRADE checkout: the same safety, and the plan is never touched -------------------------
+
+
+def upgrade_checkout(session, ada, providers, *, plan="p40", status="pending"):
+    """Ada holds a paid p20 plan and has started (not paid) an upgrade to `plan`. The provider's
+    report for the page is `status` (an abandoned page). Returns the upgrade payment's row."""
+    buy(session, ada, providers, plan="p20")
+    out = ada.post(f"{API}/subscription/change-plan", {"plan_code": plan})
+    assert out.status_code == 200 and out.json()["result"] == "checkout", out.text
+    row = stored(session, out.json()["payment"]["reference"])
+    assert row.kind == "upgrade" and row.status == "pending" and row.pay_url
+    if status is not None:
+        providers.usd.complete(row, status=status)
+    return row
+
+
+def held(session) -> dict:
+    """Every column of every subscription and hour-grant row: the plan, the period, the renewal
+    date, the hours. Two equal snapshots mean nothing about the plan moved."""
+    session.expire_all()
+    out = {}
+    for model in (Subscription, HourGrant):
+        for row in session.scalars(select(model).order_by(model.id)):
+            out[(model.__tablename__, row.id)] = {
+                column.key: getattr(row, column.key) for column in model.__table__.columns
+            }
+    return out
+
+
+def plan_view(ada) -> dict:
+    """What the person sees of their plan and hours, without the waiting payment."""
+    state = ada.get(f"{API}/subscription").json()
+    state.pop("pending_payment")
+    return state
+
+
+def test_an_abandoned_upgrade_page_is_cancelled_and_the_plan_is_exactly_as_it_was(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    assert ada.get(f"{API}/subscription").json()["pending_payment"]["kind"] == "upgrade"
+    before, view_before = held(session), plan_view(ada)
+    assert len(before) == 2  # one subscription, one plan_period grant
+    notices_before = rows(session, Notification)
+
+    out = cancel(ada, row.reference)
+
+    assert out.status_code == 200, out.text
+    body = out.json()
+    assert set(body) == {"result", "payment"} and body["result"] == "cancelled"
+    assert body["payment"]["kind"] == "upgrade" and body["payment"]["status"] == "failed"
+    assert body["payment"]["pay_url"] is None
+    assert stored(session, row.reference).status == "failed"
+    assert providers.usd.lookups == [row.reference]  # the provider was asked first
+    # the plan: same rows, to the last column (plan, price, period, renewal date, hours)
+    assert held(session) == before
+    assert plan_view(ada) == view_before
+    sub = session.scalars(select(Subscription)).one()
+    assert sub.plan_code == "p20" and sub.pending_plan_code is None
+    assert [g.seconds for g in session.scalars(select(HourGrant))] == [P20]
+    # the "unfinished payment" notice is gone, and nothing was raised for an admin
+    assert ada.get(f"{API}/subscription").json()["pending_payment"] is None
+    assert rows(session, Notification) == notices_before
+
+
+def test_a_cancelled_upgrade_can_be_started_again_with_a_new_payment(session, ada, providers):
+    row = upgrade_checkout(session, ada, providers)
+    assert cancel(ada, row.reference).status_code == 200
+
+    again = ada.post(f"{API}/subscription/change-plan", {"plan_code": "p40"})
+
+    assert again.status_code == 200 and again.json()["result"] == "checkout"
+    assert again.json()["payment"]["reference"] != row.reference
+    waiting = ada.get(f"{API}/subscription").json()["pending_payment"]
+    assert waiting["reference"] == again.json()["payment"]["reference"]
+
+
+def test_an_upgrade_page_the_provider_has_no_record_of_is_cancelled(session, ada, providers):
+    """Flutterwave answers an error for a page nobody opened (`NoRecord`): unpaid, closed."""
+    row = upgrade_checkout(session, ada, providers, status=None)
+    providers.usd.fetch_error = NoRecord("no transaction was found")
+    before = held(session)
+
+    out = cancel(ada, row.reference)
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "cancelled" and out.json()["payment"]["status"] == "failed"
+    assert held(session) == before
+
+
+def test_an_upgrade_the_provider_says_failed_is_marked_failed_and_changes_nothing(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers, status="failed")
+    before = held(session)
+
+    out = cancel(ada, row.reference)
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "failed" and out.json()["payment"]["status"] == "failed"
+    assert held(session) == before
+
+
+def test_an_upgrade_page_paid_in_the_meantime_is_settled_and_never_cancelled(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers, status=None)
+    # paid in another tab, the webhook has not arrived: only the provider knows
+    providers.usd.complete(row, card_token="tok-upgrade-late", payer_email="p@example.test")
+
+    out = cancel(ada, row.reference)
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "paid" and out.json()["payment"]["status"] == "succeeded"
+    assert stored(session, row.reference).status == "succeeded"
+    sub = session.scalars(select(Subscription)).one()
+    assert sub.plan_code == "p40"  # the upgrade took effect, exactly as the webhook would
+    kinds = sorted(
+        (g.kind, g.source_payment_id == row.id) for g in session.scalars(select(HourGrant))
+    )
+    assert len(kinds) == 2 and ("plan_period", True) in kinds  # the extra hours, granted once
+    assert ada.get(f"{API}/subscription").json()["pending_payment"] is None
+
+
+def test_an_upgrade_page_paid_wrongly_is_refused_told_to_the_admins_and_left_pending(
+    session, ada, providers
+):
+    make_user(session, "admin@example.test", admin=True)
+    row = upgrade_checkout(session, ada, providers, status=None)
+    providers.usd.complete(row, amount_minor=row.amount_minor - 1)  # paid, but too little
+    before = held(session)
+
+    out = cancel(ada, row.reference)
+
+    assert error(out, 409, "payment_in_progress")
+    assert stored(session, row.reference).status == "pending"
+    assert held(session) == before  # no plan change, no hours
+    kinds = {n.kind for n in session.scalars(select(Notification))}
+    assert "admin.billing_payment_refused" in kinds
+
+
+def test_an_upgrade_provider_that_cannot_be_asked_is_a_502_and_changes_nothing(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    providers.usd.fetch_error = ProviderError("the provider is down")
+    before = held(session)
+
+    error(cancel(ada, row.reference), 502, "provider_error")
+
+    assert stored(session, row.reference).status == "pending"
+    assert held(session) == before
+    assert ada.get(f"{API}/subscription").json()["pending_payment"]["reference"] == row.reference
+
+
+def test_an_upgrade_already_paid_answers_paid_and_changes_nothing(session, ada, providers):
+    row = upgrade_checkout(session, ada, providers, status=None)
+    pay(session, providers.usd, row, now(), card_token="tok-up")  # the webhook settled it
+    assert stored(session, row.reference).status == "succeeded"
+    before, lookups = held(session), len(providers.usd.lookups)
+
+    out = cancel(ada, row.reference)
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "paid" and out.json()["payment"]["status"] == "succeeded"
+    assert stored(session, row.reference).status == "succeeded"
+    assert held(session) == before and len(providers.usd.lookups) == lookups  # nothing asked
+
+
+def test_someone_elses_upgrade_is_a_plain_404_and_is_not_touched(session, engine, ada, providers):
+    row = upgrade_checkout(session, ada, providers)
+    make_user(session, "ben@example.test")
+    before = held(session)
+    with api_client(engine) as client:
+        ben = Buyer(client, "ben@example.test")
+        error(cancel(ben, row.reference), 404, "not_found")
+    assert stored(session, row.reference).status == "pending"
+    assert providers.usd.lookups == [] and held(session) == before
+
+
+def test_an_upgrade_is_not_cancelled_while_a_refund_of_the_plan_is_being_settled(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    plan_payment = session.scalars(select(Payment).where(Payment.kind == "plan")).one()
+    session.add(
+        Refund(
+            payment_id=plan_payment.id,
+            reference="refund-ref-up",
+            reason="first_plan_7d",
+            status="pending",
+            amount_minor=plan_payment.amount_minor,
+            currency=plan_payment.currency,
+        )
+    )
+    session.commit()
+
+    error(cancel(ada, row.reference), 409, "refund_pending")
+
+    assert stored(session, row.reference).status == "pending"
+    assert providers.usd.lookups == []
+
+
+def test_a_refund_that_starts_while_the_provider_answers_stops_an_upgrade_being_closed(
+    session, ada, providers, monkeypatch
+):
+    row = upgrade_checkout(session, ada, providers)
+    plan_payment = session.scalars(select(Payment).where(Payment.kind == "plan")).one()
+    unpaid = providers.usd.complete(stored(session, row.reference), status="pending")
+    real_lookup = cancel_checkout.lookup_by_reference
+
+    def lookup_then_a_refund_starts(adapter, reference):
+        real_lookup(adapter, reference)
+        session.add(
+            Refund(
+                payment_id=plan_payment.id,
+                reference="refund-ref-up-race",
+                reason="first_plan_7d",
+                status="pending",
+                amount_minor=plan_payment.amount_minor,
+                currency=plan_payment.currency,
+            )
+        )
+        session.commit()
+        return unpaid
+
+    monkeypatch.setattr(cancel_checkout, "lookup_by_reference", lookup_then_a_refund_starts)
+
+    error(cancel(ada, row.reference), 409, "refund_pending")
+    assert stored(session, row.reference).status == "pending"
+
+
+def test_a_webhook_holding_an_upgrade_row_makes_the_cancel_wait_and_then_answer_paid(
+    session, ada, providers, monkeypatch
+):
+    """The two-connection lock test of the plan checkout, for an upgrade: our session holds the
+    payment row (as a webhook settling it does); the cancel's lookup says unpaid, its write blocks;
+    the settlement commits (plan changed, extra hours granted) and the cancel wakes, reads again
+    and answers `paid`. It never marks a paid upgrade failed."""
+    row = upgrade_checkout(session, ada, providers)
+    unpaid = providers.usd.complete(stored(session, row.reference), status="pending")
+    looked_up = threading.Event()
+    real_lookup = cancel_checkout.lookup_by_reference
+
+    def lookup(adapter, reference):
+        real_lookup(adapter, reference)
+        looked_up.set()
+        return unpaid
+
+    monkeypatch.setattr(cancel_checkout, "lookup_by_reference", lookup)
+    session.scalars(select(Payment).where(Payment.id == row.id).with_for_update()).one()  # held
+    answers = []
+    worker = threading.Thread(target=lambda: answers.append(cancel(ada, row.reference)))
+    worker.start()
+    assert looked_up.wait(10)
+    time.sleep(0.7)  # the cancel is now waiting on the row lock
+    assert worker.is_alive() and answers == []
+
+    paid = providers.usd.complete(row, card_token="tok-up-contended", payer_email="p@example.test")
+    assert settle.settle_transaction(session, providers.usd, row.id, paid, now()) is None
+    session.commit()  # releases the lock
+    worker.join(15)
+
+    assert not worker.is_alive()
+    assert answers[0].status_code == 200, answers[0].text
+    assert answers[0].json()["result"] == "paid"
+    assert stored(session, row.reference).status == "succeeded"
+    assert session.scalars(select(Subscription)).one().plan_code == "p40"
+    assert len(list(session.scalars(select(HourGrant)))) == 2  # the plan's and the extra, once
+
+
+# ---- an upgrade page paid AFTER the cancel: no new money path -----------------------------------
+
+
+def test_a_cancelled_upgrade_page_paid_later_inside_the_period_is_applied_as_any_open_upgrade(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    assert cancel(ada, row.reference).json()["result"] == "cancelled"
+    assert stored(session, row.reference).status == "failed"
+
+    # the payer pays the old page anyway; the provider's webhook arrives, the period still runs
+    pay(session, providers.usd, stored(session, row.reference), now(), card_token="tok-up-2")
+
+    assert stored(session, row.reference).status == "succeeded"
+    assert session.scalars(select(Subscription)).one().plan_code == "p40"
+    assert len(list(session.scalars(select(HourGrant)))) == 2
+    state = ada.get(f"{API}/subscription").json()
+    assert state["pending_payment"] is None and state["state"] == "active"
+
+
+def test_a_cancelled_upgrade_page_paid_after_the_period_moved_on_grants_nothing_and_alerts(
+    session, ada, providers
+):
+    """The rule that was already there for any upgrade page paid too late (the S8a review's case)
+    holds after a cancel: the money is kept for a refund by hand, the admins are told, the plan
+    does not change and no hours are granted. Cancelling does not reopen it."""
+    make_user(session, "admin@example.test", admin=True)
+    row = upgrade_checkout(session, ada, providers)
+    assert cancel(ada, row.reference).json()["result"] == "cancelled"
+    due = session.scalars(select(Subscription)).one().current_period_end
+    renewals.run_due(session, due + timedelta(seconds=5), settings())  # the renewal got in first
+    renewed = held(session)
+
+    pay(session, providers.usd, stored(session, row.reference), due + timedelta(hours=2))
+
+    paid = stored(session, row.reference)
+    assert paid.status == "succeeded" and paid.needs_refund_reason  # kept: a person refunds it
+    sub = session.scalars(select(Subscription)).one()
+    assert sub.plan_code == "p20"  # not upgraded: the period it was for is over
+    assert held(session) == renewed  # no plan change, no extra hours
+    [alert] = [
+        n for n in session.scalars(select(Notification)) if n.kind == "admin.billing_refund_needed"
+    ]
+    assert str(row.id) in alert.body
+
+
+def test_the_sweeper_settles_a_cancelled_upgrade_page_paid_later_with_a_lost_webhook(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    assert cancel(ada, row.reference).json()["result"] == "cancelled"
+    row = stored(session, row.reference)
+    providers.usd.complete(row, card_token="tok-up-sweep", payer_email="payer@example.test")
+    # no webhook: the provider's retries ran out. The sweeper asks about the failed page.
+
+    renewals.sweep(session, row.created_at + timedelta(hours=1), settings())
+
+    session.expire_all()
+    assert stored(session, row.reference).status == "succeeded"
+    assert session.scalars(select(Subscription)).one().plan_code == "p40"
+
+
+def test_the_sweeper_leaves_a_cancelled_upgrade_page_alone_while_the_provider_says_unpaid(
+    session, ada, providers
+):
+    row = upgrade_checkout(session, ada, providers)
+    assert cancel(ada, row.reference).json()["result"] == "cancelled"
+    before, lookups = held(session), len(providers.usd.lookups)
+
+    renewals.sweep(
+        session, stored(session, row.reference).created_at + timedelta(hours=1), settings()
+    )
+
+    assert len(providers.usd.lookups) == lookups + 1  # it asked
+    assert stored(session, row.reference).status == "failed" and held(session) == before

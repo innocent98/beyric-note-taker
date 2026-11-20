@@ -22,7 +22,7 @@ New module `app/billing/cancel_checkout.py`, route in `app/billing/subscriptions
 | paid but our rules refuse it (a wrong amount, say), or a grant handler fails (the transaction is undone) | nothing changes; a refusal tells an admin (`admin.billing_payment_refused:<id>`, the same alert the sweeper raises), and so does a failed grant (`admin.billing_cancel_grant_failed:<id>`, added 2026-11-19) | 409 `payment_in_progress` |
 | (no call) the payment is already `succeeded`, `refunded` or `partly_refunded` | nothing changes | 200 `paid` |
 
-Other refusals: 404 `not_found` for someone else's or an unknown reference (the same plain answer as `GET /payments/{reference}`, the provider is not even asked) and while billing is off; 409 `cannot_cancel` for a `renewal` or `upgrade` (a renewal belongs to the clock, an upgrade to the plan change); 409 `refund_pending` while a refund of the plan is being settled (`subscriptions._refuse_while_refunding`, as everywhere).
+Other refusals: 404 `not_found` for someone else's or an unknown reference (the same plain answer as `GET /payments/{reference}`, the provider is not even asked) and while billing is off; 409 `cannot_cancel` for a `renewal` (a renewal belongs to the clock; an upgrade could not be cancelled until 2026-11-20, see `2026-11-20-cancel-upgrade-checkout.md`); 409 `refund_pending` while a refund of the plan is being settled (`subscriptions._refuse_while_refunding`, as everywhere).
 
 **Decisions and rejected alternatives.**
 
@@ -40,7 +40,7 @@ Other refusals: 404 `not_found` for someone else's or an unknown reference (the 
 | `app/billing/types.py`, `app/billing/flutterwave.py` | `NoRecord(ProviderError)`; `fetch_by_reference` raises it for a refused lookup |
 | `app/billing/renewals.py` | `_sweep_payments` also covers recent `failed` plan and pack checkouts with a page (`FAILED_LOOKBACK`) |
 | `app/billing/subscriptions_api.py` | `POST /payments/{reference}/cancel`, `CancelPaymentOut {result, payment}`, route table and error list in the module docstring |
-| `web/components/billing/cancel-payment.tsx` | new: the button (busy label "Cancelling...", error line, nothing for a `renewal` or `upgrade`), `cancelNotice()` |
+| `web/components/billing/cancel-payment.tsx` | new: the button (busy label "Cancelling...", error line, nothing for a `renewal`; an `upgrade` was added 2026-11-20), `cancelNotice()` |
 | `web/components/billing/plans-view.tsx`, `billing-view.tsx` | the button beside Continue to pay and Check this payment; the notice after; the state is read again |
 | `web/lib/billing.ts`, `web/lib/api/client.ts`, `web/components/billing/common.ts` | `CancelPaymentResult`, `api.billing.cancelPayment`, `cannot_cancel` shown as the server words it |
 | `scripts/capture_billing_cancel_checkout.py`, `docs/fe-captures/billing-cancel-checkout/` | the live capture for the FE guide |
@@ -79,7 +79,7 @@ No setting, no migration. Revert the PR to remove the button and the route; paym
 |---|---|
 | Flutterwave's real answer for a lookup of a hosted page nobody opened is assumed to be HTTP 400, 404 or 422 (what `RequestRefused` covers); a 200 with an error body would still be a 502 | check against the Flutterwave test account before go-live |
 | A `pending` row with no page (checkout creation failed, or Paystack says "reference not found") answers 502 for ever on cancel | rare; the sweeper's `NO_LINK_GRACE` logic covers renewals only |
-| An abandoned **upgrade** checkout has no cancel (only a plan or pack does), so its notice on the billing page stays until it is paid | decide with the lead whether to allow it |
+| An abandoned **upgrade** checkout has no cancel (only a plan or pack does), so its notice on the billing page stays until it is paid | **done 2026-11-20**: the same route and button now cancel an upgrade (`docs/sop/2026-11-20-cancel-upgrade-checkout.md`); a renewal still has none |
 | The daily old-pending digest lists `pending` rows only (see the sweeper note above) | deliberate; revisit if cancelled-but-paid pages ever need a human |
 | A paid page whose grant fails on cancel only wrote a log line (the person got 409, no admin was told) | **done 2026-11-19**: one admin alert per payment, `docs/sop/2026-11-19-cancel-grant-failure-alert.md` |
 | Whether a signed-in buyer should see the provider's name before the hosted page | product decision; today only admin screens, the pricing page and `llms.txt` name it |

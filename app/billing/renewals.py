@@ -74,8 +74,8 @@ SWEEP_AFTER = timedelta(
     minutes=2
 )  # a payment or event younger than this is the webhook's to settle
 SWEEP_LOOKBACK = timedelta(days=3)  # older unpaid checkouts are left alone
-# A plan or pack checkout the person put away (`cancel_checkout`: `failed`, with its page) is
-# still asked about for this long, so a page paid later by mistake whose webhook was lost is
+# A plan, pack or upgrade checkout the person put away (`cancel_checkout`: `failed`, with its page)
+# is still asked about for this long, so a page paid later by mistake whose webhook was lost is
 # settled, not lost.
 FAILED_LOOKBACK = timedelta(days=7)
 MIN_RETRY_GAP = timedelta(hours=1)  # a late pass never fires two attempts back to back
@@ -626,9 +626,9 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
 
 
 def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None:
-    """A payment still `pending` after two minutes (or a recent `failed` plan or pack checkout, see
-    below): ask the provider by our reference, and settle it only if the provider says it succeeded
-    (an unpaid or abandoned checkout is left alone: the payer may still finish it)."""
+    """A payment still `pending` after two minutes (or a recent `failed` plan, pack or upgrade
+    checkout, see below): ask the provider by our reference, and settle it only if the provider says
+    it succeeded (an unpaid or abandoned checkout is left alone: the payer may still finish it)."""
     hour, day = timedelta(hours=1), timedelta(days=1)
     # Each payment is asked about on a back-off that grows with its age (every 2 minutes for the
     # first hour, every 30 minutes for the first day, every 3 hours after), and the ones asked about
@@ -644,9 +644,10 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
         ),
         and_(Payment.created_at <= now - day, Payment.last_checked_at <= now - timedelta(hours=3)),
     )
-    # A `failed` plan or pack checkout that has its page (one the person cancelled, or one the
-    # provider reported failed: a failed payment can still be paid) is asked about too, less often:
-    # every 30 minutes the first day, every 3 hours after. Nothing else that failed is touched.
+    # A `failed` plan, pack or upgrade checkout that has its page (one the person cancelled, or one
+    # the provider reported failed: a failed payment can still be paid) is asked about too, less
+    # often: every 30 minutes the first day, every 3 hours after. Nothing else that failed is
+    # touched.
     failed_due = or_(
         Payment.last_checked_at.is_(None),
         and_(
@@ -667,7 +668,7 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
                 ),
                 and_(
                     Payment.status == "failed",
-                    Payment.kind.in_(("plan", "pack")),
+                    Payment.kind.in_(("plan", "pack", "upgrade")),
                     Payment.pay_url.is_not(None),
                     Payment.created_at > now - FAILED_LOOKBACK,
                     failed_due,

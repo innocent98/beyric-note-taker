@@ -9,11 +9,21 @@ import { billingErrorMessage } from "./common";
 
 // What the page says once a cancel is answered. `paid` is good news the person did not expect: the page was paid
 // after all (in another tab, or a moment ago), the server settled it and did NOT cancel it, so it says so.
-export function cancelNotice(result: CancelPaymentResult["result"]): { kind: "info"; text: string } {
+// An upgrade says what the person cares about: the plan and hours were not changed (nothing but the payment closes).
+export function cancelNotice(
+  result: CancelPaymentResult["result"],
+  kind?: BillingPayment["kind"],
+): { kind: "info"; text: string } {
   if (result === "paid") {
     return {
       kind: "info",
       text: "That payment had already gone through, so it was not cancelled. Your plan and hours are shown below.",
+    };
+  }
+  if (kind === "upgrade") {
+    return {
+      kind: "info",
+      text: "The payment was cancelled. Your plan and hours have not changed. Please do not pay on the old payment page.",
     };
   }
   return {
@@ -36,7 +46,7 @@ export function CancelNotice({ text, onDismiss }: { text: string; onDismiss: () 
   );
 }
 
-// "Cancel this payment" for a plan or pack checkout the person started and did not finish (`pending_payment`). The
+// "Cancel this payment" for a plan, pack or upgrade checkout the person started and did not finish (`pending_payment`). The
 // server asks the payment provider first and only closes a payment the provider says is unpaid; when the provider
 // cannot be asked it changes nothing and says so here, and the button stays so the person can try again.
 export function CancelPayment({
@@ -49,7 +59,7 @@ export function CancelPayment({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (payment.kind !== "plan" && payment.kind !== "pack") return null;
+  if (payment.kind === "renewal") return null; // a renewal belongs to the clock: the server refuses it too
 
   async function cancel() {
     if (busy) return;

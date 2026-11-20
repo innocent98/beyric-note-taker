@@ -28,6 +28,12 @@ vi.mock("@/lib/navigate", () => ({ goTo: mocks.goTo }));
 
 const PENDING = () => cap<{ pending_payment: { reference: string; kind: string } }>("19-subscription-pending.json");
 const NEVER = () => cap("09-subscription-never.json");
+// An upgrade checkout the person did not finish (captures 33 to 43, the 2026-11-20 run): the plan is the old one while
+// it waits and exactly the same after the cancel.
+const UPGRADE_WAITING = () => capCancel<{ pending_payment: { reference: string; kind: string } }>("35-subscription-with-waiting-upgrade.json");
+const UPGRADE_AFTER_CANCEL = () => capCancel("37-subscription-after-cancel-upgrade.json");
+const UPGRADE_CANCELLED = () => capCancel<{ result: string; payment: unknown }>("36-cancel-upgrade-abandoned.json");
+const UPGRADE_PAID = () => capCancel<{ result: string; payment: unknown }>("42-cancel-upgrade-paid-in-the-meantime.json");
 const CANCELLED = () => capCancel<{ result: string; payment: unknown }>("16-cancel-abandoned.json");
 const PAID = () => capCancel<{ result: string; payment: unknown }>("20-cancel-paid-in-the-meantime.json");
 const FAILED = () => capCancel<{ result: string; payment: unknown }>("24-cancel-provider-says-failed.json");
@@ -147,10 +153,15 @@ describe("the billing page's unfinished-payment notice", () => {
 });
 
 describe("what can be cancelled", () => {
-  it("offers nothing for a renewal or an upgrade (the server refuses them: 409 cannot_cancel)", () => {
-    for (const kind of ["renewal", "upgrade"] as const) {
-      const { container } = render(<CancelPayment payment={{ reference: "ref", kind }} onDone={() => {}} />);
-      expect(container.textContent).toBe("");
+  it("offers nothing for a renewal (it belongs to the clock; the server refuses it: 409 cannot_cancel)", () => {
+    const { container } = render(<CancelPayment payment={{ reference: "ref", kind: "renewal" }} onDone={() => {}} />);
+    expect(container.textContent).toBe("");
+  });
+
+  it("offers the button for a plan, a pack and an upgrade", () => {
+    for (const kind of ["plan", "pack", "upgrade"] as const) {
+      render(<CancelPayment payment={{ reference: "ref", kind }} onDone={() => {}} />);
+      expect(screen.getByRole("button", { name: "Cancel this payment" })).toBeTruthy();
       cleanup();
     }
   });
@@ -161,5 +172,51 @@ describe("what can be cancelled", () => {
     render(<CancelPayment payment={{ reference: "ref", kind: "plan" }} onDone={done} />);
     await userEvent.click(screen.getByRole("button", { name: "Cancel this payment" }));
     await waitFor(() => expect(done).toHaveBeenCalledWith(null));
+  });
+});
+
+describe("an unfinished upgrade on the billing page", () => {
+  function showUpgrade(next: unknown) {
+    mocks.state.mockReset();
+    mocks.state.mockResolvedValueOnce(UPGRADE_WAITING()).mockResolvedValue(next);
+  }
+
+  it("has Cancel this payment beside Continue to pay and Check this payment", async () => {
+    mocks.state.mockResolvedValue(UPGRADE_WAITING());
+    render(<BillingView />);
+    expect(await screen.findByRole("link", { name: "Continue to pay" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Check this payment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel this payment" })).toBeTruthy();
+  });
+
+  it("cancels it, the notice goes away, and the words say the plan and hours did not change", async () => {
+    mocks.cancelPayment.mockResolvedValue(UPGRADE_CANCELLED());
+    showUpgrade(UPGRADE_AFTER_CANCEL());
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel this payment" }));
+    expect(mocks.cancelPayment).toHaveBeenCalledWith(UPGRADE_WAITING().pending_payment.reference);
+    await waitFor(() => expect(screen.queryByText(/You have a payment that is not finished/)).toBeNull());
+    expect(
+      screen.getByText(/The payment was cancelled\. Your plan and hours have not changed\. Please do not pay on the old payment page\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/no hours were added/)).toBeNull();
+  });
+
+  it("says an upgrade that was paid after all was NOT cancelled", async () => {
+    mocks.cancelPayment.mockResolvedValue(UPGRADE_PAID());
+    showUpgrade(capCancel("43-subscription-after-paid-upgrade.json"));
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel this payment" }));
+    expect(await screen.findByText(/That payment had already gone through, so it was not cancelled/)).toBeTruthy();
+    expect(screen.queryByText(/The payment was cancelled/)).toBeNull();
+  });
+
+  it("keeps the notice and says why when the provider could not be asked (nothing was changed)", async () => {
+    mocks.state.mockResolvedValue(UPGRADE_WAITING());
+    mocks.cancelPayment.mockRejectedValue(PROVIDER_DOWN());
+    render(<BillingView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel this payment" }));
+    expect(await screen.findByText(/We could not check this payment with the payment provider just now\. Nothing was changed\./)).toBeTruthy();
+    expect(screen.getByText(/You have a payment that is not finished/)).toBeTruthy();
   });
 });

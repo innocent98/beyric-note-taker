@@ -2598,12 +2598,12 @@ References and times are from the capture run; treat every time as an instant.
 
 ### What this is, in the person's terms
 
-A person who starts a plan or pack checkout and closes the provider's page without paying leaves a payment that stays
+A person who starts a plan, pack or upgrade checkout and closes the provider's page without paying leaves a payment that stays
 `pending`: Paystack reports an abandoned page as `pending`, Flutterwave keeps it open, and `GET /subscription` keeps
 returning it as `pending_payment`. The notice "You started a payment and have not finished it" therefore never went away.
 **`POST /api/billing/payments/{reference}/cancel`** puts it away. The screens show a **Cancel this payment** button beside
 **Continue to pay** and **Check this payment**, on the plans screen's notice and on the billing page's notice, for a
-payment whose `kind` is `plan` or `pack` only.
+payment whose `kind` is `plan`, `pack` or `upgrade` (an upgrade: see "Cancelling an UPGRADE checkout" below; a `renewal` has none).
 
 The server **asks the payment provider about our reference first**; the person's click is never believed over the
 provider's word, because the page may have been paid in another tab a moment ago.
@@ -2628,7 +2628,7 @@ asks the provider again and ends the same (200 `cancelled`).
 **"Cancelled" is `failed`: there is no new state.** A `failed` payment is still open to settlement. If the person pays
 the old page after cancelling, the provider's webhook finds the row and grants the hours (capture 27 and 28), so money
 the provider took is never lost. If that webhook is lost, the sweeper (`renewals._sweep_payments`) also asks the provider
-about a `failed` plan or pack checkout that has a page, for 7 days after it was created (every 30 minutes the first day,
+about a `failed` plan, pack or upgrade checkout that has a page, for 7 days after it was created (every 30 minutes the first day,
 every 3 hours after), and settles it if the provider says it was paid (tests only). The person is still told not to pay
 the old page.
 
@@ -2800,7 +2800,7 @@ The old page paid after the cancel (capture 28, the webhook of capture 27 settle
 |---|---|---|---|---|
 | 502 | `provider_error` | `We could not check this payment with the payment provider just now. Nothing was changed. Try again in a moment.` | 14, 15 | show the message under the button, keep the notice and the button, do not reload |
 | 404 | `not_found` | `Not found.` | 03 (billing off), 12 (unknown), 13 (someone else's) | read the state again and say nothing: the payment is not this person's, or billing is off |
-| 409 | `cannot_cancel` | `This payment cannot be cancelled here.` | 30 (an `upgrade`; a `renewal` is the same) | the button is not offered for these kinds; the message is shown if it ever comes back |
+| 409 | `cannot_cancel` | `This payment cannot be cancelled here.` | 30 (a `renewal`; an `upgrade` could not be cancelled before 2026-11-20 and now can) | the button is not offered for a renewal; the message is shown if it ever comes back |
 | 403 | `csrf_rejected` | `Missing or wrong X-CSRF-Token header. Read it from GET /api/session.` | 11 | the shared handler |
 
 ```json
@@ -2824,7 +2824,7 @@ written).
 * The answer is `{"result", "payment"}`: `result` is NOT inside `payment`, and `payment.status` never says `cancelled`.
 * A `result` of `paid` is good news the person did not expect. The screen must say so ("That payment had already gone
   through, so it was not cancelled") and read the state again; never show "cancelled" for it.
-* `pending_payment` is also present for `kind` `renewal` and `upgrade`: those have no cancel button.
+* `pending_payment` is also present for `kind` `renewal`: it has no cancel button. An `upgrade` has one (2026-11-20).
 
 ### What the FE must surface
 
@@ -2843,11 +2843,282 @@ quote "..., paid through Paystack" describe the old words). The plans screen kee
 provider's own site." The provider is still named on the admin billing screens and the public pricing page; the return page,
 invoices and receipts do not name it (the pay page itself is the provider's own).
 
+### Cancelling an UPGRADE checkout (2026-11-20)
+
+The same route, the same answers, for a payment whose `kind` is **`upgrade`** (a checkout the person started with
+`POST /subscription/change-plan` and did not finish). The billing page's "You have a payment that is not finished"
+notice shows **Cancel this payment** for it. These bodies are from the **2026-11-20 run of the capture script**
+(captures 30 and 33 to 44; the earlier captures quoted above are from the 2026-11-18 run, so references and times differ
+between the two runs; each run is consistent inside itself). The provider is the same scripted double.
+
+**What "cancel" means for an upgrade: only the payment is closed.** The plan is exactly as it was: the same plan, the
+same period, the same renewal date, the same hours. The capture proves it
+(capture 38 holds every column of the subscription and hour-grant rows just before and just after: `identical` is
+`true`). The provider is asked first, as for a plan or pack: a page that was **paid** is settled (the plan changes and the
+extra hours are granted, as the webhook would do) and answered `paid`, never cancelled.
+
+The person holds a plan and starts an upgrade (capture 34, status 200). Note `payment.kind` is `upgrade` and
+`subscription.plan_code` is still the old plan:
+
+```json
+// 200  (capture billing-cancel-checkout/34-change-plan-upgrade.json)
+{
+  "result": "checkout",
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_20h",
+    "plan_name": "20 hours a month",
+    "currency": "USD",
+    "amount_minor": 1800,
+    "current_period_start": "2026-11-20T21:35:55.663087Z",
+    "current_period_end": "2026-12-20T21:35:55.663087Z",
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "grace_ends_at": null,
+    "next_retry_at": null,
+    "can_cancel": true,
+    "can_resume": false,
+    "can_change_plan": true,
+    "can_pay_now": false
+  },
+  "payment": {
+    "reference": "bn-7-6fba136ddc53baa5",
+    "kind": "upgrade",
+    "status": "pending",
+    "currency": "USD",
+    "amount_minor": 2199,
+    "created_at": "2026-11-20T21:35:55.870181Z",
+    "paid_at": null,
+    "pay_url": "https://fake.test/pay/bn-7-6fba136ddc53baa5",
+    "invoice_number": null
+  },
+  "checkout_url": "https://fake.test/pay/bn-7-6fba136ddc53baa5"
+}
+```
+
+`GET /subscription` while it waits (capture 35). `pending_payment.kind` is `upgrade`; the plan is unchanged:
+
+```json
+// 200  (capture billing-cancel-checkout/35-subscription-with-waiting-upgrade.json)
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 108000,
+    "holdings_seconds": 108000,
+    "warning": null
+  },
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_20h",
+    "plan_name": "20 hours a month",
+    "currency": "USD",
+    "amount_minor": 1800,
+    "current_period_start": "2026-11-20T21:35:55.663087Z",
+    "current_period_end": "2026-12-20T21:35:55.663087Z",
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "grace_ends_at": null,
+    "next_retry_at": null,
+    "can_cancel": true,
+    "can_resume": false,
+    "can_change_plan": true,
+    "can_pay_now": false
+  },
+  "pending_payment": {
+    "reference": "bn-7-6fba136ddc53baa5",
+    "kind": "upgrade",
+    "status": "pending",
+    "currency": "USD",
+    "amount_minor": 2199,
+    "created_at": "2026-11-20T21:35:55.870181Z",
+    "paid_at": null,
+    "pay_url": "https://fake.test/pay/bn-7-6fba136ddc53baa5",
+    "invoice_number": null
+  }
+}
+```
+
+The cancel the provider confirms is unpaid (capture 36). Same shape as a plan: `result` beside `payment`, `payment.status`
+`failed`, `pay_url` null:
+
+```json
+// 200  (capture billing-cancel-checkout/36-cancel-upgrade-abandoned.json)
+{
+  "result": "cancelled",
+  "payment": {
+    "reference": "bn-7-6fba136ddc53baa5",
+    "kind": "upgrade",
+    "status": "failed",
+    "currency": "USD",
+    "amount_minor": 2199,
+    "created_at": "2026-11-20T21:35:55.870181Z",
+    "paid_at": null,
+    "pay_url": null,
+    "invoice_number": null
+  }
+}
+```
+
+The next `GET /subscription` (capture 37): `pending_payment` is null (the notice is gone) and `subscription` is the same as
+in capture 35, field for field:
+
+```json
+// 200  (capture billing-cancel-checkout/37-subscription-after-cancel-upgrade.json)
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 108000,
+    "holdings_seconds": 108000,
+    "warning": null
+  },
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_20h",
+    "plan_name": "20 hours a month",
+    "currency": "USD",
+    "amount_minor": 1800,
+    "current_period_start": "2026-11-20T21:35:55.663087Z",
+    "current_period_end": "2026-12-20T21:35:55.663087Z",
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "grace_ends_at": null,
+    "next_retry_at": null,
+    "can_cancel": true,
+    "can_resume": false,
+    "can_change_plan": true,
+    "can_pay_now": false
+  },
+  "pending_payment": null
+}
+```
+
+Before and after, from the database (capture 38, trimmed here to the verdict and the one subscription row, which is the
+same in `before` and `after`):
+
+```json
+// capture billing-cancel-checkout/38-upgrade-plan-rows-before-and-after-cancel.json  (not an HTTP exchange)
+{
+  "identical": true,
+  "subscription_row_before_and_after": {"id": "1", "user_id": "2", "payer_user_id": "2", "plan_code": "plan_20h", "price_id": "1", "status": "active", "currency": "USD", "provider": "flutterwave", "current_period_start": "2026-11-20 21:35:55.663087+00:00", "current_period_end": "2026-12-20 21:35:55.663087+00:00", "cancel_at_period_end": "False", "canceled_at": "None", "pending_plan_code": "None", "grace_ends_at": "None", "next_charge_at": "None", "retry_count": "0", "created_at": "2026-11-20 21:35:55.664165+00:00", "updated_at": "2026-11-20 21:35:55.664165+00:00"}
+}
+```
+
+**The old page paid after the cancel.** A cancelled upgrade is `failed`, and a `failed` payment is still open to
+settlement. If the person pays the old page and the provider's webhook arrives (capture 39, the webhook route's own answer
+`{"status": "ok"}`), **inside the same period** the upgrade is applied exactly as for any upgrade page (capture 40: the
+plan is the new one and the hours have grown):
+
+```json
+// 200  (capture billing-cancel-checkout/40-subscription-after-late-upgrade.json)
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 215640,
+    "holdings_seconds": 215640,
+    "warning": null
+  },
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_50h",
+    "plan_name": "Pro",
+    "currency": "USD",
+    "amount_minor": 4000,
+    "current_period_start": "2026-11-20T21:35:55.663087Z",
+    "current_period_end": "2026-12-20T21:35:55.663087Z",
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "grace_ends_at": null,
+    "next_retry_at": null,
+    "can_cancel": true,
+    "can_resume": false,
+    "can_change_plan": true,
+    "can_pay_now": false
+  },
+  "pending_payment": null
+}
+```
+
+If the page is paid **after the period it was for has moved on** (the monthly renewal ran first), nothing is granted, the
+plan does not change, the money is kept for a refund by hand and the admins are told (this was already the rule for any
+late upgrade page; cancelling does not reopen it). **Not captured live:** it needs a month to pass; it is proved in
+`tests/test_billing_cancel_checkout.py::test_a_cancelled_upgrade_page_paid_after_the_period_moved_on_grants_nothing_and_alerts`.
+If the webhook is lost, the sweeper also asks the provider about a recent `failed` upgrade page (7 days) and settles it.
+
+**An upgrade paid in another tab** (no webhook yet): the cancel settles it and answers `paid` (capture 42), and the next
+state shows the new plan (capture 43):
+
+```json
+// 200  (capture billing-cancel-checkout/42-cancel-upgrade-paid-in-the-meantime.json)
+{
+  "result": "paid",
+  "payment": {
+    "reference": "bn-8-f098c0e8bd2abdda",
+    "kind": "upgrade",
+    "status": "succeeded",
+    "currency": "USD",
+    "amount_minor": 3999,
+    "created_at": "2026-11-20T21:35:55.971335Z",
+    "paid_at": "2026-11-20T21:35:55.985251Z",
+    "pay_url": null,
+    "invoice_number": "BN-T-2026-000004"
+  }
+}
+```
+
+```json
+// 200  (capture billing-cancel-checkout/43-subscription-after-paid-upgrade.json)
+{
+  "state": "active",
+  "hours": {
+    "seconds_left": 395280,
+    "holdings_seconds": 395280,
+    "warning": null
+  },
+  "subscription": {
+    "id": 1,
+    "status": "active",
+    "plan_code": "plan_100h",
+    "plan_name": "Scale",
+    "currency": "USD",
+    "amount_minor": 8000,
+    "current_period_start": "2026-11-20T21:35:55.663087Z",
+    "current_period_end": "2026-12-20T21:35:55.663087Z",
+    "cancel_at_period_end": false,
+    "pending_plan_code": null,
+    "grace_ends_at": null,
+    "next_retry_at": null,
+    "can_cancel": true,
+    "can_resume": false,
+    "can_change_plan": true,
+    "can_pay_now": false
+  },
+  "pending_payment": null
+}
+```
+
+**What the FE must surface for an upgrade.** After `cancelled` or `failed`: **"The payment was cancelled. Your plan and
+hours have not changed. Please do not pay on the old payment page."** (the plan and pack words say "no hours were
+added", which is the wrong thing to say about an upgrade). After `paid`: the same sentence as for a plan ("That payment
+had already gone through, so it was not cancelled. Your plan and hours are shown below.") and read the state again. The
+button is the same **Cancel this payment**; a `renewal` still has none. The other answers (502, 404, 409
+`payment_in_progress`, 409 `refund_pending`) are the ones above, unchanged.
+
+Not captured (tests only, same file): 409 `payment_in_progress` for an upgrade page paid with a wrong amount (an admin is
+told, the payment stays `pending`, the plan is untouched), 409 `refund_pending` for an upgrade while a refund of the plan
+is being settled, the provider answering `failed`, no record (`NoRecord`) and down (502) for an upgrade, someone else's
+upgrade (404), and the two-connection lock race.
+
 ### Verification (cancelling an unfinished checkout)
 
 | Behaviour | How verified |
 |---|---|
-| unpaid cancelled, notice gone, no record (`NoRecord`), `paid`, `failed`, already paid, twice, pack, provider down (502), someone else's and unknown (404), `cannot_cancel`, no CSRF (403), billing off (404), a cancelled page paid later settled by the webhook | **live over HTTP** with a scripted provider (captures 03 to 32) |
+| unpaid cancelled, notice gone, no record (`NoRecord`), `paid`, `failed`, already paid, twice, pack, provider down (502), someone else's and unknown (404), `cannot_cancel` (a renewal), no CSRF (403), billing off (404), a cancelled page paid later settled by the webhook | **live over HTTP** with a scripted provider (captures 03 to 32) |
+| an upgrade: waiting, cancelled (`cancelled`), the plan rows identical before and after, the notice gone, paid in the meantime (`paid`, plan changed), the cancelled page paid later inside the period (webhook applies it) | **live over HTTP** with a scripted provider (captures 33 to 44, run of 2026-11-20) |
+| an upgrade page paid after the period moved on (nothing granted, admin alert), the upgrade's wrong amount, refund in the way, provider down, no record, failed, someone else's, the lock race, the sweeper settling a cancelled upgrade page | tests only (`tests/test_billing_cancel_checkout.py`) |
 | a payment settled while the cancel waited for the row (two connections, two threads), a wrong-amount page (409 and the admin alert), a refund starting while the provider answered (409 `refund_pending`), a grant that fails (409, undone), a malformed or foreign report treated as no answer, the sweeper settling a cancelled page paid later with a lost webhook and leaving other failed payments alone | tests only (`tests/test_billing_cancel_checkout.py`) |
 | The real Flutterwave adapter turning HTTP 400, 404 or 422 on `verify_by_reference` into `NoRecord` (and 401, 403, 429, 5xx, a timeout staying plain errors) | tests on a scripted wire (`tests/test_billing_flutterwave.py`) |
 | What Flutterwave really answers for a hosted page nobody opened (we rely on HTTP 400, 404 or 422), and what Paystack answers for an abandoned one (we rely on `abandoned`, mapped to `pending`, `app/billing/paystack.py`) | **not verified live** |

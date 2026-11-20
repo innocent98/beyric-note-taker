@@ -1,0 +1,114 @@
+{
+  "note": "Every column of the subscription and hour-grant rows (read from the database) just before and just after the cancel of the upgrade. `identical` is the comparison.",
+  "content": {
+    "before": {
+      "subscriptions": [
+        {
+          "id": "1",
+          "user_id": "2",
+          "payer_user_id": "2",
+          "plan_code": "plan_20h",
+          "price_id": "1",
+          "status": "active",
+          "currency": "USD",
+          "provider": "flutterwave",
+          "current_period_start": "2026-11-20 21:35:55.663087+00:00",
+          "current_period_end": "2026-12-20 21:35:55.663087+00:00",
+          "cancel_at_period_end": "False",
+          "canceled_at": "None",
+          "pending_plan_code": "None",
+          "grace_ends_at": "None",
+          "next_charge_at": "None",
+          "retry_count": "0",
+          "created_at": "2026-11-20 21:35:55.664165+00:00",
+          "updated_at": "2026-11-20 21:35:55.664165+00:00"
+        }
+      ],
+      "hour_grants": [
+        {
+          "id": "1",
+          "user_id": "2",
+          "email_hash": "b97222ea69dadf792baa97fa768ecb840a0023714c831ab1328838cba9f7f437",
+          "kind": "plan_period",
+          "seconds": "72000",
+          "starts_at": "2026-11-20 21:35:55.663087+00:00",
+          "expires_at": "2026-12-20 21:35:55.663087+00:00",
+          "source_payment_id": "2",
+          "subscription_id": "1",
+          "reason": "None",
+          "created_by": "None",
+          "created_at": "2026-11-20 21:35:55.664165+00:00"
+        },
+        {
+          "id": "2",
+          "user_id": "2",
+          "email_hash": "b97222ea69dadf792baa97fa768ecb840a0023714c831ab1328838cba9f7f437",
+          "kind": "pack",
+          "seconds": "36000",
+          "starts_at": "2026-11-20 21:35:55.779036+00:00",
+          "expires_at": "2027-11-20 21:35:55.779036+00:00",
+          "source_payment_id": "4",
+          "subscription_id": "1",
+          "reason": "None",
+          "created_by": "None",
+          "created_at": "2026-11-20 21:35:55.783779+00:00"
+        }
+      ]
+    },
+    "after": {
+      "subscriptions": [
+        {
+          "id": "1",
+          "user_id": "2",
+          "payer_user_id": "2",
+          "plan_code": "plan_20h",
+          "price_id": "1",
+          "status": "active",
+          "currency": "USD",
+          "provider": "flutterwave",
+          "current_period_start": "2026-11-20 21:35:55.663087+00:00",
+          "current_period_end": "2026-12-20 21:35:55.663087+00:00",
+          "cancel_at_period_end": "False",
+          "canceled_at": "None",
+          "pending_plan_code": "None",
+          "grace_ends_at": "None",
+          "next_charge_at": "None",
+          "retry_count": "0",
+          "created_at": "2026-11-20 21:35:55.664165+00:00",
+          "updated_at": "2026-11-20 21:35:55.664165+00:00"
+        }
+      ],
+      "hour_grants": [
+        {
+          "id": "1",
+          "user_id": "2",
+          "email_hash": "b97222ea69dadf792baa97fa768ecb840a0023714c831ab1328838cba9f7f437",
+          "kind": "plan_period",
+          "seconds": "72000",
+          "starts_at": "2026-11-20 21:35:55.663087+00:00",
+          "expires_at": "2026-12-20 21:35:55.663087+00:00",
+          "source_payment_id": "2",
+          "subscription_id": "1",
+          "reason": "None",
+          "created_by": "None",
+          "created_at": "2026-11-20 21:35:55.664165+00:00"
+        },
+        {
+          "id": "2",
+          "user_id": "2",
+          "email_hash": "b97222ea69dadf792baa97fa768ecb840a0023714c831ab1328838cba9f7f437",
+          "kind": "pack",
+          "seconds": "36000",
+          "starts_at": "2026-11-20 21:35:55.779036+00:00",
+          "expires_at": "2027-11-20 21:35:55.779036+00:00",
+          "source_payment_id": "4",
+          "subscription_id": "1",
+          "reason": "None",
+          "created_by": "None",
+          "created_at": "2026-11-20 21:35:55.783779+00:00"
+        }
+      ]
+    },
+    "identical": true
+  }
+}
