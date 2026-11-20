@@ -809,6 +809,17 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 - [x] `test-durations` workflow (manual) to regenerate the timings
 - [x] Merged (on Adebayo's word), and the first run on `main` timed (the apt cache is only shared with later PRs once a run on `main` has saved it) **[Reconciled 2026-11-07 checklist pass: #70 merged; SOP records a warm run in 4 min 21 s against 12 to 13 minutes before (a run on `main` was not timed on its own)]**
 
+## Config cleanup for the production release (2026-11-20, branch `chore/env-and-nginx-cleanup`, PR open, **not merged**; no migration; SOP `docs/sop/2026-11-20-env-and-nginx-cleanup.md`)
+
+- [x] Audit of the 54 names on the server and every name in the old `.env.example` against `app/config.py`, `compose.yaml`, `deploy/`, `web/`, `scripts/`, `alembic/` (6 required, 3 Vexa-only, 2 first-install-only, 31 non-default by design, 12 default-capable of which 8 removable by value, **0 unused**)
+- [x] `.env.example` rewritten: section headers and the live variables only (59 lines); optional settings are documented with their defaults in `deploy/README.md`
+- [x] `deploy/nginx.conf` trimmed to six headers; code lines diffed identical to the old file; rationale moved to `deploy/README.md` section 6
+- [x] `scripts/clean_env.py` + `tests/test_clean_env.py` (105 tests): dry run by default, names only, backup, atomic 600 rewrite, refusals
+- [x] `deploy/README.md`: 25 variables that had no row now have one; "Cleaning the server `.env`" section
+- [ ] **Adebayo runs the cleaner on the server** (dry run, `--apply`, `docker compose up -d --force-recreate web worker scheduler`, health check, delete the backup): **not run on the real server**
+- [ ] When Vexa's cleanup is done: remove the `vexa` compose services, the two `${...:?}` checks, the Vexa section of `.env.example` and of `scripts/clean_env.py`
+- [ ] Decide whether to delete `OWNER_PASSWORD` from the server `.env` by hand (read only by migration 0006)
+
 ## Backlog
 
 - [-] Outlook calendar (after Google): now Phase O above (decided 2026-11-04) **[Reconciled 2026-11-07 checklist pass: merged into Phase O (Module 2)]**
