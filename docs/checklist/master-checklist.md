@@ -812,7 +812,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 - [x] Audit of the 54 names on the server and every name in the old `.env.example` against `app/config.py`, `compose.yaml`, `deploy/`, `web/`, `scripts/`, `alembic/` (6 required, 3 Vexa-only, 2 first-install-only, 31 non-default by design, 12 default-capable of which 8 removable by value, **0 unused**)
 - [x] `.env.example` rewritten: section headers only, optional settings as one `# NAME=default` line each (a test keeps it equal to `Settings`)
 - [x] `deploy/nginx.conf` trimmed to six headers; code lines diffed identical to the old file; rationale moved to `deploy/README.md` section 6
-- [x] `scripts/clean_env.py` + `tests/test_clean_env.py` (94 tests): dry run by default, names only, backup, atomic 600 rewrite, refusals
+- [x] `scripts/clean_env.py` + `tests/test_clean_env.py` (105 tests): dry run by default, names only, backup, atomic 600 rewrite, refusals
 - [x] `deploy/README.md`: 25 variables that had no row now have one; "Cleaning the server `.env`" section
 - [ ] **Adebayo runs the cleaner on the server** (dry run, `--apply`, `docker compose up -d --force-recreate web worker scheduler`, health check, delete the backup): **not run on the real server**
 - [ ] When Vexa's cleanup is done: remove the `vexa` compose services, the two `${...:?}` checks, the Vexa section of `.env.example` and of `scripts/clean_env.py`

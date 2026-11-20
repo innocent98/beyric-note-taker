@@ -243,7 +243,8 @@ TRUE_WORDS = {"1", "true", "yes", "on", "t", "y"}
 FALSE_WORDS = {"0", "false", "no", "off", "f", "n"}
 KEY_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*=(.*)$")
 AFTER_QUOTE = re.compile(r"^\s*(#.*)?$")
-RECREATE = "docker compose up -d --force-recreate web worker scheduler"
+RECREATE = "docker compose up -d --force-recreate --no-deps web worker scheduler"
+GATE_CHECK = """bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'"""
 
 
 class EnvError(Exception):
@@ -358,11 +359,19 @@ class Plan:
         self.kept = [k for k in self.values if k in known and k not in removed]
         self.unrecognised = [k for k in self.values if k not in known]
         self.missing = [k for k in REQUIRED if k not in self.values or is_empty(self.values[k])]
+        # compose expands `$NAME` in an unquoted or double-quoted value, so a kept value that holds
+        # a `$` might depend on another key; moving or removing keys could change what it means.
+        self.dollar_keys = [
+            k
+            for k in self.kept + self.unrecognised
+            if "$" in self.values[k] and self.values[k].strip()[:1] != "'"
+        ]
         self.warnings: list[str] = []
         self._conditional_rules()
 
     def _conditional_rules(self) -> None:
         env = effective(self.values["APP_ENV"])[0] if "APP_ENV" in self.values else "production"
+        env = env.strip().lower()
         wants_key = any(
             k in self.values and not is_empty(self.values[k])
             for k in ("GOOGLE_CLIENT_ID", "MICROSOFT_CLIENT_ID")
@@ -430,10 +439,23 @@ def read_checked(path: str) -> tuple[bytes, os.stat_result]:
         return handle.read(), info
 
 
+def unchanged_since(path: str, info: os.stat_result) -> bool:
+    now = os.lstat(path)
+    same = (now.st_dev, now.st_ino, now.st_size, now.st_mtime_ns)
+    return same == (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+
+
 def write_private(
-    path: str, data: bytes, *, exclusive: bool, owner: tuple[int, int] | None
+    path: str,
+    data: bytes,
+    *,
+    exclusive: bool,
+    owner: tuple[int, int] | None,
+    expect: os.stat_result | None = None,
 ) -> None:
-    """Write `data` to `path` with mode 600. `exclusive` refuses to overwrite (the backup)."""
+    """Write `data` to `path` with mode 600. `exclusive` refuses to overwrite (the backup) and
+    removes what it made if writing fails. `expect` is the target's stat from when it was read:
+    if the target changed since, nothing is replaced."""
     directory = os.path.dirname(path) or "."
     if exclusive:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -452,6 +474,8 @@ def write_private(
             handle.flush()
             os.fsync(handle.fileno())
         if tmp is not None:
+            if expect is not None and not unchanged_since(path, expect):
+                raise EnvError("the file changed while it was being rewritten: nothing replaced")
             os.replace(tmp, path)
             dir_fd = os.open(directory, os.O_RDONLY)
             try:
@@ -459,8 +483,9 @@ def write_private(
             finally:
                 os.close(dir_fd)
     except BaseException:
-        if tmp is not None and os.path.exists(tmp):
-            os.unlink(tmp)
+        leftover = tmp if tmp is not None else (path if exclusive else None)
+        if leftover is not None and os.path.exists(leftover):
+            os.unlink(leftover)
         raise
 
 
@@ -500,6 +525,13 @@ def run(path: str, apply: bool, out) -> int:
             f"warning: the file mode is {stat.S_IMODE(info.st_mode):o}; the new file is 600",
             file=out,
         )
+    if plan.dollar_keys:
+        print(
+            f"warning: kept values that contain $, which compose may expand "
+            f"({len(plan.dollar_keys)}): {names(plan.dollar_keys)}. --apply refuses while any "
+            f"is left; edit them by hand first",
+            file=out,
+        )
     if plan.missing:
         print(f"MISSING REQUIRED ({len(plan.missing)}): {names(plan.missing)}", file=out)
         raise EnvError("a required key is missing or empty: nothing was written")
@@ -511,20 +543,24 @@ def run(path: str, apply: bool, out) -> int:
     if not apply:
         print("dry run: nothing was written. Add --apply to write the new file.", file=out)
         return 0
+    if plan.dollar_keys:
+        raise EnvError("a kept value contains $ (names above): nothing was written")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")  # noqa: UP017 (host python3)
     backup = f"{path}.bak-{stamp}"
     owner = (info.st_uid, info.st_gid)
     write_private(backup, raw, exclusive=True, owner=owner)
-    write_private(path, rendered.encode("utf-8"), exclusive=False, owner=owner)
+    write_private(path, rendered.encode("utf-8"), exclusive=False, owner=owner, expect=info)
     back, _ = read_checked(path)
     if back != rendered.encode("utf-8"):
         raise EnvError(f"the file read back differs; the original is saved as {backup}")
     print(f"written. The old file is saved as {backup} (mode 600).", file=out)
     print(
-        "An env change is read only when a container is recreated (a restart does not). Run:",
+        "An env change is read only when a container is recreated (a restart does not).",
         file=out,
     )
+    print("Run this ONLY when no meeting is being recorded and no join is due:", file=out)
     print(f"  cd {os.path.dirname(os.path.abspath(path))}", file=out)
+    print(f"  {GATE_CHECK}    # a time printed instead means a join is due: wait", file=out)
     print(f"  {RECREATE}", file=out)
     print("To go back: copy the backup over .env, then run the same recreate command.", file=out)
     return 0

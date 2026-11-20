@@ -128,7 +128,7 @@ cp .env.example .env
 - Vexa's own database and storage get random passwords from `.env` (below), unlike Vexa's
   Makefile, which uses fixed ones.
 
-Edit `.env`. `.env.example` is laid out in sections (`# ---- Core ----`, `# ---- Billing ----`, ...) with one commented `# NAME=default` line per optional setting; every variable in it has a row below. On a server whose `.env` grew over time, section 8 "Cleaning the server `.env`" rewrites it into this layout.
+Edit `.env`. Every secret and password the app or compose needs is **empty** in `.env.example` on purpose: the app and compose refuse to start until each one is filled in (`tests/test_clean_env.py` proves it), so a copied file can never run with a published value. `.env.example` is laid out in sections (`# ---- Core ----`, `# ---- Billing ----`, ...) with one commented `# NAME=default` line per optional setting; every variable in it has a row below. On a server whose `.env` grew over time, section 8 "Cleaning the server `.env`" rewrites it into this layout.
 
 
 | Variable | Value |
@@ -501,22 +501,24 @@ already varchar(32)" or "widened". Vexa's own migrations may touch that table, s
 
 Why: over time the server's `.env` collected long comments and lines that only repeat a default. `scripts/clean_env.py` rewrites it into the layout of `.env.example` (section headers, no other comments, every value kept exactly as written). It uses only Python's standard library, so the server's own `python3` runs it, and it prints key **names** only: never a value.
 
+Wait until the CD deploy of the merge has printed `deployed <sha>` (the script is then in `/opt/beyric-note-taker/scripts/`; do not `git pull` there, the deploy leaves the checkout detached), then:
+
 ```bash
 cd /opt/beyric-note-taker
-git pull                                         # the script is in the repository
 python3 scripts/clean_env.py /opt/beyric-note-taker/.env            # dry run: changes nothing
 python3 scripts/clean_env.py /opt/beyric-note-taker/.env --apply    # when the dry run reads right
 ```
 
-The dry run lists what stays, what would be removed (a value equal to the code's own default, or an empty `PAYSTACK_WEBHOOK_SECRET=`, which behaves like no line), keys it does not know (kept at the bottom, never deleted), duplicates (the last one wins, as docker compose reads it) and any required key that is missing. It refuses, and writes nothing, if a required key is missing, a line cannot be read, the file is a symlink or belongs to another user, or the result would lose a key's value. `--apply` first saves `.env.bak-<UTC time>` (mode 600), then replaces `.env` atomically (mode 600). Run it again and nothing changes.
+The dry run lists what stays, what would be removed (a value equal to the code's own default, or an empty `PAYSTACK_WEBHOOK_SECRET=`, which behaves like no line), keys it does not know (kept at the bottom, never deleted), duplicates (the last one wins, as docker compose reads it) and any required key that is missing. It refuses, and writes nothing, if a required key is missing, a line cannot be read, the file is a symlink or belongs to another user, the file changes while it is being rewritten, a kept value contains `$` (compose expands `$NAME` in unquoted and double-quoted values, so moving keys could change what it means: the dry run names the keys, edit them by hand first), or the result would lose a key's value. Two shapes are not handled and are refused or left as they are: a CRLF line ending inside a quoted multi-line value, and a lone unclosed quote. `--apply` first saves `.env.bak-<UTC time>` (mode 600), then replaces `.env` atomically (mode 600). Run it again and nothing changes.
 
-An environment change is read only when a container is **recreated**; a restart does not re-read `.env`. After `--apply`:
+An environment change is read only when a container is **recreated**; a restart does not re-read `.env`. This is the same restart a deploy does, so use the deploy's own gate: run it **only when no meeting is being recorded and no calendar join is due** (the deploy refuses in that case, `deploy/gate.sh`). After `--apply`:
 
 ```bash
-docker compose up -d --force-recreate web worker scheduler
+bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'   # a time printed instead means a join is due: wait
+docker compose up -d --force-recreate --no-deps web worker scheduler
 ```
 
-(`migrate` and `next` need nothing: no value changes, and `next` gets `AUDIO_RETENTION_DAYS` from compose with the same default of 7.) To go back: `cp .env.bak-<time> .env`, then the same command. Delete old backups when you are satisfied: they hold every secret.
+(`--no-deps` recreates exactly those three: without it compose also starts `migrate` again, which is harmless but not needed. `next` needs nothing: no value changes, and it gets `AUDIO_RETENTION_DAYS` from compose with the same default of 7.) To go back: `cp .env.bak-<time> .env`, then the same command. Delete old backups when you are satisfied: they hold every secret.
 
 The `Vexa (to remove once its cleanup is done)` section stays while Vexa's old recordings are being cleaned up. `VEXA_DB_PASSWORD` and `VEXA_STORAGE_SECRET` are checked by `compose.yaml` even while Vexa is off, so the section can only be deleted after those two `${...:?}` checks are taken out of the compose file in the same change. `OWNER_PASSWORD` is read only by migration `0006` (the first install); the script keeps it, because a rebuilt database needs it. Once you are sure no rebuild is planned you can delete that one line by hand, and then change nothing else.
 

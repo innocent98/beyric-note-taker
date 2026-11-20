@@ -152,7 +152,7 @@ def test_apply_makes_a_mode_600_backup_first_and_a_mode_600_file(tmp_path):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert re.fullmatch(r"\.env\.bak-\d{8}T\d{6}Z", backup.name)
     assert list(tmp_path.glob(".env.*.tmp")) == []  # the temp file is gone
-    assert "docker compose up -d --force-recreate web worker scheduler" in result.stdout
+    assert "docker compose up -d --force-recreate --no-deps web worker scheduler" in result.stdout
     assert backup.name in result.stdout
     assert_no_secret(result)
 
@@ -247,11 +247,31 @@ def test_keys_whose_default_is_not_a_plain_constant_are_never_removed(tmp_path):
         assert kept in new
 
 
-def test_a_value_that_needs_interpolation_is_never_compared_to_a_default(tmp_path):
-    text = REQUIRED_TEXT + 'AUDIO_RETENTION_DAYS=$DAYS\nNOTES_MODEL="gpt-6-luna$X"\n'
+def test_a_kept_value_with_a_dollar_blocks_apply_and_is_named_not_shown(tmp_path):
+    text = REQUIRED_TEXT + 'AUDIO_RETENTION_DAYS=$DAYS\nNOTES_MODEL="gpt-6-luna$FAKE_X_5521"\n'
+    path = write_env(tmp_path, text)
+    dry = run(path)
+    assert dry.returncode == 0  # a dry run only warns
+    assert "contain $" in dry.stdout and "AUDIO_RETENTION_DAYS, NOTES_MODEL" in dry.stdout
+    result = run(path, "--apply")
+    assert result.returncode != 0
+    assert "contains $" in result.stderr
+    assert "FAKE_X_5521" not in dry.stdout + result.stdout + result.stderr
+    untouched(path, tmp_path, text)
+
+
+def test_a_dollar_inside_single_quotes_is_literal_and_does_not_block(tmp_path):
+    text = REQUIRED_TEXT + "MAIL_PROVIDER=''\nADMIN_ALERT_EMAIL='a$b@example.com'\n"
     path = write_env(tmp_path, text)
     assert run(path, "--apply").returncode == 0
-    assert "AUDIO_RETENTION_DAYS=$DAYS\n" in path.read_text()
+    assert "ADMIN_ALERT_EMAIL='a$b@example.com'\n" in path.read_text()
+
+
+def test_a_dollar_in_an_unrecognised_kept_value_blocks_apply_too(tmp_path):
+    text = REQUIRED_TEXT + "SOMETHING_ELSE=a$B\n"
+    path = write_env(tmp_path, text)
+    assert run(path, "--apply").returncode != 0
+    untouched(path, tmp_path, text)
 
 
 def test_an_empty_paystack_webhook_secret_is_dropped_and_a_set_one_is_kept(tmp_path):
@@ -484,7 +504,7 @@ def test_the_cleaner_recognises_every_active_line_of_env_example():
     active = "\n".join(line for line in active.splitlines() if not line.startswith("#"))
     plan = clean_env.Plan(clean_env.parse(active))
     assert plan.unrecognised == []
-    assert plan.missing == []  # the placeholders cover every required key
+    assert set(plan.missing) == set(clean_env.REQUIRED)  # every required value starts empty
 
 
 def test_env_example_holds_no_real_looking_value():
@@ -515,3 +535,166 @@ def test_an_empty_paystack_webhook_secret_behaves_like_none(monkeypatch):
     without = Settings(_env_file=None).model_dump()
     monkeypatch.setenv("PAYSTACK_WEBHOOK_SECRET", "")
     assert Settings(_env_file=None).model_dump() == without
+
+
+# ---- the example must not start a server as it stands ----
+
+
+def example_values():
+    """The active lines of .env.example as {KEY: value}, quotes removed."""
+    values = {}
+    for line in (ROOT / ".env.example").read_text().splitlines():
+        if line and not line.startswith("#"):
+            key, rhs = line.split("=", 1)
+            values[key] = clean_env.effective(rhs)[0]
+    return values
+
+
+def test_every_secret_and_password_in_env_example_is_empty():
+    values = example_values()
+    secrets = [
+        *clean_env.REQUIRED,
+        "OWNER_EMAIL",
+        "OWNER_PASSWORD",
+        "EDGE_SHARED_SECRET",
+        "RESEND_API_KEY",
+        "SKRIBBY_API_KEY",
+        "VEXA_API_KEY",
+        "TOKEN_ENC_KEY",
+    ]
+    for key in secrets:
+        assert values[key] == "", f"{key} has a value in .env.example: copying it would start"
+    for key, value in values.items():
+        assert not re.search(r"password|secret|api_key|token|_key", key, re.I) or value == "", key
+
+
+def _load_example_into_env(monkeypatch, tmp_path, drop=()):
+    monkeypatch.chdir(tmp_path)  # no stray .env is read
+    for key, value in example_values().items():
+        if key in drop:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+
+def test_the_app_refuses_to_start_on_the_example_as_it_stands(monkeypatch, tmp_path):
+    from pydantic import ValidationError
+
+    from app import auth
+
+    _load_example_into_env(monkeypatch, tmp_path)
+    with pytest.raises(ValidationError):  # skribby with an empty key
+        Settings(_env_file=None)
+    _load_example_into_env(monkeypatch, tmp_path, drop={"BOT_PROVIDER"})
+    with pytest.raises(RuntimeError, match="session_secret"):  # check_start refuses an empty one
+        auth.check_start(Settings(_env_file=None))
+
+
+def test_migration_0006_refuses_the_example_owner_values(monkeypatch, tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "m0006", ROOT / "alembic" / "versions" / "0006_users_and_auth.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _load_example_into_env(monkeypatch, tmp_path, drop={"BOT_PROVIDER"})
+    with pytest.raises(RuntimeError, match="OWNER_EMAIL and OWNER_PASSWORD"):
+        module._owner()
+
+
+def test_every_required_compose_variable_is_empty_in_the_example():
+    compose = (ROOT / "compose.yaml").read_text()
+    required = set(re.findall(r"\$\{([A-Z_]+):\?", compose))
+    assert {"POSTGRES_PASSWORD", "VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET"} <= required
+    for key in required:
+        assert example_values()[key] == "", key
+
+
+def _docker_compose_available() -> bool:
+    try:
+        return (
+            subprocess.run(
+                ["docker", "compose", "version"], capture_output=True, timeout=20
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+@pytest.mark.skipif(not _docker_compose_available(), reason="docker compose absent")
+def test_compose_refuses_the_example_as_it_stands(tmp_path):
+    (tmp_path / "compose.yaml").write_text((ROOT / "compose.yaml").read_text())
+    (tmp_path / ".env").write_text((ROOT / ".env.example").read_text())
+    (tmp_path / ".env.vexa").write_text("")
+    env = {k: v for k, v in os.environ.items() if k != "COMPOSE_PROFILES"}
+
+    def config():
+        return subprocess.run(
+            ["docker", "compose", "config", "-q"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+    refused = config()
+    assert refused.returncode != 0
+    assert "POSTGRES_PASSWORD" in refused.stderr
+    filled = (ROOT / ".env.example").read_text()
+    for key in ("POSTGRES_PASSWORD", "VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET"):
+        filled = filled.replace(f"\n{key}=\n", f"\n{key}=x\n")
+    (tmp_path / ".env").write_text(filled)
+    assert config().returncode == 0  # so the refusal above was really about those three
+
+
+# ---- review fixes: case, partial backup, a file that changed under us ----
+
+
+def test_the_token_key_rule_ignores_the_case_of_app_env(tmp_path):
+    text = REQUIRED_TEXT + "APP_ENV=Production\nGOOGLE_CLIENT_ID=abc.apps.example\n"
+    path = write_env(tmp_path, text)
+    result = run(path, "--apply")
+    assert result.returncode != 0
+    assert "TOKEN_ENC_KEY" in result.stdout
+
+
+def test_a_failed_backup_write_leaves_no_partial_backup(tmp_path, monkeypatch, capsys):
+    text = "# n\n" + REQUIRED_TEXT
+    path = write_env(tmp_path, text)
+
+    def boom(_fd):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(os, "fsync", boom)
+    assert clean_env.main([str(path), "--apply"]) == 2
+    assert backups(tmp_path) == []
+    assert path.read_text() == text
+    assert "No space left" in capsys.readouterr().err
+
+
+def test_a_file_changed_while_it_is_rewritten_is_not_replaced(tmp_path, monkeypatch, capsys):
+    text = "# n\n" + REQUIRED_TEXT
+    path = write_env(tmp_path, text)
+    real_mkstemp = clean_env.tempfile.mkstemp
+
+    def mkstemp_then_someone_edits(*args, **kwargs):
+        made = real_mkstemp(*args, **kwargs)
+        path.write_text(text + "ADDED_BY_SOMEONE=1\n")
+        return made
+
+    monkeypatch.setattr(clean_env.tempfile, "mkstemp", mkstemp_then_someone_edits)
+    assert clean_env.main([str(path), "--apply"]) == 1
+    assert "changed while" in capsys.readouterr().err
+    assert path.read_text() == text + "ADDED_BY_SOMEONE=1\n"
+    assert list(tmp_path.glob(".env.*.tmp")) == []
+
+
+def test_the_printed_recreate_command_names_the_services_and_the_gate(tmp_path):
+    path = write_env(tmp_path, "# n\n" + REQUIRED_TEXT)
+    out = run(path, "--apply").stdout
+    assert "docker compose up -d --force-recreate --no-deps web worker scheduler" in out
+    assert "ONLY when no meeting is being recorded and no join is due" in out
+    assert ". deploy/gate.sh; join_due_soon" in out

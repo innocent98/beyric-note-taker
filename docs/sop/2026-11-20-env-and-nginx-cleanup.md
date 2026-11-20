@@ -9,7 +9,7 @@ Adebayo is preparing a production release and the configuration had become noise
 ## How
 
 1. **Audit first.** Every name on the server and every name in the old `.env.example` was traced to where it is read: `app/config.py` (`Settings`, `extra="ignore"`, `Field(validation_alias=...)`), `compose.yaml` (`${VAR}` and which service has `env_file`), `deploy/*.sh`, `web/` (`process.env`), `scripts/`, `alembic/`, tests. The table below is the result.
-2. **`.env.example`:** `# ---- Section ----` headers are the only comments. Required and used variables are active lines with obvious placeholders (`CHANGE_ME`, `example.com`); a switch that must stay unset until its keys exist (the provider keys) is a commented line inside its section; everything else that has a code default is one `# NAME=default` line in `Optional (defaults shown)`. Optional integrations (Google, Microsoft) are empty active lines, because a placeholder there would turn on a broken feature (`TOKEN_ENC_KEY=CHANGE_ME` stops startup: a set value must be valid).
+2. **`.env.example`:** `# ---- Section ----` headers are the only comments. Required and used variables are active lines; every secret and password is **empty**, because an empty value is refused by the app (`SESSION_SECRET`, `OWNER_EMAIL`/`OWNER_PASSWORD` in migration 0006, a Skribby provider with no key) or by compose (`${VAR:?}`), whereas a `CHANGE_ME` placeholder would have been accepted and could start a server with a published admin password; a switch that must stay unset until its keys exist (the provider keys) is a commented line inside its section; everything else that has a code default is one `# NAME=default` line in `Optional (defaults shown)`. Optional integrations (Google, Microsoft) are empty active lines, because a placeholder there would turn on a broken feature (`TOKEN_ENC_KEY=CHANGE_ME` stops startup: a set value must be valid).
 3. **The explanations** were checked name by name against `deploy/README.md`. 25 names had no row (the whole Microsoft group, the model and limit settings, the mail caps, `ICS_ALLOWED_HOSTS`, `TEAMS_JOIN_ENABLED`, `BOT_NAME`); rows were added (section 3 table), and the nginx rationale is a new "What `deploy/nginx.conf` holds, and why" part of section 6. `tests/test_clean_env.py` fails if a name is in `.env.example` and not in the README.
 4. **`deploy/nginx.conf`:** comments removed, six section headers kept. Proved identical by stripping comments and blank lines from the old and the new file and diffing (empty diff). `include /etc/nginx/snippets/beyric-edge-secret.conf;` is untouched and no secret is in the file.
 5. **`scripts/clean_env.py`** (standard library only, runs on the host's `python3`): dry run by default, key names only. `--apply` saves `.env.bak-<UTC time>` (600), then writes the new file through a temp file in the same directory and `os.replace` (600, same owner). Values are copied byte for byte, quotes included. It parses the file the way docker compose does (checked with `docker compose config` on a scratch file: the last duplicate wins, quotes are stripped, an unquoted ` #` starts a comment, CRLF is fine).
@@ -45,7 +45,7 @@ Other variables, from the old `.env.example`, that are not on the server: every 
 
 ## Verification
 
-- `tests/test_clean_env.py`: 94 tests. They use fake files with values containing spaces, quotes, `#` and `=`, CRLF, no final newline, duplicates (the last wins), a missing and an empty required key, a symlink, a file owned by someone else (the effective uid is patched), an unclosed quote, text after a closing quote, idempotence (second run: "already clean", one backup only), mode 600 on the backup and the file, no leftover temp file, and unique fake secrets asserted **absent from stdout and stderr** in a dry run, an apply, a refusal and a forced write failure. One test per `DEFAULTS` entry builds `Settings` with and without the line and compares every field: removal changes nothing. Local run: the file alone, no other test.
+- `tests/test_clean_env.py`: 105 tests. They use fake files with values containing spaces, quotes, `#` and `=`, CRLF, no final newline, duplicates (the last wins), a missing and an empty required key, a symlink, a file owned by someone else (the effective uid is patched), an unclosed quote, text after a closing quote, idempotence (second run: "already clean", one backup only), mode 600 on the backup and the file, no leftover temp file, and unique fake secrets asserted **absent from stdout and stderr** in a dry run, an apply, a refusal and a forced write failure. One test per `DEFAULTS` entry builds `Settings` with and without the line and compares every field: removal changes nothing. Local run: the file alone, no other test.
 - Compose's own parser, on a scratch copy of a server-shaped fake file before and after the cleaner: `docker compose config` shows the same environment except exactly the eight removed names.
 - nginx: named tests in `tests/test_edge.py` that read `deploy/nginx.conf` (6 selected by `-k nginx or ...`) pass; code lines of old and new file diff empty. `deploy/nginx-limit-check.sh` (needs Docker, starts containers) was **not** run locally; CI does not run it either.
 - CI is the authority for the full suite.
@@ -54,14 +54,14 @@ Other variables, from the old `.env.example`, that are not on the server: every 
 
 Adebayo runs it, because nothing here can read the server.
 
-1. `cd /opt/beyric-note-taker && git pull` (the script comes with the repository once this is merged and deployed).
+1. Wait until the CD deploy of the merge has printed `deployed <sha>`; the script is then in `/opt/beyric-note-taker/scripts/`. Do not `git pull` there (the deploy leaves the checkout detached).
 2. Dry run, changes nothing: `python3 scripts/clean_env.py /opt/beyric-note-taker/.env`. Read the lists. `MISSING REQUIRED` means stop; the script has already refused.
 3. If it reads right: `python3 scripts/clean_env.py /opt/beyric-note-taker/.env --apply`. It saves `.env.bak-<time>` and prints the next command.
-4. `docker compose up -d --force-recreate web worker scheduler` (a restart does not re-read `.env`; `migrate` and `next` need nothing because no value changes).
+4. Only when no meeting is being recorded and no join is due: `bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'` (a time printed instead means a join is due; wait), then `docker compose up -d --force-recreate --no-deps web worker scheduler`. A restart does not re-read `.env`. `--no-deps` recreates exactly those three: without it compose runs `migrate` again (checked with `docker compose up --dry-run` on a scratch project; `db` was left running there); `next` needs nothing because no value changes.
 5. Check `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8021/health` prints 200 and `docker compose ps` shows web, worker and scheduler up.
 6. When satisfied, delete the backup (it holds every secret): `rm /opt/beyric-note-taker/.env.bak-*`.
 
-Roll back: `cp /opt/beyric-note-taker/.env.bak-<time> /opt/beyric-note-taker/.env && chmod 600 /opt/beyric-note-taker/.env`, then the same recreate command.
+Roll back: `cp /opt/beyric-note-taker/.env.bak-<time> /opt/beyric-note-taker/.env && chmod 600 /opt/beyric-note-taker/.env`, then the same gate check and recreate command.
 
 For nginx nothing changes on the server: the live `/etc/nginx/sites-available/beyric-notes` is edited by hand and is not replaced by this file.
 
@@ -69,7 +69,8 @@ For nginx nothing changes on the server: the live `/etc/nginx/sites-available/be
 
 - **The script has not run on the real server.** It was run on a made-up file with the server's names and fake values, and on compose's parser, on this Mac.
 - The server's actual values (which of the eight equal their default) are unknown; the dry run prints the answer by name.
-- A server `.env` with syntax the tests did not imagine (a bare `KEY` with no `=`, a text after a closing quote) is refused, not guessed.
+- A server `.env` with syntax the tests did not imagine (a bare `KEY` with no `=`, a text after a closing quote) is refused, not guessed. **Documented limits:** a CRLF inside a quoted multi-line value is turned into LF, and a lone unclosed quote swallows the rest of the file and is refused.
+- A kept value that contains `$` (compose expands `$NAME` in unquoted and double-quoted values) makes `--apply` refuse and names the key; single-quoted values are literal and do not block.
 - `deploy/nginx-limit-check.sh` and a live `nginx -t` were not run against the trimmed file.
 
 ## Follow-ups
