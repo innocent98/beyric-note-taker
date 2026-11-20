@@ -201,7 +201,7 @@ def _tell_grant_failed(db: Session, payment_id: int, exc: Exception) -> None:
     best effort: the person still gets the 409, never a 500 from the alert."""
     notify.tell_admins(
         db,
-        f"admin.billing_cancel_grant_failed:{payment_id}",
+        notify.grant_failed_key(payment_id),
         "A paid payment could not be granted",
         f"The provider reports payment {payment_id} paid, but it could not be settled "
         f"({type(exc).__name__}). Look at it.",

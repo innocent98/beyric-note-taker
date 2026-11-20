@@ -13,7 +13,7 @@ In the `except Exception as exc:` branch, after `db.rollback()`, a new helper `_
 | Decision | Why |
 |---|---|
 | Only when the provider's report is `successful` (`tx.status == "successful"`) | A `failed` report grants nothing, so there is no money for an admin to chase; an exception there is not this alert's business. Pinned by a test |
-| Key `admin.billing_cancel_grant_failed:{payment_id}` | One alert per payment. `alerts._write` does `ON CONFLICT DO NOTHING` on (user, dedupe_key), so a second press of the button does not alert again (tested) |
+| Key `admin.billing_cancel_grant_failed:{payment_id}` (**renamed 2026-11-20 to the neutral `admin.billing_grant_failed:{payment_id}`**, which the webhook and the sweepers now share: see `2026-11-20-grant-failure-sweeper-alert.md`) | One alert per payment. `alerts._write` does `ON CONFLICT DO NOTHING` on (user, dedupe_key), so a second press of the button does not alert again (tested) |
 | Own kind, not `admin.billing_payment_refused` | A refusal (wrong amount) and a crashed grant are different jobs for the admin; the key's prefix before `:` is the notification kind |
 | Body says the payment "could not be settled" (the guard catches any exception from `settle_transaction`, not only a grant handler) and has the payment id and the exception **type name** only | Never the exception text (a provider's or DB's words can carry emails, card data or amounts), never the person, never an amount. A test puts an email, a number and "secret" into the exception and asserts none reaches the alert |
 | `notify.tell_admins` directly, not `subscriptions._tell_admins` | `notify.py` is the one way billing tells admins (the latter is a one-line wrapper); `cancel_checkout` now imports `notify` |
@@ -34,7 +34,7 @@ No migration, no setting, no endpoint, no FE change (the FE guide is unchanged: 
 ## Verification
 
 * `ruff check` and `ruff format --check` on the two touched files (ruff 0.17.3, the pin); `tests/test_billing_cancel_checkout.py` only, 35 passed on a scratch Postgres 17. CI runs the rest.
-* `test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_409`: a raising grant handler gives exactly one alert row with the key, kind `admin.billing_cancel_grant_failed`, the body names the payment id and `RuntimeError` and leaks none of the planted text, the answer is 409 `payment_in_progress` **twice** (two presses), still one alert row, payment `pending`, no hours granted, no subscription.
+* `test_a_paid_page_whose_grant_fails_tells_the_admins_once_and_still_answers_409`: a raising grant handler gives exactly one alert row with the key, kind `admin.billing_grant_failed` (the neutral name since 2026-11-20), the body names the payment id and `RuntimeError` and leaks none of the planted text, the answer is 409 `payment_in_progress` **twice** (two presses), still one alert row, payment `pending`, no hours granted, no subscription.
 * `test_a_grant_failure_whose_alert_cannot_be_saved_is_still_the_same_409`: `Session.commit` is made to raise once, right after the grant handler fails (the helper's commit of the alert), so the commit guard really runs: still the same 409, the payment `pending`, no hours, no alert row (the alert's transaction was rolled back). (`notify.tell_admins`'s own swallowing of a failed alert write is notify.py's behaviour and is not what this test proves.)
 * `test_a_page_the_provider_says_failed_does_not_alert_when_a_handler_fails`: no alert for a `failed` report.
 * Mutation check: with the change removed, the first test fails (no alert row). The second passes on the old code too, by design: the 409 is the same before and after; it pins that the new commit step cannot turn it into a 500.
@@ -49,6 +49,6 @@ Nothing to run. Revert the PR to go back to a log line only. When the alert arri
 
 | Gap | Note |
 |---|---|
-| **The other paths do not alert on a grant that keeps failing** (found by the Opus review of this PR): the webhook path (`settle.process`) parks the event and raises `RetryLater`; the sweepers (`renewals._sweep_payments` and `_sweep_events`, `except Exception`) log the exception type only. A paid customer is surfaced only by pressing Cancel, or by the 24 to 48 h `admin.billing_pending_old` digest (which lists `pending` rows only). | Proposed: the sweeper raises the same key (or a neutral `admin.billing_grant_failed:{id}` shared with this path) so one payment gets one alert. Not built here |
-| `settle.process` stores `str(exc)[:200]` in `billing_events.error` | predates this PR; a PII-in-DB risk (an exception's text can carry personal data). Store the type name only |
+| ~~The other paths do not alert on a grant that keeps failing~~ (found by the Opus review of this PR) | **Done 2026-11-20** in `docs/sop/2026-11-20-grant-failure-sweeper-alert.md`: the webhook path and both sweepers alert once, after 30 minutes, under the shared neutral key `admin.billing_grant_failed:{id}` |
+| ~~`settle.process` stores `str(exc)[:200]` in `billing_events.error`~~ | **Done 2026-11-20** (same SOP): it stores the exception type name only |
 | A later change (a cancel button for an abandoned upgrade checkout) will touch `cancel_checkout.py` too | the diff here is kept small on purpose |

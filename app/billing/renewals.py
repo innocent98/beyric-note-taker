@@ -619,8 +619,8 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
             event = adapter.parse_event(json.dumps(row.payload).encode())
             settle.process(session, adapter, row, event, now)
         except RetryLater:
-            continue  # parked by `process`; the next pass tries again
-        except Exception as exc:
+            continue  # parked by `process`, which also tells the admins of a paid grant that fails
+        except Exception as exc:  # the stored body would not parse: nothing was paid or granted
             session.rollback()
             logger.error("sweeping event %s failed: %s", row.id, type(exc).__name__)
 
@@ -681,13 +681,15 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
         adapter = provider_named(payment.provider, settings)
         if adapter is None:
             continue
-        payment_id, reference = payment.id, payment.reference
+        payment_id, reference, created_at = payment.id, payment.reference, payment.created_at
         session.execute(update(Payment).where(Payment.id == payment_id).values(last_checked_at=now))
         session.commit()
+        paid = False  # the provider itself has said `successful`: only then is a failure an alert
         try:
             tx = lookup_by_reference(adapter, reference)
             if tx.status != "successful":
                 continue
+            paid = True
             refusal = settle.settle_transaction(session, adapter, payment_id, tx, now)
             if refusal:  # the provider says it is paid, our rules say no: a human looks
                 subscriptions._tell_admins(
@@ -702,6 +704,8 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
         except Exception as exc:
             session.rollback()
             logger.error("sweeping payment %s failed: %s", payment_id, type(exc).__name__)
+            if paid:  # a person who paid has nothing: told once, once it has gone on a while
+                settle.alert_grant_failed(session, payment_id, created_at, exc, now)
 
 
 # ---- the pay link ----
