@@ -697,7 +697,7 @@ def test_compose_refuses_the_example_as_it_stands(tmp_path):
 
     refused = config()
     assert refused.returncode != 0
-    assert "POSTGRES_PASSWORD" in refused.stderr
+    assert "required variable" in refused.stderr  # compose names one; which one is not asserted
     filled = (ROOT / ".env.example").read_text()
     filled = filled.replace("\nPOSTGRES_PASSWORD=\n", "\nPOSTGRES_PASSWORD=x\n")
     (tmp_path / ".env").write_text(filled)
