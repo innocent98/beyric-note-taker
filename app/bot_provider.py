@@ -263,7 +263,12 @@ class RetiredProvider:
         return None
 
     def delete_recording(self, recording_id: int) -> None:
-        return None
+        # An audit trail, no network: the copy was checked gone before the provider was removed.
+        logger.info(
+            "recording %s of retired provider %r is taken as already deleted",
+            recording_id,
+            self.name,
+        )
 
     def download_audio(self, recording_id: int, media_id: int, path: Path) -> None:
         raise BotNotFound(f"provider {self.name!r} is retired")

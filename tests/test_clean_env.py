@@ -22,11 +22,15 @@ SCRIPT = ROOT / "scripts" / "clean_env.py"
 PG = "pg-FAKE-4f1d9a"
 SESSION = "session-FAKE-" + "x" * 40
 OPENAI = "sk-FAKE-openai-7e2b"
+SKRIBBY = "skr-FAKE-key-52d1"
 GONE_DB = "gonedb-FAKE-31c8"
 GONE_STORE = "gonestore-FAKE-90aa"
-SECRETS = [PG, SESSION, OPENAI, GONE_DB, GONE_STORE]
+SECRETS = [PG, SESSION, OPENAI, SKRIBBY, GONE_DB, GONE_STORE]
 
-REQUIRED_TEXT = f"POSTGRES_PASSWORD={PG}\nSESSION_SECRET={SESSION}\nOPENAI_API_KEY={OPENAI}\n"
+REQUIRED_TEXT = (
+    f"POSTGRES_PASSWORD={PG}\nSESSION_SECRET={SESSION}\n"
+    f"SKRIBBY_API_KEY={SKRIBBY}\nOPENAI_API_KEY={OPENAI}\n"
+)
 
 # What a server .env may still hold after the self-hosted bot host (Vexa) was removed.
 LEFTOVER_TEXT = (
@@ -104,6 +108,7 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
     text = (
         "# old comment about proxies\r\n"
         'SKRIBBY_BOT_NAME="Beyric Note Taker"\r\n'
+        f"SKRIBBY_API_KEY={SKRIBBY}\r\n"
         f"POSTGRES_PASSWORD={PG}\r\n"
         'MAIL_FROM="Beyric Note Taker <no-reply@notes.beyrictech.com>"\r\n'
         f"SESSION_SECRET={SESSION}\r\n"
@@ -133,6 +138,7 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
         "TOKEN_ENC_KEY=ab#cd=ef==\n"
         "\n"
         "# ---- Bot provider (Skribby) ----\n"
+        f"SKRIBBY_API_KEY={SKRIBBY}\n"
         'SKRIBBY_BOT_NAME="Beyric Note Taker"\n'
         "\n"
         "# ---- Transcription and notes ----\n"
@@ -376,6 +382,7 @@ def untouched(path, tmp_path, text):
     [
         "POSTGRES_PASSWORD",
         "SESSION_SECRET",
+        "SKRIBBY_API_KEY",
         "OPENAI_API_KEY",
     ],
 )
@@ -414,7 +421,7 @@ def test_an_unparseable_line_refuses_without_quoting_it(tmp_path):
     path = write_env(tmp_path, text)
     result = run(path, "--apply")
     assert result.returncode != 0
-    assert "line 4" in result.stderr
+    assert "line 5" in result.stderr
     assert "FAKE-garbage-9931" not in result.stdout + result.stderr
     untouched(path, tmp_path, text)
 

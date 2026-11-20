@@ -157,3 +157,57 @@ def test_the_long_and_the_short_link_of_one_meeting_give_different_codes():
     calendars holding different forms could send two bots. Only a real Graph capture can tie them
     together. This test records today's behaviour; if it ever fails, the gap has been closed."""
     assert code(JOIN) != code(SHORT)
+
+
+# ---- the parser every provider shares: plain Zoom and Meet links, and spoofed hosts ----
+# (ported from the removed Vexa client's tests: the parser outlived it)
+
+
+def test_parse_zoom_url():
+    assert parse_meeting_url("https://us05web.zoom.us/j/123456789?pwd=abc") == ("zoom", "123456789")
+
+
+def test_parse_plain_zoom_url():
+    assert parse_meeting_url("https://zoom.us/j/987654321") == ("zoom", "987654321")
+
+
+@pytest.mark.parametrize(
+    ("raw", "canonical"),
+    [
+        (
+            "HTTP://US05WEB.Zoom.us/j/123456789?pwd=abc&x=1#frag",
+            "https://us05web.zoom.us/j/123456789?pwd=abc",
+        ),
+        ("https://zoom.us/j/123456789?other=1", "https://zoom.us/j/123456789"),
+        ("https://meet.google.com/abc-defg-hij?authuser=1", "https://meet.google.com/abc-defg-hij"),
+    ],
+)
+def test_the_link_a_bot_is_sent_is_tidied_to_its_canonical_form(raw, canonical):
+    assert canonical_meeting_url(raw) == canonical
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/meeting",
+        "https://zoom.us.evil.example/j/1",
+        "https://evilzoom.us/j/1",
+        "https://meet.google.com.evil.example/abc-defg-hij",
+        "https://zoom.us/",
+        "https://meet.google.com/",
+        "not a url",
+        "",
+        "https://user:pw@zoom.us/j/1",
+        "https://zoom.us@evil.example/j/1",
+        "https://zoom.us:8443/j/1",
+        "https://zoom.us:badport/j/1",
+        "https://zoom.us\\@evil.example/j/1",
+        "https://zoom.us/j/1\n2",
+        "https://zoom.us/j/1 2",
+        "https://meet.google.com/abc-defg-hij\x00",
+        "ftp://zoom.us/j/1",
+    ],
+)
+def test_other_hosts_and_odd_shapes_are_refused(url):
+    with pytest.raises(UnsupportedMeetingUrl):
+        parse_meeting_url(url)

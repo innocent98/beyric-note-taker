@@ -503,7 +503,8 @@ docker images | grep -E 'vexaai/vexa-lite|versity/versitygw'   # still there
 
 **Optional, a separate step you approve: delete what is left of Vexa on the server.** The volumes
 hold Vexa's own database and its recording storage. This cannot be undone. Run it only after the
-deploy above and only if you do not want Vexa's data kept. On 2026-11-20 this check printed 0
+deploy above, **only after you are sure you will never revert the removal** (see "Rolling back to
+Vexa" below), and only if you do not want Vexa's data kept. On 2026-11-20 this check printed 0
 (no Vexa recording was left to delete); run it again first, and stop if it is not 0:
 
 ```bash
@@ -528,8 +529,12 @@ leftover `VEXA_*`, `BOT_NAME` and `BOT_PROVIDER` lines (and `COMPOSE_PROFILES=ve
 read by the app", and `--apply` drops them. Until you do, they are harmless: the app ignores them
 and compose does not require them (checked with a leftover `COMPOSE_PROFILES=vexa` too).
 
-**Rolling back to Vexa** is no longer a setting: it means reverting the removal PR on `main`, and
-the volumes must still exist. Once they are deleted, Vexa would start empty.
+**Rolling back to Vexa** is no longer a setting: it means reverting the removal PR on `main`, and it
+needs three things that this page's own cleanup steps delete: the two Vexa volumes, the `VEXA_*`
+secrets in `.env` (`VEXA_DB_PASSWORD` is the password of the database inside the `vexapgdata`
+volume: without it the volume cannot be opened) and `.env.vexa`. Keep the `.env.bak-*` file the
+cleaner writes and `.env.vexa` for as long as a revert is possible; delete the volumes, images and
+those files only when you are sure it is not. Once they are gone, Vexa would start empty.
 
 ## 9. Verification checklist
 

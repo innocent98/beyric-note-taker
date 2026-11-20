@@ -49,7 +49,7 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import placement, series, teams
-from app.bot_provider import BotNotFound, BotProviderError, provider_for
+from app.bot_provider import BotNotFound, BotProviderError, is_retired, provider_for
 from app.models import (
     AuthToken,
     Base,
@@ -82,8 +82,8 @@ def recording_to_delete(
     delete, or None when there is nothing to delete. Raises `BotProviderError` while it is not
     settled."""
     stored = meeting.provider_recording_id
-    if not meeting.provider_bot_id:
-        return stored
+    if not meeting.provider_bot_id or is_retired(meeting.bot_provider):
+        return stored  # a retired provider's copy is already gone: nothing to look up or wait for
     try:
         info = provider.get_meeting_by_id(meeting.provider_bot_id)
     except BotNotFound:

@@ -71,6 +71,7 @@ from app.pipeline import (
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
+    REASON_PROVIDER_GONE,
     SEND_UNCONFIRMED,
     audio_path,
     is_join_failure,
@@ -336,6 +337,8 @@ def retry_block(meeting: Meeting, now: datetime | None = None) -> str | None:
         if is_join_failure(meeting) and not manual_retry_wait(meeting, now or datetime.now(UTC)):
             return None
         return "no_audio"
+    if meeting.failure_reason == REASON_PROVIDER_GONE:
+        return "no_audio"  # every try would fail again at once: there is nothing to resume from
     if meeting.failure_reason == REASON_NO_SPEECH:
         return "no_speech"  # the same audio would give the same result
     if meeting.transcript is None and meeting.audio_deleted_at is not None:

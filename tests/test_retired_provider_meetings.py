@@ -153,3 +153,21 @@ def test_an_old_meeting_past_the_download_finishes_without_the_provider(session,
     session.refresh(meeting)
     assert meeting.status == "ready"  # the speakers step read "not found" as "no names"
     assert meeting.speakers_incomplete is True
+
+
+def test_a_meeting_failed_as_provider_gone_is_not_offered_a_retry(session, template):
+    meeting = old_meeting(session, template, status="processing", step="audio")
+    pipeline.advance_meeting(session, meeting.id, provider=Tripwire(), now=NOW)
+    session.refresh(meeting)
+    assert services.retry_block(meeting) == "no_audio"  # every try would fail again at once
+
+
+def test_retention_never_builds_the_current_provider_for_an_old_meeting(
+    session, template, monkeypatch
+):
+    def boom(*args, **kwargs):
+        raise AssertionError("the current provider was built for a retired provider's meeting")
+
+    monkeypatch.setattr("app.bot_provider._skribby", boom)
+    old_meeting(session, template)
+    assert pipeline.delete_expired_audio(session, NOW) == 1  # no provider handed in at all

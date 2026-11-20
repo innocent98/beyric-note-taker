@@ -23,9 +23,9 @@ Adebayo's decision, 2026-11-20: "remove Vexa from the repo". Production has run 
 - **Skribby meetings: none.** Same calls, same states, same notes, same deletes. The pipeline, placement and join-runner code paths for Skribby were not touched beyond the rename of the provider parameter and fields (`vexa` → `provider`, `vexa_id` → `provider_id`, `vexa_meeting_id` → `provider_bot_id`).
 - `advance_meeting` and `register_join_runner` no longer build the default provider up front: it is built when first needed (so a missing key is a retryable `BotProviderNotConfigured` inside the existing handlers, not an exception outside them).
 - The admin bell title for a forced account purge now says "gone at the bot provider" (was "at Vexa").
-- An old `'vexa'` meeting in flight now fails (above). Old finished ones behave as before.
+- An old `'vexa'` meeting in flight now fails (above), and is not offered Retry (`retry_block` says `no_audio`: every try would fail again at once). Old finished ones behave as before; account deletion and retention skip any lookup for them (no per-row 404 error line) and retention does not build the Skribby provider for them.
 - Compose: the 5 Vexa services, `vexapgdata`, `vexastorage`, `vexainternal`, `VEXA_BASE_URL` on three services and the `vexa` profile are gone; only `POSTGRES_PASSWORD` is required. `front`, `default`, `appdb` and `next`'s fixed address are unchanged.
-- The env cleaner drops leftover `VEXA_*`, `BOT_NAME`, `BOT_PROVIDER` and `COMPOSE_PROFILES=vexa` as "no longer read by the app" (whatever the value), and `BOT_MAX_LOCAL=20` / `TEAMS_JOIN_ENABLED=true` as defaults.
+- The env cleaner now also requires `SKRIBBY_API_KEY` (the processes refuse to start without it) and drops leftover `VEXA_*`, `BOT_NAME`, `BOT_PROVIDER` and `COMPOSE_PROFILES=vexa` as "no longer read by the app" (whatever the value), and `BOT_MAX_LOCAL=20` / `TEAMS_JOIN_ENABLED=true` as defaults.
 
 ## What's involved
 
@@ -41,7 +41,7 @@ Adebayo's decision, 2026-11-20: "remove Vexa from the repo". Production has run 
 | `compose.yaml` | Vexa block, volumes, network, env lines removed |
 | `deploy/deploy.sh` (comment), `deploy/README.md` | env table rows, sections 3-5, "After Vexa was removed from the repo" |
 | `.env.example`, `scripts/clean_env.py`, `tests/test_clean_env.py` | after #248 merged |
-| `tests/` | `fake_vexa` → `fake_bot` etc. across the suite; new `tests/test_compose_services.py` (replaces the profile test), `tests/test_retired_provider_meetings.py`; contract tests now `FakeProvider` + `SkribbyProvider` |
+| `tests/` | `fake_vexa` → `fake_bot` etc. across the suite; the shared link-parser tests that lived in the removed Vexa test file (plain Zoom and Meet, canonical form, spoofed hosts) moved to `tests/test_meeting_url.py`; new `tests/test_compose_services.py` (replaces the profile test), `tests/test_retired_provider_meetings.py`; contract tests now `FakeProvider` + `SkribbyProvider` |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | two docstring sentences only |
 
 ## Remaining mentions of the word (grep, case-insensitive, over `app/ compose.yaml deploy/ scripts/ tests/ web/ .env.example .github`)
@@ -77,12 +77,12 @@ rm -f /opt/beyric-note-taker/.env.vexa
 
 Then run `python3 scripts/clean_env.py /opt/beyric-note-taker/.env` (dry run first): it now names the leftover `VEXA_*`, `BOT_NAME`, `BOT_PROVIDER` lines; `--apply` drops them. They are harmless until then.
 
-**Roll back.** Revert the PR on `main`. The volumes are untouched until the owner deletes them, so Vexa would start from its old data; after the optional step it would start empty. There is no setting to flip back any more.
+**Roll back.** Revert the PR on `main`. A revert needs the two volumes, the `VEXA_*` secrets (`VEXA_DB_PASSWORD` opens the database in `vexapgdata`) and `.env.vexa` back: keep `.env.bak-*` (the cleaner writes it) and `.env.vexa` as long as a revert is possible, and run the optional deletion only when sure it never is (the README says so). After it, Vexa would start empty. There is no setting to flip back any more.
 
 **On the retired-provider stand-in (a security-review note, acknowledged).** `RetiredProvider` treats an old meeting's provider copy as deleted without asking anyone. That is true only because the copies were verified gone before this removal (`vexa_copy_left = 0` on 2026-11-20). If it were ever false, the data would sit in the `vexastorage` volume on the server until the owner removes it; the app would not delete it. A delete of a recording by the stand-in is logged (`recording N of retired provider 'vexa' is taken as already deleted`), so there is an audit line. A startup flag that refuses to trust the stand-in was considered and not built: it would guard a premise the owner has already checked, with a switch nobody can usefully set.
 
 ## Follow-ups
 
-- Migration `0055`: rename the two columns and set the `bot_provider` server default to `skribby`, then drop the `mapped_column("vexa_...")` names. Needs a deploy order (new code first, or a compatibility view). Not needed for anything today.
+- Migration `0055`: rename the two columns and set the `bot_provider` server default to `skribby`, then drop the `mapped_column("vexa_...")` names. Needs a deploy order (new code first, or a compatibility view). Not needed for anything today. **The trap until then:** the database default of `meetings.bot_provider` is still `'vexa'`, so a raw SQL insert that omits it makes a "retired" meeting (the ORM always sets it). The one raw insert in the repo, `web/scripts/seed-owner-states.sql`, now sets `'skribby'`; the inserts in `tests/test_migrations.py` are history.
 - The server's `.env.vexa` file and the three Vexa images/volumes (optional step above).
 - Docs that tell the history of Vexa (specs, dated SOPs, FE guides) were left as written.

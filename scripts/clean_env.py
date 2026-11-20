@@ -155,8 +155,9 @@ LEGACY_ALIASES = {"MAX_ACTIVE_BOTS": "BOT_MAX_LOCAL"}
 
 # Missing (or empty) one of these and compose or the app refuses to start (or cannot work):
 # compose.yaml `${NAME:?...}` for POSTGRES_PASSWORD, app/auth.py `check_start` for SESSION_SECRET
-# (32 characters), and no notes or transcript without OPENAI_API_KEY.
-REQUIRED = ("POSTGRES_PASSWORD", "SESSION_SECRET", "OPENAI_API_KEY")
+# (32 characters), `skribby.require_configured` (web, worker and scheduler refuse to start) for
+# SKRIBBY_API_KEY, and no notes or transcript without OPENAI_API_KEY.
+REQUIRED = ("POSTGRES_PASSWORD", "SESSION_SECRET", "SKRIBBY_API_KEY", "OPENAI_API_KEY")
 
 # Names the app and compose.yaml no longer read at all (the self-hosted bot host, Vexa, was removed
 # on 2026-11-20, docs/sop/2026-11-20-remove-vexa.md): a leftover line is removed whatever its value.

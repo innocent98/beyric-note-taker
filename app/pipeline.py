@@ -46,7 +46,6 @@ from app.bot_provider import (
     BotProviderError,
     BotRegionMismatch,
     BotSendUncertain,
-    build_provider,
     is_retired,
     provider_for,
     provider_name,
@@ -1269,11 +1268,11 @@ def delete_fetched_copies(session: Session, now: datetime, *, provider=None, lim
     deleted = 0
     for meeting in candidates:
         try:
-            provider = provider_for(provider, meeting.bot_provider, meeting.bot_region)
+            holder = provider_for(provider, meeting.bot_provider, meeting.bot_region)
         except BotProviderError as exc:  # not configured here, or the bot is in another region
             _copy_failed(meeting, now, exc)
             continue
-        if delete_fetched_copy(meeting, provider, now):
+        if delete_fetched_copy(meeting, holder, now):
             deleted += 1
     session.commit()
     return deleted
@@ -1621,9 +1620,7 @@ def delete_expired_audio(session: Session, now: datetime, *, provider=None) -> i
         ):
             try:
                 # The provider that holds this meeting's copy (a retired one for an old meeting).
-                holder = provider_for(
-                    default or build_provider(), meeting.bot_provider, meeting.bot_region
-                )
+                holder = provider_for(default, meeting.bot_provider, meeting.bot_region)
                 if meeting.provider_recording_id is not None:
                     holder.delete_recording(meeting.provider_recording_id)
                 elif hasattr(type(holder), "delete_bot_record"):
