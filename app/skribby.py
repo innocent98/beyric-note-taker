@@ -7,12 +7,12 @@ In short:
 - **Polling only.** Skribby makes one webhook delivery per event and no retry; the worker already
   looks at each live meeting every `POLL_INTERVAL_SECONDS`, so there is no inbound route.
 - **Skribby speaks in bot ids (UUIDs); the seam speaks in meeting codes and integers.** The id is
-  stored as text in `meetings.provider_bot_id`. A stop by `(platform, code)` and a
-  duplicate check need the bot behind a code, which Skribby cannot look up (it has no list call), so
-  the provider asks our own `meetings` table (`DbLedger`) and remembers the bots it sent in this
-  process (the window before the meeting row is committed). The recording is addressed by an integer
-  *handle* made from the UUID (`recording_handle`): it fits `meetings.provider_recording_id`, and the
-  UUID comes back through the meetings table or this process's recent lookups.
+  stored as text in `meetings.provider_bot_id`. A stop by `(platform, code)` and a duplicate check
+  need the bot behind a code, which Skribby cannot look up (it has no list call), so the provider
+  asks our own `meetings` table (`DbLedger`) and remembers the bots it sent in this process (the
+  window before the meeting row is committed). The recording is addressed by an integer *handle*
+  made from the UUID (`recording_handle`): it fits `meetings.provider_recording_id`, and the UUID
+  comes back through the meetings table or this process's recent lookups.
 - **Skribby's transcript is only evidence of who spoke.** Our own transcription still writes the
   transcript from the downloaded audio; Skribby's segments (`speaker_name` and text) become the
   `BotMeeting.segments` that label speakers, which is where the pipeline reads the speaker segments.

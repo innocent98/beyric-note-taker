@@ -2,8 +2,8 @@
 
 Each scenario runs against `FakeProvider` and `SkribbyProvider`, the last over a pretend HTTP layer
 (`pytest-httpx`; the Skribby bodies and error answers are the ones in Skribby's API pages and the
-bake-off tool), and both must give the same answer. The expected results are written out by
-hand, so the test is not the fake agreeing with itself: it is each provider agreeing with the contract in
+bake-off tool), and both must give the same answer. The expected results are written out by hand, so
+the test is not the fake agreeing with itself: it is each provider agreeing with the contract in
 `app/bot_provider.py`.
 
 A new provider (Recall) adds one `World` below and inherits every scenario.
@@ -141,9 +141,9 @@ class StubLedger:
 
 
 class SkribbyWorld:
-    """`SkribbyProvider` over a pretend Skribby. A beat in the pipeline's words is written as the Skribby
-    bot body that must be read as that beat: the door and the knock are told by how long the bot's
-    `joining` lasted (the provider's clock is fixed at `NOW`)."""
+    """`SkribbyProvider` over a pretend Skribby. A beat in the pipeline's words is written as the
+    Skribby bot body that must be read as that beat: the door and the knock are told by how long the
+    bot's `joining` lasted (the provider's clock is fixed at `NOW`)."""
 
     name = "skribby"
     live_speech = False  # Skribby hands the transcript over once the bot has finished
@@ -528,7 +528,7 @@ def test_the_default_name_picks_the_provider_a_new_factory_registered(monkeypatc
 def test_a_retired_name_is_data_not_a_provider():
     assert RETIRED_PROVIDERS == {"vexa"}
     assert "vexa" not in PROVIDER_FACTORIES
-    assert is_retired("vexa") and is_retired(" The provider ")
+    assert is_retired("vexa") and is_retired(" VEXA ")
     assert not is_retired("skribby") and not is_retired(None)
 
 

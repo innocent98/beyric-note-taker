@@ -328,8 +328,9 @@ def without_long(
 def only_provider(
     meetings: list[MeetingWithId], runs: list[RunRow], provider: str
 ) -> tuple[list[MeetingRow], list[RunRow]]:
-    """The meetings a given bot provider attended, and the runs tied to those meetings: the cost
-    of one hour of the current setup, without the older the provider hours that cost no vendor money."""
+    """The meetings a given bot provider attended, and the runs tied to those meetings: the cost of
+    one hour of the current setup, without the older the provider hours that cost no vendor
+    money."""
     ids = {m.id for m in meetings if m.row.bot_provider == provider}
     return [m.row for m in meetings if m.id in ids], [r for r in runs if r.meeting_id in ids]
 

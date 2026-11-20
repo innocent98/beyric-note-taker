@@ -34,11 +34,11 @@ A caller that holds a row lock passes `wait_seconds=0`: the rollback between loo
 The holder is bounded too: `BotProvider.send_bot` has a total deadline
 (`app.bot_provider.SEND_DEADLINE_SECONDS`).
 
-An uncertain send (`BotSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the
-host, which keeps handling the request after the client leaves, so the bot can join seconds later.
-A stop sent now would find nothing, so instead the meeting is kept as a placeholder: `bot_sent`, no
-provider id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted for
-capacity and for the duplicate checks, so the code stays taken. The worker settles it
+An uncertain send (`BotSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the host,
+which keeps handling the request after the client leaves, so the bot can join seconds later. A stop
+sent now would find nothing, so instead the meeting is kept as a placeholder: `bot_sent`, no
+provider id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted
+for capacity and for the duplicate checks, so the code stays taken. The worker settles it
 (`pipeline._poll`): it adopts a bot that shows up for the code, or after `UNCONFIRMED_GRACE` stops
 the code and fails the meeting with a plain "not recorded" reason.
 
@@ -81,7 +81,8 @@ LOCAL_HOST_ID = 1
 # looks. A send itself is bounded by `app.bot_provider.SEND_DEADLINE_SECONDS`.
 LOCK_WAIT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.2
-# The most a calendar join waits for the provider to say what bot is on a code (see `_orphan_to_adopt`).
+# The most a calendar join waits for the provider to say what bot is on a code (see
+# `_orphan_to_adopt`).
 ADOPT_LOOKUP_SECONDS = 5.0
 # Stored in `completion_reason` of a meeting whose send got no clear answer (see the module doc).
 SEND_UNCONFIRMED = "send_unconfirmed"
@@ -103,11 +104,11 @@ class PlacementRequest:
     # The calendar event's title, stored on the meeting (cleaned: it is text from an invite).
     # None for a pasted link, which is then named by platform and code.
     title: str | None = None
-    # A calendar join at the start of a meeting: if the provider says a bot is already in that meeting but
-    # no meeting of ours holds the code, it may be our own orphan (a send killed between the provider
-    # accepting it and the commit), so a LIVE bot no row holds is adopted instead of telling the
-    # owner someone else's note taker is there. The identity is only the meeting code under the one
-    # shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
+    # A calendar join at the start of a meeting: if the provider says a bot is already in that
+    # meeting but no meeting of ours holds the code, it may be our own orphan (a send killed between
+    # the provider accepting it and the commit), so a LIVE bot no row holds is adopted instead of
+    # telling the owner someone else's note taker is there. The identity is only the meeting code
+    # under the one shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
     adopt_orphan: bool = False
     # The calendar event's length in seconds, when a calendar join (or Send now on one) places the
     # meeting: under `HOURS_MODE=enforce` a second concurrent meeting reserves it instead of the
@@ -406,10 +407,10 @@ def place_bot(
         if not req.adopt_orphan:
             session.rollback()
             raise PlacementRefused("meeting_has_note_taker") from None
-        # ...or, for a calendar join, our own orphan (a send killed between the provider accepting the bot
-        # and the commit; the pre-flight found no meeting of anyone on the code). Look the bot up
-        # and adopt it only if it is arriving or live and no row holds its provider id; a leftover that
-        # is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
+        # ...or, for a calendar join, our own orphan (a send killed between the provider accepting
+        # the bot and the commit; the pre-flight found no meeting of anyone on the code). Look the
+        # bot up and adopt it only if it is arriving or live and no row holds its provider id; a
+        # leftover that is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
         provider_id = _orphan_to_adopt(session, provider, req)
     except BotSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
@@ -492,10 +493,10 @@ def commit_or_stop(
     native_id: str,
     provider_id: BotId | None,
 ) -> None:
-    """Commit a meeting row that points at the bot `provider_id` (None: an unconfirmed start). If the
-    commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
-    row did land after all (a lost answer to a commit that succeeded): that bot is a recorded one
-    and stopping it would throw a meeting away. With no id there is nothing to check: it stops.
+    """Commit a meeting row that points at the bot `provider_id` (None: an unconfirmed start). If
+    the commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless
+    the row did land after all (a lost answer to a commit that succeeded): that bot is a recorded
+    one and stopping it would throw a meeting away. With no id there is nothing to check: it stops.
     The stop is by meeting code, so it runs only under the placement lock again and only if no
     live meeting holds the code by then (`_stop_if_the_code_is_free`)."""
     try:
@@ -576,11 +577,11 @@ def stop_unrecorded_bot(provider: BotProvider, platform: str, native_id: str) ->
 def may_stop_bot(session: Session, meeting: Meeting) -> bool:
     """Whether stopping the bot at this meeting's code takes out THIS meeting's bot.
 
-    `stop_bot` is keyed by platform and meeting code alone, and the provider keeps one bot per code, so
-    whichever bot is there goes. If another meeting row also has a live bot on the code, the bot
-    there is that row's (the provider let it in only after ours was gone, or it was sent later): a stop for
-    this meeting must not run. This meeting owns the bot only if no other live row on the code is
-    newer (or, when this one is not live itself, if there is no other live row at all)."""
+    `stop_bot` is keyed by platform and meeting code alone, and the provider keeps one bot per code,
+    so whichever bot is there goes. If another meeting row also has a live bot on the code, the bot
+    there is that row's (the provider let it in only after ours was gone, or it was sent later): a
+    stop for this meeting must not run. This meeting owns the bot only if no other live row on the
+    code is newer (or, when this one is not live itself, if there is no other live row at all)."""
     other = select(Meeting.id).where(
         Meeting.platform == meeting.platform,
         Meeting.native_id == meeting.native_id,

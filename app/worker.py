@@ -126,8 +126,8 @@ def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime)
 def hourly_jobs(session: Session, now: datetime, provider=None) -> None:
     """The hourly jobs, each on its own: deleting expired audio, and the housekeeping of
     `app/maintenance.py` (the unverified-account sweep, the mail outbox scrub and the rest). One
-    that fails every time (the provider down for the audio cleanup, say) must not stop the other, so each
-    is caught and logged by type only."""
+    that fails every time (the provider down for the audio cleanup, say) must not stop the other, so
+    each is caught and logged by type only."""
 
     def audio() -> None:
         removed = delete_expired_audio(session, now, provider=provider or build_provider())

@@ -505,8 +505,8 @@ def abridged_blocks(sections: list[Section], names: tuple[str, ...] = MAIL_SECTI
 
 # ---- "Notes ready" ----
 
-# `pipeline.REMOVAL_REASONS` (a test keeps the two equal): the provider says the bot was removed or ran
-# out of time, so the notes may stop before the meeting did.
+# `pipeline.REMOVAL_REASONS` (a test keeps the two equal): the provider says the bot was removed or
+# ran out of time, so the notes may stop before the meeting did.
 LEFT_EARLY_REASONS = frozenset({"evicted", "max_bot_time_exceeded"})
 
 

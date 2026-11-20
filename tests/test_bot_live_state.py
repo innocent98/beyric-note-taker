@@ -1,9 +1,9 @@
 """While the call runs, the meeting says what the bot is doing, from the state the provider reports.
 
-The states are the ones the provider's lifecycle schema lists (`core/meetings/contracts/lifecycle.v1` at
-`31122f9`): `joining`, `awaiting_admission`, `active`, `needs_help`. Real runs on 2026-11-03: a
-good join went `joining` -> `awaiting_admission` -> `active` -> done (meeting 12); a refused
-v0.12.28 join went `awaiting_admission` -> `needs_help` -> failed. The worker keeps the state in
+The states are the pipeline's lifecycle words (`app/bot_provider.py`): `joining`,
+`awaiting_admission`, `active`, `needs_help`. Real runs on 2026-11-03: a good join went `joining`
+-> `awaiting_admission` -> `active` -> done (meeting 12); a refused join went `awaiting_admission`
+-> `needs_help` -> failed. The worker keeps the state in
 `Meeting.completion_reason` while the meeting is `bot_sent`, so there is no new column.
 """
 

@@ -769,8 +769,8 @@ class Meeting(Base):
     # `pipeline.COPY_MAX_ATTEMPTS` the retry job leaves the row to the retention pass.
     provider_copy_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     provider_copy_next_try_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # The hosted provider's region the bot was sent to (`eu`, `jp`); null for a retired provider's. Skribby's two
-    # regions are separate accounts: a bot sent to one is not found in the other.
+    # The hosted provider's region the bot was sent to (`eu`, `jp`); null for a retired provider's.
+    # Skribby's two regions are separate accounts: a bot sent to one is not found in the other.
     bot_region: Mapped[str | None] = mapped_column(String(8))
     # The note taker name sent with this meeting's bot when it was created (`app/bot_names.py`);
     # null = the server default (meetings made before migration 0047, providers that take no name).

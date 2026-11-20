@@ -683,11 +683,12 @@ def delete_meeting(
     provider=Depends(get_bot_provider),
 ) -> Response:
     """Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
-    open questions, review items, notifications, mail still waiting to be sent, the audio and
-    the provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+    open questions, review items, notifications, mail still waiting to be sent, the audio and the
+    provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
     or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
     being written, 409 `meeting_busy` when the worker holds it (try again), 502
-    `recording_delete_failed` when the provider would not remove the recording: nothing is deleted."""
+    `recording_delete_failed` when the provider would not remove the recording: nothing is
+    deleted."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
     services.delete_meeting(session, provider, meeting)
     return Response(status_code=204)

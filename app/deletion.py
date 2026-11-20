@@ -6,9 +6,9 @@ the slot is free at once, since `deleted` rows are treated as absent everywhere)
 `deleted_at`; the worker then calls `purge_deleted`, which runs `purge_user` for each. The pipeline
 leaves a deleted user's meetings alone (`pipeline._owner_deleted`), so nothing more is downloaded,
 sent to OpenAI or counted for them. `purge_user` stops any bot that is still in a call, deletes
-every recording at the bot provider and here, then deletes their meetings (and the speaker evidence kept for
-them, `skribby_segment_evidence`), templates, vocabulary, settings,
-notifications, queued mail, tokens and waitlist row, and finally the user.
+every recording at the bot provider and here, then deletes their meetings (and the speaker evidence
+kept for them, `skribby_segment_evidence`), templates, vocabulary, settings, notifications, queued
+mail, tokens and waitlist row, and finally the user.
 
 What stays: `usage_entries` rows, with only the seconds and `email_hash` (no personal data), so
 signing up again does not reset the 5 hours.
@@ -17,16 +17,16 @@ signing up again does not reset the 5 hours.
 no longer produce a recording we would not delete:
 - the provider does not know the meeting (404), or
 - the bot is gone (`completed` or `failed`) and either a recording with audio exists (it is deleted
-  first), or the meeting `failed`, or the recording itself `failed`, or no audio appeared within
-  the pipeline's own grace (`RECORDING_GRACE`) counted from the moment THIS purge first saw the provider
+  first), or the meeting `failed`, or the recording itself `failed`, or no audio appeared within the
+  pipeline's own grace (`RECORDING_GRACE`) counted from the moment THIS purge first saw the provider
   report the meeting over (stamped on the row, never taken from when it was created).
 Anything else (a bot still in a call, a recording still `in_progress` or in any other unsettled
-state, the grace not over, the provider not answering) raises `BotProviderError` before anything of the
-user is deleted, and the next pass tries again; the bounded give-up below ends a wait that never settles.
-A 404 for the meeting is settled but logged at error level with the meeting id when no recording
-id is stored, so there is a trace of a copy that could not be looked for.
-A bot is stopped whatever our own status says: a meeting given up after six hours is `failed` here
-while its bot may still be in the call.
+state, the grace not over, the provider not answering) raises `BotProviderError` before anything of
+the user is deleted, and the next pass tries again; the bounded give-up below ends a wait that never
+settles. A 404 for the meeting is settled but logged at error level with the meeting id when no
+recording id is stored, so there is a trace of a copy that could not be looked for. A bot is stopped
+whatever our own status says: a meeting given up after six hours is `failed` here while its bot may
+still be in the call.
 
 **Retired providers.** An old meeting that a provider no longer in the code ran (`'vexa'`, see
 `app.bot_provider.RETIRED_PROVIDERS`) has nothing to settle: `provider_for` hands it a
@@ -34,11 +34,11 @@ while its bot may still be in the call.
 delete succeed at once. Nothing is sent over the network and the account's deletion never waits on
 it.
 
-**Bounded.** If a purge keeps waiting for a day (`GIVE_UP_AFTER` since `deleted_at`, which the
-first failed pass stamps if the admin API did not), it stops waiting: it logs an error naming the
+**Bounded.** If a purge keeps waiting for a day (`GIVE_UP_AFTER` since `deleted_at`, which the first
+failed pass stamps if the admin API did not), it stops waiting: it logs an error naming the
 meetings, tells every admin in the app (`admin.purge_forced`), and deletes our rows anyway without
-calling the provider again. The data then outlives the promise only at the provider, and the admin knows which
-meetings to look at. The alert and the log carry ids, never the person's address.
+calling the provider again. The data then outlives the promise only at the provider, and the admin
+knows which meetings to look at. The alert and the log carry ids, never the person's address.
 """
 
 import logging
@@ -79,7 +79,8 @@ def recording_to_delete(
     session: Session, provider, meeting: Meeting, now: datetime, stopped: set[int]
 ) -> int | None:
     """Settle one meeting's provider side (see the module docstring): the id of the recording to
-    delete, or None when there is nothing to delete. Raises `BotProviderError` while it is not settled."""
+    delete, or None when there is nothing to delete. Raises `BotProviderError` while it is not
+    settled."""
     stored = meeting.provider_recording_id
     if not meeting.provider_bot_id:
         return stored
@@ -207,9 +208,9 @@ def erase_account_row(session: Session, user: User, now: datetime) -> None:
 def purge_user(
     session: Session, user: User, provider, now: datetime | None = None, *, force: bool = False
 ) -> None:
-    """Delete `user` and everything of theirs. Commits. Raises `BotProviderError` while the provider has not
-    settled (nothing is deleted then). With `force`, the provider is not called at all: the caller has
-    given up waiting and recorded that."""
+    """Delete `user` and everything of theirs. Commits. Raises `BotProviderError` while the provider
+    has not settled (nothing is deleted then). With `force`, the provider is not called at all: the
+    caller has given up waiting and recorded that."""
     now = now or datetime.now(UTC)
     meetings = meetings_to_delete(session, user.id)
     meeting_ids = [meeting.id for meeting in meetings]
@@ -290,16 +291,16 @@ def _give_up(session: Session, user: User, now: datetime) -> None:
     """Stop waiting for the provider: log, tell every admin in the app, delete our rows anyway."""
     meeting_ids = [meeting.id for meeting in meetings_to_delete(session, user.id)]
     logger.error(
-        "user %s: gave up waiting for the provider after %s; deleting our rows, the provider's copy of meetings "
-        "%s could not be confirmed deleted",
+        "user %s: gave up waiting for the provider after %s; deleting our rows, the provider's "
+        "copy of meetings %s could not be confirmed deleted",
         user.id,
         GIVE_UP_AFTER,
         meeting_ids,
     )
     body = (
         f"The deletion of user {user.id} waited a day for the bot provider and then deleted our "
-        f"records anyway. Check the provider for the recordings of meeting ids {meeting_ids}: they could not be "
-        "confirmed deleted."
+        f"records anyway. Check the provider for the recordings of meeting ids {meeting_ids}: "
+        "they could not be confirmed deleted."
     )
     for admin_id in session.scalars(
         select(User.id).where(User.is_admin.is_(True), User.status == "active")
@@ -309,7 +310,7 @@ def _give_up(session: Session, user: User, now: datetime) -> None:
                 user_id=admin_id,
                 kind="admin.purge_forced",
                 severity="error",
-                title="A deleted account's recordings could not be confirmed gone at the bot provider",
+                title="A deleted account's recordings could not be confirmed gone at the provider",
                 body=body,
                 dedupe_key=f"purge_forced:{user.id}",
                 created_at=now,
@@ -320,9 +321,9 @@ def _give_up(session: Session, user: User, now: datetime) -> None:
 
 
 def purge_deleted(session: Session, provider) -> int:
-    """Purge every user marked `deleted`; returns how many went. Any trouble with one user (the provider
-    down or not settled, a bad value, a database error) is logged by type only and leaves that
-    user marked for the next pass, until a day has passed (see the module docstring); it never
+    """Purge every user marked `deleted`; returns how many went. Any trouble with one user (the
+    provider down or not settled, a bad value, a database error) is logged by type only and leaves
+    that user marked for the next pass, until a day has passed (see the module docstring); it never
     stops the others and never reaches the worker's loop."""
     ids = list(
         session.scalars(

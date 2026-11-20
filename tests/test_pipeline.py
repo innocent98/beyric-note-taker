@@ -565,7 +565,8 @@ def test_first_sight_of_the_recording_stores_its_id(session, meeting):
 
 
 def test_recording_ids_beyond_32_bits_are_stored(session, meeting):
-    # Seen live on 2026-11-02: The provider recording 676401909012 failed every meeting at this step.
+    # Seen live on 2026-11-02: the provider recording 676401909012 failed every meeting at this
+    # step.
     big = BotMeeting(
         status="active",
         recording_id=676401909012,

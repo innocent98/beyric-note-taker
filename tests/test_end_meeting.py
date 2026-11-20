@@ -76,7 +76,7 @@ def test_a_bot_in_the_call_can_be_ended(api, session, template, fake_bot, state)
         None,
         "requested",
         "joining",
-        "awaiting_admission",  # at the door the provider ends it `failed`: nothing to write notes from
+        "awaiting_admission",  # at the door the provider ends it `failed`: no notes to write
         "needs_help",
         "stopping",
         "google_meet_join_refused",
@@ -339,8 +339,8 @@ def test_an_ended_meeting_with_no_speech_gives_the_same_result_as_any_other(
 
 
 def test_a_stop_the_owner_did_not_ask_for_does_not_say_you_ended_the_meeting(session, waiting):
-    """The worker's own stop can reach the provider and still look failed on our side; the provider then says
-    `stopped` for a meeting nobody pressed End on."""
+    """The worker's own stop can reach the provider and still look failed on our side; the
+    provider then says `stopped` for a meeting nobody pressed End on."""
     run(
         session,
         waiting,

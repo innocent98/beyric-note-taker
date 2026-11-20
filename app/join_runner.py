@@ -29,13 +29,13 @@ email) and the admins (an alert), the row becomes `no_capacity`, and the runner 
 15 s until the deadline. At the deadline the row ends `failed` as "not recorded" and the owner is
 told again. A queued meeting is an unrecorded meeting, so nothing waits for a slot silently.
 
-**Another account in the same meeting.** One bot per meeting code (the provider has one API key): the first
-placement wins. The other user's row ends `skipped` with the neutral reason, and a plain notice
-that a note taker is already in that meeting. Nobody's bot is stopped or adopted. Who is first is
-not left to a race when the event's ORGANIZER has an account that can place: a guest's row holds
-back for `ORGANIZER_BOT_WAIT_SECONDS` after its run time (`app/organizer_bot.py`, billing spec 2.5;
-`_hold_for_the_organizer`: a delay on the tick, not a sleep), and the organizer's rows are looked
-at first in each tick (`_due_ids`). With no such organizer nobody waits.
+**Another account in the same meeting.** One bot per meeting code (the provider has one API key):
+the first placement wins. The other user's row ends `skipped` with the neutral reason, and a plain
+notice that a note taker is already in that meeting. Nobody's bot is stopped or adopted. Who is
+first is not left to a race when the event's ORGANIZER has an account that can place: a guest's row
+holds back for `ORGANIZER_BOT_WAIT_SECONDS` after its run time (`app/organizer_bot.py`, billing spec
+2.5; `_hold_for_the_organizer`: a delay on the tick, not a sleep), and the organizer's rows are
+looked at first in each tick (`_due_ids`). With no such organizer nobody waits.
 
 Notifications go through `app/alerts.py` (once per row, or once per 30-minute bucket for the ones
 that repeat), with kinds that start `calendar.` so a disconnect deletes them. Admin text names the

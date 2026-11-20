@@ -3,18 +3,18 @@
     python scripts/capture_template_delete.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_owner_api.py` (it is imported for the recorder, the fakes and the
-database preparation): real migrations, the real app under uvicorn, real HTTP, only the provider and OpenAI
-replaced by fakes. The person is the admin account migration 0006 creates, with the four templates
-migration 0007 gave them. Meetings are inserted by SQL in the states the worker leaves them in, and
-the stored rows that matter (the calendar setting, a planned join) are saved as files between the
-calls, so every claim in `docs/fe-integration-guide-owner-app.md` section 5b can be re-derived.
+database preparation): real migrations, the real app under uvicorn, real HTTP, only the provider and
+OpenAI replaced by fakes. The person is the admin account migration 0006 creates, with the four
+templates migration 0007 gave them. Meetings are inserted by SQL in the states the worker leaves
+them in, and the stored rows that matter (the calendar setting, a planned join) are saved as files
+between the calls, so every claim in `docs/fe-integration-guide-owner-app.md` section 5b can be
+re-derived.
 
 Files go to `docs/fe-captures/template-delete/NN-name.json`.
 
-What is NOT real: The provider and OpenAI (fakes), the worker (it never runs), and the Google calendar:
-the calendar setting is written by SQL, because `PUT /api/calendar/settings` answers 404 while
-`CALENDAR_ENABLED` is off, as in this run.
-"""
+What is NOT real: the provider and OpenAI (fakes), the worker (it never runs), and the Google
+calendar: the calendar setting is written by SQL, because `PUT /api/calendar/settings` answers 404
+while `CALENDAR_ENABLED` is off, as in this run."""
 
 import shutil
 import sys

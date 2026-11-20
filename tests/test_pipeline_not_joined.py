@@ -1,6 +1,7 @@
 """The "Could not join" mail and its bell entry, sent when a meeting fails because the bot was NOT
-admitted: the provider's `awaiting_admission_timeout` / `awaiting_admission_rejected`, or Google refusing
-the bot's ask to join. Every other way a meeting ends keeps what it had (no mail, no bell)."""
+admitted: the provider's `awaiting_admission_timeout` / `awaiting_admission_rejected`, or Google
+refusing the bot's ask to join. Every other way a meeting ends keeps what it had (no mail, no
+bell)."""
 
 import logging
 from datetime import timedelta

@@ -103,9 +103,9 @@ STEP_TEXT = {
     "speakers": "Working out who said what",
     "notes": "Writing the notes",
 }
-# What the owner reads while the bot is in a call, by the state the worker last saw the provider report.
-# `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something is
-# being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
+# What the owner reads while the bot is in a call, by the state the worker last saw the provider
+# report. `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something
+# is being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
 BOT_STATE_TEXT = {
     "requested": "Starting the bot",
     SEND_UNCONFIRMED: "Starting the bot",
@@ -123,8 +123,8 @@ BOT_STATE_TEXT = {
 BOT_ENDING_TEXT = "The bot is leaving the meeting. The notes start once it has gone"
 # The provider reported the call over but the recording is not ready to download yet.
 CALL_ENDED_TEXT = "The call ended; finishing the recording"
-# A live state older than this many poll intervals is not shown as current: the worker is behind,
-# or the provider has not answered for a while. The worker handles meetings one at a time, so a pass on
+# A live state older than this many poll intervals is not shown as current: the worker is behind, or
+# the provider has not answered for a while. The worker handles meetings one at a time, so a pass on
 # another meeting (minutes of transcription) leaves this one unseen for that long: the window only
 # covers a slow provider and a short pass, not a long one.
 BOT_STATE_STALE_POLLS = 4
@@ -309,7 +309,7 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
                 )
             )
         if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
-            return CALL_ENDED_TEXT  # the provider said the call is over and the recording is being made
+            return CALL_ENDED_TEXT  # the provider said the call is over; the recording is made
         return "Bot sent"
     if meeting.status == "processing":
         return STEP_TEXT.get(meeting.step, "Working on it")
@@ -745,7 +745,8 @@ def _lock_meeting(session: Session, meeting: Meeting) -> Meeting:
 
 def _stop_bot_or_refuse(session: Session, provider, meeting: Meeting) -> None:
     """Ask the provider to take the bot out, or roll back and refuse with a plain 502 (the message
-    never carries the provider's own text; a meeting code the client will not send is the same failure)."""
+    never carries the provider's own text; a meeting code the client will not send is the same
+    failure)."""
     if not placement.may_stop_bot(session, meeting):
         logger.info("meeting %s: the bot at its code is a newer meeting's, left alone", meeting.id)
         return  # this meeting's own bot is already gone; its owner carries on
@@ -819,8 +820,8 @@ def delete_meeting(session: Session, provider: BotProvider, meeting: Meeting) ->
     meeting_id = locked.id
     try:
         if locked.audio_deleted_at is None:
-            # Settle the provider's side the way account deletion does: a cancelled meeting never had
-            # the recording id stored, so ask the provider for it (waiting out its grace) before
+            # Settle the provider's side the way account deletion does: a cancelled meeting never
+            # had the recording id stored, so ask the provider for it (waiting out its grace) before
             # it is lost.
             holder = provider_for(provider, locked.bot_provider, locked.bot_region)
             recording_id = deletion.recording_to_delete(
@@ -918,8 +919,8 @@ def end_meeting(session: Session, provider: BotProvider, meeting: Meeting) -> Me
     """Take the bot out of the call and let the pipeline write the notes from what it recorded.
 
     Unlike `cancel_meeting` nothing is discarded: the meeting stays `bot_sent`, marked
-    `end_requested`, and the worker carries on as for any call that ended (the provider reports the bot
-    gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
+    `end_requested`, and the worker carries on as for any call that ended (the provider reports the
+    bot gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
     that recorded nothing ends as the same "nothing was recorded" failure as any empty meeting."""
     _check_endable(meeting)  # without the lock: a meeting being processed must not make us wait
     locked = _lock_meeting(session, meeting)

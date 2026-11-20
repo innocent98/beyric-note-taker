@@ -4,15 +4,14 @@
 
 The argument is any Postgres server the script may create a scratch database on. It runs the real
 migrations there, makes three Google Meet meetings the bot "was sent to" and lets the REAL pipeline
-(`pipeline.advance_meeting`) see the provider report: the waiting room timed out, the host declined, and an
-ordinary bot failure (which must say nothing). Then it starts the real app under uvicorn, logs in
-and fetches the bell. The queued "Could not join" mail is rendered by the real template and written
-next to the responses. Each exchange goes to `docs/fe-captures/could-not-join/NN-name.json`.
+(`pipeline.advance_meeting`) see the provider report: the waiting room timed out, the host declined,
+and an ordinary bot failure (which must say nothing). Then it starts the real app under uvicorn,
+logs in and fetches the bell. The queued "Could not join" mail is rendered by the real template and
+written next to the responses. Each exchange goes to `docs/fe-captures/could-not-join/NN-name.json`.
 
 What is real: the app, the pipeline, the alerts code, the mail template, CSRF and every response.
-What is not: The provider (a stub that answers with the three states). Cookie values and CSRF tokens are
-masked; the e-mail address and password are placeholders.
-"""
+What is not: the provider (a stub that answers with the three states). Cookie values and CSRF tokens
+are masked; the e-mail address and password are placeholders."""
 
 import json
 import os

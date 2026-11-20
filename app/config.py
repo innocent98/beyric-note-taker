@@ -488,8 +488,9 @@ class Settings(BaseSettings):
 
     poll_interval_seconds: int = 30
     # How long the bot may sit in a call with no one else speaking before it leaves on its own
-    # (Skribby's `last_person_detection`, in whole minutes, rounded up). It is a silence rule, not a headcount, so a short
-    # window can cut a quiet meeting short. 0 = send nothing and keep Skribby's default.
+    # (Skribby's `last_person_detection`, in whole minutes, rounded up). It is a silence rule, not a
+    # headcount, so a short window can cut a quiet meeting short. 0 = send nothing and keep
+    # Skribby's default.
     bot_left_alone_seconds: int = 300
     max_poll_hours: int = 6
     # How many bots may be on meetings at once across all users (`app/placement.py`). The bots run

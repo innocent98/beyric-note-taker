@@ -51,7 +51,6 @@ LAYOUT = [
     (
         "Bot provider (Skribby)",
         [
-            "BOT_PROVIDER",
             "SKRIBBY_API_KEY",
             "SKRIBBY_ACCOUNT_ID",
             "SKRIBBY_ACCOUNT_NAME",
@@ -81,10 +80,6 @@ LAYOUT = [
         ],
     ),
     ("Feature switches", ["MULTI_TEAM_ENABLED", "SERIES_FOLLOW_MEETINGS"]),
-    (
-        "Vexa (to remove once its cleanup is done)",
-        ["VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET", "VEXA_API_KEY", "VEXA_IMAGE_TAG", "BOT_NAME"],
-    ),
     (
         "Optional",
         [
@@ -150,7 +145,7 @@ LAYOUT = [
             "BILLING_VAT_RATE_BP",
         ],
     ),
-    ("Local development (outside Docker)", ["DATABASE_URL", "VEXA_BASE_URL"]),
+    ("Local development (outside Docker)", ["DATABASE_URL"]),
 ]
 UNRECOGNISED_TITLE = "Not recognised (kept)"
 
@@ -159,21 +154,22 @@ UNRECOGNISED_TITLE = "Not recognised (kept)"
 LEGACY_ALIASES = {"MAX_ACTIVE_BOTS": "BOT_MAX_LOCAL"}
 
 # Missing (or empty) one of these and compose or the app refuses to start (or cannot work):
-# compose.yaml `${NAME:?...}` for the first three (the two Vexa ones are checked even while the
-# vexa profile is off, tests/test_compose_vexa_profile.py), app/auth.py `check_start` for
-# SESSION_SECRET (32 characters), and no notes or transcript without OPENAI_API_KEY.
-REQUIRED = (
-    "POSTGRES_PASSWORD",
-    "VEXA_DB_PASSWORD",
-    "VEXA_STORAGE_SECRET",
-    "SESSION_SECRET",
-    "OPENAI_API_KEY",
-)
+# compose.yaml `${NAME:?...}` for POSTGRES_PASSWORD, app/auth.py `check_start` for SESSION_SECRET
+# (32 characters), and no notes or transcript without OPENAI_API_KEY.
+REQUIRED = ("POSTGRES_PASSWORD", "SESSION_SECRET", "OPENAI_API_KEY")
+
+# Names the app and compose.yaml no longer read at all (the self-hosted bot host, Vexa, was removed
+# on 2026-11-20, docs/sop/2026-11-20-remove-vexa.md): a leftover line is removed whatever its value.
+# Everything starting `VEXA_` goes (its database password, storage secret, API key, image tag, base
+# URL), and so do `BOT_NAME` (the name of that host's bot) and `BOT_PROVIDER` (there is one
+# provider). `COMPOSE_PROFILES` goes only when it is exactly `vexa`: that was the profile that
+# started the host; any other value is someone else's and is kept.
+UNUSED_PREFIX = "VEXA_"
+UNUSED_NAMES = ("BOT_NAME", "BOT_PROVIDER")
 
 # Removed only when the value IS the code's default (app/config.py), so the app behaves the same
-# without the line. Left out on purpose, although they have a default: BOT_MAX_LOCAL and
-# TEAMS_JOIN_ENABLED (their default follows BOT_PROVIDER, and a line in .env always wins),
-# BILLING_LIVE and TOKEN_ENC_KEY_VERSION (explicit safety and rotation state).
+# without the line. Left out on purpose, although they have a default: BILLING_LIVE and
+# TOKEN_ENC_KEY_VERSION (explicit safety and rotation state).
 # kind: s = text, i = whole number, b = true/false. tests/test_clean_env.py checks each default
 # against Settings, so this table cannot drift from the code.
 DEFAULTS = {
@@ -182,8 +178,10 @@ DEFAULTS = {
     "MAX_POLL_HOURS": ("i", 6),
     "POLL_INTERVAL_SECONDS": ("i", 30),
     "BOT_LEFT_ALONE_SECONDS": ("i", 300),
+    "BOT_MAX_LOCAL": ("i", 20),
     "USER_BOT_LIMIT": ("i", 2),
     "HOURS_RESERVE_MINUTES": ("i", 30),
+    "TEAMS_JOIN_ENABLED": ("b", True),
     "AUTOJOIN_ENABLED": ("b", True),
     "AUTOJOIN_LEAD_SECONDS": ("i", 60),
     "SCHEDULER_DISPATCH_SECONDS": ("i", 10),
@@ -333,6 +331,13 @@ def equals_default(key: str, rhs: str) -> bool:
     return value == default
 
 
+def is_unused(key: str, rhs: str) -> bool:
+    """Whether a line is a leftover of something the app no longer reads (`UNUSED_NAMES`)."""
+    if key.startswith(UNUSED_PREFIX) or key in UNUSED_NAMES:
+        return True
+    return key == "COMPOSE_PROFILES" and effective(rhs)[0].strip().lower() == "vexa"
+
+
 def is_empty(rhs: str) -> bool:
     value, plain = effective(rhs)
     return plain and value == ""
@@ -354,10 +359,11 @@ class Plan:
         self.removed_empty = [
             k for k, v in self.values.items() if k in EMPTY_IS_ABSENT and is_empty(v)
         ]
-        removed = set(self.removed_default) | set(self.removed_empty)
+        self.removed_unused = [k for k, v in self.values.items() if is_unused(k, v)]
+        removed = set(self.removed_default) | set(self.removed_empty) | set(self.removed_unused)
         known = {k for _, keys in LAYOUT for k in keys} | set(LEGACY_ALIASES)
         self.kept = [k for k in self.values if k in known and k not in removed]
-        self.unrecognised = [k for k in self.values if k not in known]
+        self.unrecognised = [k for k in self.values if k not in known and k not in removed]
         self.missing = [k for k in REQUIRED if k not in self.values or is_empty(self.values[k])]
         # compose expands `$NAME` in an unquoted or double-quoted value, so a kept value that holds
         # a `$` might depend on another key; moving or removing keys could change what it means.
@@ -408,7 +414,7 @@ class Plan:
     def check_nothing_lost(self, rendered: str) -> None:
         """Parse what would be written and compare it with the input, key by key."""
         again = dict(parse(rendered))
-        removed = set(self.removed_default) | set(self.removed_empty)
+        removed = set(self.removed_default) | set(self.removed_empty) | set(self.removed_unused)
         for key, rhs in self.values.items():
             if key in removed:
                 if key in again:
@@ -510,6 +516,11 @@ def run(path: str, apply: bool, out) -> int:
     print(
         f"removed, empty line that means the same as none ({len(plan.removed_empty)}): "
         f"{names(plan.removed_empty)}",
+        file=out,
+    )
+    print(
+        f"removed, no longer read by the app ({len(plan.removed_unused)}): "
+        f"{names(plan.removed_unused)}",
         file=out,
     )
     print(f"kept, not recognised ({len(plan.unrecognised)}): {names(plan.unrecognised)}", file=out)

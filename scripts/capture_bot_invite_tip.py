@@ -8,8 +8,8 @@ uvicorn, real HTTP, the Google connection made through the real connect flow.
 
 The server is started as production would run it with the tip on: Skribby as the provider, a signed
 in account (`SKRIBBY_ACCOUNT_ID`) and `BOT_INVITE_EMAIL`. Every value is a placeholder. The same two
-reads are then captured with the address unset, with the account unset and with the provider as provider,
-to show the field is `null` (present, not absent) whenever the server may not say it.
+reads are then captured with the address unset, with the account unset and with the provider as
+provider, to show the field is `null` (present, not absent) whenever the server may not say it.
 
 Files go to `docs/fe-captures/bot-invite-tip/NN-name.json`.
 

@@ -121,8 +121,8 @@ NEEDS_HELP_MARK = "needs_help"
 # Stored in `Meeting.completion_reason` (with `terminal_seen_at` as the time) when the worker ended
 # a join itself, so what follows reads the structured marker, never the wording of the reason.
 JOIN_FAILURE_MARKS = (MEET_REFUSED, NEEDS_HELP_MARK)
-# Bots sent for one meeting when Google refuses them, the first included. The provider already knocks
-# more than once inside one bot, so more sends only look like hammering.
+# Bots sent for one meeting when Google refuses them, the first included. The provider already
+# knocks more than once inside one bot, so more sends only look like hammering.
 REFUSAL_MAX_SENDS = 2
 # The pause before the second bot, counted from the refusal, plus a stable 0 to 60 s per meeting.
 REFUSAL_RETRY_GAP = timedelta(minutes=4)
@@ -139,9 +139,9 @@ STOP_TRIES = 3
 JOIN_BUTTON_ERROR = "could not locate join button"
 MEET_MARKETING_URL = "workspace.google.com/products/meet"
 
-# What the bot is doing while the call runs, as the provider reports it (`status` in the lifecycle schema).
-# The worker keeps it in `Meeting.completion_reason` while the meeting is `bot_sent`, with the time
-# of the poll that saw it in `bot_state_seen_at`, so the owner's page can say it
+# What the bot is doing while the call runs, as the provider reports it (`status` in the lifecycle
+# schema). The worker keeps it in `Meeting.completion_reason` while the meeting is `bot_sent`, with
+# the time of the poll that saw it in `bot_state_seen_at`, so the owner's page can say it
 # (`services.status_text`); no column of its own for the state. `BOT_RECORDING` is not a provider
 # status: it is `active` once segments or a recording id prove something is being captured.
 BOT_RECORDING = "recording"
@@ -155,16 +155,16 @@ BOT_LIVE_STATES = (
     BOT_RECORDING,
 )
 # Stored in `completion_reason` by "End now and write the notes" (`services.end_meeting`) while the
-# bot is leaving. Not a live state, so a poll never replaces it; the provider's own completion reason
-# replaces it once the bot has gone.
+# bot is leaving. Not a live state, so a poll never replaces it; the provider's own completion
+# reason replaces it once the bot has gone.
 BOT_END_REQUESTED = "end_requested"
-# A bot was sent and the provider gave no clear answer: it may be joining, or not at all. The meeting is
-# kept as a placeholder (`bot_sent`, no provider id) with this in `completion_reason`, read as
-# "Starting the bot", until `_settle_unconfirmed` adopts a bot that shows up for the code or gives
-# up.
+# A bot was sent and the provider gave no clear answer: it may be joining, or not at all. The
+# meeting is kept as a placeholder (`bot_sent`, no provider id) with this in `completion_reason`,
+# read as "Starting the bot", until `_settle_unconfirmed` adopts a bot that shows up for the code or
+# gives up.
 SEND_UNCONFIRMED = placement.SEND_UNCONFIRMED
-# The provider states in which a bot is taken as the one a placeholder was waiting for: not `stopping`,
-# which is a leftover leaving (a cancelled meeting's bot), never one that is arriving.
+# The provider states in which a bot is taken as the one a placeholder was waiting for: not
+# `stopping`, which is a leftover leaving (a cancelled meeting's bot), never one that is arriving.
 ADOPTABLE_STATES = tuple(state for state in BOT_LIVE_STATES if state != "stopping")
 # How long the worker waits for a bot to show up before it stops the code and fails the meeting.
 UNCONFIRMED_GRACE = timedelta(seconds=60)
@@ -172,8 +172,8 @@ REASON_SEND_UNCONFIRMED = (
     "The bot could not be confirmed in the meeting, so this meeting was not recorded. "
     "Please send the bot again."
 )
-# The states in which the owner may end the bot with "End now and write the notes": in the call.
-# At the door the provider tears the bot down and ends it `failed`, so there would be nothing to write
+# The states in which the owner may end the bot with "End now and write the notes": in the call. At
+# the door the provider tears the bot down and ends it `failed`, so there would be nothing to write
 # notes from (Cancel says that better); a bot still joining, one asking for help, and one already
 # leaving are not offered it either.
 BOT_ENDABLE_STATES = ("active", BOT_RECORDING)
@@ -186,8 +186,8 @@ MAX_JOIN_ATTEMPTS = 3
 ZOOM_BLOCKED = "zoom_requires_rtms"
 
 # A finished meeting whose recording is still "in progress" after this long is downloaded anyway:
-# The provider builds the audio file when it is read (`GET /recordings/{id}/media/{id}/raw` assembles the
-# master from the uploaded chunks first), so the status can lag behind the file.
+# The provider builds the audio file when it is read (`GET /recordings/{id}/media/{id}/raw`
+# assembles the master from the uploaded chunks first), so the status can lag behind the file.
 RECORDING_GRACE = timedelta(minutes=10)
 # Provider `completion_reason` values that mean the bot did not stay to the end. "evicted" is also
 # reported on calls that ended normally, so it only ever produces a notice, never a failure.
@@ -231,8 +231,9 @@ def audio_path(meeting_id: int) -> Path:
 
 
 def _lookup(provider, meeting: Meeting) -> BotMeeting:
-    """Ask the provider about this meeting by its provider id, so a reused link cannot pick up an earlier
-    recording. Rows without an id (made before it was stored) fall back to the meeting code."""
+    """Ask the provider about this meeting by its provider id, so a reused link cannot pick up an
+    earlier recording. Rows without an id (made before it was stored) fall back to the meeting
+    code."""
     # The meeting's own stored note taker name goes along (`own_names`, Skribby's provider only), so
     # a custom bot name is never named as a speaker by elimination; null = the server default,
     # which the provider already knows.
@@ -321,7 +322,7 @@ def _give_up(session: Session, meeting: Meeting) -> None:
 
 
 def _remember(meeting: Meeting, info: BotMeeting) -> None:
-    """Keep what the provider told us that is needed later: its recording id and why the bot left."""
+    """Keep what the provider told us that is needed later: its recording id, why the bot left."""
     if info.recording_id is not None:
         meeting.provider_recording_id = info.recording_id
     # The owner's End press stays on the row until the meeting is done: it is what tells "you
@@ -331,8 +332,8 @@ def _remember(meeting: Meeting, info: BotMeeting) -> None:
 
 
 def _live_state(info: BotMeeting) -> str | None:
-    """The bot's state for the owner while the call runs, or None when the provider says something else
-    (over, failed)."""
+    """The bot's state for the owner while the call runs, or None when the provider says something
+    else (over, failed)."""
     captured = bool(info.segments) or info.recording_id is not None
     if info.status == "active" and captured:
         return BOT_RECORDING
@@ -440,8 +441,8 @@ def _owner_bot_name(session, meeting: Meeting, settings, provider: str) -> str |
 def send_again(meeting: Meeting, provider, *, raise_duplicate: bool = False) -> bool:
     """Send a fresh bot to the same link and point the meeting at it. The caller commits.
 
-    False, with the meeting untouched, when the provider could not take the bot. A send that got no clear
-    answer (`BotSendUncertain`) leaves the meeting as an unconfirmed start for the worker to
+    False, with the meeting untouched, when the provider could not take the bot. A send that got no
+    clear answer (`BotSendUncertain`) leaves the meeting as an unconfirmed start for the worker to
     settle, and counts as sent. A provider duplicate refusal (a bot that is not ours is in that
     meeting) is raised when `raise_duplicate`, else it is a plain failure."""
     unconfirmed = False
@@ -580,10 +581,11 @@ def _join_problem(meeting: Meeting, info: BotMeeting, now: datetime) -> str | No
         JOIN_BUTTON_ERROR in lowered and MEET_MARKETING_URL in lowered
     ):
         return MEET_REFUSED
-    # A bot that is already recording is the provider asking for help for another reason: leave it be.
-    # So is one still in the waiting room: there `needs_help` is the provider warning that its lobby
-    # budget is nearly spent (`waiting_room_timeout_approaching`), and the host may admit it any
-    # moment; the provider ends the wait itself when the budget runs out (seen live on 2026-11-06).
+    # A bot that is already recording is the provider asking for help for another reason: leave it
+    # be. So is one still in the waiting room: there `needs_help` is the provider warning that its
+    # lobby budget is nearly spent (`waiting_room_timeout_approaching`), and the host may admit it
+    # any moment; the provider ends the wait itself when the budget runs out (seen live on
+    # 2026-11-06).
     if (
         info.status == "needs_help"
         and not info.segments
@@ -598,7 +600,8 @@ def _join_problem(meeting: Meeting, info: BotMeeting, now: datetime) -> str | No
 
 def _stop_bot(meeting: Meeting, provider) -> bool:
     """Ask the provider to take the bot out. False when it could not, until it has been tried
-    `STOP_TRIES` times: then it is given up on, so the provider being down cannot hold the meeting."""
+    `STOP_TRIES` times: then it is given up on, so the provider being down cannot hold the
+    meeting."""
     session = object_session(meeting)
     if session is not None and not placement.may_stop_bot(session, meeting):
         return True  # the bot at this code is a newer meeting's, not this one's: nothing to stop
@@ -664,8 +667,8 @@ def _on_join_problem(
 
 
 def _held_by_another_meeting(session: Session, meeting: Meeting, provider_id: int) -> bool:
-    """Whether a different meeting row already points at this provider bot: then it is that meeting's
-    (for instance a cancelled one still stopping), never this placeholder's."""
+    """Whether a different meeting row already points at this provider bot: then it is that
+    meeting's (for instance a cancelled one still stopping), never this placeholder's."""
     return (
         session.scalar(
             select(Meeting.id)
@@ -693,8 +696,8 @@ def _settle_unconfirmed(session: Session, meeting: Meeting, provider, now: datet
         and info.provider_id is not None
         and not _held_by_another_meeting(session, meeting, info.provider_id)
     ):
-        # Adopted, and pinned to the provider's id from here on: a reused code can then never hand this
-        # meeting someone else's (or an older) recording.
+        # Adopted, and pinned to the provider's id from here on: a reused code can then never hand
+        # this meeting someone else's (or an older) recording.
         meeting.provider_bot_id = str(info.provider_id)
         meeting.completion_reason, meeting.bot_state_seen_at = None, None
         _lookup_misses.pop(meeting.id, None)

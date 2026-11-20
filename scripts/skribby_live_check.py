@@ -22,9 +22,8 @@ Keys: `SKRIBBY_API_KEY` (required), `SKRIBBY_ACCOUNT_ID` (the signed-in bot; lea
 else from `~/.config/beyric-bakeoff/keys.env` (the bake-off's file, `NAME=value` per line). No key
 is ever printed, logged or put in an error.
 
-It talks only to Skribby, never to the app's database or the provider. It uses Skribby time: the free plan
-has 5 bot hours a month; a check of two minutes costs about two minutes of that.
-"""
+It talks only to Skribby, never to the app's database or the provider. It uses Skribby time: the
+free plan has 5 bot hours a month; a check of two minutes costs about two minutes of that."""
 
 import argparse
 import os

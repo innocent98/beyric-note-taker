@@ -3,11 +3,11 @@
     python scripts/capture_meeting_delete.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_template_delete.py`: real migrations, the real app under uvicorn,
-real HTTP, only the provider and OpenAI replaced by fakes (the fake the provider accepts `delete_recording`). Rows
-are inserted by SQL in the states the worker leaves them in, and the stored rows are saved between
-calls. Files go to `docs/fe-captures/meeting-delete/NN-name.json`.
+real HTTP, only the provider and OpenAI replaced by fakes (the fake the provider accepts
+`delete_recording`). Rows are inserted by SQL in the states the worker leaves them in, and the
+stored rows are saved between calls. Files go to `docs/fe-captures/meeting-delete/NN-name.json`.
 
-What is NOT real: The provider and OpenAI (fakes), the worker (it never runs). The `502
+What is NOT real: the provider and OpenAI (fakes), the worker (it never runs). The `502
 recording_delete_failed` answer comes from a fake the provider told to fail.
 """
 

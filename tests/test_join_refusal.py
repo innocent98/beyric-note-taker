@@ -1,13 +1,12 @@
 """A refused or stuck Google Meet join fails fast with a plain reason, and retries are polite.
 
-Fake the provider answers follow the real payload shape. the provider v0.12.29 reports a refusal as a typed
-`denial` (`bot/src/orchestrator.ts`, `modules/join/src/googlemeet/refusal.ts` at `31122f9`):
-status `failed`, `completion_reason` `awaiting_admission_rejected` (the same value a host
-declining the bot gets) and `data.reason` starting `google_meet_join_refused:`. v0.12.28 gave
-`needs_help` about two minutes after the knock, and meeting 10's "Could not locate join button"
-error (both seen live on 2026-11-03). In the provider `needs_help` is also the consent gate and reCAPTCHA
-(`admission.ts`), so it never reads as a refusal.
-"""
+The fake provider's answers follow the pipeline's vocabulary (`app/bot_provider.py`; a real provider
+maps its own states into it). A Google refusal arrives as a typed denial: status `failed`,
+`completion_reason` `awaiting_admission_rejected` (the same value a host declining the bot gets) and
+a failure reason starting `google_meet_join_refused:`. Older bots gave `needs_help` about two
+minutes after the knock, or a "Could not locate join button" error (both seen live on 2026-11-03,
+with the provider that has since been removed). `needs_help` is also the consent gate and reCAPTCHA,
+so it never reads as a refusal."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -368,7 +367,7 @@ def test_v028_join_button_error_is_settled_within_one_poll_of_provider_failing(s
 def test_v029_refusal_is_settled_within_one_poll_of_provider_reporting_it(
     session, meeting, attempts
 ):
-    # The 100 s is made up: The provider measured 25 s to the lobby with one refusal and 41 s with two,
+    # The 100 s is made up: 25 s to the lobby with one refusal and 41 s with two were measured live,
     # and the time to report after three refusals was not measured. The worker adds one poll.
     fresh_send(session, meeting, attempts)
     settled, provider = settle_time(session, meeting, V29_REFUSED)
@@ -535,8 +534,8 @@ def test_a_manual_send_whose_commit_fails_stops_the_bot_it_just_sent(session, me
 
 
 def test_a_manual_send_that_times_out_keeps_the_meeting_as_an_unconfirmed_start(session, meeting):
-    """The provider may still be taking the bot: the row becomes a placeholder the worker adopts or reaps
-    (a stop now would find nothing), not a 502 that frees the code for a second bot."""
+    """The provider may still be taking the bot: the row becomes a placeholder the worker adopts or
+    reaps (a stop now would find nothing), not a 502 that frees the code for a second bot."""
     from app.bot_provider import BotSendUncertain
 
     refused_meeting(session, meeting, ago=10 * MINUTE)
@@ -612,13 +611,15 @@ def test_a_manual_send_respects_the_hours_cap(session, meeting, owner):
     assert not getattr(provider, "sent", []) and meeting.status == "failed"
 
 
-# ---- needs_help raised from the waiting room: the provider's lobby-timeout warning, not a prompt ----
+# ---- needs_help raised from the waiting room: the provider's lobby-timeout warning, not a prompt
+# ----
 #
 # Seen live on 2026-11-06 (meetings 15 and 16): the bot sat in the waiting room, the provider raised
 # `[Escalation] Triggered: waiting_room_timeout_approaching` at 80% of its 15-minute lobby budget
 # (721 s) and turned the bot `needs_help`; the worker read that as a stuck prompt and withdrew the
-# knock two minutes later, just as the host clicked Admit. the provider's own rule (`lifecycle/machine.py`
-# at `31122f9`) is that `needs_help` entered after `awaiting_admission` is still the lobby.
+# knock two minutes later, just as the host clicked Admit. the provider's own rule
+# (`lifecycle/machine.py` at `31122f9`) is that `needs_help` entered after `awaiting_admission` is
+# still the lobby.
 
 LOBBY_WARNING = BotMeeting(status="needs_help", reached_lobby=True)
 

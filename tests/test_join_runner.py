@@ -1540,8 +1540,8 @@ def test_the_scheduler_stop_grace_is_longer_than_a_tick_can_run():
 def test_a_live_bot_in_the_meeting_with_no_row_is_adopted_not_called_someone_elses(
     session, host, cal, ada
 ):
-    """M3: a send killed after the provider took the bot leaves a live bot and no row. The retry used to
-    get the provider's duplicate answer and tell the owner another note taker was there."""
+    """M3: a send killed after the provider took the bot leaves a live bot and no row. The retry
+    used to get the provider's duplicate answer and tell the owner another note taker was there."""
     from app import pipeline
 
     host.seed_live_bot("google_meet", "abc-defg-hij")

@@ -3,12 +3,12 @@
     python scripts/capture_meetings_date_filter.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_meeting_delete.py`: real migrations, the real app under uvicorn,
-real HTTP, only the provider and OpenAI replaced by fakes. Six finished meetings are inserted by SQL with
-chosen `created_at` times (the worker is not running), around midnight in Lagos (UTC+1) so the
+real HTTP, only the provider and OpenAI replaced by fakes. Six finished meetings are inserted by SQL
+with chosen `created_at` times (the worker is not running), around midnight in Lagos (UTC+1) so the
 time-zone rule shows. Files go to `docs/fe-captures/meetings-date-filter/NN-name.json`.
 
-What is NOT real: The provider and OpenAI (fakes), the worker (it never runs), the meetings (inserted).
-"""
+What is NOT real: the provider and OpenAI (fakes), the worker (it never runs), the meetings
+(inserted)."""
 
 import shutil
 import sys

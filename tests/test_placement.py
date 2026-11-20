@@ -242,8 +242,8 @@ def test_same_code_by_same_user_is_already_in_meeting(session, host, ada, ada_te
 def test_same_code_by_other_user_is_meeting_has_note_taker(
     session, host, ada, ada_template, ben, ben_template
 ):
-    """With one shared the provider key there is one bot per meeting code, so a second account in a meeting
-    that already has a note taker cannot get its own (it is the plan's
+    """With one shared provider key there is one bot per meeting code, so a second account in a
+    meeting that already has a note taker cannot get its own (it is the plan's
     `..._other_user_is_already_in_meeting`, with a neutral code that names nobody). Sharing waits
     for C12 or per-user keys."""
     add_live(session, ada, ada_template, CODE)
@@ -518,9 +518,10 @@ def test_an_unknown_user_is_an_error_before_anything_is_sent(session, host, ada_
 def test_an_uncertain_send_keeps_the_code_reserved_with_a_placeholder_meeting(
     engine, session, host, ada, ada_template, ben, ben_template
 ):
-    """The provider may still be handling a POST whose answer was lost, so the bot can join seconds later:
-    a stop sent now would find nothing. The meeting is kept as `bot_sent` with no the provider id, marked
-    as unconfirmed, so the code stays taken (counted for capacity) until the worker knows."""
+    """The provider may still be handling a POST whose answer was lost, so the bot can join seconds
+    later: a stop sent now would find nothing. The meeting is kept as `bot_sent` with no the
+    provider id, marked as unconfirmed, so the code stays taken (counted for capacity) until the
+    worker knows."""
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
@@ -675,8 +676,8 @@ def test_a_bot_that_never_landed_is_stopped_and_the_meeting_fails_in_plain_words
 def test_a_finished_provider_meeting_on_the_reused_code_is_not_adopted(
     session, host, ada, ada_template
 ):
-    """The code of a recurring meeting can match an older, finished the provider meeting: that is not our
-    bot, and must never be adopted as one."""
+    """The code of a recurring meeting can match an older, finished meeting: that is not our bot,
+    and must never be adopted as one."""
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     host.get_meeting = lambda platform, code: provider_meeting(status="completed")
@@ -823,8 +824,9 @@ def test_a_failed_commit_does_not_stop_the_bot_when_the_lock_cannot_be_had(
 def test_cancel_during_the_uncertain_window_is_refused_so_a_late_bot_is_not_orphaned(
     session, host, ada, ada_template
 ):
-    """A stop sent now finds nothing (The provider still handling the POST: a 404 counts as stopped), the
-    row would fail, the code would be freed and the late bot would join with no row at all."""
+    """A stop sent now finds nothing (the provider is still handling the POST: a 404 counts as
+    stopped), the row would fail, the code would be freed and the late bot would join with no row at
+    all."""
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     assert services.can_cancel(meeting) is False  # the page does not offer it
@@ -897,8 +899,8 @@ def test_a_bot_that_lands_after_the_reap_makes_the_next_user_get_the_neutral_ref
 def test_a_cancelled_meetings_leftover_bot_is_not_adopted_by_the_next_users_placeholder(
     session, host, ada, ada_template, ben, ben_template
 ):
-    """Ada cancels (her row fails, the provider shows her bot `stopping`), Ben pastes the same code and his
-    send gets a 5xx: his placeholder must not adopt Ada's bot or her recording."""
+    """Ada cancels (her row fails, the provider shows her bot `stopping`), Ben pastes the same code
+    and his send gets a 5xx: his placeholder must not adopt Ada's bot or her recording."""
     host.late_accept = False
     first = place(session, host, request_for(ada, ada_template), bot_max_local=3)
     services.cancel_meeting(session, FakeBot(), first)  # The provider has not finished stopping it:

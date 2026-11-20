@@ -2,10 +2,10 @@
 
 The worker, the pipeline, `place_bot`, the join runner, deletion and the routes depend on
 `BotProvider` and on the names here, never on a vendor's client. One provider exists:
-`app.skribby.SkribbyProvider` (the hosted Skribby). `build_provider()` builds it (`DEFAULT_PROVIDER`);
-a new provider adds a factory to `PROVIDER_FACTORIES` and nothing else. A meeting remembers which
-provider ran it (`meetings.bot_provider`), and `provider_for` hands the callers that work on an
-existing meeting (the pipeline, deletion, cancel and end) that provider.
+`app.skribby.SkribbyProvider` (the hosted Skribby). `build_provider()` builds it
+(`DEFAULT_PROVIDER`); a new provider adds a factory to `PROVIDER_FACTORIES` and nothing else. A
+meeting remembers which provider ran it (`meetings.bot_provider`), and `provider_for` hands the
+callers that work on an existing meeting (the pipeline, deletion, cancel and end) that provider.
 
 **Retired providers.** Old meetings still say `bot_provider = 'vexa'` (the self-hosted Vexa, removed
 on 2026-11-20 after its last recording copy was deleted). That is data, not code: `provider_for`
@@ -49,12 +49,15 @@ This module imports nothing from the app at module level (the settings are read 
 `build_provider`), so `app/config.py` can read `PROVIDER_FACTORIES` for the startup check.
 """
 
+import logging
 import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 # The provider's id for a bot: whatever `send_bot` returned, stored as text on the meeting.
 BotId = int | str

@@ -111,8 +111,8 @@ class _Bot:
         return not self.stopped and (self.at == 0 or current.status not in TERMINAL)
 
     def stop(self) -> None:
-        """Like the provider: a bot already in the call finishes with what it recorded; one that was not
-        in yet fails. Either way it no longer holds the code."""
+        """Like a real provider: a bot already in the call finishes with what it recorded; one that
+        was not in yet fails. Either way it no longer holds the code."""
         self.stopped = True
         last = self.beats[-1]
         was_in = any(b.status == "active" for b in self.beats[: self.at])

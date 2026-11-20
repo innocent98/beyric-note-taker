@@ -87,7 +87,7 @@ class FakeBotHost:
                 self._in_flight -= 1
 
     def land_late_bots(self) -> None:
-        """The provider finishes handling the requests whose answers were lost: the bots join now."""
+        """The host finishes handling the requests whose answers were lost: the bots join now."""
         for key in self._late:
             self._next_id += 1
             self.live[key] = self._next_id

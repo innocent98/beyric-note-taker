@@ -808,8 +808,8 @@ def test_a_meeting_provider_is_still_finishing_keeps_the_account_until_the_copy_
 
 def test_a_finished_meeting_with_no_recording_yet_waits_out_the_recording_grace(session, audio_dir):
     """`completed` with no recording id is not proof that none will appear: the pipeline itself
-    waits RECORDING_GRACE after first seeing the meeting over. The purge measures it from the
-    moment IT first saw the provider report the meeting over (stamped on the row), never from creation."""
+    waits RECORDING_GRACE after first seeing the meeting over. The purge measures it from the moment
+    IT first saw the provider report the meeting over (stamped on the row), never from creation."""
     from app import pipeline
 
     user, running = live_meeting_account(session, audio_dir)

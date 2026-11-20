@@ -2,16 +2,15 @@
 
     python scripts/capture_owner_api.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
-The argument is any Postgres server the script may create a scratch database on. It runs the
-real migrations there (migration 0006 creates the admin account from OWNER_EMAIL and
-OWNER_PASSWORD, set below to placeholders), starts the real app under uvicorn on a free local
-port with only the provider and OpenAI replaced by fakes, and walks the owner journey with httpx. Each
-exchange is written to `docs/fe-captures/owner-app/NN-name.json`, so every claim in the frontend
-guide
+The argument is any Postgres server the script may create a scratch database on. It runs the real
+migrations there (migration 0006 creates the admin account from OWNER_EMAIL and OWNER_PASSWORD, set
+below to placeholders), starts the real app under uvicorn on a free local port with only the
+provider and OpenAI replaced by fakes, and walks the owner journey with httpx. Each exchange is
+written to `docs/fe-captures/owner-app/NN-name.json`, so every claim in the frontend guide
 (`docs/fe-integration-guide-owner-app.md`) can be re-derived by running this again.
 
 What is real: the app, auth, CSRF, validation, database, migrations, serialisation and every
-error. What is not: The provider and OpenAI (fakes, below) and the worker, which never runs, so
+error. What is not: the provider and OpenAI (fakes, below) and the worker, which never runs, so
 meetings past `bot_sent` are inserted by SQL in the states the worker would leave them in.
 Secrets in the files are masked: the CSRF tokens become `<csrf-A>`, `<csrf-B>` in order of first
 appearance (so a token that changes still shows as different) and the cookie value `<cookie>`.
@@ -840,7 +839,8 @@ class BotAs:
 
 def run_live_state(owner, engine, general_id) -> None:
     """What the owner sees while the call runs. The worker is not running in this script, so each
-    state is the real `pipeline.advance_meeting` fed one the provider answer, then read over HTTP."""
+    state is the real `pipeline.advance_meeting` fed one the provider answer, then read over
+    HTTP."""
     from app import pipeline
 
     with Session(engine) as session:
@@ -866,7 +866,8 @@ def run_live_state(owner, engine, general_id) -> None:
         (
             "bot-state-unknown",
             BotProviderError("down"),
-            'the provider could not be reached, so nothing is known: `status_text` is the old "Bot sent".',
+            "the provider could not be reached, so nothing is known: `status_text` is the old "
+            '"Bot sent".',
         ),
         (
             "bot-joining",
@@ -881,8 +882,8 @@ def run_live_state(owner, engine, general_id) -> None:
         (
             "bot-in-meeting",
             BotMeeting(status="active"),
-            "The provider reports `active` with no segments and no recording yet: the bot is in, and the "
-            "text does not say it is recording.",
+            "The provider reports `active` with no segments and no recording yet: the bot is in, "
+            "and the text does not say it is recording.",
         ),
         (
             "bot-recording",
@@ -892,8 +893,8 @@ def run_live_state(owner, engine, general_id) -> None:
         (
             "bot-needs-help",
             BotMeeting(status="needs_help"),
-            "The provider reports `needs_help` (a consent or verification prompt). Still `bot_sent`: the "
-            "worker only fails the join after 2 minutes of it.",
+            "The provider reports `needs_help` (a consent or verification prompt). Still "
+            "`bot_sent`: the worker only fails the join after 2 minutes of it.",
         ),
     ]
     for name, answer, note in steps:
@@ -958,8 +959,8 @@ def run_end_controls(owner, engine, general_id, provider) -> None:
         "meeting-detail-bot-requested",
         "GET",
         f"/api/meetings/{mid}",
-        note="The provider reports `requested`: the bot has been asked for and is not in the call yet. "
-        "`can_end` is false: nothing to end yet (Cancel is still offered).",
+        note="The provider reports `requested`: the bot has been asked for and is not in the call "
+        "yet. `can_end` is false: nothing to end yet (Cancel is still offered).",
     )
     poll(mid, BotMeeting(status="active", segments=[segment]))
     owner.call(
@@ -974,8 +975,8 @@ def run_end_controls(owner, engine, general_id, provider) -> None:
         "meeting-end-provider-down",
         "POST",
         f"/api/meetings/{mid}/end",
-        note="The provider could not stop the bot. 502, nothing changed, and the owner may try again. "
-        "The message never carries the provider's own text.",
+        note="The provider could not stop the bot. 502, nothing changed, and the owner may try "
+        "again. The message never carries the provider's own text.",
     )
     provider.stop_error = False
     owner.call(
@@ -1014,8 +1015,8 @@ def run_end_controls(owner, engine, general_id, provider) -> None:
         "meeting-detail-call-ended-finishing-recording",
         "GET",
         f"/api/meetings/{mid}",
-        note="The bot has gone (The provider: `completed`, reason `stopped`) and its recording is still "
-        "being finished. After this the worker downloads it and the meeting goes through "
+        note="The bot has gone (the provider: `completed`, reason `stopped`) and its recording is "
+        "still being finished. After this the worker downloads it and the meeting goes through "
         "`processing` to `ready` like any other.",
     )
 

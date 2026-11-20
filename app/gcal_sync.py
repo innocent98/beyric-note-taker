@@ -175,8 +175,8 @@ def apply_batch(
     provider: BotProvider | None = None,
 ) -> ApplyResult:
     """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule` and
-    `calendar_template_id`. `provider` is only needed (and only built when absent) to stop a bot whose
-    event was cancelled."""
+    `calendar_template_id`. `provider` is only needed (and only built when absent) to stop a bot
+    whose event was cancelled."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     settings = settings or get_settings()
@@ -459,9 +459,9 @@ def _cancel_missing(run: _Run, named: set[str]) -> None:
 
 def _stop_cancelled_bots(run: _Run, provider: BotProvider | None) -> None:
     """Stop the bot of each meeting whose event was cancelled while the bot was sent and not yet
-    done. `cancel_meeting` refuses a meeting the pipeline already took, and says 502 when the provider will
-    not stop the bot: in both cases the join stays `joined` and nothing is raised (the calendar
-    change itself is already saved)."""
+    done. `cancel_meeting` refuses a meeting the pipeline already took, and says 502 when the
+    provider will not stop the bot: in both cases the join stays `joined` and nothing is raised (the
+    calendar change itself is already saved)."""
     session = run.session
     for join_id in run.to_stop:
         join = session.get(ScheduledJoin, join_id)

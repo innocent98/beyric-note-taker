@@ -4,11 +4,11 @@ the frontend guide.
     python scripts/capture_meeting_title.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_meeting_delete.py`: real migrations, the real app under uvicorn,
-real HTTP, only the provider and OpenAI replaced by fakes. Between sends the earlier meetings are set to
-`ready` by SQL (the worker is not running), so the account is never at its bot limit. Files go to
-`docs/fe-captures/meeting-title/NN-name.json`.
+real HTTP, only the provider and OpenAI replaced by fakes. Between sends the earlier meetings are
+set to `ready` by SQL (the worker is not running), so the account is never at its bot limit. Files
+go to `docs/fe-captures/meeting-title/NN-name.json`.
 
-What is NOT real: The provider and OpenAI (fakes), the worker (it never runs).
+What is NOT real: the provider and OpenAI (fakes), the worker (it never runs).
 """
 
 import shutil

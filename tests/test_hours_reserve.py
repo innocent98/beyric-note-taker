@@ -419,7 +419,7 @@ def test_the_default_ceiling_lets_many_people_record_at_once(session, ada):
     others = [make_user(session, f"p{n}@example.test") for n in range(5)]
     for n, other in enumerate(others):
         running(session, other, f"oth-{n}00-aaa", T0)
-    skribby = make_settings(**{k: v for k, v in SK.items() if k != "session_secret"})
+    skribby = make_settings()
     reserve_slot(
         session, ada, platform="google_meet", native_id="new-aaaa-aaa", now=T0, settings=skribby
     )

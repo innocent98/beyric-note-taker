@@ -68,9 +68,9 @@ def test_joins_chunks_in_order(fake_openai, chunks):
 
 def test_sends_terms_as_a_keywords_list(fake_openai, chunks):
     client = fake_openai(["a", "b"])
-    transcribe_chunks(chunks, ["Beyric", "The provider", "Beyric"], client=client)
-    assert client.calls[0]["keywords"] == ["Beyric", "The provider"]
-    assert client.calls[1]["keywords"] == ["Beyric", "The provider"]
+    transcribe_chunks(chunks, ["Beyric", "Zorbl", "Beyric"], client=client)
+    assert client.calls[0]["keywords"] == ["Beyric", "Zorbl"]
+    assert client.calls[1]["keywords"] == ["Beyric", "Zorbl"]
 
 
 def test_keywords_are_capped_in_count_and_length(fake_openai, chunks):
@@ -134,9 +134,9 @@ def test_permanent_client_error_fails_immediately(fake_openai, chunks):
 
 def test_invalid_term_is_removed_from_keywords(fake_openai, chunks):
     client = fake_openai(["a", "b"])
-    terms = ["Beyric", "<script>", "a>b", "line\nbreak", "cr\rterm", "The provider"]
+    terms = ["Beyric", "<script>", "a>b", "line\nbreak", "cr\rterm", "Zorbl"]
     transcribe_chunks(chunks, terms, client=client)
-    assert client.calls[0]["keywords"] == ["Beyric", "The provider"]
+    assert client.calls[0]["keywords"] == ["Beyric", "Zorbl"]
 
 
 def test_no_chunks_returns_empty_string(fake_openai):

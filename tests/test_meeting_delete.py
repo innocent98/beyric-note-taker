@@ -232,7 +232,7 @@ def test_the_audio_folder_goes_with_the_meeting(api, session, template, tmp_path
 def test_a_cancelled_meeting_whose_recording_id_was_never_stored_is_asked_of_provider(
     api, fake_bot, session, template
 ):
-    """The bot was stopped and the meeting marked failed before the provider's recording id was seen."""
+    """The bot was stopped and the meeting marked failed before the recording id was seen."""
     from types import SimpleNamespace
 
     deleted = []
