@@ -18,6 +18,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app import export
+from app.billing import invoice_number
 from app.models import Invoice, Payment
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def _date(at: datetime) -> str:
 
 
 def filename(invoice: Invoice) -> str:
-    return f"invoice-{invoice.number}.pdf"
+    return f"invoice-{invoice_number.shown(invoice.number)}.pdf"
 
 
 def _party(values: dict, order: list[tuple[str, str]]) -> list[str]:
@@ -95,11 +96,8 @@ def document(invoice: Invoice, payment: Payment, refunded_at: datetime | None = 
             ("Subtotal", money(invoice.subtotal_minor, currency)),
             (f"VAT {rate} (included in the price)", money(invoice.vat_minor, currency)),
         ]
+    number = invoice_number.shown(invoice.number)
     banners = []
-    if invoice.test_mode:
-        banners.append(
-            "TEST INVOICE: paid with test keys, no real money moved. Not a tax document."
-        )
     if refunded_at is not None:
         banners.append(f"REFUNDED on {_date(refunded_at)}: this payment was refunded in full.")
     notes = [f"Payment reference: {payment.reference}"]
@@ -108,7 +106,7 @@ def document(invoice: Invoice, payment: Payment, refunded_at: datetime | None = 
     if invoice.vat_rate_bp == 0:
         notes.append("No VAT is charged on this invoice.")
     return {
-        "number": invoice.number,
+        "number": number,
         "issued": _date(invoice.issued_at),
         "seller": seller,
         "buyer": buyer,
@@ -120,7 +118,7 @@ def document(invoice: Invoice, payment: Payment, refunded_at: datetime | None = 
         "total": money(invoice.total_minor, currency),
         "banners": banners,
         "notes": notes,
-        "footer": f"{invoice.seller.get('name') or 'Beyric'} - invoice {invoice.number}",
+        "footer": f"{invoice.seller.get('name') or 'Beyric'} - invoice {number}",
     }
 
 

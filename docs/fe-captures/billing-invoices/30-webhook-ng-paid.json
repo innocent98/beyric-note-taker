@@ -11,7 +11,7 @@
     "body": {
       "id": "evt-charge_succeeded-fake-tx-1",
       "kind": "charge_succeeded",
-      "reference": "bn-3-fda99da00ec7145f",
+      "reference": "bn-3-4fd8e12a847349ff",
       "tx_id": "fake-tx-1",
       "amount_minor": 2500000,
       "currency": "NGN",

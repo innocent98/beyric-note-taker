@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from app import entitlements, services
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
 from app.billing import cancel_checkout, plans, renewals, routing, states, subscriptions
+from app.billing.invoice_number import shown as shown_invoice_number
 from app.billing.profile_api import RouteOut, billing_user
 from app.db import get_session
 from app.models import Invoice, Payment, Plan, PlanPrice, Subscription, User
@@ -212,7 +213,7 @@ def _invoice_numbers(db: Session, rows) -> dict[int, str]:
     found = db.execute(
         select(Invoice.payment_id, Invoice.number).where(Invoice.payment_id.in_(ids))
     )
-    return {payment_id: number for payment_id, number in found}
+    return {payment_id: shown_invoice_number(number) for payment_id, number in found}
 
 
 def _subscription_out(db: Session, sub: Subscription, now: datetime) -> SubscriptionOut:

@@ -4,6 +4,7 @@
 The app's own routes with billing on, real Postgres, a scripted provider; a person pays through the
 real webhook inbox and settlement rules. The PDF is the real one (the real child process)."""
 
+import json
 import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -13,8 +14,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.billing import invoice_pdf, invoices
-from app.models import Payment, Refund, User
-from tests.billing_support import make_catalog, pay
+from app.models import Invoice, Payment, Refund, User
+from tests.billing_support import assert_no_test_wording, make_catalog, pay
 from tests.test_billing_profile import API, api_client, error, rows
 from tests.test_billing_subscriptions_api import Buyer
 from tests.test_web import make_user
@@ -98,15 +99,14 @@ def test_a_person_lists_their_own_invoices_newest_first(session, ada, providers)
     payment = buy(session, ada, providers.usd)
     body = ada.get(f"{API}/invoices").json()
     [invoice] = body["invoices"]
-    assert (
-        invoice["number"].startswith("BN-") and len(invoice["number"]) == 16
-    )  # BN-T-2026-000001: a test-mode payment
+    assert invoice["number"] == "BN-2026-900001"  # stored `BN-T-2026-000001`, shown without the T
     assert invoice["currency"] == "USD" and invoice["total_minor"] == 1800
     assert (invoice["subtotal_minor"], invoice["vat_minor"], invoice["vat_rate_bp"]) == (1800, 0, 0)
     assert invoice["description"] == "Twenty"
     assert invoice["payment_reference"] == payment.reference
     assert invoice["payment_status"] == "succeeded" and invoice["refunded_at"] is None
-    assert invoice["test_mode"] is True
+    assert "test_mode" not in invoice  # internal: never returned
+    assert_no_test_wording(json.dumps(body))
     # the billing history points at it
     [row] = ada.get(f"{API}/payments").json()["payments"]
     assert row["invoice_number"] == invoice["number"]
@@ -224,7 +224,8 @@ def test_the_admin_sees_each_payment_and_whether_it_may_be_refunded(session, ada
     body = root.get(f"{ADMIN_API}/payments").json()
     [row] = body["payments"]
     assert row["id"] == payment.id and row["payer_email"] == "ada@example.test"
-    assert row["status"] == "succeeded" and row["invoice_number"].startswith("BN-")
+    assert row["status"] == "succeeded" and row["invoice_number"] == "BN-2026-900001"
+    assert_no_test_wording(json.dumps(body))
     assert row["refund"] is None and row["needs_refund_reason"] is None
     assert row["refund_option"] == {"reason": "first_plan_7d", "allowed": True, "message": None}
     # after the window the same payment says why not
@@ -365,3 +366,38 @@ def test_a_double_charge_shows_in_the_needs_refund_list_and_is_refunded(
     out = root.post(f"{ADMIN_API}/payments/{second.id}/refund", {"reason": "double_charge"}).json()
     assert out["status"] == "submitted"
     assert ada.get(f"{API}/subscription").json()["state"] == "active"  # the real plan is intact
+
+
+def test_an_invoice_made_before_this_change_still_lists_and_downloads(session, ada, providers):
+    """Rows made earlier keep their stored `BN-T-` number (nothing is rewritten). They are listed
+    and downloaded under the shown number, and the old spelling is not a number any more."""
+    buy(session, ada, providers.usd)
+    stored = session.scalars(select(Invoice)).one().number
+    assert stored == "BN-T-2026-000001"
+    [invoice] = ada.get(f"{API}/invoices").json()["invoices"]
+    assert invoice["number"] == "BN-2026-900001"
+    got = ada.get(f"{API}/invoices/BN-2026-900001/pdf")
+    assert got.status_code == 200 and got.content.startswith(b"%PDF-")
+    assert 'filename="invoice-BN-2026-900001.pdf"' in got.headers["content-disposition"]
+    error(ada.get(f"{API}/invoices/BN-T-2026-000001/pdf"), 404, "not_found")
+    if shutil.which("pdftotext"):
+        text = subprocess.run(
+            ["pdftotext", "-layout", "-", "-"], input=got.content, capture_output=True
+        ).stdout.decode()
+        assert_no_test_wording(text)
+
+
+def test_a_live_invoice_is_listed_and_downloaded_under_its_stored_number(
+    session, ada, providers, monkeypatch
+):
+    payment = buy(session, ada, providers.usd)
+    session.query(Invoice).delete()
+    session.flush()
+    from tests.billing_support import settings
+
+    live = invoices.issue(session, payment, now(), settings(billing_live=True))
+    session.commit()
+    assert live.number == "BN-2026-000001"
+    [invoice] = ada.get(f"{API}/invoices").json()["invoices"]
+    assert invoice["number"] == "BN-2026-000001" and "test_mode" not in invoice
+    assert ada.get(f"{API}/invoices/BN-2026-000001/pdf").status_code == 200

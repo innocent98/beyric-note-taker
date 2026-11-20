@@ -49,6 +49,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app import hours, mail  # noqa: E402
 from app.billing import invoices, renewals  # noqa: E402
+from app.billing.invoice_number import shown as shown_number  # noqa: E402
 from app.billing.payments import new_payment  # noqa: E402
 from app.billing.types import OutcomeUnknown, ProviderError, ProviderTransaction  # noqa: E402
 from app.config import Settings  # noqa: E402
@@ -299,7 +300,7 @@ def run(engine, on: str, off: str, settings: Settings) -> None:
         "invoices-list",
         "GET",
         "/api/billing/invoices",
-        note="`subtotal_minor + vat_minor = total_minor`; `vat_rate_bp` 0 means no VAT line; `test_mode` true: paid with test keys, not a tax document.",
+        note="`subtotal_minor + vat_minor = total_minor`; `vat_rate_bp` 0 means no VAT line; the number is a plain `BN-<year>-<digits>`.",
     ).json()
     number = listed["invoices"][0]["number"]
     save_pdf(
@@ -739,7 +740,7 @@ def run(engine, on: str, off: str, settings: Settings) -> None:
             {
                 "invoices": [
                     {
-                        "number": i.number,
+                        "number": shown_number(i.number),
                         "payment_id": i.payment_id,
                         "currency": i.currency,
                         "subtotal_minor": i.subtotal_minor,
@@ -748,7 +749,6 @@ def run(engine, on: str, off: str, settings: Settings) -> None:
                         "total_minor": i.total_minor,
                         "kind": i.line.get("kind"),
                         "seller": i.seller,
-                        "test_mode": i.test_mode,
                     }
                     for i in session.scalars(select(Invoice).order_by(Invoice.id))
                 ]
