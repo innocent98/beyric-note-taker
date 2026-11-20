@@ -22,7 +22,7 @@ a second ago:
 - paid, but our rules refuse it (a wrong amount, say): 409 `payment_in_progress`, an admin is told,
   nothing changes.
 - paid, but granting the hours fails (a grant handler raises): the transaction is undone, 409
-  `payment_in_progress`, an admin is told (`admin.billing_cancel_grant_failed:<id>`), nothing
+  `payment_in_progress`, an admin is told (`admin.billing_grant_failed:<id>`), nothing
   changes.
 
 A payment that is already paid or refunded answers `paid` and changes nothing; asking again after a
@@ -201,7 +201,7 @@ def _tell_grant_failed(db: Session, payment_id: int, exc: Exception) -> None:
     best effort: the person still gets the 409, never a 500 from the alert."""
     notify.tell_admins(
         db,
-        f"admin.billing_cancel_grant_failed:{payment_id}",
+        notify.grant_failed_key(payment_id),
         "A paid payment could not be granted",
         f"The provider reports payment {payment_id} paid, but it could not be settled "
         f"({type(exc).__name__}). Look at it.",

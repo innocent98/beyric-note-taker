@@ -250,7 +250,8 @@ def test_a_provider_that_cannot_be_reached_leaves_the_event_waiting_then_a_retry
     assert first.status_code == 503
     assert grants == [] and reload_payment(session, payment).status == "pending"
     [row] = events(session)
-    assert row.processed_at is None and "timeout" in row.error
+    # the exception TYPE only: its text can hold an email, an amount or the provider's own words
+    assert row.processed_at is None and row.error == "ProviderError"
 
     fake.fetch_error = None
     fake.add_transaction(tx_for(payment))

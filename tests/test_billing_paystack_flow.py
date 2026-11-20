@@ -266,7 +266,7 @@ def test_a_malformed_answer_leaves_the_payment_pending_and_the_retry_settles(
     assert first.status_code == 503
     assert reload(session, payment).status == "pending" and grants == []
     [row] = events(session)
-    assert row.processed_at is None and "malformed Paystack answer" in row.error
+    assert row.processed_at is None and row.error == "ProviderError"  # the type, never the text
 
     second = post(client, body)  # Paystack's resend, answered well this time
 
