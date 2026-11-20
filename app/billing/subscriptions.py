@@ -581,7 +581,7 @@ def _upgrade_paid(db: Session, payment: Payment) -> None:
     old_price = db.get(PlanPrice, sub.price_id)
     try:
         # The hours are the proration of the moment the person asked (the payment was made then).
-        extra = plans.prorate_upgrade(
+        proration = plans.prorate_upgrade(
             old_amount_minor=old_price.amount_minor,
             new_amount_minor=price.amount_minor,
             old_seconds=old.monthly_seconds,
@@ -589,9 +589,15 @@ def _upgrade_paid(db: Session, payment: Payment) -> None:
             period_start=sub.current_period_start,
             period_end=sub.current_period_end,
             now=payment.created_at,
-        ).extra_seconds
+        )
     except plans.NoUpgrade as exc:
         return needs_refund(db, payment, exc.message)
+    if proration.amount_minor != payment.amount_minor:
+        # The page was priced from a different plan than the one held now (the person upgraded
+        # another way after asking for this one, then paid this old page): the amount kept
+        # includes a part the plan change cannot pay for. Apply nothing, tell the admins.
+        return needs_refund(db, payment, "the plan changed since this upgrade was asked for")
+    extra = proration.extra_seconds
     sub.plan_code, sub.price_id, sub.pending_plan_code = new.code, price.id, None
     sub.updated_at = payment.paid_at
     if extra > 0:

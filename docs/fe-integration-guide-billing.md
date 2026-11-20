@@ -3107,6 +3107,15 @@ had already gone through, so it was not cancelled. Your plan and hours are shown
 button is the same **Cancel this payment**; a `renewal` still has none. The other answers (502, 404, 409
 `payment_in_progress`, 409 `refund_pending`) are the ones above, unchanged.
 
+**A `paid` answer for an upgrade does not always mean the plan changed.** If the old page was paid after its period moved
+on, or after the plan changed another way (a smaller upgrade paid first), the payment is `succeeded` but nothing is
+granted: the server keeps the money for a refund by hand and tells the admins. The cancel answer is still `result` `paid`
+with `payment.status` `succeeded`; nothing in the body tells it apart (no flag, `invoice_number` null). The screen's
+sentence then says the plan and hours are shown below, and the plan is unchanged. This is rare (a stale page plus a late
+payment). Until the API says it, the FE should compare the plan on the state it reads after the cancel with the one it had,
+and must not word it as an upgrade done. **Not captured live:** it needs the period to pass or two upgrades, proved in
+`tests/test_billing_cancel_checkout.py` (the three "big upgrade" and "period moved on" tests).
+
 Not captured (tests only, same file): 409 `payment_in_progress` for an upgrade page paid with a wrong amount (an admin is
 told, the payment stays `pending`, the plan is untouched), 409 `refund_pending` for an upgrade while a refund of the plan
 is being settled, the provider answering `failed`, no record (`NoRecord`) and down (502) for an upgrade, someone else's

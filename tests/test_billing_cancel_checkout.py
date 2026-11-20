@@ -1011,3 +1011,99 @@ def test_the_sweeper_leaves_a_cancelled_upgrade_page_alone_while_the_provider_sa
 
     assert len(providers.usd.lookups) == lookups + 1  # it asked
     assert stored(session, row.reference).status == "failed" and held(session) == before
+
+
+# ---- a cancelled upgrade paid late after a SMALLER second upgrade (Opus review of #247) ----------
+
+
+def a_cancelled_big_upgrade_and_a_paid_smaller_one(session, ada, providers):
+    """On p20: upgrade A to p60 is started and cancelled, upgrade B to p40 is started and paid.
+    Returns A's row. (A p60 plan is added to the catalog: the shared one has p20 and p40.)"""
+    from app.models import Plan, PlanPrice
+
+    session.add(Plan(code="p60", name="Sixty", monthly_seconds=3 * P20, sort_order=3))
+    session.flush()
+    session.add(
+        PlanPrice(
+            plan_code="p60",
+            currency="USD",
+            amount_minor=5000,
+            active_from=datetime(2000, 1, 1, tzinfo=UTC),
+        )
+    )
+    session.commit()
+    big = upgrade_checkout(session, ada, providers, plan="p60")
+    assert cancel(ada, big.reference).json()["result"] == "cancelled"
+    small = ada.post(f"{API}/subscription/change-plan", {"plan_code": "p40"})
+    assert small.status_code == 200 and small.json()["result"] == "checkout", small.text
+    pay(
+        session,
+        providers.usd,
+        stored(session, small.json()["payment"]["reference"]),
+        now(),
+        card_token="tok-small",
+    )
+    assert session.scalars(select(Subscription)).one().plan_code == "p40"
+    return stored(session, big.reference)
+
+
+def refund_alerts(session):
+    session.expire_all()
+    return [
+        n for n in session.scalars(select(Notification)) if n.kind == "admin.billing_refund_needed"
+    ]
+
+
+def test_a_cancelled_big_upgrade_paid_after_a_smaller_one_is_kept_for_a_refund_not_applied(
+    session, ada, providers
+):
+    """The page was priced from p20 to p60; the plan is p40 now. Applying it would re-price the
+    change from p40, keep the larger amount and take the p20 to p40 part for nothing with no alert.
+    So: nothing is applied, the reason is recorded, the admins are told once."""
+    make_user(session, "admin@example.test", admin=True)
+    big = a_cancelled_big_upgrade_and_a_paid_smaller_one(session, ada, providers)
+    assert refund_alerts(session) == []
+    before = held(session)
+
+    pay(session, providers.usd, big, now(), card_token="tok-big-late")
+
+    paid = stored(session, big.reference)
+    assert paid.status == "succeeded"
+    assert paid.needs_refund_reason == "the plan changed since this upgrade was asked for"
+    assert held(session) == before  # still p40, no extra hours, nothing changed by A
+    [alert] = refund_alerts(session)
+    assert str(big.id) in alert.body
+
+
+def test_the_sweeper_keeps_a_cancelled_big_upgrade_paid_later_for_a_refund_too(
+    session, ada, providers
+):
+    make_user(session, "admin@example.test", admin=True)
+    big = a_cancelled_big_upgrade_and_a_paid_smaller_one(session, ada, providers)
+    before = held(session)
+    providers.usd.complete(big, card_token="tok-big-sweep", payer_email="payer@example.test")
+
+    renewals.sweep(session, big.created_at + timedelta(hours=1), settings())
+
+    paid = stored(session, big.reference)
+    assert paid.status == "succeeded" and paid.needs_refund_reason
+    assert held(session) == before
+    assert len(refund_alerts(session)) == 1
+
+
+def test_asking_for_a_cancelled_page_again_after_a_smaller_upgrade_answers_paid_and_refunds(
+    session, ada, providers
+):
+    """The cancel button on the old page after it was paid by mistake: the answer is `paid` (it
+    was settled, not cancelled) and the plan is still the smaller one: the case the screen words."""
+    make_user(session, "admin@example.test", admin=True)
+    big = a_cancelled_big_upgrade_and_a_paid_smaller_one(session, ada, providers)
+    providers.usd.complete(big, card_token="tok-big-cancel", payer_email="payer@example.test")
+
+    out = cancel(ada, big.reference)
+
+    assert out.status_code == 200, out.text
+    assert out.json()["result"] == "paid"
+    assert stored(session, big.reference).needs_refund_reason
+    assert session.scalars(select(Subscription)).one().plan_code == "p40"
+    assert len(refund_alerts(session)) == 1
