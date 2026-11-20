@@ -1,6 +1,6 @@
 """The whole bot path through `SkribbyProvider` (task B2): a pretend Skribby, nothing else faked.
 
-`BOT_PROVIDER=skribby` picks the provider through `build_provider()` exactly as production does; the
+`build_provider()` picks the provider exactly as production does; the
 requests go through the real client to `pytest-httpx`, with the bodies Skribby's pages describe.
 Real Postgres, the real placement lock, the real worker pass (`worker.run_pass`), the real ledger
 over the `meetings` table; only the transcription and notes models are `FakeOpenAI` and the audio
@@ -22,7 +22,6 @@ from app.bot_provider import build_provider
 from app.config import Settings, get_settings
 from app.models import Meeting, Notification
 from app.skribby import recording_handle
-from app.vexa import VexaProvider
 from tests.test_pipeline import NOTES, TRANSCRIPT, FakeOpenAI, _good_chunks
 from tests.test_placement import CODE, make_template, request_for, url_of
 from tests.test_placement import place as place_at
@@ -42,7 +41,6 @@ SECOND = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
 @pytest.fixture
 def skribby(monkeypatch, tmp_path, engine):
     """Skribby chosen the way production chooses it, with our table as the ledger's source."""
-    monkeypatch.setenv("BOT_PROVIDER", "skribby")
     monkeypatch.setenv("SKRIBBY_API_KEY", KEY)
     get_settings.cache_clear()
     monkeypatch.setattr("app.db.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
@@ -218,7 +216,7 @@ def test_a_meeting_goes_from_the_send_to_notes_with_skribbys_speaker_names(
 
     meeting = place(session, skribby, user, template)
 
-    assert (meeting.bot_provider, meeting.vexa_meeting_id) == ("skribby", BOT)
+    assert (meeting.bot_provider, meeting.provider_bot_id) == ("skribby", BOT)
     sent = json.loads(posts(httpx_mock)[0].content)
     assert sent["meeting_url"] == url_of(CODE) and sent["service"] == "gmeet"
 
@@ -235,7 +233,7 @@ def test_a_meeting_goes_from_the_send_to_notes_with_skribbys_speaker_names(
     assert done.speaker_transcript.startswith("[Ada]: ")  # Skribby's names label it
     assert done.speakers_incomplete is False
     assert done.notes == NOTES + "\n"
-    assert done.vexa_recording_id == recording_handle(BOT)
+    assert done.provider_recording_id == recording_handle(BOT)
     downloads = [r for r in httpx_mock.get_requests() if str(r.url) == FILES]
     assert len(downloads) == 1
 
@@ -348,7 +346,7 @@ def test_a_meeting_that_has_not_yet_got_its_speaker_names_keeps_skribbys_copy(
     looks(httpx_mock, BOT, *GOOD_CALL)
     meeting = place(session, skribby, user, template)
     meeting.status, meeting.step = "failed", "transcribing"
-    meeting.vexa_recording_id = recording_handle(BOT)  # the audio is fetched, the names are not
+    meeting.provider_recording_id = recording_handle(BOT)  # the audio is fetched, the names are not
     session.commit()
 
     assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
@@ -356,8 +354,10 @@ def test_a_meeting_that_has_not_yet_got_its_speaker_names_keeps_skribbys_copy(
     assert deletes(httpx_mock) == []
 
 
-def test_a_vexa_meeting_is_never_touched_by_the_delete_job(session, user, template, httpx_mock):
-    meeting = vexa_row(session, user, template)
+def test_a_retired_providers_meeting_is_never_touched_by_the_delete_job(
+    session, user, template, httpx_mock
+):
+    meeting = retired_row(session, user, template)
     meeting.status, meeting.speaker_transcript = "ready", "[Ada]: hi"
     session.commit()
 
@@ -468,7 +468,7 @@ def test_googles_block_pauses_for_one_retry_and_the_second_bot_goes_through_the_
     session.expire_all()
     resent = session.get(Meeting, meeting.id)
     assert resent.join_attempts == 2
-    assert (resent.vexa_meeting_id, resent.bot_provider) == (SECOND, "skribby")
+    assert (resent.provider_bot_id, resent.bot_provider) == (SECOND, "skribby")
     assert len(posts(httpx_mock)) == 2
 
 
@@ -501,7 +501,7 @@ def test_a_send_that_got_no_answer_is_kept_then_given_up_since_skribby_cannot_fi
     httpx_mock.add_response(method="POST", url=f"{API}/bot", status_code=504)
     meeting = place(session, skribby, user, template)
     assert (
-        meeting.completion_reason == pipeline.SEND_UNCONFIRMED and meeting.vexa_meeting_id is None
+        meeting.completion_reason == pipeline.SEND_UNCONFIRMED and meeting.provider_bot_id is None
     )
 
     inside = meeting.started_polling_at + timedelta(seconds=1)
@@ -519,15 +519,13 @@ def test_a_send_that_got_no_answer_is_kept_then_given_up_since_skribby_cannot_fi
 # ---- the owner's actions ----
 
 
-def test_cancelling_a_skribby_meeting_stops_its_bot_even_with_vexa_as_the_provider_given(
-    session, skribby, user, template, httpx_mock
-):
+def test_cancelling_a_skribby_meeting_stops_its_bot(session, skribby, user, template, httpx_mock):
     accept(httpx_mock)
     looks(httpx_mock, BOT, GOOD_CALL[0])
     httpx_mock.add_response(method="POST", url=f"{API}/bot/{BOT}/stop", json={"message": "ok"})
     meeting = place(session, skribby, user, template)
 
-    services.cancel_meeting(session, VexaProvider(), meeting)  # routed by the meeting's own row
+    services.cancel_meeting(session, skribby, meeting)
 
     assert len(posts(httpx_mock, f"/{BOT}/stop")) == 1
     session.expire_all()
@@ -546,24 +544,26 @@ def test_deleting_a_finished_skribby_meeting_deletes_the_bots_data_at_skribby(
     session.expire_all()
     assert len(deletes(httpx_mock)) == 1  # as soon as the names were saved
 
-    services.delete_meeting(session, VexaProvider(), session.get(Meeting, meeting.id))
+    services.delete_meeting(session, skribby, session.get(Meeting, meeting.id))
 
     # the owner's delete asks again and Skribby's answer for a bot already gone is success
     assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"] * 2
     assert session.get(Meeting, meeting.id) is None
 
 
-# ---- flipping the setting never strands a meeting in flight ----
+# ---- a retired provider's meetings, and a meeting that outlives its key ----
 
 
-def vexa_row(session, user, template, *, bot_id="55"):
+def retired_row(session, user, template, *, bot_id="55"):
+    """A meeting a provider that no longer exists ran (`bot_provider = 'vexa'`, old data)."""
     meeting = Meeting(
         owner_user_id=user.id,
         url=url_of(CODE),
         platform="google_meet",
         native_id=CODE,
         template_id=template.id,
-        vexa_meeting_id=bot_id,
+        provider_bot_id=bot_id,
+        bot_provider="vexa",
         started_polling_at=datetime.now(UTC),
     )
     session.add(meeting)
@@ -571,34 +571,27 @@ def vexa_row(session, user, template, *, bot_id="55"):
     return meeting
 
 
-def test_a_meeting_vexa_is_running_keeps_talking_to_vexa_after_the_setting_moved_to_skribby(
+def test_a_retired_providers_meeting_still_in_flight_is_failed_and_nothing_is_asked(
     session, skribby, user, template, httpx_mock
 ):
-    meeting = vexa_row(session, user, template)
-    vexa = "http://localhost:8056/transcripts/by-id/55"
-    httpx_mock.add_response(
-        method="GET",
-        url=vexa,
-        json={"id": 55, "status": "active", "segments": [{"speaker": "Ada", "text": "hi"}]},
-    )
+    meeting = retired_row(session, user, template)
 
     pipeline.advance_meeting(session, meeting.id, openai_client=FakeOpenAI())
 
-    asked = [str(r.url) for r in httpx_mock.get_requests()]
-    assert asked == [vexa]  # nothing went to Skribby
+    assert httpx_mock.get_requests() == []  # no poll, to Skribby or anyone
     session.expire_all()
-    assert session.get(Meeting, meeting.id).completion_reason == "recording"
+    failed = session.get(Meeting, meeting.id)
+    assert (failed.status, failed.failure_reason) == ("failed", pipeline.REASON_PROVIDER_GONE)
 
 
-def test_a_meeting_skribby_is_running_keeps_talking_to_skribby_after_the_setting_moved_back(
+def test_a_meeting_skribby_is_running_keeps_talking_to_skribby(
     session, user, template, httpx_mock, monkeypatch, engine
 ):
-    monkeypatch.setenv("BOT_PROVIDER", "vexa")
     monkeypatch.setenv("SKRIBBY_API_KEY", KEY)
     get_settings.cache_clear()
     monkeypatch.setattr("app.db.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
     try:
-        meeting = vexa_row(session, user, template, bot_id=BOT)
+        meeting = retired_row(session, user, template, bot_id=BOT)
         meeting.bot_provider = "skribby"
         session.commit()
         looks(httpx_mock, BOT, body("recording", events=[("joining", 40), ("recording", 30)]))
@@ -615,11 +608,10 @@ def test_a_meeting_skribby_is_running_keeps_talking_to_skribby_after_the_setting
 def test_a_skribby_meeting_waits_instead_of_failing_when_its_key_has_been_removed(
     session, user, template, httpx_mock, monkeypatch
 ):
-    monkeypatch.setenv("BOT_PROVIDER", "vexa")
     monkeypatch.delenv("SKRIBBY_API_KEY", raising=False)
     get_settings.cache_clear()
     try:
-        meeting = vexa_row(session, user, template, bot_id=BOT)
+        meeting = retired_row(session, user, template, bot_id=BOT)
         meeting.bot_provider = "skribby"
         session.commit()
 
@@ -636,20 +628,22 @@ def test_a_skribby_meeting_waits_instead_of_failing_when_its_key_has_been_remove
 def test_a_hand_retry_of_a_refused_meeting_goes_to_the_provider_in_use_now(
     session, skribby, user, template, httpx_mock
 ):
-    meeting = vexa_row(session, user, template)  # a Vexa meeting, refused by Google earlier
+    meeting = retired_row(
+        session, user, template
+    )  # a retired provider's meeting, refused by Google earlier
     accept(httpx_mock, SECOND)
 
     assert pipeline.send_again(meeting, skribby) is True
 
-    assert (meeting.bot_provider, meeting.vexa_meeting_id) == ("skribby", SECOND)
-    assert meeting.vexa_recording_id is None
-    assert uuid.UUID(meeting.vexa_meeting_id)
+    assert (meeting.bot_provider, meeting.provider_bot_id) == ("skribby", SECOND)
+    assert meeting.provider_recording_id is None
+    assert uuid.UUID(meeting.provider_bot_id)
 
 
 def test_the_owners_retry_of_a_refused_meeting_sends_a_skribby_bot_and_keeps_its_uuid_as_text(
     session, skribby, user, template, httpx_mock
 ):
-    meeting = vexa_row(session, user, template, bot_id="55")
+    meeting = retired_row(session, user, template, bot_id="55")
     meeting.status, meeting.step = "failed", "waiting"
     meeting.completion_reason = pipeline.MEET_REFUSED
     meeting.terminal_seen_at = datetime.now(UTC) - timedelta(hours=1)
@@ -659,13 +653,13 @@ def test_the_owners_retry_of_a_refused_meeting_sends_a_skribby_bot_and_keeps_its
 
     retried = services.retry_meeting(session, meeting, skribby)
 
-    assert (retried.status, retried.bot_provider, retried.vexa_meeting_id) == (
+    assert (retried.status, retried.bot_provider, retried.provider_bot_id) == (
         "bot_sent",
         "skribby",
         SECOND,
     )
     session.expire_all()
-    assert session.get(Meeting, meeting.id).vexa_meeting_id == SECOND
+    assert session.get(Meeting, meeting.id).provider_bot_id == SECOND
 
 
 def test_a_bot_that_was_never_let_in_has_its_record_deleted_at_skribby_too(
@@ -713,7 +707,7 @@ def test_deleting_an_account_deletes_the_record_of_a_bot_that_never_recorded(
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
 
-    deletion.purge_user(session, user, VexaProvider())
+    deletion.purge_user(session, user, skribby)
 
     assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
 
@@ -728,7 +722,7 @@ def test_deleting_a_meeting_that_never_recorded_deletes_the_bots_record_too(
     passes(session, meeting.id)
     session.expire_all()
 
-    services.delete_meeting(session, VexaProvider(), session.get(Meeting, meeting.id))
+    services.delete_meeting(session, skribby, session.get(Meeting, meeting.id))
 
     assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
 
@@ -736,7 +730,7 @@ def test_deleting_a_meeting_that_never_recorded_deletes_the_bots_record_too(
 def test_sending_a_new_bot_deletes_the_replaced_bots_record_while_its_id_is_still_known(
     session, skribby, user, template, httpx_mock
 ):
-    meeting = vexa_row(session, user, template, bot_id=BOT)
+    meeting = retired_row(session, user, template, bot_id=BOT)
     meeting.bot_provider = "skribby"
     session.commit()
     looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))  # it is over
@@ -746,13 +740,13 @@ def test_sending_a_new_bot_deletes_the_replaced_bots_record_while_its_id_is_stil
     assert pipeline.send_again(meeting, skribby) is True
 
     assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
-    assert (meeting.vexa_meeting_id, meeting.provider_copy_deleted_at) == (SECOND, None)
+    assert (meeting.provider_bot_id, meeting.provider_copy_deleted_at) == (SECOND, None)
 
 
 def test_a_replaced_bots_record_that_cannot_be_deleted_never_stops_the_new_bot(
     session, skribby, user, template, httpx_mock
 ):
-    meeting = vexa_row(session, user, template, bot_id=BOT)
+    meeting = retired_row(session, user, template, bot_id=BOT)
     meeting.bot_provider = "skribby"
     session.commit()
     looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))  # it is over
@@ -760,7 +754,7 @@ def test_a_replaced_bots_record_that_cannot_be_deleted_never_stops_the_new_bot(
     deletable(httpx_mock, BOT, 500)
 
     assert pipeline.send_again(meeting, skribby) is True
-    assert meeting.vexa_meeting_id == SECOND
+    assert meeting.provider_bot_id == SECOND
 
 
 def test_a_failed_meeting_with_no_bot_id_has_nothing_to_delete_at_skribby(
@@ -905,7 +899,7 @@ def test_a_meeting_given_up_on_while_skribby_is_still_processing_keeps_its_copy(
     pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
     session.expire_all()
     gave_up = session.get(Meeting, meeting.id)
-    assert gave_up.status == "failed" and gave_up.vexa_recording_id is None
+    assert gave_up.status == "failed" and gave_up.provider_recording_id is None
 
     assert pipeline.delete_fetched_copies(session, late) == 0  # the recording may still arrive
     assert deletes(httpx_mock) == []
@@ -929,7 +923,7 @@ def stuck_row(session, user, template, code, bot_id):
         platform="google_meet",
         native_id=code,
         template_id=template.id,
-        vexa_meeting_id=bot_id,
+        provider_bot_id=bot_id,
         bot_provider="skribby",
         bot_region="eu",
         status="failed",
@@ -950,7 +944,7 @@ def test_rows_that_keep_failing_back_off_stop_at_the_cap_and_never_crowd_out_new
     ]
     newer = stuck_row(session, user, template, "zzz-yyyy-xxx", SECOND)
     for row_ in stuck:
-        stuck_bot(httpx_mock, row_.vexa_meeting_id, 500)
+        stuck_bot(httpx_mock, row_.provider_bot_id, 500)
     stuck_bot(httpx_mock, SECOND)
     now = datetime.now(UTC)
 
@@ -1046,21 +1040,16 @@ def test_a_new_meeting_remembers_the_region_it_was_sent_to(
     assert meeting.bot_region == "eu"
 
 
-def test_the_admit_line_names_the_bot_of_the_provider_that_ran_the_meeting(monkeypatch):
-    skribby_setting = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+def test_the_admit_line_names_the_bot(monkeypatch):
+    skribby_setting = Settings(_env_file=None, skribby_api_key=KEY)
     monkeypatch.setattr(services, "get_settings", lambda: skribby_setting)
-
-    def line(provider):
-        meeting = Meeting(
-            status="bot_sent",
-            completion_reason="awaiting_admission",
-            bot_state_seen_at=datetime.now(UTC),
-            bot_provider=provider,
-        )
-        return services.status_text(meeting)
-
-    assert "Beyric Note Taker (recording)" in line("vexa")  # a meeting Vexa runs, after the flip
-    assert "Beyric Meeting Support" in line("skribby")
+    meeting = Meeting(
+        status="bot_sent",
+        completion_reason="awaiting_admission",
+        bot_state_seen_at=datetime.now(UTC),
+        bot_provider="skribby",
+    )
+    assert "Beyric Meeting Support" in services.status_text(meeting)
 
 
 def test_a_meeting_whose_bot_is_in_another_region_waits_and_keeps_its_speaker_names_chance(

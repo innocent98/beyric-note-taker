@@ -1,4 +1,4 @@
-"""The whole bot path through `FakeProvider` (task B1): no Vexa, no HTTP.
+"""The whole bot path through `FakeProvider` (task B1): no the provider, no HTTP.
 
 `place_bot`, the join runner, the worker's poll loop and the pipeline all take the provider from the
 `BOT_PROVIDER` setting or as an argument, so a meeting can be driven from the send to its notes (or
@@ -106,7 +106,7 @@ def test_place_bot_and_the_worker_loop_take_a_meeting_from_send_to_notes(
 
     assert fake.bots_sent == 1 and fake.sent == [url_of(CODE)]
     assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
-    assert meeting.vexa_meeting_id == "2001"
+    assert meeting.provider_bot_id == "2001"
 
     seen = passes(session, meeting.id)
 
@@ -204,7 +204,7 @@ def test_an_uncertain_send_keeps_the_code_as_an_unconfirmed_start(session, fake,
     fake.script(CODE, "uncertain")
     meeting = place(session, fake, request_for(user, template))
     assert (meeting.status, meeting.completion_reason) == ("bot_sent", pipeline.SEND_UNCONFIRMED)
-    assert meeting.vexa_meeting_id is None
+    assert meeting.provider_bot_id is None
 
 
 def test_a_bot_the_database_does_not_know_about_is_refused_as_another_note_taker(
@@ -248,7 +248,7 @@ def test_the_join_runner_sends_a_calendar_bot_and_the_worker_takes_it_to_notes(
 
     assert [o.result for o in outcomes] == ["joined"] and fake.bots_sent == 1
     [meeting] = meetings(session)
-    assert meeting.source == "calendar" and meeting.vexa_meeting_id == "2001"
+    assert meeting.source == "calendar" and meeting.provider_bot_id == "2001"
     assert state_of(session, join) == ("joined", None)
 
     seen = passes(session, meeting.id)

@@ -29,7 +29,7 @@ email) and the admins (an alert), the row becomes `no_capacity`, and the runner 
 15 s until the deadline. At the deadline the row ends `failed` as "not recorded" and the owner is
 told again. A queued meeting is an unrecorded meeting, so nothing waits for a slot silently.
 
-**Another account in the same meeting.** One bot per meeting code (Vexa has one API key): the first
+**Another account in the same meeting.** One bot per meeting code (the provider has one API key): the first
 placement wins. The other user's row ends `skipped` with the neutral reason, and a plain notice
 that a note taker is already in that meeting. Nobody's bot is stopped or adopted. Who is first is
 not left to a race when the event's ORGANIZER has an account that can place: a guest's row holds
@@ -163,7 +163,7 @@ def _connection_of(session: Session, join: ScheduledJoin) -> CalendarConnection 
 
 def run_due_joins(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     calendar: "calendar_providers.SourceRegistry | CalendarSource | None",
     *,
     now: datetime,
@@ -185,7 +185,7 @@ def run_due_joins(
         if time.monotonic() - started > RUN_BUDGET_SECONDS:
             break
         try:
-            outcome = _process(session, vexa, calendar, join_id, now, settings)
+            outcome = _process(session, provider, calendar, join_id, now, settings)
         except Exception as exc:  # one row must not stop the rest; its text may hold a link
             session.rollback()
             logger.error("join %s could not be handled (%s)", join_id, type(exc).__name__)
@@ -361,7 +361,7 @@ def _lock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None
 
 def _process(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     calendar: "calendar_providers.SourceRegistry",
     join_id: int,
     now: datetime,
@@ -379,14 +379,14 @@ def _process(
         if stop is not None:
             return stop
         if _recheck_due(join, now):
-            answer = _recheck(session, vexa, calendar, join, now, settings)
+            answer = _recheck(session, provider, calendar, join, now, settings)
             if answer == WAIT:  # the calendar could not be asked and the run time is not here yet
                 return None
             continue  # the row may have been moved or cancelled: look at it again
         if join.run_at > now:  # only a re-check made it due, and it has been done
             session.rollback()
             return None
-        return _place(session, vexa, join, now, settings)
+        return _place(session, provider, join, now, settings)
     session.rollback()  # pragma: no cover - the second pass never re-checks
     return None
 
@@ -530,7 +530,7 @@ def _recheck_due(join: ScheduledJoin, now: datetime) -> bool:
 
 def _recheck(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     calendar: "calendar_providers.SourceRegistry",
     join: ScheduledJoin,
     now: datetime,
@@ -585,7 +585,7 @@ def _recheck(
             user_settings,
             now=now,
             settings=settings,
-            vexa=vexa,
+            provider=provider,
         )
     except Exception as exc:
         session.rollback()
@@ -598,7 +598,7 @@ def _recheck(
 
 
 def _place(
-    session: Session, vexa: BotProvider, join: ScheduledJoin, now: datetime, settings: Settings
+    session: Session, provider: BotProvider, join: ScheduledJoin, now: datetime, settings: Settings
 ) -> JoinOutcome | None:
     """`place_bot()` under the row lock (the retry gap is already in the due query). The row lock
     was taken before the
@@ -654,7 +654,7 @@ def _place(
     try:
         meeting = place_bot(
             session,
-            vexa,
+            provider,
             request,
             now=now,
             settings=settings,
@@ -959,7 +959,7 @@ def register_join_runner(
     settings: Settings | None = None,
     *,
     source: "calendar_providers.SourceRegistry | CalendarSource | None" = None,
-    vexa: BotProvider | None = None,
+    provider: BotProvider | None = None,
 ) -> bool:
     """Put the runner on the scheduler's dispatch loop (every tick, 10 s). Not registered while
     `AUTOJOIN_ENABLED` is false (the operator's emergency stop). The scheduler process shares its
@@ -967,11 +967,11 @@ def register_join_runner(
     settings = settings or get_settings()
     if not settings.autojoin_enabled:
         return False
-    vexa = vexa or build_provider()
+    provider = provider or build_provider()
     scheduler.register(
         "join_runner",
         1,
-        lambda session, now: run_due_joins(session, vexa, source, now=now, settings=settings),
+        lambda session, now: run_due_joins(session, provider, source, now=now, settings=settings),
         loop="dispatch",
     )
     return True

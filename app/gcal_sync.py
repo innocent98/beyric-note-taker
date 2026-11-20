@@ -111,7 +111,7 @@ class _Run:
     template_id: int | None
     result: ApplyResult = field(default_factory=ApplyResult)
     # Joins whose bot is already sent and whose event was cancelled: stopped after the commit,
-    # because `cancel_meeting` commits and talks to Vexa.
+    # because `cancel_meeting` commits and talks to the provider.
     to_stop: list[int] = field(default_factory=list)
 
 
@@ -172,10 +172,10 @@ def apply_batch(
     *,
     now: datetime,
     settings: Settings | None = None,
-    vexa: BotProvider | None = None,
+    provider: BotProvider | None = None,
 ) -> ApplyResult:
     """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule` and
-    `calendar_template_id`. `vexa` is only needed (and only built when absent) to stop a bot whose
+    `calendar_template_id`. `provider` is only needed (and only built when absent) to stop a bot whose
     event was cancelled."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
@@ -213,7 +213,7 @@ def apply_batch(
     if batch.complete and batch.full:
         _cancel_missing(run, named)
     session.commit()
-    _stop_cancelled_bots(run, vexa)
+    _stop_cancelled_bots(run, provider)
     return run.result
 
 
@@ -457,9 +457,9 @@ def _cancel_missing(run: _Run, named: set[str]) -> None:
             _cancel_join(run, join, "removed")
 
 
-def _stop_cancelled_bots(run: _Run, vexa: BotProvider | None) -> None:
+def _stop_cancelled_bots(run: _Run, provider: BotProvider | None) -> None:
     """Stop the bot of each meeting whose event was cancelled while the bot was sent and not yet
-    done. `cancel_meeting` refuses a meeting the pipeline already took, and says 502 when Vexa will
+    done. `cancel_meeting` refuses a meeting the pipeline already took, and says 502 when the provider will
     not stop the bot: in both cases the join stays `joined` and nothing is raised (the calendar
     change itself is already saved)."""
     session = run.session
@@ -468,9 +468,9 @@ def _stop_cancelled_bots(run: _Run, vexa: BotProvider | None) -> None:
         meeting = session.get(Meeting, join.meeting_id) if join and join.meeting_id else None
         if join is None or meeting is None:
             continue
-        vexa = vexa or build_provider()
+        provider = provider or build_provider()
         try:
-            cancel_meeting(session, vexa, meeting)
+            cancel_meeting(session, provider, meeting)
         except Refused as refused:
             logger.info("calendar cancel left meeting %s alone (%s)", meeting.id, refused.code)
             continue
@@ -523,7 +523,7 @@ def sync_connection(
     *,
     now: datetime,
     settings: Settings | None = None,
-    vexa: BotProvider | None = None,
+    provider: BotProvider | None = None,
 ) -> None:
     """Sync one connection. Never raises for what Google or the data does: a failure is recorded
     in `last_error` and the next attempt starts from the same state."""
@@ -532,7 +532,9 @@ def sync_connection(
     user_settings = session.get(UserSettings, conn.user_id) or DEFAULT_USER_SETTINGS
     try:
         batch = _fetch(source, conn, now)
-        apply_batch(session, conn, batch, user_settings, now=now, settings=settings, vexa=vexa)
+        apply_batch(
+            session, conn, batch, user_settings, now=now, settings=settings, provider=provider
+        )
     except Exception as exc:
         session.rollback()
         _record_error(session, conn, exc, now, settings)

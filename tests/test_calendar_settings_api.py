@@ -26,7 +26,7 @@ from tests.test_web import OTHER_EMAIL, make_settings
 
 # The fixtures of the connect tests and the web tests, shared by name.
 capp, google, settings, vault_key, web = cc.capp, cc.google, cc.settings, cc.vault_key, cc.web
-fake_openai, fake_vexa, owner, stranger = tw.fake_openai, tw.fake_vexa, tw.owner, tw.stranger
+fake_openai, fake_bot, owner, stranger = tw.fake_openai, tw.fake_bot, tw.owner, tw.stranger
 
 URL = "/api/calendar"
 SETTINGS_URL = "/api/calendar/settings"
@@ -101,14 +101,14 @@ def test_settings_needs_a_login(capp, owner):
 
 
 def test_settings_is_dark_while_the_calendar_flag_is_off(
-    engine, google, fake_vexa, fake_openai, owner
+    engine, google, fake_bot, fake_openai, owner
 ):
     off = make_settings(
         google_client_id="id.apps.example.test",
         google_client_secret="s3cret",
         calendar_enabled=False,
     )
-    web = browser(build_app(engine, off, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, off, google, fake_bot, fake_openai))
     error_of(web.put(SETTINGS_URL, {"rule": "none"}), 404, "calendar_unavailable")
 
 
@@ -371,14 +371,14 @@ def test_override_needs_a_login(capp, owner):
 
 
 def test_override_is_dark_while_the_calendar_flag_is_off(
-    engine, google, fake_vexa, fake_openai, owner
+    engine, google, fake_bot, fake_openai, owner
 ):
     off = make_settings(
         google_client_id="id.apps.example.test",
         google_client_secret="s3cret",
         calendar_enabled=False,
     )
-    web = browser(build_app(engine, off, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, off, google, fake_bot, fake_openai))
     error_of(web.put(override_url(1), {"override": True}), 404, "calendar_unavailable")
 
 
@@ -432,17 +432,16 @@ def test_override_on_declined_or_ended_or_teams_flag_off_is_409_not_joinable(
 
 
 def test_a_teams_event_can_be_switched_once_the_server_can_join_teams(
-    engine, google, fake_vexa, fake_openai, owner, session
+    engine, google, fake_bot, fake_openai, owner, session
 ):
     on = make_settings(
         google_client_id=cc.CLIENT_ID,
         google_client_secret="s3cret",
         calendar_enabled=True,
         token_enc_key=cc.KEY,
-        bot_provider="skribby",  # Teams follows the provider: only Skribby can join it
         skribby_api_key="placeholder-key",
     )
-    web = browser(build_app(engine, on, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, on, google, fake_bot, fake_openai))
     connect_google(web, google)
     conn = connection_of(session, owner)
     event = add_event(session, conn, 1, hours=2, platform="teams", organizer_self=False)

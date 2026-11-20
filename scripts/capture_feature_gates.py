@@ -41,7 +41,7 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import HourGrant, Meeting, Template, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_openai_client, get_vexa  # noqa: E402
+from app.services import get_bot_provider, get_openai_client  # noqa: E402
 from app.usage import email_hash  # noqa: E402
 from tests.test_web import NOTES, FakeOpenAI  # noqa: E402
 
@@ -297,7 +297,7 @@ def main() -> None:
         current["settings"] = settings_for(mode)
 
     app = create_app(current["settings"])
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     app.dependency_overrides[get_openai_client] = lambda: FakeOpenAI()
     server, server_base = base.start_server(app)
     tap = LogTap()

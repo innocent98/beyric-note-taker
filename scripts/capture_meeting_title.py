@@ -4,11 +4,11 @@ the frontend guide.
     python scripts/capture_meeting_title.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_meeting_delete.py`: real migrations, the real app under uvicorn,
-real HTTP, only Vexa and OpenAI replaced by fakes. Between sends the earlier meetings are set to
+real HTTP, only the provider and OpenAI replaced by fakes. Between sends the earlier meetings are set to
 `ready` by SQL (the worker is not running), so the account is never at its bot limit. Files go to
 `docs/fe-captures/meeting-title/NN-name.json`.
 
-What is NOT real: Vexa and OpenAI (fakes), the worker (it never runs).
+What is NOT real: The provider and OpenAI (fakes), the worker (it never runs).
 """
 
 import shutil
@@ -23,7 +23,7 @@ from sqlalchemy import create_engine, text  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.services import get_openai_client, get_vexa  # noqa: E402
+from app.services import get_bot_provider, get_openai_client  # noqa: E402
 
 Recorder = base.Recorder
 
@@ -41,9 +41,9 @@ def main() -> None:
         cookie_secure=False,
         database_url=base.scratch_url,
     )
-    vexa, openai_client = base.FakeVexa(), base.FakeOpenAI()
+    provider, openai_client = base.FakeBot(), base.FakeOpenAI()
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: vexa
+    app.dependency_overrides[get_bot_provider] = lambda: provider
     app.dependency_overrides[get_openai_client] = lambda: openai_client
     server, server_base = base.start_server(app)
     engine = create_engine(base.scratch_url)

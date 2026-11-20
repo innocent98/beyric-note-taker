@@ -26,6 +26,7 @@ from app.bot_provider import (
     BotProviderError,
     BotProviderNotConfigured,
     BotSendUncertain,
+    RetiredProvider,
     build_provider,
     describe_failure,
     provider_for,
@@ -46,7 +47,6 @@ from app.skribby import (
     recording_handle,
     speaker_events_record,
 )
-from app.vexa import VexaProvider
 from tests.test_placement import add_live, make_template
 from tests.test_web import make_user
 
@@ -819,7 +819,7 @@ def test_a_recording_handle_fits_a_bigint_and_comes_back_to_the_uuid_it_was_made
     assert handle == recording_handle(BOT.upper())
 
 
-def test_a_vexa_recording_id_is_not_a_handle():
+def test_a_plain_recording_id_is_not_a_handle():
     for number in (0, 7, 9, 123456789, 2**59):
         assert handle_prefix(number) is None
 
@@ -1204,7 +1204,7 @@ def test_a_lookup_by_id_asks_for_that_bot_and_names_it_in_the_answer(httpx_mock)
     httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", json=bot("recording"))
     provider, _ = make()
     info = provider.get_meeting_by_id(BOT)
-    assert (info.status, info.vexa_id) == ("active", BOT)
+    assert (info.status, info.provider_id) == ("active", BOT)
 
 
 @pytest.mark.parametrize("status", [500, 502, 429, 403])
@@ -1230,14 +1230,14 @@ def test_a_lookup_answering_not_json_or_not_an_object_is_an_error(httpx_mock):
 def test_a_lookup_by_code_uses_the_newest_live_bot_of_ours(httpx_mock):
     httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{OTHER}", json=bot("joining"))
     provider, _ = make(ledger=Ledger(live=[OTHER, BOT]))
-    assert provider.get_meeting("google_meet", CODE).vexa_id == OTHER
+    assert provider.get_meeting("google_meet", CODE).provider_id == OTHER
 
 
 def test_a_lookup_by_code_skips_a_bot_skribby_forgot(httpx_mock):
     httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{OTHER}", status_code=404, json={})
     httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", json=bot("joining"))
     provider, _ = make(ledger=Ledger(live=[OTHER, BOT]))
-    assert provider.get_meeting("google_meet", CODE).vexa_id == BOT
+    assert provider.get_meeting("google_meet", CODE).provider_id == BOT
 
 
 def test_a_lookup_by_code_for_a_send_whose_answer_was_lost_finds_nothing():
@@ -1345,7 +1345,7 @@ def test_a_recording_no_meeting_of_ours_holds_is_not_deleted_by_guesswork(httpx_
     with pytest.raises(SkribbyError):
         provider.delete_recording(recording_handle(BOT))  # no row, no recent lookup
     with pytest.raises(SkribbyError):
-        provider.delete_recording(7)  # a Vexa-sized id handed to Skribby
+        provider.delete_recording(7)  # a plain integer id handed to Skribby
     assert httpx_mock.get_requests() == []
 
 
@@ -1519,43 +1519,34 @@ def reset():
     get_settings.cache_clear()
 
 
-def test_the_provider_skribby_without_its_key_stops_startup_naming_the_setting(monkeypatch):
-    monkeypatch.setenv("BOT_PROVIDER", "skribby")
-    monkeypatch.delenv("SKRIBBY_API_KEY", raising=False)
-    reset()
-    try:
-        with pytest.raises(
-            ValueError, match="BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set"
-        ):
-            get_settings()
-        monkeypatch.setenv("SKRIBBY_API_KEY", "   ")
-        reset()
-        with pytest.raises(ValueError, match="SKRIBBY_API_KEY is not set"):
-            get_settings()
-    finally:
-        reset()
+def test_a_process_without_the_key_stops_at_startup_naming_the_setting(monkeypatch):
+    from app.skribby import require_configured
+
+    require_configured(Settings(_env_file=None, skribby_api_key=KEY))  # fine
+    for blank in ("", "   "):
+        with pytest.raises(ValueError, match="SKRIBBY_API_KEY is not set") as caught:
+            require_configured(Settings(_env_file=None, skribby_api_key=blank))
+        assert KEY not in str(caught.value)
 
 
 def test_the_error_at_startup_does_not_print_a_key(monkeypatch):
-    monkeypatch.setenv("BOT_PROVIDER", "skribby")
-    monkeypatch.setenv("SKRIBBY_API_KEY", "")
+    monkeypatch.setenv("SKRIBBY_API_KEY", KEY)
     monkeypatch.setenv("SKRIBBY_ACCOUNT_ID", "not-a-uuid")
     reset()
     try:
         with pytest.raises(ValueError) as caught:
             get_settings()
         assert "SKRIBBY_ACCOUNT_ID" in str(caught.value)
+        assert KEY not in str(caught.value)
     finally:
         reset()
 
 
 def test_with_a_key_skribby_starts_and_the_other_settings_have_their_defaults(monkeypatch):
-    monkeypatch.setenv("BOT_PROVIDER", " Skribby ")
     monkeypatch.setenv("SKRIBBY_API_KEY", KEY)
     reset()
     try:
         settings = get_settings()
-        assert settings.bot_provider == "skribby"
         assert (settings.skribby_region, settings.skribby_account_id) == ("eu", "")
         assert settings.skribby_transcription_model == "groq/whisper-large-v3-turbo"
         assert settings.skribby_bot_name == "Beyric Meeting Support"
@@ -1563,10 +1554,10 @@ def test_with_a_key_skribby_starts_and_the_other_settings_have_their_defaults(mo
         reset()
 
 
-def test_vexa_needs_no_skribby_setting_at_all(monkeypatch):
-    monkeypatch.delenv("BOT_PROVIDER", raising=False)
+def test_the_settings_can_be_built_without_the_skribby_key(monkeypatch):
+    """Tools and tests that never send a bot need no key; the processes check it at start."""
     monkeypatch.delenv("SKRIBBY_API_KEY", raising=False)
-    assert Settings(_env_file=None).bot_provider == "vexa"
+    assert Settings(_env_file=None).skribby_api_key == ""
 
 
 @pytest.mark.parametrize("region", ["EU", " jp ", ""])
@@ -1585,13 +1576,12 @@ def test_an_unknown_region_or_a_bad_account_id_is_refused():
     )
 
 
-def test_the_name_the_host_sees_follows_the_provider_and_the_account():
-    assert Settings(_env_file=None).shown_bot_name == "Beyric Note Taker (recording)"
-    guest = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+def test_the_name_the_host_sees_follows_the_account():
+    assert Settings(_env_file=None).shown_bot_name == "Beyric Meeting Support"
+    guest = Settings(_env_file=None, skribby_api_key=KEY)
     assert guest.shown_bot_name == "Beyric Meeting Support"
     signed_in = Settings(
         _env_file=None,
-        bot_provider="skribby",
         skribby_api_key=KEY,
         skribby_account_id=OTHER,
         skribby_account_name="Beyric Notes",
@@ -1633,35 +1623,32 @@ def test_asking_for_skribby_with_no_key_is_a_retryable_not_configured_error(monk
         reset()
 
 
-def test_the_factory_table_has_both_providers():
-    assert set(PROVIDER_FACTORIES) >= {"vexa", "skribby"}
+def test_the_factory_table_has_the_one_provider():
+    assert set(PROVIDER_FACTORIES) == {"skribby"}
 
 
 def test_provider_names_and_routing_rules():
     skribby, _ = make()
-    vexa = VexaProvider()
-    assert (provider_name(skribby), provider_name(vexa)) == ("skribby", "vexa")
+    assert provider_name(skribby) == "skribby"
 
-    class Double:  # a test double has no name: it is always used, and counts as the setting's
+    class Double:  # a test double has no name: it is always used, and counts as the default
         pass
 
     double = Double()
+    assert provider_name(double) == "skribby"
     assert provider_for(double, "skribby") is double
     assert provider_for(double, None) is double
     assert provider_for(skribby, "skribby") is skribby
     assert provider_for(skribby, None) is skribby and provider_for(skribby, "") is skribby
     assert provider_for(skribby, "no-such-provider") is skribby  # unknown to this build: keep it
-    routed = provider_for(skribby, "vexa")
-    assert isinstance(routed, VexaProvider)
-    assert isinstance(provider_for(vexa, "vexa"), VexaProvider)
+    assert isinstance(provider_for(skribby, "vexa"), RetiredProvider)  # old data: nothing asked
 
 
-def test_a_meeting_of_skribby_is_routed_to_skribby_when_the_setting_is_vexa(monkeypatch):
+def test_a_meeting_of_skribby_with_no_default_given_builds_skribby(monkeypatch):
     monkeypatch.setenv("SKRIBBY_API_KEY", KEY)
     reset()
     try:
-        routed = provider_for(VexaProvider(), "skribby")
-        assert isinstance(routed, SkribbyProvider)
+        assert isinstance(provider_for(None, "skribby"), SkribbyProvider)
     finally:
         reset()
 
@@ -1679,7 +1666,7 @@ def ledger(engine):
 def row(session, user, template, code, *, provider, status="bot_sent", bot_id=None):
     meeting = add_live(session, user, template, code, status=status)
     meeting.bot_provider = provider
-    meeting.vexa_meeting_id = bot_id
+    meeting.provider_bot_id = bot_id
     session.commit()
     return meeting
 
@@ -1724,12 +1711,12 @@ def test_the_provider_reads_the_real_table_through_its_ledger(session, ledger, h
     provider.stop_bot("google_meet", CODE)
 
 
-def test_a_new_meeting_row_defaults_to_vexa(session):
+def test_a_new_meeting_row_defaults_to_skribby(session):
     user = make_user(session, "ada@example.test")
     template = make_template(session, user)
     meeting = add_live(session, user, template, CODE)
     session.refresh(meeting)
-    assert isinstance(meeting, Meeting) and meeting.bot_provider == "vexa"
+    assert isinstance(meeting, Meeting) and meeting.bot_provider == "skribby"
 
 
 def test_a_finished_body_with_no_id_of_its_own_still_gets_the_handle_of_the_bot_asked_for(
@@ -1881,7 +1868,7 @@ def test_a_late_answer_attaches_to_a_real_placeholder_row(session, httpx_mock, e
     assert ledger.adopt_late_bot("google_meet", CODE, BOT) is True
 
     session.refresh(placeholder)
-    assert placeholder.vexa_meeting_id == BOT
+    assert placeholder.provider_bot_id == BOT
     assert placeholder.completion_reason is None and placeholder.bot_state_seen_at is None
     assert ledger.adopt_late_bot("google_meet", CODE, OTHER) is False  # nothing left waiting
 
@@ -2047,11 +2034,9 @@ def test_the_provider_says_which_region_it_talks_to():
     assert SkribbyProvider(SkribbyClient(api_key=KEY, region="jp"), Ledger()).region == "jp"
 
 
-def test_the_name_the_host_sees_is_the_one_of_the_provider_that_ran_the_meeting():
-    settings = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
-    assert settings.bot_name_for("vexa") == "Beyric Note Taker (recording)"
-    assert settings.bot_name_for("skribby") == "Beyric Meeting Support"
-    assert settings.bot_name_for(None) == "Beyric Meeting Support"  # an old row: the setting
+def test_the_name_the_host_sees_is_the_guest_name_until_the_bot_signs_in():
+    settings = Settings(_env_file=None, skribby_api_key=KEY)
+    assert settings.shown_bot_name == "Beyric Meeting Support"
 
 
 def test_starting_with_another_region_logs_loudly_and_still_starts(session, engine, caplog):
@@ -2065,12 +2050,8 @@ def test_starting_with_another_region_logs_loudly_and_still_starts(session, engi
     meeting.bot_region = "eu"
     session.commit()
     factory = sessionmaker(bind=engine, expire_on_commit=False)
-    here = Settings(
-        _env_file=None, bot_provider="skribby", skribby_api_key=KEY, skribby_region="eu"
-    )
-    there = Settings(
-        _env_file=None, bot_provider="skribby", skribby_api_key=KEY, skribby_region="jp"
-    )
+    here = Settings(_env_file=None, skribby_api_key=KEY, skribby_region="eu")
+    there = Settings(_env_file=None, skribby_api_key=KEY, skribby_region="jp")
 
     assert check_region_unchanged(here, factory) == 0  # the same region: fine
     with caplog.at_level(logging.ERROR, logger="app.skribby"):
@@ -2102,7 +2083,7 @@ def test_an_unreachable_database_is_a_warning_and_not_a_refusal_to_start():
 
         raise OperationalError("select", {}, RuntimeError("down"))
 
-    settings = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+    settings = Settings(_env_file=None, skribby_api_key=KEY)
     assert check_region_unchanged(settings, broken) == 0
 
 

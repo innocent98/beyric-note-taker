@@ -43,8 +43,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
@@ -56,7 +56,7 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     multi_team_on,
     world,
 )
-from tests.test_multi_team_moved import NoVexa
+from tests.test_multi_team_moved import NoBot
 from tests.test_series import (  # noqa: F401
     MONDAY,
     NOW,
@@ -613,7 +613,7 @@ def test_a_deleted_recorders_moved_meeting_stays_readable_and_gets_no_mail(
     )
     teams.leave(session, world.pat, NOW, team_id=world.x.id)
     session.commit()
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.expire_all()
     ada = sign_in(app, OWNER_EMAIL)
     page = page_of(ada, pats.x_row)

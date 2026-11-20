@@ -30,8 +30,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
@@ -758,11 +758,11 @@ def test_deleting_an_account_removes_the_invitations_sent_to_it_and_frees_the_pl
     invite(api, OTHER_EMAIL)
     assert session.scalars(select(TeamInvite)).one().email == OTHER_EMAIL
 
-    class NoVexa:
+    class NoBot:
         pass
 
     stranger_row = session.get(User, stranger.id)
-    deletion.purge_user(session, stranger_row, NoVexa(), force=True)
+    deletion.purge_user(session, stranger_row, NoBot(), force=True)
     assert session.scalars(select(TeamInvite)).all() == []
 
 

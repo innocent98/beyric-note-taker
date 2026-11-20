@@ -3,7 +3,7 @@
     python scripts/capture_export_api.py postgresql+psycopg://USER:PASS@HOST:PORT/postgres
 
 Same method as `capture_owner_api.py`: a scratch database with the real migrations, the real app
-under uvicorn on a free local port, only Vexa and OpenAI faked, httpx for every call. Each
+under uvicorn on a free local port, only the provider and OpenAI faked, httpx for every call. Each
 exchange goes to `docs/fe-captures/export/NN-name.json`; a file the server sends is saved under
 `files/` (they hold only the placeholder text below, so they are safe to commit and open in
 Word and a PDF viewer), and the JSON records its headers, size and first bytes.

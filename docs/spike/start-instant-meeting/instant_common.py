@@ -270,40 +270,9 @@ def log_space(space: Space, requested: str, action: str) -> None:
 
 # --- the bot ---------------------------------------------------------------------------------
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 TIMELINE_LINE = re.compile(
     r"t\+\s*(?P<t>[\d.]+)s status=(?P<status>\S+) reason=(?P<reason>.*?) stage="
 )
-
-
-def require_local_vexa(base_url: str) -> str:
-    """Refuse any Vexa that is not on this machine: this test must never send a bot from the
-    production server."""
-    parts = urllib.parse.urlsplit(base_url)
-    if parts.scheme != "http" or parts.hostname not in LOCAL_HOSTS:
-        raise SpikeError(
-            f"{base_url} is not a Vexa on this Mac. This test only talks to http://localhost. "
-            "It must never send a bot from the production server."
-        )
-    return base_url.rstrip("/")
-
-
-def read_vexa_key(path: Path) -> str:
-    """The Vexa API key from `spike/.env.api`: a bare key on one line, or KEY=value lines."""
-    if not path.exists():
-        raise SpikeError(f"No Vexa key file at {path} (pass --key-file).")
-    lines = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
-    lines = [ln for ln in lines if not ln.startswith("#")]
-    if len(lines) == 1 and "=" not in lines[0]:
-        return lines[0]
-    pairs = dict(ln.split("=", 1) for ln in lines if "=" in ln)
-    for name in ("VEXA_API_KEY", "API_KEY", "X_API_KEY"):
-        if pairs.get(name):
-            return pairs[name].strip().strip("'\"")
-    raise SpikeError(
-        f"Cannot tell which line of {path} is the key. Its names are: {', '.join(sorted(pairs))}. "
-        "Pass --key-file with a file that holds only the key."
-    )
 
 
 def parse_timeline(lines: list[str]) -> list[tuple[float, str, str | None]]:

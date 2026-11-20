@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from app.billing.types import EVENT_KINDS as BILLING_EVENT_KINDS
+from app.bot_provider import DEFAULT_PROVIDER
 
 STATUSES = ("bot_sent", "processing", "ready", "failed")
 STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
@@ -752,18 +753,23 @@ class Meeting(Base):
     platform: Mapped[str] = mapped_column(String(32))
     native_id: Mapped[str] = mapped_column(String(200))
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
-    # The provider's id for the bot (`vexa_meeting_id` keeps its name; it holds a Skribby bot's
-    # UUID as text too) and which provider ran it. Old rows are `vexa`.
-    vexa_meeting_id: Mapped[str | None] = mapped_column(String(100))
-    bot_provider: Mapped[str] = mapped_column(String(32), default="vexa", server_default="vexa")
-    # When a hosted provider's copy (recording, transcript, bot record) was deleted at the provider;
-    # null until then, and always null for Vexa (its copy follows the retention rule).
+    # The provider's id for the bot (a Skribby bot's UUID, as text) and which provider ran it. The
+    # database column keeps the name it was made with (`vexa_meeting_id`, migration 0001): renaming
+    # it would need a migration and a deploy ordering for no gain. Old rows say `bot_provider =
+    # 'vexa'` (a retired provider, `app.bot_provider.RETIRED_PROVIDERS`); the migration's server
+    # default stays `'vexa'` so the schema is unchanged, and the ORM always sets the value.
+    provider_bot_id: Mapped[str | None] = mapped_column("vexa_meeting_id", String(100))
+    bot_provider: Mapped[str] = mapped_column(
+        String(32), default=DEFAULT_PROVIDER, server_default="vexa"
+    )
+    # When the provider's copy (recording, transcript, bot record) was deleted at the provider;
+    # null until then, and always null for a retired provider's meetings.
     provider_copy_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Failed tries to delete it and when the next may be made (backoff); after
     # `pipeline.COPY_MAX_ATTEMPTS` the retry job leaves the row to the retention pass.
     provider_copy_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     provider_copy_next_try_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # The hosted provider's region the bot was sent to (`eu`, `jp`); null for Vexa. Skribby's two
+    # The hosted provider's region the bot was sent to (`eu`, `jp`); null for a retired provider's. Skribby's two
     # regions are separate accounts: a bot sent to one is not found in the other.
     bot_region: Mapped[str | None] = mapped_column(String(8))
     # The note taker name sent with this meeting's bot when it was created (`app/bot_names.py`);
@@ -781,8 +787,9 @@ class Meeting(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Vexa's id for the recording, kept when first seen so cleanup can delete Vexa's copy.
-    vexa_recording_id: Mapped[int | None] = mapped_column(BigInteger)
+    # The provider's id for the recording, kept when first seen so cleanup can delete the provider's
+    # copy (database column `vexa_recording_id`, see `provider_bot_id`).
+    provider_recording_id: Mapped[int | None] = mapped_column("vexa_recording_id", BigInteger)
     # True when some part of the transcript could not be given speaker names.
     speakers_incomplete: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()
@@ -790,7 +797,7 @@ class Meeting(Base):
     completion_reason: Mapped[str | None] = mapped_column(String(64))
     # How many bots have been sent for this meeting; Zoom sometimes turns one away.
     join_attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
-    # When a poll first saw Vexa report the meeting as over.
+    # When a poll first saw the provider report the meeting as over.
     terminal_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When a poll last saw the bot in the live state kept in `completion_reason`; null when there
     # is none. A state older than a couple of poll intervals is not shown as current.

@@ -312,6 +312,7 @@ def _remember_if_autojoin_is_off(settings) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = get_settings()
+    skribby.require_configured(settings)
     skribby.check_region_unchanged(settings)
     scheduler = Scheduler(
         SystemClock(),

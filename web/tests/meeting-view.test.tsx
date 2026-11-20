@@ -341,7 +341,7 @@ describe("end now and write the notes", () => {
     expect(mocks.end).not.toHaveBeenCalled();
   });
 
-  it("shows the API's message when Vexa could not stop the bot, and leaves the button there", async () => {
+  it("shows the API's message when the provider could not stop the bot, and leaves the button there", async () => {
     mocks.end.mockRejectedValue(new ApiError(502, "bot_stop_failed", "The bot could not be stopped. Please try again in a moment."));
     show(meeting("112-meeting-detail-bot-recording-can-end.json"));
     fireEvent.click(screen.getByRole("button", { name: "End now and write the notes" }));

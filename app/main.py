@@ -42,7 +42,9 @@ def _own_session(app: FastAPI) -> Iterator[Session]:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     logging_setup.configure()  # web's own INFO lines (the shadow lines) must reach its log
-    settings = settings or get_settings()
+    if settings is None:  # the production start (`uvicorn app.main:create_app --factory`)
+        settings = get_settings()
+        skribby.require_configured(settings)
     auth.check_start(settings)
     skribby.check_region_unchanged(settings)
     mail.check_settings(settings)

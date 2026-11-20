@@ -27,7 +27,7 @@ from tests.test_web import OTHER_EMAIL, make_settings
 
 # The fixtures of the connect tests and the web tests, shared by name.
 capp, google, settings, vault_key, web = cc.capp, cc.google, cc.settings, cc.vault_key, cc.web
-fake_openai, fake_vexa, owner, stranger = tw.fake_openai, tw.fake_vexa, tw.owner, tw.stranger
+fake_openai, fake_bot, owner, stranger = tw.fake_openai, tw.fake_bot, tw.owner, tw.stranger
 
 URL = "/api/calendar"
 # The route reads the real clock (a fixed one would put the OAuth ID token's `iat` in the future),
@@ -74,19 +74,19 @@ def test_it_needs_a_login(capp, owner):
     error_of(anon.get(URL), 401, "not_authenticated")
 
 
-def test_it_is_dark_while_the_calendar_flag_is_off(engine, google, fake_vexa, fake_openai, owner):
+def test_it_is_dark_while_the_calendar_flag_is_off(engine, google, fake_bot, fake_openai, owner):
     off = make_settings(
         google_client_id="id.apps.example.test",
         google_client_secret="s3cret",
         calendar_enabled=False,
     )
-    web = browser(build_app(engine, off, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, off, google, fake_bot, fake_openai))
     error_of(web.get(URL), 404, "calendar_unavailable")
 
 
-def test_it_is_dark_without_a_google_client(engine, google, fake_vexa, fake_openai, owner):
+def test_it_is_dark_without_a_google_client(engine, google, fake_bot, fake_openai, owner):
     bare = make_settings(calendar_enabled=True)
-    app = build_app(engine, bare, google, fake_vexa, fake_openai)
+    app = build_app(engine, bare, google, fake_bot, fake_openai)
     from app import google_oauth
 
     app.dependency_overrides[google_oauth.get_google] = lambda: None
@@ -112,7 +112,7 @@ def test_the_answer_says_when_the_scheduler_recorded_that_auto_join_is_off(web, 
 
 
 def test_the_web_processs_own_environment_does_not_decide_the_notice(
-    engine, google, fake_vexa, fake_openai, owner, session
+    engine, google, fake_bot, fake_openai, owner, session
 ):
     """`web` keeps the environment it started with: the scheduler's record is the only source, so
     switching auto-join back on needs no restart of `web`."""
@@ -123,7 +123,7 @@ def test_the_web_processs_own_environment_does_not_decide_the_notice(
         autojoin_enabled=False,
         token_enc_key="K" * 43 + "=",
     )
-    web = browser(build_app(engine, stale, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, stale, google, fake_bot, fake_openai))
     connect_google(web, google)
     assert web.get(URL).json()["auto_join_paused"] is False
 

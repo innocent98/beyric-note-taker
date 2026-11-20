@@ -30,6 +30,7 @@ import re
 import unicodedata
 
 from app import titles
+from app.bot_provider import DEFAULT_PROVIDER
 from app.config import Settings
 
 # Teams' limit (strictly enforced; Meet allows 60 and Zoom 64). Skribby cuts a longer name at the
@@ -108,10 +109,8 @@ def recorder_warning(name: str | None) -> str | None:
 
 
 def default_name(settings: Settings, provider: str | None) -> str:
-    """The name used when the person set none: Skribby's guest name, or Vexa's for a meeting Vexa
-    runs (Vexa takes no per-user name)."""
-    provider = provider or settings.bot_provider
-    return settings.skribby_bot_name if provider == "skribby" else settings.bot_name
+    """The name used when the person set none: the server's guest name (`SKRIBBY_BOT_NAME`)."""
+    return settings.skribby_bot_name
 
 
 def takes_name(provider: str | None) -> bool:
@@ -123,15 +122,15 @@ def bot_name_for_user(settings: Settings, user, provider: str | None) -> str:
     """The name to SEND for this person's bot: their own when set and the provider takes one, else
     the server default. `user` may be None (the default is returned)."""
     own = getattr(user, "bot_name", None)
-    if own and takes_name(provider or settings.bot_provider):
+    if own and takes_name(provider or DEFAULT_PROVIDER):
         return own
     return default_name(settings, provider)
 
 
 def stored_name(settings: Settings, user, provider: str | None) -> str | None:
     """What goes in `meetings.bot_name`: the name sent, or None for a provider that takes no
-    name (so a Vexa meeting never claims a name Vexa did not get)."""
-    if not takes_name(provider or settings.bot_provider):
+    name (so a meeting of a provider that takes none never claims a name it did not get)."""
+    if not takes_name(provider or DEFAULT_PROVIDER):
         return None
     return bot_name_for_user(settings, user, provider)
 
@@ -142,9 +141,6 @@ def shown_name(
     """The name the host sees in the participant list, for the owner's "Admit '...'" line and the
     chat notice. `stored` is `meetings.bot_name` (None = the server default). See the module doc for
     why a signed-in Google Meet bot keeps showing the account's own name."""
-    provider = provider or settings.bot_provider
-    if provider != "skribby":
-        return settings.bot_name
     name = stored or settings.skribby_bot_name
     signed_in = bool(settings.skribby_account_id) and platform == "google_meet"
     if signed_in and not settings.bot_name_applies_when_signed_in:

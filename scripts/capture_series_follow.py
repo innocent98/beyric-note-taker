@@ -1545,7 +1545,7 @@ def main() -> None:
     assert settings.multi_team_enabled and not settings.series_follow_meetings
     engine = create_engine(scratch_url)
     seeded = seed(engine)
-    app = create_app()
+    app = create_app(settings)
     server, base = start_server(app)
     try:
         run(base, seeded, engine)

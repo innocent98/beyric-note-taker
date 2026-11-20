@@ -5,13 +5,13 @@
 The argument is any Postgres server the script may create a scratch database on. It runs the
 real migrations there (migration 0006 creates the admin account from OWNER_EMAIL and
 OWNER_PASSWORD, set below to placeholders), starts the real app under uvicorn on a free local
-port with only Vexa and OpenAI replaced by fakes, and walks the owner journey with httpx. Each
+port with only the provider and OpenAI replaced by fakes, and walks the owner journey with httpx. Each
 exchange is written to `docs/fe-captures/owner-app/NN-name.json`, so every claim in the frontend
 guide
 (`docs/fe-integration-guide-owner-app.md`) can be re-derived by running this again.
 
 What is real: the app, auth, CSRF, validation, database, migrations, serialisation and every
-error. What is not: Vexa and OpenAI (fakes, below) and the worker, which never runs, so
+error. What is not: The provider and OpenAI (fakes, below) and the worker, which never runs, so
 meetings past `bot_sent` are inserted by SQL in the states the worker would leave them in.
 Secrets in the files are masked: the CSRF tokens become `<csrf-A>`, `<csrf-B>` in order of first
 appearance (so a token that changes still shows as different) and the cookie value `<cookie>`.
@@ -61,6 +61,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import usage  # noqa: E402
 from app.accounts import create_user_defaults  # noqa: E402
 from app.auth import LoginLimiter  # noqa: E402
+from app.bot_provider import BotMeeting, BotProviderError  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import AppState, Meeting, UsageEntry, User  # noqa: E402
@@ -71,8 +72,7 @@ from app.pipeline import (  # noqa: E402
     REASON_NO_SPEECH,
     REASON_NOT_ADMITTED,
 )
-from app.services import get_openai_client, get_vexa  # noqa: E402
-from app.vexa import VexaError, VexaMeeting  # noqa: E402
+from app.services import get_bot_provider, get_openai_client  # noqa: E402
 
 NOTES = "\n\n".join(
     [
@@ -94,18 +94,22 @@ PLAIN_TRANSCRIPT = (
 )
 
 
-class FakeVexa:
+class FakeBot:
     fail = False
     stop_error = False
 
     def send_bot(self, url):
         if self.fail:
-            raise VexaError("send_bot failed: internal detail that must not reach the client")
+            raise BotProviderError(
+                "send_bot failed: internal detail that must not reach the client"
+            )
         return 4242
 
     def stop_bot(self, platform, native_id):
         if self.stop_error:
-            raise VexaError("stop_bot failed: internal detail that must not reach the client")
+            raise BotProviderError(
+                "stop_bot failed: internal detail that must not reach the client"
+            )
 
 
 class FakeOpenAI:
@@ -292,20 +296,20 @@ def main() -> None:
         cookie_secure=False,
         database_url=scratch_url,
     )
-    vexa, openai_client = FakeVexa(), FakeOpenAI()
+    provider, openai_client = FakeBot(), FakeOpenAI()
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: vexa
+    app.dependency_overrides[get_bot_provider] = lambda: provider
     app.dependency_overrides[get_openai_client] = lambda: openai_client
     server, base = start_server(app)
     engine = create_engine(scratch_url)
     try:
-        run(app, base, engine, vexa, openai_client)
+        run(app, base, engine, provider, openai_client)
     finally:
         server.should_exit = True
         engine.dispose()
 
 
-def run(app, base, engine, vexa, openai_client) -> None:
+def run(app, base, engine, provider, openai_client) -> None:
     owner = Recorder(base)
 
     # --- session ---
@@ -455,14 +459,14 @@ def run(app, base, engine, vexa, openai_client) -> None:
         "/api/meetings/1/retry",
         note="A cancelled meeting never recorded anything, so it cannot be retried.",
     )
-    vexa.fail = True
+    provider.fail = True
     owner.call(
-        "meeting-create-vexa-down",
+        "meeting-create-provider-down",
         "POST",
         "/api/meetings",
         body={"url": MEET, "template_id": general["id"]},
     )
-    vexa.fail = False
+    provider.fail = False
     owner.call(
         "meeting-create-zoom",
         "POST",
@@ -479,9 +483,9 @@ def run(app, base, engine, vexa, openai_client) -> None:
         "/api/meetings/2",
         note="join_attempts was set to 2 by SQL (the worker does this).",
     )
-    vexa.stop_error = True
-    owner.call("meeting-cancel-vexa-down", "POST", "/api/meetings/2/cancel")
-    vexa.stop_error = False
+    provider.stop_error = True
+    owner.call("meeting-cancel-provider-down", "POST", "/api/meetings/2/cancel")
+    provider.stop_error = False
 
     # --- states the worker leaves behind ---
     with Session(engine) as session:
@@ -601,7 +605,7 @@ def run(app, base, engine, vexa, openai_client) -> None:
     run_accounts(app, base, engine, ids, general["id"])
     run_refusal(owner, engine, general["id"])
     run_live_state(owner, engine, general["id"])
-    run_end_controls(owner, engine, general["id"], vexa)
+    run_end_controls(owner, engine, general["id"], provider)
 
 
 def run_accounts(app, base, engine, ids, admin_general_id) -> None:
@@ -754,7 +758,7 @@ def run_refusal(owner, engine, general_id) -> None:
             completion_reason="google_meet_join_refused",
             terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
             join_attempts=2,
-            vexa_meeting_id="4241",
+            provider_bot_id="4241",
         )
         session.add(refused)
         session.commit()
@@ -789,7 +793,7 @@ def run_refusal(owner, engine, general_id) -> None:
         "meeting-retry-refused-sends-a-new-bot",
         "POST",
         f"/api/meetings/{refused_id}/retry",
-        note="Sends a NEW bot (fake Vexa here) and puts the meeting back to `bot_sent`.",
+        note="Sends a NEW bot (fake the provider here) and puts the meeting back to `bot_sent`.",
     )
     with Session(engine) as session:
         # The new bot is finished by SQL so only the paused meeting below holds a bot.
@@ -808,7 +812,7 @@ def run_refusal(owner, engine, general_id) -> None:
             completion_reason="google_meet_join_refused",
             terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
             join_attempts=1,
-            vexa_meeting_id="4243",
+            provider_bot_id="4243",
         )
         session.add(paused)
         session.commit()
@@ -823,12 +827,12 @@ def run_refusal(owner, engine, general_id) -> None:
 
 
 class BotAs:
-    """A Vexa that answers every lookup with one state (or fails), for the real worker below."""
+    """A provider that answers every lookup with one state (or fails), for the real worker below."""
 
     def __init__(self, answer) -> None:
         self.answer = answer
 
-    def get_meeting_by_id(self, vexa_meeting_id):
+    def get_meeting_by_id(self, provider_bot_id):
         if isinstance(self.answer, Exception):
             raise self.answer
         return self.answer
@@ -836,7 +840,7 @@ class BotAs:
 
 def run_live_state(owner, engine, general_id) -> None:
     """What the owner sees while the call runs. The worker is not running in this script, so each
-    state is the real `pipeline.advance_meeting` fed one Vexa answer, then read over HTTP."""
+    state is the real `pipeline.advance_meeting` fed one the provider answer, then read over HTTP."""
     from app import pipeline
 
     with Session(engine) as session:
@@ -852,7 +856,7 @@ def run_live_state(owner, engine, general_id) -> None:
             platform="google_meet",
             native_id="abc-defg-hij",
             template_id=general_id,
-            vexa_meeting_id="4250",
+            provider_bot_id="4250",
         )
         session.add(meeting)
         session.commit()
@@ -861,40 +865,42 @@ def run_live_state(owner, engine, general_id) -> None:
     steps = [
         (
             "bot-state-unknown",
-            VexaError("down"),
-            'Vexa could not be reached, so nothing is known: `status_text` is the old "Bot sent".',
+            BotProviderError("down"),
+            'the provider could not be reached, so nothing is known: `status_text` is the old "Bot sent".',
         ),
         (
             "bot-joining",
-            VexaMeeting(status="joining"),
-            "Vexa reports `joining`. Same fields as before: only `status_text` changed.",
+            BotMeeting(status="joining"),
+            "The provider reports `joining`. Same fields as before: only `status_text` changed.",
         ),
         (
             "bot-awaiting-admission",
-            VexaMeeting(status="awaiting_admission"),
-            "Vexa reports `awaiting_admission`: the bot is in the waiting room.",
+            BotMeeting(status="awaiting_admission"),
+            "The provider reports `awaiting_admission`: the bot is in the waiting room.",
         ),
         (
             "bot-in-meeting",
-            VexaMeeting(status="active"),
-            "Vexa reports `active` with no segments and no recording yet: the bot is in, and the "
+            BotMeeting(status="active"),
+            "The provider reports `active` with no segments and no recording yet: the bot is in, and the "
             "text does not say it is recording.",
         ),
         (
             "bot-recording",
-            VexaMeeting(status="active", segments=[segment]),
+            BotMeeting(status="active", segments=[segment]),
             "`active` with transcript segments: now it says `Recording`.",
         ),
         (
             "bot-needs-help",
-            VexaMeeting(status="needs_help"),
-            "Vexa reports `needs_help` (a consent or verification prompt). Still `bot_sent`: the "
+            BotMeeting(status="needs_help"),
+            "The provider reports `needs_help` (a consent or verification prompt). Still `bot_sent`: the "
             "worker only fails the join after 2 minutes of it.",
         ),
     ]
     for name, answer, note in steps:
         with Session(engine) as session:
-            pipeline.advance_meeting(session, meeting_id, vexa=BotAs(answer), now=datetime.now(UTC))
+            pipeline.advance_meeting(
+                session, meeting_id, provider=BotAs(answer), now=datetime.now(UTC)
+            )
         owner.call(f"meeting-detail-{name}", "GET", f"/api/meetings/{meeting_id}", note=note)
     owner.call(
         "meetings-list-bot-needs-help",
@@ -904,13 +910,13 @@ def run_live_state(owner, engine, general_id) -> None:
     )
 
 
-def run_end_controls(owner, engine, general_id, vexa) -> None:
+def run_end_controls(owner, engine, general_id, provider) -> None:
     """ "End now and write the notes", the words for the in-between states, a state the worker has
     not renewed, and a quiet worker. As above, each state is the real `pipeline.advance_meeting`
-    fed one Vexa answer; the endpoint and the reads are real HTTP."""
+    fed one the provider answer; the endpoint and the reads are real HTTP."""
     from app import pipeline
 
-    def new_meeting(vexa_id: str) -> int:
+    def new_meeting(provider_id: str) -> int:
         with Session(engine) as session:
             session.execute(
                 text(
@@ -924,7 +930,7 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
                 platform="google_meet",
                 native_id="abc-defg-hij",
                 template_id=general_id,
-                vexa_meeting_id=vexa_id,
+                provider_bot_id=provider_id,
             )
             session.add(meeting)
             session.commit()
@@ -933,7 +939,7 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
     def poll(meeting_id: int, answer, when: datetime | None = None) -> None:
         with Session(engine) as session:
             pipeline.advance_meeting(
-                session, meeting_id, vexa=BotAs(answer), now=when or datetime.now(UTC)
+                session, meeting_id, provider=BotAs(answer), now=when or datetime.now(UTC)
             )
 
     def heartbeat(minutes_ago: int) -> None:
@@ -947,15 +953,15 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
     heartbeat(0)  # a worker that is alive; the captures above were made with none
 
     mid = new_meeting("4260")
-    poll(mid, VexaMeeting(status="requested"))
+    poll(mid, BotMeeting(status="requested"))
     owner.call(
         "meeting-detail-bot-requested",
         "GET",
         f"/api/meetings/{mid}",
-        note="Vexa reports `requested`: the bot has been asked for and is not in the call yet. "
+        note="The provider reports `requested`: the bot has been asked for and is not in the call yet. "
         "`can_end` is false: nothing to end yet (Cancel is still offered).",
     )
-    poll(mid, VexaMeeting(status="active", segments=[segment]))
+    poll(mid, BotMeeting(status="active", segments=[segment]))
     owner.call(
         "meeting-detail-bot-recording-can-end",
         "GET",
@@ -963,15 +969,15 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
         note='The bot is recording. `can_end` is true: the page may offer "End now and write '
         'the notes". `worker_stale` is false: the worker checked in a moment ago.',
     )
-    vexa.stop_error = True
+    provider.stop_error = True
     owner.call(
-        "meeting-end-vexa-down",
+        "meeting-end-provider-down",
         "POST",
         f"/api/meetings/{mid}/end",
-        note="Vexa could not stop the bot. 502, nothing changed, and the owner may try again. "
-        "The message never carries Vexa's own text.",
+        note="The provider could not stop the bot. 502, nothing changed, and the owner may try again. "
+        "The message never carries the provider's own text.",
     )
-    vexa.stop_error = False
+    provider.stop_error = False
     owner.call(
         "meeting-end",
         "POST",
@@ -986,16 +992,16 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
         f"/api/meetings/{mid}/end",
         note="A second press (a double click) is refused and stops nothing a second time.",
     )
-    poll(mid, VexaMeeting(status="stopping"))
+    poll(mid, BotMeeting(status="stopping"))
     owner.call(
         "meeting-detail-bot-leaving",
         "GET",
         f"/api/meetings/{mid}",
-        note="Vexa reports `stopping`. The words stay the same until the bot has gone.",
+        note="The provider reports `stopping`. The words stay the same until the bot has gone.",
     )
     poll(
         mid,
-        VexaMeeting(
+        BotMeeting(
             status="completed",
             segments=[segment],
             recording_id=7,
@@ -1008,13 +1014,13 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
         "meeting-detail-call-ended-finishing-recording",
         "GET",
         f"/api/meetings/{mid}",
-        note="The bot has gone (Vexa: `completed`, reason `stopped`) and its recording is still "
+        note="The bot has gone (The provider: `completed`, reason `stopped`) and its recording is still "
         "being finished. After this the worker downloads it and the meeting goes through "
         "`processing` to `ready` like any other.",
     )
 
     joining = new_meeting("4261")
-    poll(joining, VexaMeeting(status="joining"))
+    poll(joining, BotMeeting(status="joining"))
     owner.call(
         "meeting-end-not-endable",
         "POST",
@@ -1024,10 +1030,10 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
     )
 
     empty = new_meeting("4262")
-    poll(empty, VexaMeeting(status="active"))
+    poll(empty, BotMeeting(status="active"))
     owner.call("meeting-end-before-anything-recorded", "POST", f"/api/meetings/{empty}/end")
     for _ in range(pipeline.NO_AUDIO_GRACE_POLLS):  # the few polls a recording gets to appear
-        poll(empty, VexaMeeting(status="completed", **left))
+        poll(empty, BotMeeting(status="completed", **left))
     owner.call(
         "meeting-detail-ended-nothing-recorded",
         "GET",
@@ -1037,7 +1043,7 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
     )
 
     kept = new_meeting("4264")
-    poll(kept, VexaMeeting(status="active", segments=[segment]))
+    poll(kept, BotMeeting(status="active", segments=[segment]))
     owner.call("meeting-end-then-cancel-setup", "POST", f"/api/meetings/{kept}/end")
     owner.call(
         "meeting-cancel-after-end",
@@ -1048,7 +1054,7 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
     )
 
     stale = new_meeting("4263")
-    poll(stale, VexaMeeting(status="active"), when=datetime.now(UTC) - timedelta(minutes=5))
+    poll(stale, BotMeeting(status="active"), when=datetime.now(UTC) - timedelta(minutes=5))
     owner.call(
         "meeting-detail-bot-state-stale",
         "GET",

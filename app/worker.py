@@ -86,9 +86,9 @@ def send_mail(session: Session, mailer: mail.Mailer | None, now: datetime) -> in
     return mail.deliver_pending(session, mailer, get_settings(), now)
 
 
-def purge_deleted(session: Session, vexa=None) -> int:
+def purge_deleted(session: Session, provider=None) -> int:
     """Remove the data of accounts the admin deleted (`app/deletion.py`)."""
-    return deletion.purge_deleted(session, vexa or build_provider())
+    return deletion.purge_deleted(session, provider or build_provider())
 
 
 def extract_pending(session: Session, now: datetime) -> int | None:
@@ -123,14 +123,14 @@ def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime)
             logger.warning("%s job failed (%s)", name, type(exc).__name__)
 
 
-def hourly_jobs(session: Session, now: datetime, vexa=None) -> None:
+def hourly_jobs(session: Session, now: datetime, provider=None) -> None:
     """The hourly jobs, each on its own: deleting expired audio, and the housekeeping of
     `app/maintenance.py` (the unverified-account sweep, the mail outbox scrub and the rest). One
-    that fails every time (Vexa down for the audio cleanup, say) must not stop the other, so each
+    that fails every time (the provider down for the audio cleanup, say) must not stop the other, so each
     is caught and logged by type only."""
 
     def audio() -> None:
-        removed = delete_expired_audio(session, now, vexa=vexa or build_provider())
+        removed = delete_expired_audio(session, now, provider=provider or build_provider())
         if removed:
             logger.info("deleted audio for %s meetings", removed)
 
@@ -179,6 +179,7 @@ def start_shadow_thread(stop: threading.Event) -> threading.Thread:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    skribby.require_configured(get_settings())
     skribby.check_region_unchanged(get_settings())
     mailer = mail.build_mailer(get_settings())
     if mailer is None:

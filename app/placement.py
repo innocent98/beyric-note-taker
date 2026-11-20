@@ -1,9 +1,9 @@
 """`place_bot()`: the one place a bot is sent to a meeting (spec section 9.4, plan task C11).
 
 A pasted link, a shared link, and (from C12) a calendar join all come through here, so the rules
-about how many bots may run, and for whom, exist once. This is the single-host form: one local Vexa
-host, `bot_max_local` bots at a time (1 under Vexa, our own host; a high safety ceiling under
-Skribby, whose servers run the bots: `app/config.py`). Phase D generalises it to several hosts
+about how many bots may run, and for whom, exist once. This is the single-host form: one bot host,
+`bot_max_local` bots at a time (a high safety ceiling: Skribby's servers run the bots, see
+`app/config.py`). Phase D generalises it to several hosts
 (the second int of the lock is the host id, always 1 until then).
 
 Pre-flight, in this order, each refusing with a `PlacementRefused` code:
@@ -13,9 +13,9 @@ Pre-flight, in this order, each refusing with a `PlacementRefused` code:
    or `no_plan`).
 2. `user_limit`: the user already has `user_bot_limit` bots on meetings.
 3. `already_in_meeting`: the user already has a bot in this meeting (same platform and code).
-4. `meeting_has_note_taker`: another user's bot is in this meeting. Vexa (one API key) keeps one
-   bot per meeting code, so a second account cannot get its own; sharing waits for C12 or
-   per-user keys. Neutral on purpose: no user, no meeting id, no hint of who.
+4. `meeting_has_note_taker`: another user's bot is in this meeting. The provider keeps one
+   bot per meeting code (one API key), so a second account cannot get its own; sharing waits for
+   C12 or per-user keys. Neutral on purpose: no user, no meeting id, no hint of who.
 5. `bot_busy`: the host is full. Says nothing about whose meeting holds it, and there is no queue:
    a queued meeting is an unrecorded meeting. The caller (a person, or the C12 runner) decides
    what to do with the refusal.
@@ -37,7 +37,7 @@ The holder is bounded too: `BotProvider.send_bot` has a total deadline
 An uncertain send (`BotSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the
 host, which keeps handling the request after the client leaves, so the bot can join seconds later.
 A stop sent now would find nothing, so instead the meeting is kept as a placeholder: `bot_sent`, no
-Vexa id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted for
+provider id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted for
 capacity and for the duplicate checks, so the code stays taken. The worker settles it
 (`pipeline._poll`): it adopts a bot that shows up for the code, or after `UNCONFIRMED_GRACE` stops
 the code and fails the meeting with a plain "not recorded" reason.
@@ -81,7 +81,7 @@ LOCAL_HOST_ID = 1
 # looks. A send itself is bounded by `app.bot_provider.SEND_DEADLINE_SECONDS`.
 LOCK_WAIT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.2
-# The most a calendar join waits for Vexa to say what bot is on a code (see `_orphan_to_adopt`).
+# The most a calendar join waits for the provider to say what bot is on a code (see `_orphan_to_adopt`).
 ADOPT_LOOKUP_SECONDS = 5.0
 # Stored in `completion_reason` of a meeting whose send got no clear answer (see the module doc).
 SEND_UNCONFIRMED = "send_unconfirmed"
@@ -103,8 +103,8 @@ class PlacementRequest:
     # The calendar event's title, stored on the meeting (cleaned: it is text from an invite).
     # None for a pasted link, which is then named by platform and code.
     title: str | None = None
-    # A calendar join at the start of a meeting: if Vexa says a bot is already in that meeting but
-    # no meeting of ours holds the code, it may be our own orphan (a send killed between Vexa
+    # A calendar join at the start of a meeting: if the provider says a bot is already in that meeting but
+    # no meeting of ours holds the code, it may be our own orphan (a send killed between the provider
     # accepting it and the commit), so a LIVE bot no row holds is adopted instead of telling the
     # owner someone else's note taker is there. The identity is only the meeting code under the one
     # shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
@@ -344,7 +344,7 @@ def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int]:
 
 def place_bot(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     req: PlacementRequest,
     *,
     now: datetime,
@@ -381,24 +381,24 @@ def place_bot(
         session.rollback()  # also releases the lock
         raise
     effective = settings or get_settings()
-    provider = provider_name(vexa)
+    provider_label = provider_name(provider)
     # The note taker name for this meeting (the person's own, else the server default): computed
     # once, sent, and stored on the meeting below, so what was sent is what is recorded.
-    sent_name = bot_names.stored_name(effective, user, provider)
+    sent_name = bot_names.stored_name(effective, user, provider_label)
     try:
-        vexa_id = vexa.send_bot(
+        provider_id = provider.send_bot(
             req.meeting_url,
             **transcript_source.send_options(
                 session,
-                vexa,
+                provider,
                 user.id,
                 effective,
                 bot_name=sent_name,
                 shown_bot_name=bot_names.shown_name(
-                    effective, provider=provider, platform=req.platform, stored=sent_name
+                    effective, provider=provider_label, platform=req.platform, stored=sent_name
                 ),
                 fallback_shown_bot_name=bot_names.shown_name(
-                    effective, provider=provider, platform=req.platform, stored=None
+                    effective, provider=provider_label, platform=req.platform, stored=None
                 ),
             ),
         )
@@ -406,35 +406,35 @@ def place_bot(
         if not req.adopt_orphan:
             session.rollback()
             raise PlacementRefused("meeting_has_note_taker") from None
-        # ...or, for a calendar join, our own orphan (a send killed between Vexa accepting the bot
+        # ...or, for a calendar join, our own orphan (a send killed between the provider accepting the bot
         # and the commit; the pre-flight found no meeting of anyone on the code). Look the bot up
-        # and adopt it only if it is arriving or live and no row holds its Vexa id; a leftover that
+        # and adopt it only if it is arriving or live and no row holds its provider id; a leftover that
         # is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
-        vexa_id = _orphan_to_adopt(session, vexa, req)
+        provider_id = _orphan_to_adopt(session, provider, req)
     except BotSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
-        vexa_id = None
+        provider_id = None
     except BaseException:  # the host said no, or anything else: no meeting, free the slot
         session.rollback()
         raise
     # The provider answers with the name it really used when it had to fall back to the default
     # because the person's own name was refused (`skribby.SentBotId`): that is what is stored.
-    sent_name = getattr(vexa_id, "bot_name", None) or sent_name
+    sent_name = getattr(provider_id, "bot_name", None) or sent_name
     meeting = Meeting(
         owner_user_id=user.id,
         url=req.meeting_url,
         platform=req.platform,
         native_id=req.native_id,
         template_id=template_id,
-        vexa_meeting_id=None if vexa_id is None else str(vexa_id),
-        bot_provider=provider,
-        bot_region=provider_region(vexa),
+        provider_bot_id=None if provider_id is None else str(provider_id),
+        bot_provider=provider_label,
+        bot_region=provider_region(provider),
         bot_name=sent_name,
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),
     )
-    if vexa_id is None:
+    if provider_id is None:
         # The grace counts from after the send, not from the caller's `now`, which was taken
         # before the lock wait and the send (up to 30 s of the 60 would be gone).
         sent_at = datetime.now(UTC)
@@ -447,15 +447,17 @@ def place_bot(
             on_placed(session, meeting)
             session.flush()
     except BaseException:
-        stop_unrecorded_bot(vexa, req.platform, req.native_id)  # before the lock is let go
+        stop_unrecorded_bot(provider, req.platform, req.native_id)  # before the lock is let go
         session.rollback()
         raise
-    commit_or_stop(session, vexa, platform=req.platform, native_id=req.native_id, vexa_id=vexa_id)
+    commit_or_stop(
+        session, provider, platform=req.platform, native_id=req.native_id, provider_id=provider_id
+    )
     return meeting
 
 
-def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest) -> BotId:
-    """The Vexa id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
+def _orphan_to_adopt(session: Session, provider: BotProvider, req: PlacementRequest) -> BotId:
+    """The provider id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
     rollback) when there is none to adopt: it is leaving, finished, unknown, or some row's."""
     from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
 
@@ -463,29 +465,34 @@ def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest)
         # A short whole-call deadline: this runs under the placement, row and event locks, and the
         # client's own timeouts are per phase (30 s each).
         info = run_within(
-            ADOPT_LOOKUP_SECONDS, lambda: vexa.get_meeting(req.platform, req.native_id)
+            ADOPT_LOOKUP_SECONDS, lambda: provider.get_meeting(req.platform, req.native_id)
         )
     except (BotProviderError, TimeoutError):
         info = None
     if (
         info is None
         or info.status not in ADOPTABLE_STATES
-        or info.vexa_id is None
+        or info.provider_id is None
         or session.scalar(
-            select(Meeting.id).where(Meeting.vexa_meeting_id == str(info.vexa_id)).limit(1)
+            select(Meeting.id).where(Meeting.provider_bot_id == str(info.provider_id)).limit(1)
         )
         is not None
     ):
         session.rollback()
         raise PlacementRefused("code_busy")
     logger.warning("a live bot with no row for it was adopted for a calendar join")
-    return info.vexa_id
+    return info.provider_id
 
 
 def commit_or_stop(
-    session: Session, vexa: BotProvider, *, platform: str, native_id: str, vexa_id: BotId | None
+    session: Session,
+    provider: BotProvider,
+    *,
+    platform: str,
+    native_id: str,
+    provider_id: BotId | None,
 ) -> None:
-    """Commit a meeting row that points at the bot `vexa_id` (None: an unconfirmed start). If the
+    """Commit a meeting row that points at the bot `provider_id` (None: an unconfirmed start). If the
     commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
     row did land after all (a lost answer to a commit that succeeded): that bot is a recorded one
     and stopping it would throw a meeting away. With no id there is nothing to check: it stops.
@@ -495,13 +502,13 @@ def commit_or_stop(
         session.commit()
     except BaseException:
         session.rollback()
-        if vexa_id is None or not _is_recorded(session, platform, native_id, vexa_id):
-            _stop_if_the_code_is_free(session, vexa, platform, native_id)
+        if provider_id is None or not _is_recorded(session, platform, native_id, provider_id):
+            _stop_if_the_code_is_free(session, provider, platform, native_id)
         raise
 
 
 def _stop_if_the_code_is_free(
-    session: Session, vexa: BotProvider, platform: str, native_id: str
+    session: Session, provider: BotProvider, platform: str, native_id: str
 ) -> None:
     """Stop an unrecorded bot by code while holding the placement lock, so nobody else can place on
     the code meanwhile, and skip the stop when a live meeting of anyone holds the code: the bot
@@ -530,12 +537,12 @@ def _stop_if_the_code_is_free(
     except Exception:  # cannot check: see above
         session.rollback()
     try:
-        stop_unrecorded_bot(vexa, platform, native_id)
+        stop_unrecorded_bot(provider, platform, native_id)
     finally:
         session.rollback()  # releases the lock
 
 
-def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: BotId) -> bool:
+def _is_recorded(session: Session, platform: str, native_id: str, provider_id: BotId) -> bool:
     try:
         return (
             session.scalar(
@@ -543,7 +550,7 @@ def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: BotId
                 .where(
                     Meeting.platform == platform,
                     Meeting.native_id == native_id,
-                    Meeting.vexa_meeting_id == str(vexa_id),
+                    Meeting.provider_bot_id == str(provider_id),
                 )
                 .limit(1)
             )
@@ -554,11 +561,11 @@ def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: BotId
         return False
 
 
-def stop_unrecorded_bot(vexa: BotProvider, platform: str, native_id: str) -> None:
+def stop_unrecorded_bot(provider: BotProvider, platform: str, native_id: str) -> None:
     """The bot is in a meeting the database has no row for. Take it out; if that fails too the
-    bot stays until Vexa's own limits end it, which is logged for an operator."""
+    bot stays until the provider's own limits end it, which is logged for an operator."""
     try:
-        vexa.stop_bot(platform, native_id)
+        provider.stop_bot(platform, native_id)
     except (BotProviderError, ValueError) as exc:
         logger.error(
             "a bot was sent but its meeting could not be saved, and it could not be stopped (%s)",
@@ -569,9 +576,9 @@ def stop_unrecorded_bot(vexa: BotProvider, platform: str, native_id: str) -> Non
 def may_stop_bot(session: Session, meeting: Meeting) -> bool:
     """Whether stopping the bot at this meeting's code takes out THIS meeting's bot.
 
-    `stop_bot` is keyed by platform and meeting code alone, and Vexa keeps one bot per code, so
+    `stop_bot` is keyed by platform and meeting code alone, and the provider keeps one bot per code, so
     whichever bot is there goes. If another meeting row also has a live bot on the code, the bot
-    there is that row's (Vexa let it in only after ours was gone, or it was sent later): a stop for
+    there is that row's (the provider let it in only after ours was gone, or it was sent later): a stop for
     this meeting must not run. This meeting owns the bot only if no other live row on the code is
     newer (or, when this one is not live itself, if there is no other live row at all)."""
     other = select(Meeting.id).where(

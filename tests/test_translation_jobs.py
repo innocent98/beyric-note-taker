@@ -445,7 +445,7 @@ def test_purging_an_account_removes_its_translations_and_keeps_only_the_ledger(
 
     request(session, user, meeting)
     work(session)
-    deletion.purge_user(session, user, vexa=None, force=True)
+    deletion.purge_user(session, user, provider=None, force=True)
     assert session.scalars(select(MeetingTranslation)).all() == []
     [run] = session.scalars(select(AiRun)).all()
     assert run.kind == "translate" and run.meeting_id is None

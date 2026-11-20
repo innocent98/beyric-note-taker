@@ -37,7 +37,7 @@ from app.gcal_sync import sync_connection  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import CalendarConnection, CalendarEvent, ScheduledJoin, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from tests.fakes.google import FakeGoogle, FakeGoogleCalendar  # noqa: E402
 
 Recorder = base.Recorder
@@ -382,7 +382,7 @@ def main() -> None:
     )
     google = FakeGoogle(settings)
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     server, server_base = base.start_server(app)
     engine = create_engine(base.SCRATCH_URL)

@@ -23,7 +23,7 @@ def meeting_invite_email(meeting: Meeting, settings: Settings) -> str | None:
     """The address to tell this meeting's owner to invite, or None.
 
     Needs the server to allow the tip at all (`Settings.bot_invite_email_shown`), a Google Meet
-    meeting, a meeting that Skribby ran (Vexa's bot has no such address), and either a bot that
+    meeting, a meeting that Skribby ran (the only provider with a signed-in bot), and either a bot that
     is waiting to be let in right now (a state not seen for a while is not shown) or a meeting
     that failed because the bot was not let in."""
     address = settings.bot_invite_email_shown

@@ -3,7 +3,7 @@
 It is the whole of `app.bot_provider.BotProvider`, with the rules every provider keeps (one live bot
 per meeting code, `stop_bot` of nothing is fine, a send for a bad link is `UnsupportedMeetingUrl`,
 the three typed errors), so a test can drive a meeting from `send_bot` to notes with no HTTP. The
-same scenarios run against it and against `VexaProvider` in `tests/test_provider_contract.py`, so
+same scenarios run against it and against `SkribbyProvider` in `tests/test_provider_contract.py`, so
 the two cannot drift.
 
 **Scripting.** Each outcome is a list of *beats*: what the provider reports on one look. A bot
@@ -21,7 +21,7 @@ walks its beats, one per `get_meeting` / `get_meeting_by_id` call, and the last 
 
 `script(code, outcome)` sets one meeting code; `default` is used for any other. `outcome` may also
 be a list of `Beat`s, for a case none of the above fits. The statuses and reasons are the ones the
-pipeline reads today (Vexa's vocabulary: see the module doc of `app/bot_provider.py`). Ids,
+pipeline reads today (the provider's vocabulary: see the module doc of `app/bot_provider.py`). Ids,
 recording ids and audio bytes are placeholders.
 """
 
@@ -111,7 +111,7 @@ class _Bot:
         return not self.stopped and (self.at == 0 or current.status not in TERMINAL)
 
     def stop(self) -> None:
-        """Like Vexa: a bot already in the call finishes with what it recorded; one that was not
+        """Like the provider: a bot already in the call finishes with what it recorded; one that was not
         in yet fails. Either way it no longer holds the code."""
         self.stopped = True
         last = self.beats[-1]
@@ -163,16 +163,16 @@ class FakeProvider:
             return self._next_id
 
     def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
-        """The newest bot sent for the code, as Vexa answers a lookup by code."""
+        """The newest bot sent for the code, as the provider answers a lookup by code."""
         with self._guard:
             bots = [b for b in self._bots.values() if b.key == (platform, native_id)]
             if not bots:
                 raise BotNotFound("get_meeting failed: 404")
             return self._report(max(bots, key=lambda b: b.id))
 
-    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting:
+    def get_meeting_by_id(self, provider_bot_id: str | int) -> BotMeeting:
         with self._guard:
-            bot = self._bots.get(int(vexa_meeting_id))
+            bot = self._bots.get(int(provider_bot_id))
             if bot is None:
                 raise BotNotFound("get_meeting failed: 404")
             return self._report(bot)
@@ -189,7 +189,7 @@ class FakeProvider:
             recording_status="completed" if done else None,
             completion_reason=beat.completion_reason,
             failure_reason=beat.failure_reason,
-            vexa_id=bot.id,
+            provider_id=bot.id,
             reached_lobby=beat.lobby,
         )
 

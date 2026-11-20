@@ -62,7 +62,7 @@ result = {
     "notes_tokens": dict(usage),
 }
 
-# A real call's transcript and Vexa segments, kept out of git (personal data).
+# A real call's transcript and the provider segments, kept out of git (personal data).
 raw = pathlib.Path("spike/captures/raw")
 if (raw / "zoom-transcript.json").exists():
     segments = json.loads((raw / "zoom-transcript.json").read_text())

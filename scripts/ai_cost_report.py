@@ -247,7 +247,7 @@ class BotEstimate:
 
 def bot_estimate(meetings: list[MeetingRow]) -> BotEstimate:
     """Skribby bot hours and its transcription model line, from recorded hours of the meetings the
-    Skribby bot attended (a Vexa-era meeting costs no vendor money)."""
+    Skribby bot attended (a provider-era meeting costs no vendor money)."""
     skribby = [m for m in meetings if m.bot_provider == "skribby"]
     new = hours(recorded_seconds([m for m in skribby if m.created_at >= ELEVENLABS_SINCE]))
     old = hours(recorded_seconds([m for m in skribby if m.created_at < ELEVENLABS_SINCE]))
@@ -329,7 +329,7 @@ def only_provider(
     meetings: list[MeetingWithId], runs: list[RunRow], provider: str
 ) -> tuple[list[MeetingRow], list[RunRow]]:
     """The meetings a given bot provider attended, and the runs tied to those meetings: the cost
-    of one hour of the current setup, without the older Vexa hours that cost no vendor money."""
+    of one hour of the current setup, without the older the provider hours that cost no vendor money."""
     ids = {m.id for m in meetings if m.row.bot_provider == provider}
     return [m.row for m in meetings if m.id in ids], [r for r in runs if r.meeting_id in ids]
 
@@ -447,7 +447,7 @@ def render(
     add("== 3. ESTIMATE, not in the database (constants at the top of this file) ==")
     add(
         f"  Skribby bot meetings: {b.skribby_hours:.2f} recorded hours "
-        f"(Vexa-era meetings cost no vendor money)."
+        f"(The provider-era meetings cost no vendor money)."
     )
     add(
         f"  Skribby bot time: {span(b.bot_low, b.bot_high)}   "

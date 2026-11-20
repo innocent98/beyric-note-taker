@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End to end through the Next front door only, against a scratch compose stack (never the pilot):
 // log in, create a template, create and delete a vocabulary term, list meetings, load every owner
-// page, log out. Vexa and OpenAI are not involved: nothing here sends a bot or rewrites notes.
+// page, log out. The bot provider and OpenAI are not involved: nothing here sends a bot or rewrites notes.
 //
 //   node scripts/owner-e2e.mjs --next http://127.0.0.1:8020 --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD"
 //
@@ -155,7 +155,7 @@ check("GET /meetings/<unknown> is a 404 page", r.status === 404, `status ${r.sta
 r = await send("GET", "/meetings/abc");
 check("GET /meetings/<not a number> is a 404", r.status === 404, `status ${r.status}`);
 r = await write("POST", "/api/meetings", { url: "https://example.com/x", template_id: templateId });
-check("create a meeting with a bad link: 400 invalid_meeting_url (nothing sent to Vexa)", r.status === 400 && r.body?.error?.code === "invalid_meeting_url", `${r.status} ${r.text}`);
+check("create a meeting with a bad link: 400 invalid_meeting_url (nothing sent to the bot provider)", r.status === 400 && r.body?.error?.code === "invalid_meeting_url", `${r.status} ${r.text}`);
 
 // 7. Fallback still serves Jinja
 r = await send("GET", "/health");

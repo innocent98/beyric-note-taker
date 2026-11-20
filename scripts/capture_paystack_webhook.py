@@ -44,7 +44,7 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import BillingEvent, Payment, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 FIXTURES = base.ROOT / "tests" / "fixtures" / "paystack"
 # Placeholders, never keys: they exist only for this run against a scratch database.
@@ -352,7 +352,7 @@ def main() -> None:
 
     apps = [create_app(settings_for(billing_enabled=True)), create_app(settings_for())]
     for each in apps:
-        each.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+        each.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     started = [base.start_server(each) for each in apps]
     engine = create_engine(base.SCRATCH_URL)
     try:

@@ -1,6 +1,6 @@
 """Send now and Not recorded (plan task C15b, spec 7.7).
 
-Real Postgres, the real app and routes, `place_bot()` and `FakeVexaHost` (it counts the bots it was
+Real Postgres, the real app and routes, `place_bot()` and `FakeBotHost` (it counts the bots it was
 asked to start). The routes read the real clock, so joins are placed relative to the moment a test
 runs. Nothing is faked between the button and the placement: if a pre-flight check could be
 bypassed, a test here would see a bot sent.
@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.usage import email_hash
 from tests import test_calendar_connect as cc
-from tests.fakes.vexa_host import FakeVexaHost
+from tests.fakes.bot_host import FakeBotHost
 from tests.test_api import error_of
 from tests.test_calendar_connect import browser, build_app
 from tests.test_gcal_sync import make_world
@@ -39,7 +39,7 @@ LIST = "/api/not-recorded"
 
 @pytest.fixture
 def host():
-    return FakeVexaHost()
+    return FakeBotHost()
 
 
 @pytest.fixture
@@ -360,9 +360,9 @@ def test_it_needs_a_login_and_the_csrf_header(
 
 
 def test_a_host_that_refuses_the_bot_is_502_and_changes_nothing(web, session, host, owner_world):
-    from app.vexa import VexaError
+    from app.bot_provider import BotProviderError
 
-    host.error = VexaError("send_bot failed: secret detail")
+    host.error = BotProviderError("send_bot failed: secret detail")
     join = join_row(session, owner_world)
     body = error_of(web.post(SEND.format(join.id)), 502, "bot_send_failed")
     assert "secret" not in str(body)
@@ -626,7 +626,7 @@ def test_an_orphan_bot_of_the_owners_is_adopted_not_called_someone_elses(
     answer = web.post(SEND.format(join.id))
     assert answer.status_code == 200, answer.text
     meeting = session.get(Meeting, answer.json()["meeting_id"])
-    assert meeting.vexa_meeting_id == "1" and host.bots_sent == 0  # adopted, nothing new sent
+    assert meeting.provider_bot_id == "1" and host.bots_sent == 0  # adopted, nothing new sent
 
 
 def test_an_unexpected_value_error_is_not_a_template_problem_and_frees_the_locks(

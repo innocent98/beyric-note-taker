@@ -38,7 +38,7 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import HourGrant, Meeting, Template, UsageEntry, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from app.usage import email_hash  # noqa: E402
 
 Recorder = base.Recorder
@@ -320,7 +320,7 @@ def main() -> None:
     enforce, off = settings_for("enforce"), settings_for("off")
     app, app_off = create_app(enforce), create_app(off)
     for each in (app, app_off):
-        each.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+        each.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     server, server_base = base.start_server(app)
     server_off, off_base = base.start_server(app_off)
     engine = create_engine(base.SCRATCH_URL)

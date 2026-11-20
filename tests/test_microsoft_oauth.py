@@ -830,7 +830,7 @@ SECRET_FIELDS = (
     "edge_shared_secret",
     "resend_api_key",
     "openai_api_key",
-    "vexa_api_key",
+    "provider_api_key",
 )
 
 
@@ -847,7 +847,7 @@ def test_a_start_up_validation_error_never_prints_a_secret():
     """A forced failure (`BOT_PROVIDER=skribby` with no key) used to print the whole input."""
     sentinels = {name: f"SENTINEL-{name}-VALUE" for name in SECRET_FIELDS}
     with pytest.raises(Exception) as raised:
-        make_settings(bot_provider="skribby", **sentinels)
+        make_settings(**sentinels)
     shown = str(raised.value) + repr(raised.value)
     assert "SKRIBBY_API_KEY" in shown  # the useful message is there
     for value in sentinels.values():

@@ -20,8 +20,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
@@ -567,7 +567,7 @@ def test_deleting_an_account_removes_the_tasks_they_made_and_unassigns_the_rest(
     add_task(session, team, None, title="Theirs", created_by_user_id=member.id)
     kept = add_task(session, team, None, title="Kept", created_by_user_id=owner.id, assignee=member)
     from_meeting = add_task(session, team, private, title="From the meeting", assignee=member)
-    deletion.purge_user(session, member, vexa=None, force=True)
+    deletion.purge_user(session, member, provider=None, force=True)
     session.expire_all()
     left = {t.title: t.assignee_user_id for t in session.scalars(select(Task))}
     assert left == {"Kept": None, "From the meeting": None}  # "Theirs" went with its maker
@@ -580,6 +580,6 @@ def test_meetings_a_user_owns_take_their_tasks_when_the_account_is_purged(
     session, team, private, owner, member
 ):
     add_task(session, team, private, assignee=member)
-    deletion.purge_user(session, owner, vexa=None, force=True)
+    deletion.purge_user(session, owner, provider=None, force=True)
     assert session.scalars(select(Task)).all() == []
     assert session.scalars(select(Meeting)).all() == []

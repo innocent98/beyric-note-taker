@@ -43,7 +43,7 @@ from app.models import (
     User,
     UserSettings,
 )
-from app.services import get_openai_client, get_vexa
+from app.services import get_bot_provider, get_openai_client
 from tests import test_calendar_connect as cc
 from tests.fakes.google import FakeGoogle
 from tests.fakes.microsoft import FakeMicrosoft
@@ -59,8 +59,8 @@ from tests.test_calendar_connect import (
 from tests.test_web import (  # noqa: F401
     OTHER_EMAIL,
     OWNER_EMAIL,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
     owner,
@@ -115,7 +115,7 @@ def google(settings):
     return FakeGoogle(settings)
 
 
-def build_app(engine, settings, ms, google, fake_vexa, fake_openai):
+def build_app(engine, settings, ms, google, fake_bot, fake_openai):
     app = create_app(settings)
 
     def session_override():
@@ -123,7 +123,7 @@ def build_app(engine, settings, ms, google, fake_vexa, fake_openai):
             yield s
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_vexa] = lambda: fake_vexa
+    app.dependency_overrides[get_bot_provider] = lambda: fake_bot
     app.dependency_overrides[get_openai_client] = lambda: fake_openai
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     app.dependency_overrides[microsoft_oauth.get_microsoft] = lambda: ms.oauth
@@ -131,8 +131,8 @@ def build_app(engine, settings, ms, google, fake_vexa, fake_openai):
 
 
 @pytest.fixture
-def capp(engine, settings, ms, google, fake_vexa, fake_openai):
-    return build_app(engine, settings, ms, google, fake_vexa, fake_openai)
+def capp(engine, settings, ms, google, fake_bot, fake_openai):
+    return build_app(engine, settings, ms, google, fake_bot, fake_openai)
 
 
 @pytest.fixture
@@ -219,12 +219,12 @@ def test_the_connect_url_is_the_consumers_code_flow_with_pkce(web, session, owne
     [("consumers", False, False), ("common", False, True), ("common", True, False)],
 )
 def test_the_notice_flag_is_for_work_accounts_until_the_publisher_is_verified(
-    engine, settings, ms, google, fake_vexa, fake_openai, owner, authority, verified, expected
+    engine, settings, ms, google, fake_bot, fake_openai, owner, authority, verified, expected
 ):
     changed = settings.model_copy(
         update={"microsoft_authority": authority, "microsoft_publisher_verified": verified}
     )
-    app = build_app(engine, changed, FakeMicrosoft(changed), google, fake_vexa, fake_openai)
+    app = build_app(engine, changed, FakeMicrosoft(changed), google, fake_bot, fake_openai)
     app.dependency_overrides[microsoft_oauth.get_microsoft] = lambda: FakeMicrosoft(changed).oauth
     assert connect(browser(app))[2].json()["show_unverified_notice"] is expected
 
@@ -276,11 +276,11 @@ def test_connect_needs_a_login_and_the_csrf_token(capp, owner):
     ids=["flag off", "calendar features off", "no client id", "no client secret"],
 )
 def test_every_route_but_disconnect_answers_404_while_microsoft_is_not_switched_on(
-    changes, engine, settings, google, fake_vexa, fake_openai, owner
+    changes, engine, settings, google, fake_bot, fake_openai, owner
 ):
     off = settings.model_copy(update=changes)
     ms_off = FakeMicrosoft(off)
-    app = build_app(engine, off, ms_off, google, fake_vexa, fake_openai)
+    app = build_app(engine, off, ms_off, google, fake_bot, fake_openai)
     if "microsoft_client_id" in changes or "microsoft_client_secret" in changes:
         app.dependency_overrides[microsoft_oauth.get_microsoft] = lambda: None
     web = browser(app)
@@ -433,15 +433,15 @@ def work_settings(settings):
     return settings.model_copy(update={"microsoft_authority": "common"})
 
 
-def work_app(engine, work_settings, google, fake_vexa, fake_openai):
+def work_app(engine, work_settings, google, fake_bot, fake_openai):
     work_ms = FakeMicrosoft(work_settings)
-    return build_app(engine, work_settings, work_ms, google, fake_vexa, fake_openai), work_ms
+    return build_app(engine, work_settings, work_ms, google, fake_bot, fake_openai), work_ms
 
 
 def test_a_work_account_connects_but_its_domains_are_not_read_by_default(
-    engine, work_settings, google, fake_vexa, fake_openai, session, owner
+    engine, work_settings, google, fake_bot, fake_openai, session, owner
 ):
-    app, work_ms = work_app(engine, work_settings, google, fake_vexa, fake_openai)
+    app, work_ms = work_app(engine, work_settings, google, fake_bot, fake_openai)
     response, _, _ = connect_outlook(browser(app), work_ms, tid=WORK_TENANT, scope_style="full")
     assert landing(response)[1] == {"calendar": "connected"}
     conn = row(session, owner)
@@ -452,10 +452,10 @@ def test_a_work_account_connects_but_its_domains_are_not_read_by_default(
 
 
 def test_with_the_trust_switch_on_a_work_connection_stores_the_verified_domains(
-    engine, work_settings, google, fake_vexa, fake_openai, session, owner
+    engine, work_settings, google, fake_bot, fake_openai, session, owner
 ):
     on = work_settings.model_copy(update={"microsoft_organizer_domain_trust": True})
-    app, work_ms = work_app(engine, on, google, fake_vexa, fake_openai)
+    app, work_ms = work_app(engine, on, google, fake_bot, fake_openai)
     connect_outlook(browser(app), work_ms, tid=WORK_TENANT)
     assert row(session, owner).tenant_domains == "company.onmicrosoft.com company.test"
 
@@ -474,10 +474,10 @@ def test_with_the_trust_switch_on_a_work_connection_stores_the_verified_domains(
     ],
 )
 def test_domains_that_cannot_be_read_leave_the_field_empty_and_the_connect_working(
-    engine, work_settings, google, fake_vexa, fake_openai, session, owner, answer
+    engine, work_settings, google, fake_bot, fake_openai, session, owner, answer
 ):
     on = work_settings.model_copy(update={"microsoft_organizer_domain_trust": True})
-    app, work_ms = work_app(engine, on, google, fake_vexa, fake_openai)
+    app, work_ms = work_app(engine, on, google, fake_bot, fake_openai)
     work_ms.organization = answer
     response, _, _ = connect_outlook(browser(app), work_ms, tid=WORK_TENANT)
     assert landing(response)[1] == {"calendar": "connected"}
@@ -485,19 +485,19 @@ def test_domains_that_cannot_be_read_leave_the_field_empty_and_the_connect_worki
 
 
 def test_a_personal_account_never_reads_the_organisation(
-    engine, settings, google, fake_vexa, fake_openai, session, owner, ms
+    engine, settings, google, fake_bot, fake_openai, session, owner, ms
 ):
     on = settings.model_copy(update={"microsoft_organizer_domain_trust": True})
-    app = build_app(engine, on, ms, google, fake_vexa, fake_openai)
+    app = build_app(engine, on, ms, google, fake_bot, fake_openai)
     connect_outlook(browser(app), ms)
     assert all(r.url.path != "/v1.0/organization" for r in ms.graph_requests)
 
 
 def test_a_tenant_outside_the_allow_list_is_refused_and_nothing_is_stored(
-    engine, work_settings, google, fake_vexa, fake_openai, session, owner
+    engine, work_settings, google, fake_bot, fake_openai, session, owner
 ):
     limited = work_settings.model_copy(update={"microsoft_allowed_tenants": OTHER_TENANT})
-    app, work_ms = work_app(engine, limited, google, fake_vexa, fake_openai)
+    app, work_ms = work_app(engine, limited, google, fake_bot, fake_openai)
     response, _, _ = connect_outlook(browser(app), work_ms, tid=WORK_TENANT)
     assert error_code(response) == "tenant_not_allowed"
     assert row(session, owner) is None and work_ms.graph_requests == []
@@ -1194,10 +1194,10 @@ def test_replacing_a_dead_connection_only_drops_that_connections_unstarted_joins
 
 
 def test_the_same_object_id_under_a_different_tenant_is_another_identity(
-    engine, work_settings, google, fake_vexa, fake_openai, session, owner
+    engine, work_settings, google, fake_bot, fake_openai, session, owner
 ):
     """Identity is tenant plus object id: `oid` alone is not enough."""
-    app, work_ms = work_app(engine, work_settings, google, fake_vexa, fake_openai)
+    app, work_ms = work_app(engine, work_settings, google, fake_bot, fake_openai)
     web_ = browser(app)
     connect_outlook(web_, work_ms, oid=OID_SAME)  # personal tenant
     response, _, _ = connect_outlook(web_, work_ms, oid=OID_SAME, tid=WORK_TENANT)

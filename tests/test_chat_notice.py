@@ -11,7 +11,6 @@ from app.chat_notice import FALLBACK_OWNER, NAME_LIMIT, notice_text
 from app.config import Settings
 from app.models import VocabularyTerm
 from app.skribby import SkribbyClient, SkribbyProvider
-from app.vexa import VexaProvider
 from tests.test_skribby_provider import BASE, BOT, OTHER, URL, accept, make, sent_body
 from tests.test_web import make_settings, make_user
 
@@ -155,15 +154,12 @@ def test_the_notice_and_the_vocabulary_ride_together(session):
 # ---- other providers get nothing and no error ----
 
 
-def test_vexa_is_never_given_a_notice_even_when_the_setting_is_on(session):
+def test_a_provider_that_takes_no_notice_is_never_given_one_even_when_the_setting_is_on(session):
+    from tests.fakes.provider import FakeProvider
+
     owner = make_user(session, name="Ada")
     settings = make_settings(bot_chat_notice_enabled=True)
-    assert (
-        transcript_source.send_options(
-            session, VexaProvider.__new__(VexaProvider), owner.id, settings
-        )
-        == {}
-    )
+    assert transcript_source.send_options(session, FakeProvider(), owner.id, settings) == {}
 
 
 # ---- a bad parameter cannot stop a bot ----

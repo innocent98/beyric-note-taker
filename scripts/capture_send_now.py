@@ -7,7 +7,7 @@ HTTP recorder, the scratch database and the app server): real migrations, the re
 uvicorn, real HTTP. The calendar is connected through the real connect flow, the events become
 `scheduled_joins` through the REAL sync job reading `FakeGoogleCalendar`, and the rows that end
 as "not recorded" or "no capacity" are ended by the REAL join runner (`run_due_joins`) against
-`FakeVexaHost`, the same fake host the placement tests use (it keeps one bot per meeting code and
+`FakeBotHost`, the same fake host the placement tests use (it keeps one bot per meeting code and
 counts the bots it was asked for). The Send now calls then go through the real route and the real
 `place_bot()`.
 
@@ -16,7 +16,7 @@ Files go to `docs/fe-captures/send-now/NN-name.json`. Passwords in login calls a
 
 What is NOT real, said in each file's note where it matters:
 - Google (consent, token and Calendar API are `tests/fakes/google.py`; event bodies are synthetic).
-- The bot host: `FakeVexaHost` answers the send, so **no real bot was placed in a real meeting**.
+- The bot host: `FakeBotHost` answers the send, so **no real bot was placed in a real meeting**.
 - The runner's clock for the "not recorded" row is moved forward four minutes (the runner takes
   its clock as an argument) so that a meeting that started 14 minutes ago passes its 15-minute
   deadline; the row it writes is the runner's own.
@@ -38,6 +38,7 @@ from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import google_oauth, join_runner, mail_templates, vault  # noqa: E402
+from app.bot_provider import BotProviderError  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.gcal_client import AccessTokenCache, GoogleSource  # noqa: E402
 from app.gcal_sync import sync_connection  # noqa: E402
@@ -52,11 +53,10 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from app.usage import email_hash  # noqa: E402
-from app.vexa import VexaError  # noqa: E402
+from tests.fakes.bot_host import FakeBotHost  # noqa: E402
 from tests.fakes.google import FakeGoogle, FakeGoogleCalendar  # noqa: E402
-from tests.fakes.vexa_host import FakeVexaHost  # noqa: E402
 from tests.test_gcal_sync import raw_event  # noqa: E402
 
 Recorder = base.Recorder
@@ -255,12 +255,14 @@ def run(app, server_base, engine, settings, google, host) -> None:
             meeting.step = "done"
         session.commit()
     host.live.clear()
-    host.error = VexaError("send_bot failed: placeholder detail that must never reach the page")
+    host.error = BotProviderError(
+        "send_bot failed: placeholder detail that must never reach the page"
+    )
     user.call(
         "send-now-host-refused",
         "POST",
         f"/api/scheduled-joins/{missed}/send-now",
-        note="The bot host refused the bot (the fake host raises `VexaError`): 502 `bot_send_failed`; "
+        note="The bot host refused the bot (the fake host raises `BotProviderError`): 502 `bot_send_failed`; "
         "no meeting was made and the row is unchanged, so pressing again later works.",
     )
     host.error = None
@@ -269,7 +271,7 @@ def run(app, server_base, engine, settings, google, host) -> None:
         "send-now",
         "POST",
         f"/api/scheduled-joins/{missed}/send-now",
-        note="The slot is free: the same pre-flight passes and the bot is sent (`FakeVexaHost`, "
+        note="The slot is free: the same pre-flight passes and the bot is sent (`FakeBotHost`, "
         "not a real bot). 200 with the new `meeting_id`.",
     ).json()
     user.call(
@@ -435,9 +437,9 @@ def main() -> None:
         autojoin_lead_seconds=60,
     )
     google = FakeGoogle(settings)
-    host = FakeVexaHost()
+    host = FakeBotHost()
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: host
+    app.dependency_overrides[get_bot_provider] = lambda: host
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     server, server_base = base.start_server(app)
     engine = create_engine(base.SCRATCH_URL)

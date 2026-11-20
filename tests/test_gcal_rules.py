@@ -254,25 +254,14 @@ def test_it_accepts_a_stored_event_row_not_only_a_parsed_event():
     assert will_join(row, None, settings(), now=NOW) == JoinDecision(True, "ok")
 
 
-def test_teams_join_enabled_defaults_to_false_in_config():
-    assert Settings(_env_file=None).teams_join_enabled is False
+def test_teams_join_enabled_defaults_to_true_in_config():
+    assert Settings(_env_file=None).teams_join_enabled is True
 
 
-@pytest.mark.parametrize(
-    ("provider", "setting", "expected"),
-    [
-        ("vexa", None, False),
-        ("vexa", True, False),  # Vexa cannot join Teams, whatever is asked
-        ("skribby", None, True),
-        ("skribby", True, True),
-        ("skribby", False, False),
-    ],
-)
-def test_teams_join_follows_the_provider_unless_switched_off(provider, setting, expected):
-    extra = {"skribby_api_key": "placeholder-key"} if provider == "skribby" else {}
+@pytest.mark.parametrize(("setting", "expected"), [(None, True), (True, True), (False, False)])
+def test_teams_join_is_on_unless_switched_off(setting, expected):
     value = {} if setting is None else {"teams_join_enabled": setting}
-    settings = Settings(_env_file=None, bot_provider=provider, **extra, **value)
-    assert settings.teams_join_enabled is expected
+    assert Settings(_env_file=None, **value).teams_join_enabled is expected
 
 
 def test_a_teams_event_is_joined_when_teams_is_on_and_still_waits_when_off():

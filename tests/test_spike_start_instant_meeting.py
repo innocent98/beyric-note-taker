@@ -1,7 +1,7 @@
 """Tests for the throwaway scripts in docs/spike/start-instant-meeting/.
 
 They cover only what needs no Google account: reading a Space answer, turning API errors into
-plain text, never leaking a secret, refusing a non-local Vexa, and reading a bot's status
+plain text, never leaking a secret and reading a bot's status
 timeline (the real E2 captures are the fixtures). The live calls are not tested here.
 """
 
@@ -17,7 +17,6 @@ E2_LOGS = Path(__file__).resolve().parent.parent / "docs/spike/meet-join-experim
 sys.path.insert(0, str(SPIKE))
 
 import instant_common as ic  # noqa: E402
-import send_bot  # noqa: E402
 
 # The shape Google documents for a Space (discovery document meet.googleapis.com v2, revision
 # 20261029); the values are placeholders.
@@ -178,64 +177,6 @@ def test_save_private_is_owner_only(tmp_path):
     target = tmp_path / "local" / "token.json"
     ic.save_private(target, {"a": 1})
     assert target.stat().st_mode & 0o777 == 0o600
-
-
-# --- the Vexa guard --------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "url", ["http://localhost:8056", "http://127.0.0.1:8056/", "http://[::1]:8056"]
-)
-def test_local_vexa_is_accepted(url):
-    assert ic.require_local_vexa(url) == url.rstrip("/")
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://notes.beyrictech.com",
-        "http://203.0.113.9:8056",
-        "http://localhost.evil.example:8056",
-        "http://localhost@evil.example:8056",
-        "https://localhost:8056",
-        "http://vexa:8056",
-    ],
-)
-def test_anything_but_this_mac_is_refused(url):
-    with pytest.raises(ic.SpikeError, match="never send a bot from the production server"):
-        ic.require_local_vexa(url)
-
-
-def test_read_vexa_key_accepts_a_bare_key_or_a_named_line(tmp_path):
-    bare = tmp_path / "bare"
-    bare.write_text("# comment\nvx_PLACEHOLDER\n")
-    named = tmp_path / "named"
-    named.write_text("OTHER=1\nVEXA_API_KEY='vx_PLACEHOLDER'\n")
-    assert ic.read_vexa_key(bare) == "vx_PLACEHOLDER"
-    assert ic.read_vexa_key(named) == "vx_PLACEHOLDER"
-
-
-def test_read_vexa_key_error_names_the_lines_but_never_their_values(tmp_path):
-    path = tmp_path / "env"
-    path.write_text("FIRST=vx_SECRETONE\nSECOND=vx_SECRETTWO\n")
-    with pytest.raises(ic.SpikeError) as caught:
-        ic.read_vexa_key(path)
-    text = str(caught.value)
-    assert "FIRST" in text and "SECOND" in text
-    assert "SECRETONE" not in text and "SECRETTWO" not in text
-
-
-def test_meeting_argument_accepts_a_code_or_a_link_and_nothing_else():
-    assert send_bot.meeting_url("abc-mnop-xyz") == (
-        "abc-mnop-xyz",
-        "https://meet.google.com/abc-mnop-xyz",
-    )
-    assert send_bot.meeting_url("https://meet.google.com/abc-mnop-xyz?authuser=1")[0] == (
-        "abc-mnop-xyz"
-    )
-    for bad in ("https://zoom.us/j/123", "https://evil.example/abc-mnop-xyz", "hello"):
-        with pytest.raises(ic.SpikeError):
-            send_bot.meeting_url(bad)
 
 
 # --- the bot timeline (real E2 captures as fixtures) -----------------------------------------

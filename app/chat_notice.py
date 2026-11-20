@@ -10,7 +10,7 @@ no.
 The page states no length limit and no platform list: Meet, Zoom and Teams support is a vendor claim
 nobody has seen live (`docs/sop/2026-11-14-bot-chat-notice.md`, "how to prove it live"). So the
 whole feature sits behind `BOT_CHAT_NOTICE_ENABLED` (default false), a provider that does not take a
-notice (Vexa) is never given one, and if Skribby refuses a create that carries it the create is made
+notice is never given one, and if Skribby refuses a create that carries it the create is made
 once more without it (`SkribbyClient.create`): a bad parameter must not stop a bot from being sent.
 
 Both names are typed by somebody (the owner's display name, the `SKRIBBY_BOT_NAME` setting) and end
@@ -47,10 +47,10 @@ def _write_out_at(text: str) -> str:
     return _AT_SIGNS.sub("(at)", text)
 
 
-def notice_bot_name(settings: Settings, provider: str = "skribby") -> str:
+def notice_bot_name(settings: Settings) -> str:
     """The name the notice gives the bot when the caller names none: the server default. A meeting's
     own name comes from `app.bot_names.shown_name`, passed to `send_options`."""
-    return settings.bot_name_for(provider)
+    return settings.shown_bot_name
 
 
 def _bot_part(bot_name: str | None) -> str:

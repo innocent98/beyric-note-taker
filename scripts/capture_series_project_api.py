@@ -81,7 +81,7 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 
 def hide_tokens(value):
@@ -405,7 +405,7 @@ def main() -> None:
         public_base_url="https://notes.example.test",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: None
+    app.dependency_overrides[get_bot_provider] = lambda: None
     server, base = start_server(app)
     engine = create_engine(scratch_url)
     try:

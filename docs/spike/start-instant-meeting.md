@@ -2,6 +2,8 @@
 
 **Date written:** 2026-11-03. **Type:** small test with throwaway scripts. Nothing here touches `app/`, the production server or the production Google project. Separate from the parked instant-Meet notification test (P0.2, draft PR #46), which this does not touch.
 
+> **2026-11-20:** `send_bot.py` and its Vexa helpers were removed from the repo with Vexa (`docs/sop/2026-11-20-remove-vexa.md`). This page is history: the steps that start a local Vexa can no longer be followed.
+
 ## What this test is for
 
 We want a "Start a meeting with the note taker" button: one tap makes a Google Meet and sends the bot into it. This test finds out whether Google lets a personal Gmail create a meeting from code, and whether the bot can then get into that meeting, with or without someone letting it in.

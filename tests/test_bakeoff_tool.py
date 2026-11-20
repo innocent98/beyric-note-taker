@@ -631,7 +631,7 @@ def seed(log, arm, minutes, day="2026-11-01"):
     )
 
 
-def test_used_minutes_adds_up_per_vendor_and_ignores_vexa(tmp_path):
+def test_used_minutes_adds_up_per_vendor_and_ignores_the_hand_entered_arm(tmp_path):
     log = tmp_path / "l.csv"
     seed(log, "skribby-guest", 100)
     seed(log, "skribby-auth", 50.5)
@@ -707,61 +707,6 @@ def test_log_has_the_agreed_columns_and_is_append_only(tmp_path):
     assert r["time_utc"] == "2026-11-07T10:45:00Z" and r["time_lagos"] == "2026-11-07 11:45:00"
     assert r["trial_id"] == "20261107T104500Z-skribby-guest"
     assert r["meeting_code"] == "ghij" and "abc" not in text and "meet.google.com" not in text
-
-
-def test_note_command_records_a_vexa_trial(tmp_path):
-    code, out, _, log = cli(
-        [
-            "note",
-            "--arm",
-            "vexa",
-            "--meet-url",
-            MEET,
-            "--result",
-            "knocked-then-admitted",
-            "--seconds-to-door",
-            "47",
-            "--host-type",
-            "external",
-        ],
-        tmp_path,
-    )
-    assert code == 0
-    code, out, _, log = cli(
-        [
-            "note",
-            "--arm",
-            "vexa",
-            "--meet-url",
-            MEET,
-            "--result",
-            "refused",
-            "--seconds-to-door",
-            "12",
-            "--reason",
-            "Google said it cannot join",
-        ],
-        tmp_path,
-    )
-    first, second = rows_of(log)
-    assert (first["arm"], first["result"], first["seconds_to_admission"], first["host_type"]) == (
-        "vexa",
-        "knocked-then-admitted",
-        "47.0",
-        "external",
-    )
-    assert second["result"] == "refused" and second["final_status"] == "Google said it cannot join"
-    assert second["seconds_to_admission"] == "" and "12s until the bot's answer" in second["notes"]
-    assert "entered by hand" in second["notes"]
-
-
-def test_note_rejects_other_arms_and_bad_results(tmp_path):
-    with pytest.raises(SystemExit):
-        cli(
-            ["note", "--arm", "skribby-guest", "--meet-url", MEET, "--result", "admitted"], tmp_path
-        )
-    with pytest.raises(SystemExit):
-        cli(["note", "--arm", "vexa", "--meet-url", MEET, "--result", "maybe"], tmp_path)
 
 
 # ---------------------------------------------------------------------------------- the report

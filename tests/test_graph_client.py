@@ -1085,9 +1085,9 @@ RUNNER_SETTINGS = make_settings(
 
 @pytest.fixture
 def host():
-    from tests.fakes.vexa_host import FakeVexaHost
+    from tests.fakes.bot_host import FakeBotHost
 
-    return FakeVexaHost()
+    return FakeBotHost()
 
 
 @pytest.fixture(autouse=True)

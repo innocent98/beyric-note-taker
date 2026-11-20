@@ -1,7 +1,6 @@
 """Reading a Google Meet, Zoom or Microsoft Teams link: which platform, which meeting code, and the
 clean URL a bot is sent to. Nothing here talks to a bot provider, so every provider
-(`app/bot_provider.py`) and the calendar code share one rule for what a meeting link is.
-`app/vexa.py` re-exports these names."""
+(`app/bot_provider.py`) and the calendar code share one rule for what a meeting link is."""
 
 import hashlib
 import re

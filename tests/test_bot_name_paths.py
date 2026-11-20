@@ -11,7 +11,7 @@ import pytest
 from app import pipeline
 from app.models import Meeting
 from app.placement import PlacementRequest, place_bot
-from tests.fakes.vexa_host import FakeVexaHost
+from tests.fakes.bot_host import FakeBotHost
 from tests.test_api import add_meeting, anon, api  # noqa: F401
 from tests.test_calendar_connect import google, settings, vault_key  # noqa: F401
 from tests.test_join_runner import (  # noqa: F401
@@ -36,8 +36,8 @@ from tests.test_send_now import (  # noqa: F401
 from tests.test_web import (  # noqa: F401
     anon_client,
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
     owner,
@@ -48,7 +48,7 @@ NAME = "Alex from Product"
 MEET = "https://meet.google.com/abc-defg-hij"
 
 
-class NamedHost(FakeVexaHost):
+class NamedHost(FakeBotHost):
     """A host that takes a name (Skribby's shape): `names` is what each send carried."""
 
     name = "skribby"
@@ -69,7 +69,7 @@ def host():
 
 
 @pytest.fixture
-def fake_vexa(host):
+def fake_bot(host):
     return host
 
 
@@ -169,7 +169,7 @@ def test_an_unconfirmed_send_keeps_the_name_it_was_sent_with(session, template, 
     meeting = place_bot(
         session, host, request_for(owner, template), now=datetime.now(UTC), settings=make_settings()
     )
-    assert meeting.vexa_meeting_id is None  # the answer was lost: an unconfirmed start
+    assert meeting.provider_bot_id is None  # the answer was lost: an unconfirmed start
     assert host.names == [NAME] and meeting.bot_name == NAME
 
 
@@ -186,4 +186,4 @@ def test_an_adopted_orphan_stores_the_current_name(session, template, host, owne
         now=datetime.now(UTC),
         settings=make_settings(),
     )
-    assert meeting.vexa_meeting_id is not None and meeting.bot_name == NAME
+    assert meeting.provider_bot_id is not None and meeting.bot_name == NAME

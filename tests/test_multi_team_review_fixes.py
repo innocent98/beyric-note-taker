@@ -33,15 +33,15 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
 )
 from tests.test_api_tasks import add_task
 from tests.test_multi_team_leaks import PAT, QUINN, multi_team_on, new_team, world  # noqa: F401
-from tests.test_multi_team_moved import ADA, DEE, NoVexa, dee, move  # noqa: F401
+from tests.test_multi_team_moved import ADA, DEE, NoBot, dee, move  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_workspace import GOOD, NOTES, FakeChat
 
@@ -225,7 +225,7 @@ def test_a_meeting_given_back_by_a_deleted_team_keeps_its_tasks_and_milestones(a
     session.commit()
     teams.leave(session, world.ada, datetime.now(UTC), team_id=team_w.id)
     session.commit()
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.expire_all()
     meeting = session.get(Meeting, world.private.id)
     assert meeting.owner_team_id is None and meeting.owner_user_id == world.ada.id
@@ -366,7 +366,7 @@ def test_an_erased_accounts_linked_rows_are_gone_and_only_the_hollow_row_stays(s
         )
     )
     session.commit()
-    deletion.purge_user(session, session.get(User, ada_id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, ada_id), NoBot(), force=True)
     session.expire_all()
     assert session.scalars(select(CalendarConnection)).all() == []
     assert session.scalars(select(Notification).where(Notification.user_id == ada_id)).all() == []

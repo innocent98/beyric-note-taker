@@ -79,7 +79,7 @@ from app.models import (  # noqa: E402
     UserSettings,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 # Where the Next dev server is (the provider's "return" goes there) and where this app listens.
 # Ports 3000 and 8000 are often taken by other projects, so the defaults are not those.
@@ -463,7 +463,7 @@ def main() -> None:
         feature_gates_mode="enforce",
     )
     app = create_app(SETTINGS)
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     dev = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     dev.include_router(router)
     app.mount("/dev", dev)

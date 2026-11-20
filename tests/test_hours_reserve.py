@@ -57,7 +57,7 @@ from tests.test_join_runner import (  # noqa: F401
 )
 from tests.test_join_runner import notes as bell
 from tests.test_placement import add_live
-from tests.test_web import fake_openai, fake_vexa, make_settings, make_user  # noqa: F401
+from tests.test_web import fake_bot, fake_openai, make_settings, make_user  # noqa: F401
 
 MIN = 60
 
@@ -366,9 +366,9 @@ def test_the_calendar_events_length_goes_to_the_placement(session, host, cal, wo
     seen = []
     real = placement.place_bot
 
-    def spy(session_, vexa, req, **kwargs):
+    def spy(session_, provider, req, **kwargs):
         seen.append(req.expected_seconds)
-        return real(session_, vexa, req, **kwargs)
+        return real(session_, provider, req, **kwargs)
 
     monkeypatch.setattr(join_runner, "place_bot", spy)
     grant(session, world.user, 10 * HOUR, kind="plan_period", starts=T0 - 10 * DAY)
@@ -389,37 +389,33 @@ def test_the_reserved_skip_reason_is_listed_like_the_other_hours_reasons():
 
 # ---- capacity ----
 
-SK = {"bot_provider": "skribby", "skribby_api_key": "k", "session_secret": "x" * 40}
-
 
 def settings(monkeypatch=None, **fields):
     return Settings(_env_file=None, **{"session_secret": "x" * 40, **fields})
 
 
-def test_capacity_is_one_under_vexa_and_a_high_ceiling_under_skribby():
-    assert settings().bot_max_local == 1
-    assert settings(bot_provider="skribby", skribby_api_key="k").bot_max_local == 20
+def test_capacity_is_a_high_ceiling_by_default():
+    assert settings().bot_max_local == 20
+    assert settings(skribby_api_key="k").bot_max_local == 20
     assert SKRIBBY_BOT_CEILING == 20 < 25  # below the 25 concurrent bots our Skribby plan allows
 
 
-def test_a_value_in_the_environment_wins_under_either_provider(monkeypatch):
+def test_a_value_in_the_environment_wins(monkeypatch):
     monkeypatch.setenv("BOT_MAX_LOCAL", "3")
-    assert settings(bot_provider="skribby", skribby_api_key="k").bot_max_local == 3
+    assert settings(skribby_api_key="k").bot_max_local == 3
     assert settings().bot_max_local == 3
 
 
-def test_the_old_name_still_works_and_a_value_of_one_stays_one_under_skribby(monkeypatch):
-    assert (
-        settings(bot_provider="skribby", skribby_api_key="k", max_active_bots=4).bot_max_local == 4
-    )
-    assert settings(bot_provider="skribby", skribby_api_key="k", bot_max_local=1).bot_max_local == 1
+def test_the_old_name_still_works_and_a_value_of_one_stays_one(monkeypatch):
+    assert settings(skribby_api_key="k", max_active_bots=4).bot_max_local == 4
+    assert settings(skribby_api_key="k", bot_max_local=1).bot_max_local == 1
 
 
 def test_the_per_person_limit_stays_two_by_default():
-    assert settings(bot_provider="skribby", skribby_api_key="k").user_bot_limit == 2
+    assert settings(skribby_api_key="k").user_bot_limit == 2
 
 
-def test_under_skribby_the_default_ceiling_lets_many_people_record_at_once(session, ada):
+def test_the_default_ceiling_lets_many_people_record_at_once(session, ada):
     others = [make_user(session, f"p{n}@example.test") for n in range(5)]
     for n, other in enumerate(others):
         running(session, other, f"oth-{n}00-aaa", T0)
@@ -428,7 +424,7 @@ def test_under_skribby_the_default_ceiling_lets_many_people_record_at_once(sessi
         session, ada, platform="google_meet", native_id="new-aaaa-aaa", now=T0, settings=skribby
     )
     session.rollback()
-    with pytest.raises(PlacementRefused) as caught:  # the Vexa default is still one at a time
+    with pytest.raises(PlacementRefused) as caught:  # the provider default is still one at a time
         reserve_slot(
             session,
             ada,

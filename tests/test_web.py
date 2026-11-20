@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.auth import LoginLimiter
+from app.bot_provider import BotProviderError
 from app.config import Settings
 from app.db import get_session
 from app.main import create_app
@@ -18,8 +19,7 @@ from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import HEADINGS
 from app.passwords import hash_password
 from app.pipeline import REASON_JOIN_REFUSED, REASON_NO_SPEECH
-from app.vexa import VexaError
-from app.web import get_openai_client, get_vexa
+from app.web import get_bot_provider, get_openai_client
 
 PASSWORD = " ".join(["correct", "horse", "battery"])
 OWNER_EMAIL = "owner@example.test"  # placeholder addresses, never real ones
@@ -40,14 +40,14 @@ def make_settings(**overrides) -> Settings:
     return Settings(_env_file=None, **{**values, **overrides})
 
 
-class FakeVexa:
+class FakeBot:
     def __init__(self, fail=False):
         self.fail = fail
         self.sent: list[str] = []
 
     def send_bot(self, url):
         if self.fail:
-            raise VexaError("send_bot failed: secret detail")
+            raise BotProviderError("send_bot failed: secret detail")
         self.sent.append(url)
         return 4242
 
@@ -83,8 +83,8 @@ class FakeOpenAI:
 
 
 @pytest.fixture
-def fake_vexa():
-    return FakeVexa()
+def fake_bot():
+    return FakeBot()
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ def template(session, owner):
 
 
 @pytest.fixture
-def app(engine, fake_vexa, fake_openai):
+def app(engine, fake_bot, fake_openai):
     app = create_app(make_settings())
 
     def session_override():
@@ -145,7 +145,7 @@ def app(engine, fake_vexa, fake_openai):
             yield s
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_vexa] = lambda: fake_vexa
+    app.dependency_overrides[get_bot_provider] = lambda: fake_bot
     app.dependency_overrides[get_openai_client] = lambda: fake_openai
     return app
 
@@ -216,35 +216,35 @@ def test_pages_require_login(anon_client):
     assert anon_client.get("/login").status_code == 200
 
 
-def test_paste_link_sends_bot(client, fake_vexa, template, session):
+def test_paste_link_sends_bot(client, fake_bot, template, session):
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 303
     meeting = session.scalars(select(Meeting)).one()
     assert response.headers["location"] == f"/meetings/{meeting.id}"
-    assert fake_vexa.sent == [MEET]
+    assert fake_bot.sent == [MEET]
     assert (meeting.platform, meeting.native_id) == ("google_meet", "abc-defg-hij")
-    assert meeting.vexa_meeting_id == "4242"
+    assert meeting.provider_bot_id == "4242"
     assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
     assert meeting.template_id == template.id
     assert meeting.started_polling_at is not None
 
 
-def test_second_active_meeting_is_refused(client, fake_vexa, template, session):
+def test_second_active_meeting_is_refused(client, fake_bot, template, session):
     add_meeting(session, template, status="processing", step="notes")
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 409
     assert "busy right now" in response.text
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     assert len(session.scalars(select(Meeting)).all()) == 1
 
 
-def test_invalid_link_shows_plain_error(client, fake_vexa, template, session):
+def test_invalid_link_shows_plain_error(client, fake_bot, template, session):
     response = post(
         client, "/meetings", {"url": "https://example.com/x", "template_id": template.id}
     )
     assert response.status_code == 400
     assert "Google Meet, Zoom or Microsoft Teams" in response.text
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     assert session.scalars(select(Meeting)).all() == []
 
 
@@ -291,8 +291,8 @@ def test_failed_meeting_shows_reason(client, template, session):
 # ---- more behaviour ----
 
 
-def test_vexa_failure_saves_nothing_and_leaks_nothing(app, client, template, session):
-    app.dependency_overrides[get_vexa] = lambda: FakeVexa(fail=True)
+def test_provider_failure_saves_nothing_and_leaks_nothing(app, client, template, session):
+    app.dependency_overrides[get_bot_provider] = lambda: FakeBot(fail=True)
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 502
     assert "secret detail" not in response.text
@@ -813,14 +813,14 @@ def test_health_is_503_without_detail_when_the_database_is_down(app, anon_client
 
 
 def test_cancel_stops_the_bot_and_fails_the_meeting_without_openai(
-    client, fake_vexa, fake_openai, template, session
+    client, fake_bot, fake_openai, template, session
 ):
     meeting = add_meeting(session, template)
     page = client.get(f"/meetings/{meeting.id}").text
     assert f"/meetings/{meeting.id}/cancel" in page
     response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
     assert response.status_code == 303
-    assert fake_vexa.stopped == [("google_meet", "abc-defg-hij")]
+    assert fake_bot.stopped == [("google_meet", "abc-defg-hij")]
     session.refresh(meeting)
     assert meeting.status == "failed"
     assert meeting.failure_reason == "You cancelled this meeting before it was recorded."
@@ -830,8 +830,8 @@ def test_cancel_stops_the_bot_and_fails_the_meeting_without_openai(
     assert f"/meetings/{meeting.id}/cancel" not in failed
 
 
-def test_cancel_failure_keeps_the_meeting_waiting(client, fake_vexa, template, session):
-    fake_vexa.stop_error = VexaError("stop_bot failed: secret detail")
+def test_cancel_failure_keeps_the_meeting_waiting(client, fake_bot, template, session):
+    fake_bot.stop_error = BotProviderError("stop_bot failed: secret detail")
     meeting = add_meeting(session, template)
     response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
     assert response.status_code == 502
@@ -843,13 +843,11 @@ def test_cancel_failure_keeps_the_meeting_waiting(client, fake_vexa, template, s
 @pytest.mark.parametrize(
     "status,step", [("processing", "audio"), ("ready", "done"), ("failed", "notes")]
 )
-def test_cancel_only_applies_to_waiting_meetings(
-    client, fake_vexa, template, session, status, step
-):
+def test_cancel_only_applies_to_waiting_meetings(client, fake_bot, template, session, status, step):
     meeting = add_meeting(session, template, status=status, step=step)
     response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
     assert response.status_code == 409
-    assert getattr(fake_vexa, "stopped", []) == []
+    assert getattr(fake_bot, "stopped", []) == []
     session.refresh(meeting)
     assert meeting.status == status
     assert f"/meetings/{meeting.id}/cancel" not in client.get(f"/meetings/{meeting.id}").text
@@ -935,7 +933,7 @@ def test_meeting_page_says_a_refused_meet_bot_is_paused_before_one_retry(client,
 
 
 def test_a_refused_meeting_page_shows_the_wait_then_a_working_send_again(
-    client, template, session, fake_vexa
+    client, template, session, fake_bot
 ):
     refused = add_meeting(
         session,
@@ -945,7 +943,7 @@ def test_a_refused_meeting_page_shows_the_wait_then_a_working_send_again(
         completion_reason="google_meet_join_refused",
         terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
         join_attempts=2,
-        vexa_meeting_id="1",
+        provider_bot_id="1",
     )
     page = client.get(f"/meetings/{refused.id}").text
     assert "try sending the bot again in a few minutes" in page and "in 4 minutes" in page
@@ -954,14 +952,14 @@ def test_a_refused_meeting_page_shows_the_wait_then_a_working_send_again(
         post(client, f"/meetings/{refused.id}/retry", page=f"/meetings/{refused.id}").status_code
         == 409
     )
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     refused.terminal_seen_at = datetime.now(UTC) - timedelta(minutes=6)
     session.commit()
     assert f"/meetings/{refused.id}/retry" in client.get(f"/meetings/{refused.id}").text
     response = post(client, f"/meetings/{refused.id}/retry", page=f"/meetings/{refused.id}")
     assert response.status_code == 303
     session.refresh(refused)
-    assert refused.status == "bot_sent" and fake_vexa.sent == [MEET]
+    assert refused.status == "bot_sent" and fake_bot.sent == [MEET]
 
 
 # ---- public pages ----
@@ -1081,7 +1079,7 @@ LIVE_WORDS = [
     ("joining", "Bot is joining the meeting"),
     (
         "awaiting_admission",
-        "Waiting to be let in. Admit &#39;Beyric Note Taker (recording)&#39; in",
+        "Waiting to be let in. Admit &#39;Beyric Meeting Support&#39; in",
     ),
     ("active", "Bot is in the meeting"),
     ("recording", "Recording"),

@@ -13,11 +13,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import auth, services, titles
+from app.bot_provider import BotProviderError
 from app.db import get_session
 from app.models import AiRun, AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
 from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
 from app.services import RETRY_BLOCK_TEXT
-from app.vexa import VexaError
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
     MEET,
     NOTES,
@@ -31,8 +31,8 @@ from tests.test_web import (  # noqa: F401  (fixtures used by name)
     anon_client,
     app,
     client,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     login_data,
     make_user,
     owner,
@@ -695,7 +695,7 @@ def test_refused_meeting_detail_shows_the_wait_in_the_existing_fields(api, sessi
     )
 
 
-def test_retry_of_a_refused_meeting_sends_a_new_bot(api, session, template, fake_vexa):
+def test_retry_of_a_refused_meeting_sends_a_new_bot(api, session, template, fake_bot):
     refused = add_meeting(
         session,
         template,
@@ -713,7 +713,7 @@ def test_retry_of_a_refused_meeting_sends_a_new_bot(api, session, template, fake
     session.commit()
     body = api.post(f"/api/meetings/{refused.id}/retry").json()
     assert body["status"] == "bot_sent" and body["failure_reason"] is None
-    assert fake_vexa.sent == [MEET] and body["join_attempts"] == 3
+    assert fake_bot.sent == [MEET] and body["join_attempts"] == 3
 
 
 def teams_meeting_to_retry(session, template):
@@ -732,27 +732,27 @@ def teams_meeting_to_retry(session, template):
 
 
 def test_retry_of_a_teams_meeting_is_a_plain_refusal_while_the_provider_cannot_join_teams(
-    api, session, template, fake_vexa
+    api, session, template, fake_bot
 ):
     meeting = teams_meeting_to_retry(session, template)  # made while Skribby was the provider
     error = error_of(api.post(f"/api/meetings/{meeting.id}/retry"), 409, "unsupported_link")
     assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     session.refresh(meeting)
     assert meeting.status == "failed"  # untouched
 
 
 def test_retry_of_a_teams_meeting_sends_a_new_bot_when_the_provider_can(
-    api, session, template, fake_vexa, monkeypatch
+    api, session, template, fake_bot, monkeypatch
 ):
     from tests.test_web import make_settings
 
-    on = make_settings(bot_provider="skribby", skribby_api_key="placeholder-key")
+    on = make_settings(skribby_api_key="placeholder-key")
     monkeypatch.setattr(services, "get_settings", lambda: on)
     meeting = teams_meeting_to_retry(session, template)
     response = api.post(f"/api/meetings/{meeting.id}/retry")
     assert response.status_code == 200, response.text
-    assert fake_vexa.sent == [meeting.url]
+    assert fake_bot.sent == [meeting.url]
 
 
 @pytest.mark.parametrize(
@@ -770,25 +770,25 @@ def create(api, template, url=MEET, **extra):
     return api.post("/api/meetings", {"url": url, "template_id": template.id, **extra})
 
 
-def test_create_sends_a_bot_and_returns_the_meeting(api, template, fake_vexa, session):
+def test_create_sends_a_bot_and_returns_the_meeting(api, template, fake_bot, session):
     response = create(api, template)
     assert response.status_code == 201
     body = response.json()
     assert response.headers["location"] == f"/api/meetings/{body['id']}"
     assert body["status"] == "bot_sent" and body["title"] == "Google Meet abc-defg-hij"
     assert body["template_id"] == template.id and body["can_cancel"] is True
-    assert fake_vexa.sent == [MEET]
+    assert fake_bot.sent == [MEET]
     row = session.get(Meeting, body["id"])
-    assert row.vexa_meeting_id == "4242" and row.started_polling_at is not None
+    assert row.provider_bot_id == "4242" and row.started_polling_at is not None
 
 
-def test_create_trims_the_link(api, template, fake_vexa):
+def test_create_trims_the_link(api, template, fake_bot):
     assert create(api, template, url=f"  {MEET}  ").status_code == 201
-    assert fake_vexa.sent == [MEET]
+    assert fake_bot.sent == [MEET]
 
 
 def test_create_with_a_title_stores_it_and_names_the_meeting_by_it(
-    api, template, fake_vexa, session
+    api, template, fake_bot, session
 ):
     response = create(api, template, title="Weekly planning")
     assert response.status_code == 201
@@ -801,20 +801,20 @@ def test_create_with_a_title_stores_it_and_names_the_meeting_by_it(
 
 @pytest.mark.parametrize("extra", [{}, {"title": None}, {"title": ""}, {"title": "  \t\n "}])
 def test_create_without_a_usable_title_keeps_the_fallback_name(
-    api, template, fake_vexa, session, extra
+    api, template, fake_bot, session, extra
 ):
     body = create(api, template, **extra).json()
     assert body["title"] == "Google Meet abc-defg-hij"
     assert session.get(Meeting, body["id"]).title is None  # none stored: today's behaviour
 
 
-def test_create_cleans_a_title_like_a_calendar_title(api, template, fake_vexa, session):
+def test_create_cleans_a_title_like_a_calendar_title(api, template, fake_bot, session):
     body = create(api, template, title="  Q4\n\tplanning \x00 with   spaces  ").json()
     assert body["title"] == "Q4 planning with spaces"
     assert session.get(Meeting, body["id"]).title == "Q4 planning with spaces"
 
 
-def test_create_keeps_markup_in_a_title_as_plain_text(api, template, fake_vexa, session):
+def test_create_keeps_markup_in_a_title_as_plain_text(api, template, fake_bot, session):
     text = '<script>alert(1)</script> <b>Plan</b> & "review"'
     body = create(api, template, title=text).json()
     # Stored and returned as the words typed: the pages draw it as text (React escapes it) and mail
@@ -823,19 +823,19 @@ def test_create_keeps_markup_in_a_title_as_plain_text(api, template, fake_vexa, 
     assert session.get(Meeting, body["id"]).title == text
 
 
-def test_create_cuts_a_long_title_at_the_calendar_limit(api, template, fake_vexa, session):
+def test_create_cuts_a_long_title_at_the_calendar_limit(api, template, fake_bot, session):
     body = create(api, template, title="x" * 300).json()
     assert len(body["title"]) == titles.TITLE_LIMIT and body["title"].endswith("…")
     assert session.get(Meeting, body["id"]).title == body["title"]
 
 
 @pytest.mark.parametrize("title", ["y" * 1001, 5, ["a"], True])
-def test_create_refuses_a_title_that_is_huge_or_not_text(api, template, fake_vexa, session, title):
+def test_create_refuses_a_title_that_is_huge_or_not_text(api, template, fake_bot, session, title):
     error_of(create(api, template, title=title), 422, "validation_error")
-    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+    assert fake_bot.sent == [] and session.scalars(select(Meeting)).first() is None
 
 
-def test_a_refused_link_stores_nothing_even_with_a_title(api, template, fake_vexa, session):
+def test_a_refused_link_stores_nothing_even_with_a_title(api, template, fake_bot, session):
     error_of(
         create(api, template, url="https://example.com/x", title="Weekly"),
         400,
@@ -847,49 +847,49 @@ def test_a_refused_link_stores_nothing_even_with_a_title(api, template, fake_vex
 @pytest.mark.parametrize(
     "url", ["", "https://example.com/x", "not a url", "https://meet.google.com/" + "a" * 2100]
 )
-def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_vexa, session, url):
+def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_bot, session, url):
     error = error_of(create(api, template, url=url), 400, "invalid_meeting_url")
     assert (
         error["message"]
         == "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link."
     )
-    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+    assert fake_bot.sent == [] and session.scalars(select(Meeting)).first() is None
 
 
 TEAMS = "https://teams.microsoft.com/meet/1234567890123?p=placeholder"
 
 
 def test_create_refuses_a_teams_link_while_the_provider_cannot_join_teams(
-    api, template, fake_vexa, session
+    api, template, fake_bot, session
 ):
     error = error_of(create(api, template, url=TEAMS), 400, "unsupported_link")
     assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
-    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+    assert fake_bot.sent == [] and session.scalars(select(Meeting)).first() is None
 
 
 def test_create_sends_a_bot_to_a_teams_link_when_the_provider_can(
-    api, template, fake_vexa, session, monkeypatch
+    api, template, fake_bot, session, monkeypatch
 ):
     from tests.test_web import make_settings
 
     monkeypatch.setattr(
         api.client.app.state,
         "settings",
-        make_settings(bot_provider="skribby", skribby_api_key="placeholder-key"),
+        make_settings(skribby_api_key="placeholder-key"),
     )
     response = create(api, template, url=TEAMS)
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["platform"] == "teams" and body["title"] == "Microsoft Teams"
     assert body["native_id"].startswith("teams-")
-    assert fake_vexa.sent == [TEAMS]
+    assert fake_bot.sent == [TEAMS]
     # the same meeting again, however the link is written: one bot per meeting code
     again = create(api, template, url=TEAMS.split("?")[0])
     assert again.status_code == 409
 
 
 def test_a_pasted_safe_links_wrapper_is_stored_as_the_inner_teams_link(
-    api, template, fake_vexa, session, monkeypatch
+    api, template, fake_bot, session, monkeypatch
 ):
     from urllib.parse import quote
 
@@ -898,25 +898,25 @@ def test_a_pasted_safe_links_wrapper_is_stored_as_the_inner_teams_link(
     monkeypatch.setattr(
         api.client.app.state,
         "settings",
-        make_settings(bot_provider="skribby", skribby_api_key="placeholder-key"),
+        make_settings(skribby_api_key="placeholder-key"),
     )
     wrapped = (
         "https://eur01.safelinks.protection.outlook.com/?url="
         f"{quote(TEAMS, safe='')}&data=05%7c02%7cpat%40example.test%7cplaceholder"
     )
     body = create(api, template, url=wrapped).json()
-    assert fake_vexa.sent == [TEAMS]
+    assert fake_bot.sent == [TEAMS]
     assert session.get(Meeting, body["id"]).url == TEAMS  # no wrapper, no reader's address
 
 
-def test_create_needs_a_real_template(api, template, fake_vexa):
+def test_create_needs_a_real_template(api, template, fake_bot):
     response = api.post("/api/meetings", {"url": MEET, "template_id": 9999})
     error_of(response, 400, "template_required")
     response = api.post("/api/meetings", {"url": MEET, "template_id": 0})
     error_of(response, 400, "template_required")
     response = api.post("/api/meetings", {"url": MEET, "template_id": 2**40})
     error_of(response, 400, "template_required")
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 @pytest.mark.parametrize(
@@ -931,31 +931,31 @@ def test_create_needs_a_real_template(api, template, fake_vexa):
         {"url": MEET, "template_id": 1, "extra": 1},
     ],
 )
-def test_create_validates_the_body(api, template, fake_vexa, body):
+def test_create_validates_the_body(api, template, fake_bot, body):
     error_of(api.post("/api/meetings", body), 422, "validation_error")
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
-def test_create_refuses_while_a_bot_is_active(api, template, session, fake_vexa):
+def test_create_refuses_while_a_bot_is_active(api, template, session, fake_bot):
     """The user's own running meeting fills the one slot: a plain busy (the old, longer
     `bot_already_active` wording is retired with the lock it belonged to)."""
     add_meeting(session, template, status="processing", step="audio")
     error = error_of(create(api, template), 409, "bot_busy")
     assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_create_refuses_a_second_bot_in_the_same_meeting_with_room_to_spare(
-    api, app, template, session, fake_vexa
+    api, app, template, session, fake_bot
 ):
     app.state.settings.bot_max_local = 3
     add_meeting(session, template, status="bot_sent")  # a bot is already in abc-defg-hij
     error = error_of(create(api, template), 409, "already_in_meeting")
     assert "already in that meeting" in error["message"]
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
-def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fake_vexa):
+def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fake_bot):
     app.state.settings.bot_max_local = 3
     add_meeting(session, template, status="bot_sent", native_id="aaa-aaaa-aaa")
     add_meeting(session, template, status="bot_sent", native_id="bbb-bbbb-bbb")
@@ -963,11 +963,11 @@ def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fa
     assert error["message"] == (
         "You have reached the most bots allowed at once (2). Wait for one to finish first."
     )
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_a_slot_that_is_only_locked_says_a_note_taker_is_being_set_up(
-    api, template, session, fake_vexa, engine, monkeypatch
+    api, template, session, fake_bot, engine, monkeypatch
 ):
     """Not full, only locked by a send in flight: different words, same code, no user, no id."""
     from sqlalchemy import text
@@ -985,18 +985,18 @@ def test_a_slot_that_is_only_locked_says_a_note_taker_is_being_set_up(
     assert error["message"] == (
         "A note taker is being set up for another meeting. Try again in a minute."
     )
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_a_meeting_whose_bot_is_still_starting_cannot_be_cancelled(
-    api, template, session, fake_vexa
+    api, template, session, fake_bot
 ):
     """Its send got no clear answer: a stop now would find nothing and the late bot would be
     orphaned. The page does not offer Cancel; the call says to try again in a minute."""
     from app import pipeline
 
     meeting = add_meeting(
-        session, template, completion_reason=pipeline.SEND_UNCONFIRMED, vexa_meeting_id=None
+        session, template, completion_reason=pipeline.SEND_UNCONFIRMED, provider_bot_id=None
     )
     meeting.bot_state_seen_at = datetime.now(UTC)
     session.commit()
@@ -1004,19 +1004,19 @@ def test_a_meeting_whose_bot_is_still_starting_cannot_be_cancelled(
     assert body["can_cancel"] is False and body["status_text"] == "Starting the bot"
     error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "bot_starting")
     assert "still starting" in error["message"]
-    assert not hasattr(fake_vexa, "stopped")
+    assert not hasattr(fake_bot, "stopped")
 
 
-def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_vexa):
+def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_bot):
     app.state.settings.user_bot_limit = 0
     response = create(api, template)
     error = error_of(response, 409, "user_limit")
     assert "0 bots" not in error["message"] and "already have" not in error["message"]
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_user_limit_met_by_a_meeting_being_written_up_does_not_say_it_is_in_a_meeting(
-    api, app, template, session, fake_vexa
+    api, app, template, session, fake_bot
 ):
     """`processing` meetings count toward the limit, but the bot has left them: the words must not
     call them bots in meetings."""
@@ -1029,7 +1029,7 @@ def test_user_limit_met_by_a_meeting_being_written_up_does_not_say_it_is_in_a_me
 
 
 def test_create_into_a_meeting_another_user_has_a_note_taker_in_is_the_neutral_refusal(
-    api, app, template, session, fake_vexa, stranger
+    api, app, template, session, fake_bot, stranger
 ):
     app.state.settings.bot_max_local = 3
     theirs = Template(owner_user_id=stranger.id, name="Their template", instructions="x")
@@ -1041,11 +1041,11 @@ def test_create_into_a_meeting_another_user_has_a_note_taker_in_is_the_neutral_r
     assert error["message"] == "A note taker is already in this meeting."
     for leak in (stranger.email, "Board", "Their template"):
         assert leak not in response.text
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_pasted_link_busy_answer_is_neutral_409_bot_busy_and_does_not_name_another_user(
-    api, template, session, fake_vexa, stranger
+    api, template, session, fake_bot, stranger
 ):
     """Whoever holds the note taker, the answer is the same words: no name, no address, no id, no
     title, no hint that someone is recording (the stranger's meeting has a title to leak)."""
@@ -1061,11 +1061,11 @@ def test_pasted_link_busy_answer_is_neutral_409_bot_busy_and_does_not_name_anoth
     for leak in (stranger.email, "Board", "layoffs", "zzz-zzzz-zzz", "Their template", "already"):
         assert leak not in response.text
     assert str(stranger.id) not in error["message"]
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
-    api, template, session, fake_vexa, stranger
+    api, template, session, fake_bot, stranger
 ):
     """A capacity refusal must not say whose meeting holds the bot (or that anyone is recording)."""
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
@@ -1074,11 +1074,11 @@ def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
     add_meeting(session, theirs, status="bot_sent", native_id="zzz-zzzz-zzz")
     error = error_of(create(api, template), 409, "bot_busy")
     assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_someone_elses_meeting_does_not_block_when_there_is_room(
-    api, app, template, session, fake_vexa, stranger
+    api, app, template, session, fake_bot, stranger
 ):
     app.state.settings.bot_max_local = 2
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
@@ -1088,8 +1088,8 @@ def test_someone_elses_meeting_does_not_block_when_there_is_room(
     assert create(api, template).status_code == 201
 
 
-def test_create_reports_a_vexa_failure_without_its_detail(api, template, fake_vexa, session):
-    fake_vexa.fail = True
+def test_create_reports_a_provider_failure_without_its_detail(api, template, fake_bot, session):
+    fake_bot.fail = True
     response = create(api, template, url=ZOOM)
     error = error_of(response, 502, "bot_send_failed")
     assert "secret" not in response.text and "SECRETPWD" not in response.text
@@ -1097,7 +1097,7 @@ def test_create_reports_a_vexa_failure_without_its_detail(api, template, fake_ve
     assert session.scalars(select(Meeting)).first() is None
 
 
-def test_cancel_removes_the_bot(api, template, session, fake_vexa):
+def test_cancel_removes_the_bot(api, template, session, fake_bot):
     meeting = add_meeting(session, template)
     response = api.post(f"/api/meetings/{meeting.id}/cancel")
     assert response.status_code == 200
@@ -1105,18 +1105,18 @@ def test_cancel_removes_the_bot(api, template, session, fake_vexa):
     assert body["status"] == "failed" and body["failure_reason"] == REASON_CANCELLED
     assert body["can_cancel"] is False
     assert body["retry_block"] == "no_audio" and body["can_retry"] is False
-    assert fake_vexa.stopped == [("google_meet", "abc-defg-hij")]
+    assert fake_bot.stopped == [("google_meet", "abc-defg-hij")]
 
 
-def test_cancel_only_while_waiting_for_the_bot(api, template, session, fake_vexa):
+def test_cancel_only_while_waiting_for_the_bot(api, template, session, fake_bot):
     meeting = add_meeting(session, template, status="processing", step="audio")
     error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "not_waiting_for_bot")
     assert "still waiting for its bot" in error["message"]
-    assert not hasattr(fake_vexa, "stopped")
+    assert not hasattr(fake_bot, "stopped")
 
 
-def test_cancel_reports_a_vexa_failure_and_changes_nothing(api, template, session, fake_vexa):
-    fake_vexa.stop_error = VexaError("secret detail")
+def test_cancel_reports_a_provider_failure_and_changes_nothing(api, template, session, fake_bot):
+    fake_bot.stop_error = BotProviderError("secret detail")
     meeting = add_meeting(session, template)
     response = api.post(f"/api/meetings/{meeting.id}/cancel")
     error_of(response, 502, "bot_stop_failed")
@@ -1367,7 +1367,7 @@ LIVE_STATES = [
     ("joining", "Bot is joining the meeting"),
     (
         "awaiting_admission",
-        "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting",
+        "Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting",
     ),
     ("active", "Bot is in the meeting"),
     ("recording", "Recording"),

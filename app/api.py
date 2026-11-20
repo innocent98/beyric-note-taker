@@ -654,7 +654,7 @@ def create_meeting(
     response: Response,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Send the bot to a Google Meet or Zoom link, through the same placement as every other way a
     bot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the
@@ -664,7 +664,7 @@ def create_meeting(
     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
     when the bot host did not take the bot."""
     meeting = services.create_meeting(
-        session, vexa, user, body.url, body.template_id, request.app.state.settings, body.title
+        session, provider, user, body.url, body.template_id, request.app.state.settings, body.title
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
     return _detail(meeting, session, user)
@@ -680,16 +680,16 @@ def delete_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> Response:
     """Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
     open questions, review items, notifications, mail still waiting to be sent, the audio and
-    Vexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+    the provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
     or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
     being written, 409 `meeting_busy` when the worker holds it (try again), 502
-    `recording_delete_failed` when Vexa would not remove the recording: nothing is deleted."""
+    `recording_delete_failed` when the provider would not remove the recording: nothing is deleted."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    services.delete_meeting(session, vexa, meeting)
+    services.delete_meeting(session, provider, meeting)
     return Response(status_code=204)
 
 
@@ -812,7 +812,7 @@ def cancel_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
     is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
@@ -820,7 +820,7 @@ def cancel_meeting(
     reads "Starting the bot") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`
     when the worker holds the meeting, try again."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    return _detail(services.cancel_meeting(session, vexa, meeting), session, user)
+    return _detail(services.cancel_meeting(session, provider, meeting), session, user)
 
 
 @router.post(
@@ -832,7 +832,7 @@ def end_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """ "End now and write the notes": take the bot out of the call and write the notes from what
     it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
@@ -840,7 +840,7 @@ def end_meeting(
     The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
     cancel and nothing is discarded."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    return _detail(services.end_meeting(session, vexa, meeting), session, user)
+    return _detail(services.end_meeting(session, provider, meeting), session, user)
 
 
 @router.post(
@@ -852,13 +852,13 @@ def retry_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
     sends a new bot instead, no sooner than 5 minutes after the failure."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    return _detail(services.retry_meeting(session, meeting, vexa), session, user)
+    return _detail(services.retry_meeting(session, meeting, provider), session, user)
 
 
 @router.post(

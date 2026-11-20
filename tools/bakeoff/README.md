@@ -2,15 +2,15 @@
 
 ## What this is for
 
-Google refuses our own bot (Vexa) about a quarter of the time. Before paying anyone, we want
+Google refused our own earlier bot about a quarter of the time (a comparison made on 2026-11-07). Before paying anyone, we want
 numbers: on the same kind of real Google Meet calls, how often does each bot **get in**, how often
 does it have to **knock** (wait at the door for someone to press Admit), and how often does Google
 **refuse** it?
 
 This tool sends a bot from **Skribby** or **Recall** into a Meet you start yourself, watches what
 happens, makes the bot leave after about a minute (to save free hours), and writes one line per
-trial to a log file. For **Vexa** it cannot send the bot (that stays in the Beyric app), so you
-tell it what you saw with one short command. Then `report` adds it all up.
+trial to a log file. Then `report` adds it all up. (The hand-entered arm for our own earlier bot was
+removed on 2026-11-20 with that bot; its rows in the recorded log still show in the report.)
 
 What it will never do: it runs on your Mac only, talks only to Skribby's and Recall's servers, never
 contacts notes.beyrictech.com, never reads Beyric data, and never prints or saves your keys.
@@ -178,21 +178,6 @@ The signed-in bot only skips the knock if its Google account is on the calendar 
 
    The bot shows the account's own name. If it still knocks, that is a result: it is logged as
    `knocked-then-admitted` (Skribby's docs say the host's meeting settings decide).
-
-### Vexa (our own bot): start it in the Beyric app, then tell the tool what you saw
-
-Start the bot from the Beyric app as usual, in its own new Meet. Watch it, then record the outcome:
-
-```bash
-python3 tools/bakeoff/bakeoff.py note --arm vexa --meet-url LINK --result knocked-then-admitted --seconds-to-door 47 --host-type self
-```
-
-`--result` is one of `admitted` (walked straight in), `knocked-then-admitted` (waited at the door,
-then you admitted it), `refused` (Google or the host said no; add `--reason "what you saw"`), or
-`never-joined` (nothing happened and you gave up). `--seconds-to-door` is the number of seconds
-from pressing start in the Beyric app until the bot was in the call (for a refusal, until you saw
-the refusal; it goes in the notes). This one is typed by hand, so it is only as accurate as your
-stopwatch.
 
 ### Free hours
 

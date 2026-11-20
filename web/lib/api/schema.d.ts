@@ -80,7 +80,7 @@ export interface paths {
         /**
          * Delete User
          * @description Delete an account and everything of theirs. The user is signed out and their slot is free
-         *     at once; the worker then removes their data (bots stopped, recordings deleted at Vexa and
+         *     at once; the worker then removes their data (bots stopped, recordings deleted at the bot provider and
          *     here). The hours ledger keeps seconds only. 409 `last_admin`.
          */
         delete: operations["delete_user"];
@@ -711,10 +711,10 @@ export interface paths {
          * Delete Meeting
          * @description Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
          *     open questions, review items, notifications, mail still waiting to be sent, the audio and
-         *     Vexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+         *     the provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
          *     or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
          *     being written, 409 `meeting_busy` when the worker holds it (try again), 502
-         *     `recording_delete_failed` when Vexa would not remove the recording: nothing is deleted.
+         *     `recording_delete_failed` when the provider would not remove the recording: nothing is deleted.
          */
         delete: operations["delete_meeting"];
         options?: never;

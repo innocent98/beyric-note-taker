@@ -55,7 +55,7 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import HourGrant, Payment, Plan, PlanPrice, Subscription, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "billing_test_purchase", base.ROOT / "scripts" / "billing_test_purchase.py"
@@ -743,7 +743,7 @@ def main() -> None:
     on_settings = settings_for(billing_enabled=True, billing_allowed_emails="*")
     apps = [create_app(on_settings), create_app(settings_for(billing_enabled=False))]
     for each in apps:
-        each.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+        each.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     started = [base.start_server(each) for each in apps]
     engine = create_engine(base.SCRATCH_URL)
     try:

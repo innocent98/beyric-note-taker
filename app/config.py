@@ -27,26 +27,6 @@ class Settings(BaseSettings):
     # (they hold the secrets below; their `repr` is hidden too, `Field(repr=False)`).
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
-    @field_validator("bot_provider", mode="before")
-    @classmethod
-    def _blank_bot_provider_is_the_default(cls, value):
-        """An empty `BOT_PROVIDER=` line (a commented-out value left as a bare key) means "not
-        set", the same as leaving it out, so it cannot stop every process at startup."""
-        if isinstance(value, str) and not value.strip():
-            return "vexa"
-        return value
-
-    @field_validator("bot_provider")
-    @classmethod
-    def _known_bot_provider(cls, value: str) -> str:
-        from app.bot_provider import PROVIDER_FACTORIES
-
-        name = value.strip().lower()
-        if name not in PROVIDER_FACTORIES:
-            known = ", ".join(sorted(PROVIDER_FACTORIES))
-            raise ValueError(f"BOT_PROVIDER is {value!r}; it must be one of: {known}")
-        return name
-
     @field_validator("transcript_source", mode="before")
     @classmethod
     def _blank_transcript_source_is_the_default(cls, value):
@@ -309,14 +289,6 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _skribby_needs_its_key(self):
-        """A process told to use Skribby with no key would fail at the first meeting; stop it at
-        startup instead, naming the setting (never printing any key)."""
-        if self.bot_provider == "skribby" and not self.skribby_api_key.strip():
-            raise ValueError("BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set")
-        return self
-
-    @model_validator(mode="after")
     def _skribby_transcript_needs_a_diarizing_model(self):
         if (
             self.transcript_source == "skribby"
@@ -329,32 +301,14 @@ class Settings(BaseSettings):
             )
         return self
 
-    @model_validator(mode="after")
-    def _capacity_follows_the_provider(self):
-        """Unset, `BOT_MAX_LOCAL` follows the provider: 1 for Vexa (our own host), 20 for Skribby
-        (Skribby's servers; a ceiling under our plan's 25). A value in `.env` always wins."""
-        if self.bot_provider == "skribby" and "bot_max_local" not in self.model_fields_set:
-            self.bot_max_local = SKRIBBY_BOT_CEILING
-        return self
-
-    @model_validator(mode="after")
-    def _teams_follows_the_provider(self):
-        if self.bot_provider != "skribby":
-            self.teams_join_enabled = False
-        elif self.teams_join_enabled is None:
-            self.teams_join_enabled = True
-        return self
-
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/notetaker"
 
-    # Which bot provider puts the bot in meetings (`app/bot_provider.py`): `vexa` (the default, the
-    # self-hosted Vexa) or `skribby` (the hosted Skribby, `app/skribby.py`). An unknown value, or
-    # `skribby` without its key, stops the process at startup instead of failing at the first
-    # meeting.
-    bot_provider: str = "vexa"
-    # Skribby (only read when `bot_provider` is `skribby`, or when a meeting that Skribby ran is
-    # still being worked on). The key is never logged or shown: `repr=False` keeps it out of the
-    # settings' own repr.
+    # Skribby, the one bot provider (`app/bot_provider.py`, `app/skribby.py`). The key is never
+    # logged or shown: `repr=False` keeps it out of the settings' own repr. Without it no bot can
+    # be sent: the web, worker and scheduler entry points refuse to start (`skribby.
+    # require_configured`), and the provider refuses with `BotProviderNotConfigured` (retryable).
+    # It is not checked while the settings are built, so tools and tests that never send a bot
+    # need no key.
     skribby_api_key: str = Field(default="", repr=False)
     # The id of an Authenticated Account made in Skribby's dashboard (the Google account the bot
     # signs in as). Empty = the bot joins as a guest named `skribby_bot_name`.
@@ -510,57 +464,47 @@ class Settings(BaseSettings):
     # tell people to invite it ("Add note@... to your event to skip the wait"). Public, not a
     # secret. Empty = no such tip. Shown only when it is true, see `bot_invite_email_shown`.
     bot_invite_email: str = ""
-    vexa_base_url: str = "http://localhost:8056"
-    vexa_api_key: str = Field(default="", repr=False)
-    bot_name: str = "Beyric Note Taker (recording)"
     # The line the bot posts in the meeting chat when it joins ("Hi, I'm <bot>. <owner> added me to
     # record this meeting ..."): Skribby only (`app/chat_notice.py`). OFF until one real meeting on
     # each platform has shown it works; a Skribby refusal of the parameter is retried without it.
     bot_chat_notice_enabled: bool = False
 
-    def bot_name_for(self, provider: str | None) -> str:
-        """The name the host sees in the meeting for the provider that ran a meeting, for the
-        owner's "Admit '...'" line (so a meeting Vexa runs still names Vexa's bot after the setting
-        moved to Skribby)."""
-        if (provider or self.bot_provider) == "skribby":
-            if self.skribby_account_id:
-                return self.skribby_account_name.strip() or self.skribby_bot_name
-            return self.skribby_bot_name
-        return self.bot_name
-
     @property
     def shown_bot_name(self) -> str:
-        return self.bot_name_for(self.bot_provider)
+        """The name the host sees in the meeting for the bot, for the owner's "Admit '...'" line:
+        the signed-in account's own name when the bot signs in, else the guest name."""
+        if self.skribby_account_id:
+            return self.skribby_account_name.strip() or self.skribby_bot_name
+        return self.skribby_bot_name
 
     @property
     def bot_invite_email_shown(self) -> str | None:
         """The address people may be told to invite, or None. It is told only when it is true: the
-        bot is Skribby's, and it is signed in (`skribby_account_id`) as that address. A guest bot
-        (no account) or Vexa's bot is not on anyone's guest list, so there is nothing to invite."""
-        if self.bot_provider == "skribby" and self.skribby_account_id and self.bot_invite_email:
+        bot is signed in (`skribby_account_id`) as that address. A guest bot (no account) is not on
+        anyone's guest list, so there is nothing to invite."""
+        if self.skribby_account_id and self.bot_invite_email:
             return self.bot_invite_email
         return None
 
     poll_interval_seconds: int = 30
     # How long the bot may sit in a call with no one else speaking before it leaves on its own
-    # (Vexa `automatic_leave.max_time_left_alone`). It is a silence rule, not a headcount, so a
-    # short window can cut a quiet meeting short. Vexa's own default is 10 minutes. 0 = send
-    # nothing and keep Vexa's default.
+    # (Skribby's `last_person_detection`, in whole minutes, rounded up). It is a silence rule, not a headcount, so a short
+    # window can cut a quiet meeting short. 0 = send nothing and keep Skribby's default.
     bot_left_alone_seconds: int = 300
     max_poll_hours: int = 6
-    # How many bots may be on meetings at once across all users (`app/placement.py`). Under Vexa the
-    # bots run on our own host, which fits about one until measured (spec section 9), so the
-    # default is 1. Under Skribby the bots run on Skribby's servers (our plan there allows 25 at
-    # once; Skribby's billing page has a "Request an increase"), so this is only a high safety
-    # ceiling there, default 20; `USER_BOT_LIMIT` is the real per-person control. Set it in `.env`
-    # to override either default. 0 sends no new bots (a drain). `MAX_ACTIVE_BOTS`, the name this
-    # setting had before placement existed, is still read, so an old .env keeps working.
+    # How many bots may be on meetings at once across all users (`app/placement.py`). The bots run
+    # on Skribby's servers (our plan there allows 25 at once; Skribby's billing page has a "Request
+    # an increase"), so this is only a high safety ceiling, default 20 (`SKRIBBY_BOT_CEILING`);
+    # `USER_BOT_LIMIT` is the real per-person control. Set it in `.env` to override. 0 sends no new
+    # bots (a drain). `MAX_ACTIVE_BOTS`, the name this setting had before placement existed, is
+    # still read, so an old .env keeps working.
     bot_max_local: int = Field(
-        default=1, ge=0, validation_alias=AliasChoices("bot_max_local", "max_active_bots")
+        default=SKRIBBY_BOT_CEILING,
+        ge=0,
+        validation_alias=AliasChoices("bot_max_local", "max_active_bots"),
     )
     # How many bots one user may have on meetings at once (spec section 9.4, step 7). It is the
-    # real per-person control under Skribby (the capacity ceiling above is high there); under Vexa
-    # it only bites once `bot_max_local` is above it. 0 stops every user.
+    # real per-person control (the capacity ceiling above is high). 0 stops every user.
     user_bot_limit: int = Field(default=2, ge=0)
     # `HOURS_MODE=enforce`: while a person has a meeting running or just placed, a second one starts
     # only if their hours cover a reserve for each of them: this many minutes per meeting (the
@@ -587,12 +531,11 @@ class Settings(BaseSettings):
     # (a week: the mail must be read by someone who checks their inbox about once a week, with time
     # left to take a plan). If the job first acts closer to the end, that person's end moves out.
     pilot_expiry_min_notice_days: int = Field(default=7, ge=1, le=60)
-    # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
-    # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
-    # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under
-    # Skribby; `true` under Vexa is ignored (the bot could not join). Off, a Teams event reads
-    # "Microsoft Teams meetings cannot be joined yet" and a pasted Teams link is refused.
-    teams_join_enabled: bool | None = None
+    # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event): on by
+    # default (Skribby joins Teams as a guest). `TEAMS_JOIN_ENABLED=false` switches it off. Off, a
+    # Teams event reads "Microsoft Teams meetings cannot be joined yet" and a pasted Teams link is
+    # refused.
+    teams_join_enabled: bool = True
 
     openai_api_key: str = Field(default="", repr=False)
     transcription_model: str = "gpt-transcribe"

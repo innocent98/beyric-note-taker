@@ -1,6 +1,6 @@
 """Prepare meeting recordings for transcription.
 
-OpenAI rejects uploads over 25 MB and an hour of Vexa audio is about 56 MB, so the
+OpenAI rejects uploads over 25 MB and an hour of meeting audio is about 56 MB, so the
 recording is compressed to mono 32 kbps Opus and split into chunks of at most 15 minutes.
 Each cut goes in a silence near the end of its window so words are not sliced in half.
 """

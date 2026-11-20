@@ -14,8 +14,8 @@ from tests.test_bot_name import make
 from tests.test_web import (  # noqa: F401
     anon_client,
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
     owner,
