@@ -33,11 +33,17 @@ settlement (`settle.OPEN_STATUSES`): if the page is paid later by mistake, or a 
 through it, the provider's webhook finds the row, asks the provider again and grants the hours as it
 would for a retried checkout. Nothing here can lose money the provider took. A payment whose
 webhook never arrives is found by the sweeper (`renewals._sweep_payments`), which also asks about
-recent `failed` plan and pack payments that have a page (`renewals.FAILED_LOOKBACK`) and settles one
-the provider says is paid. The person is also told not to pay the old page.
+recent `failed` plan, pack and upgrade payments that have a page (`renewals.FAILED_LOOKBACK`) and
+settles one the provider says is paid. The person is also told not to pay the old page.
 
-Only a plan or a pack checkout can be cancelled here (a renewal belongs to the clock and an upgrade
-to the plan change). The payment row is locked only to write (the order everywhere is the payment,
+A plan, a pack or an **upgrade** checkout can be cancelled here (a renewal belongs to the clock, so
+it cannot: 409 `cannot_cancel`). Cancelling an upgrade closes only its payment: the subscription is
+not written (same plan, same period, same renewal date, same hours; a test compares the rows before
+and after). An upgrade page paid after the cancel is no new money path: it settles as any open
+upgrade does (`subscriptions._upgrade_paid`: applied if the period it was for is still running
+and the plan has not changed since, else nothing is granted and the admins are told to refund
+it), and a lost webhook is found by the sweeper as it is for a plan or pack.
+The payment row is locked only to write (the order everywhere is the payment,
 then the refund, then the subscription: this takes the payment and reads the refund), never across
 the call to the provider. While a refund of the plan is being settled nothing about the plan's
 payments moves (`subscriptions._refuse_while_refunding`).
@@ -57,7 +63,7 @@ from app.models import Payment, Subscription, User
 
 logger = logging.getLogger(__name__)
 
-CANCELLABLE_KINDS = ("plan", "pack")
+CANCELLABLE_KINDS = ("plan", "pack", "upgrade")
 # A payment in one of these has been paid (and maybe refunded): there is nothing to cancel.
 PAID_STATUSES = ("succeeded", "refunded", "partly_refunded")
 
@@ -99,10 +105,10 @@ def _locked(db: Session, payment_id: int) -> Payment:
 
 
 def cancel_checkout(db: Session, user: User, reference: str, settings: Settings, now) -> Cancelled:
-    """Put away the caller's own unfinished plan or pack checkout, after asking the provider. The
-    caller commits on a result and rolls back on a `subscriptions.Refused`. (Two exceptions in
-    `_settle_reported`: its refusal path and its grant-failure path each commit only the admin alert
-    they raised, then refuse.)"""
+    """Put away the caller's own unfinished plan, pack or upgrade checkout, after asking the
+    provider. The caller commits on a result and rolls back on a `subscriptions.Refused`. (Two
+    exceptions in `_settle_reported`: its refusal path and its grant-failure path each commit only
+    the admin alert they raised, then refuse.)"""
     payment = db.scalars(
         select(Payment).where(Payment.reference == reference, Payment.payer_user_id == user.id)
     ).one_or_none()

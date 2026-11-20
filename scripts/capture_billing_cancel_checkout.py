@@ -121,6 +121,18 @@ def rows(engine) -> dict:
         }
 
 
+def plan_rows(engine) -> dict:
+    """Every column of every subscription and hour-grant row, as plain text."""
+    out = {}
+    with Session(engine) as session:
+        for model in (Subscription, HourGrant):
+            out[model.__tablename__] = [
+                {c.key: str(getattr(row, c.key)) for c in model.__table__.columns}
+                for row in session.scalars(select(model).order_by(model.id))
+            ]
+    return out
+
+
 def run(engine, on, off) -> None:
     for email in (ADA, BEN):
         person(engine, email)
@@ -295,25 +307,29 @@ def run(engine, on, off) -> None:
         note="`succeeded`: nothing was lost by cancelling.",
     )
 
-    # ---- an upgrade or a renewal is not cancelled here ----
+    # ---- a renewal is not cancelled here ----
     stuck = ada.call(
         "checkout-pack-for-kind",
         "POST",
         "/api/billing/checkout",
         body={"kind": "pack", "code": "pack_10h"},
-        note="A pack checkout whose KIND this capture then changes by SQL (to `upgrade`), only to "
-        "show the refusal: no upgrade checkout is made here.",
+        note="A pack checkout whose KIND this capture then changes by SQL (to `renewal`), only to "
+        "show the refusal: no renewal charge is made here.",
     ).json()
     ref5 = stuck["payment"]["reference"]
     with Session(engine) as session:
-        session.execute(update(Payment).where(Payment.reference == ref5).values(kind="upgrade"))
+        session.execute(update(Payment).where(Payment.reference == ref5).values(kind="renewal"))
         session.commit()
     ada.call(
-        "cancel-an-upgrade",
+        "cancel-a-renewal",
         "POST",
         f"/api/billing/payments/{ref5}/cancel",
-        note="Only a plan or a pack checkout can be cancelled: 409 `cannot_cancel`.",
+        note="A renewal belongs to the clock: 409 `cannot_cancel`. (A plan, pack or upgrade "
+        "checkout can be cancelled.)",
     )
+    with Session(engine) as session:  # the stand-in renewal is put away so it is not the banner
+        session.execute(update(Payment).where(Payment.reference == ref5).values(status="failed"))
+        session.commit()
 
     # ---- the provider has no record of the page (Flutterwave: none until a payer tries) ----
     empty = ada.call(
@@ -335,6 +351,96 @@ def run(engine, on, off) -> None:
         "is closed. `result` `cancelled`, `payment.status` `failed`.",
     )
     USD.fetch_error = None
+
+    # ---- an UPGRADE checkout (the plan is p20 and paid at this point) ----
+    ada.call(
+        "subscription-before-upgrade",
+        "GET",
+        "/api/billing/subscription",
+        note="The person holds the 20-hour plan (paid in capture 20). The next calls start an "
+        "upgrade to `plan_50h`.",
+    )
+    up = ada.call(
+        "change-plan-upgrade",
+        "POST",
+        "/api/billing/subscription/change-plan",
+        body={"plan_code": "plan_50h"},
+        note="An upgrade is a hosted checkout for the prorated difference: `result` `checkout`, "
+        "`payment.kind` `upgrade`. The plan does not change until it is paid.",
+    ).json()
+    ref_up = up["payment"]["reference"]
+    ada.call(
+        "subscription-with-waiting-upgrade",
+        "GET",
+        "/api/billing/subscription",
+        note="`pending_payment` is the upgrade (`kind` `upgrade`): the billing page's banner "
+        "'You have a payment that is not finished'. `subscription.plan_code` is still the old "
+        "plan.",
+    )
+    before_up = plan_rows(engine)
+    USD.complete(payment_by_reference(engine, ref_up), status="pending")
+    ada.call(
+        "cancel-upgrade-abandoned",
+        "POST",
+        f"/api/billing/payments/{ref_up}/cancel",
+        note="The provider reports the upgrade page unpaid: `result` `cancelled`, the payment is "
+        "`failed` with no `pay_url`. Only the payment is closed.",
+    )
+    ada.call(
+        "subscription-after-cancel-upgrade",
+        "GET",
+        "/api/billing/subscription",
+        note="`pending_payment` is null: the banner is gone. `subscription` is exactly what it was "
+        "in the call before the upgrade (same plan, period and renewal date).",
+    )
+    after_up = plan_rows(engine)
+    base.note_file(
+        "upgrade-plan-rows-before-and-after-cancel",
+        "Every column of the subscription and hour-grant rows (read from the database) just "
+        "before and just after the cancel of the upgrade. `identical` is the comparison.",
+        {"before": before_up, "after": after_up, "identical": before_up == after_up},
+    )
+    webhook(
+        on,
+        "webhook-cancelled-upgrade-paid-later",
+        USD,
+        USD.complete(
+            payment_by_reference(engine, ref_up), card_token="tok-capture-3", payer_email=ADA
+        ),
+        "The payer paid the OLD upgrade page after all and the provider's webhook arrives, inside "
+        "the same period: the cancelled (`failed`) payment is still open to settlement, so the "
+        "upgrade is applied as it would be for any upgrade page. (Paid after the period has moved "
+        "on, nothing is granted and the admins are told: tests only, it needs a month to pass.)",
+    )
+    ada.call(
+        "subscription-after-late-upgrade",
+        "GET",
+        "/api/billing/subscription",
+        note="`subscription.plan_code` is `plan_50h` now and the extra hours are in `hours`.",
+    )
+    big = ada.call(
+        "change-plan-upgrade-again",
+        "POST",
+        "/api/billing/subscription/change-plan",
+        body={"plan_code": "plan_100h"},
+        note="Another upgrade checkout, to `plan_100h`.",
+    ).json()
+    ref_big = big["payment"]["reference"]
+    USD.complete(payment_by_reference(engine, ref_big), card_token="tok-capture-4", payer_email=ADA)
+    ada.call(
+        "cancel-upgrade-paid-in-the-meantime",
+        "POST",
+        f"/api/billing/payments/{ref_big}/cancel",
+        note="The payer paid in another tab and no webhook has arrived: the provider says "
+        "`successful`, so the upgrade is SETTLED and the answer is `paid`. A paid upgrade is "
+        "never cancelled.",
+    )
+    ada.call(
+        "subscription-after-paid-upgrade",
+        "GET",
+        "/api/billing/subscription",
+        note="`subscription.plan_code` is `plan_100h`; no waiting payment.",
+    )
 
     base.note_file(
         "rows-at-the-end",

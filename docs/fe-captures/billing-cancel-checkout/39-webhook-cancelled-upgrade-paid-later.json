@@ -1,0 +1,29 @@
+{
+  "note": "The payer paid the OLD upgrade page after all and the provider's webhook arrives, inside the same period: the cancelled (`failed`) payment is still open to settlement, so the upgrade is applied as it would be for any upgrade page. (Paid after the period has moved on, nothing is granted and the admins are told: tests only, it needs a month to pass.)",
+  "client": "the provider",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/webhooks/flutterwave",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Fake-Signature": "<signature>"
+    },
+    "body": {
+      "id": "evt-charge_succeeded-fake-tx-7",
+      "kind": "charge_succeeded",
+      "reference": "bn-7-6fba136ddc53baa5",
+      "tx_id": "fake-tx-7",
+      "amount_minor": 2199,
+      "currency": "USD",
+      "payer_email": null,
+      "card_token": null,
+      "refund_failed": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  }
+}

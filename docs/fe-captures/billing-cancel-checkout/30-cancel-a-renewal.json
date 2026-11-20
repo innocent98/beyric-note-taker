@@ -1,9 +1,9 @@
 {
-  "note": "Only a plan or a pack checkout can be cancelled: 409 `cannot_cancel`.",
+  "note": "A renewal belongs to the clock: 409 `cannot_cancel`. (A plan, pack or upgrade checkout can be cancelled.)",
   "client": "ada billing-on",
   "request": {
     "method": "POST",
-    "path": "/api/billing/payments/bn-5-b57fa20eff642dd8/cancel",
+    "path": "/api/billing/payments/bn-5-566dabe6ca603158/cancel",
     "headers": {
       "X-CSRF-Token": "<csrf-D>",
       "Cookie": "device=<cookie>; session=<cookie>"
