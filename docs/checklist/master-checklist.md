@@ -3,6 +3,17 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-21, about 16:30 WAT: BILLING IS LIVE** (`main` at `7ca02a37`, Alembic head 0055 not verified on the server; SOP `docs/sop/2026-11-21-billing-go-live-executed.md`, runbook `docs/launch/billing-go-live-runbook.md`):
+- [x] Closeout of test-mode data run on the server (`--before 2026-11-21T14:45:33Z --end-pilot --trial-for-ended-pilot`: `PROOF: OK`; every billing table was empty; 4 pilot grants ended, 4 ordinary trials given)
+- [x] Live keys in `.env`, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE=2026-11-21T14:45:33Z`, billing open to everyone (`BILLING_ALLOWED_EMAILS=*`), `PAYSTACK_WEBHOOK_SECRET` deleted (classic `x-paystack-signature` with the secret key), one recreate, gap check `0 | 0 | 0`, webhook routes 401, no errors in the first hour
+- [ ] **First real payment per provider and refund (Adebayo, later):** Paystack NGN 25,000 on fresh account A, Flutterwave USD 18 on fresh account B, then admin refund; the first signed live webhook (`billing_events.signature_ok` true) proves the webhook path. NOT done: no real payment yet
+- [ ] After the first dollar payment: read Flutterwave's currency, rate and settlement, then decide on dollar settlement
+- [ ] First renewal in a month (cannot be proved earlier); trial cost watch (no daily trial cap)
+- [x] Vexa removed from the repo (#252), containers and volumes gone from the server; `.env` cleaned by `scripts/clean_env.py` (#248)
+- [x] No test-mode wording anywhere a person sees (#250); VAT not charged (Beyrichq not VAT-registered), TIN empty
+- [x] Google sensitive-scope verification submitted (waiting); Microsoft publisher domain verified, Partner Center verification in progress
+- [ ] Follow-ups: remove the dead pilot-expiry job and mail; read-only live `proof` and `preflight` scripts; optional migration for the `bot_provider` default; transcript fallback review after a week; VAT add-on build only if Beyrichq registers; haven-api deploy prune (other project)
+
 **Addendum 2026-11-21: read-only live proof script** (branch `feature/live-proof-script`, SOP `docs/sop/2026-11-21-live-proof-script.md`, no migration, no endpoint change):
 - [x] `scripts/billing_test_purchase.py` runs `proof EMAIL`, `proof EMAIL --refund`, `state EMAIL` and the new `live-check` against LIVE billing, each in a transaction the database holds read only (checked to be on before anything is read); `checkout` and `make-due` still refuse, also when only a live key or `BILLING_LIVE_SINCE` is present
 - [x] Live `proof`: payment `succeeded` with `paid_at`, one active subscription, invoice `BN-<year>-NNNNNN` not test-mode and not hidden by the cutover, grant equals the plan's hours, `WEBHOOK PATH PROVED` or `NOT PROVED`; `--refund` checks runbook section 6; `live-check` checks the live settings (key prefixes only), seller details, prices, counters and the inbox's health
