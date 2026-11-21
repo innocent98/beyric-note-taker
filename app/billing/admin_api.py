@@ -282,12 +282,13 @@ def refund_payment(
     "/refunds/{refund_id}/resolve",
     responses={
         404: {"model": ErrorResponse, "description": "`not_found`"},
-        409: {"model": ErrorResponse, "description": "`not_unresolved`"},
+        409: {"model": ErrorResponse, "description": "`not_unresolved`, `before_go_live`"},
     },
 )
 def resolve_refund(
     refund_id: int,
     body: ResolveIn,
+    request: Request,
     admin: User = Depends(billing_admin),
     db: Session = Depends(get_session),
 ) -> AdminRefund:
@@ -296,7 +297,7 @@ def resolve_refund(
     back, so a new refund may be started."""
     now = _now()
     try:
-        row = refunds.resolve(db, refund_id, body.outcome, admin, now)
+        row = refunds.resolve(db, refund_id, body.outcome, admin, now, request.app.state.settings)
     except subscriptions.Refused as exc:
         db.rollback()
         raise services.Refused(exc.status, exc.code, exc.message) from None

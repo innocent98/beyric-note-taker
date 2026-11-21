@@ -289,8 +289,10 @@ def test_the_invoice_handler_never_stops_the_hours_and_the_sweeper_issues_it_lat
     assert len(alerts) == 1
 
     monkeypatch.setattr(invoices, "issue", real)
-    assert invoices.issue_missing(session, T0 + timedelta(minutes=3)) == 1
-    assert invoices.issue_missing(session, T0 + timedelta(minutes=4)) == 0  # nothing left to do
+    assert invoices.issue_missing(session, T0 + timedelta(minutes=3), settings()) == 1
+    assert (
+        invoices.issue_missing(session, T0 + timedelta(minutes=4), settings()) == 0
+    )  # nothing left to do
     assert [i.number for i in all_invoices(session)] == ["BN-T-2026-000001"]
 
 
@@ -300,7 +302,7 @@ def test_issue_missing_skips_a_payment_nothing_could_use(session, ada, providers
     payment = session.scalars(select(Payment)).one()
     payment.needs_refund_reason = "test"
     session.commit()
-    assert invoices.issue_missing(session, T0) == 0
+    assert invoices.issue_missing(session, T0, settings()) == 0
 
 
 # ---- the number under concurrency -------------------------------------------------------------

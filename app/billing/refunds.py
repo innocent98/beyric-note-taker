@@ -455,11 +455,16 @@ def _late_answer(
     )
 
 
-def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetime) -> Refund:
+def resolve(
+    db: Session, refund_id: int, outcome: str, admin: User, now: datetime, settings: Settings
+) -> Refund:
     """An admin says what the provider's dashboard shows for an `unknown` refund (or a `pending`
     one left by a dead process): `made` (it exists: the payment is refunded) or `not_made` (it does
     not: the refund is closed and the hours come back, so a new refund can be started). The only
-    way out of `unknown`; nothing here calls the provider."""
+    way out of `unknown`; nothing here calls the provider. A refund of a payment made before the
+    go-live cutover (`BILLING_LIVE_SINCE`) cannot be resolved: `made` would delete the person's
+    LIVE saved card and mail them, `not_made` would give test hours back (the closeout script
+    refuses to run while such a refund is open, so none should exist)."""
     if outcome not in ("made", "not_made"):
         raise Refused(422, "validation_error", "The outcome is `made` or `not_made`.")
     # Lock order everywhere: the payment, then the refund (as `request`'s last step does).
@@ -473,6 +478,12 @@ def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetim
         .with_for_update()
         .execution_options(populate_existing=True)
     ).one()
+    if cutover.is_test_era(payment.created_at, settings):
+        raise _refuse(
+            "before_go_live",
+            "This refund is for a payment made before billing went live: it cannot be resolved "
+            "here.",
+        )
     waiting_too_long = refund.status == "pending" and now - refund.created_at >= STUCK_AFTER
     if refund.status != "unknown" and not waiting_too_long:
         raise _refuse("not_unresolved", "This refund is not waiting for a person to resolve it.")

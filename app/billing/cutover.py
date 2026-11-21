@@ -31,22 +31,25 @@ if TYPE_CHECKING:
 __all__ = ["is_test_era", "live_only", "parse_instant", "since"]
 
 
-def since(settings: "Settings") -> datetime | None:
+def since(settings: "Settings | None") -> datetime | None:
     """`T` while the cutover is in force: `BILLING_LIVE` is true and `BILLING_LIVE_SINCE` is set.
-    None otherwise (every row counts)."""
+    None otherwise (every row counts). `settings` None means "no settings given": no cutover (only
+    the profile functions take it as an optional argument, for callers that have none)."""
+    if settings is None:
+        return None
     raw = settings.billing_live_since.strip()
     if not settings.billing_live or not raw:
         return None
     return parse_instant(raw, name="BILLING_LIVE_SINCE")
 
 
-def is_test_era(created_at: datetime, settings: "Settings") -> bool:
+def is_test_era(created_at: datetime, settings: "Settings | None") -> bool:
     """True when a payment created at `created_at` was made before the cutover."""
     cutover = since(settings)
     return cutover is not None and created_at < cutover
 
 
-def live_only(column, settings: "Settings") -> ColumnElement[bool]:
+def live_only(column, settings: "Settings | None") -> ColumnElement[bool]:
     """A `where` clause that keeps only rows made at or after the cutover (all rows while it is
     not in force). `column` is `Payment.created_at`, or `BillingEvent.received_at` for a webhook
     event (an event is judged by when it arrived)."""

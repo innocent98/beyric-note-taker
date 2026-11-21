@@ -158,11 +158,16 @@ def _suggestion(db: Session, user: User, routes_text: str) -> dict:
 
 
 def _profile_out(
-    db: Session, user: User, row: BillingProfile | None, routes_text: str, now: datetime
+    db: Session,
+    user: User,
+    row: BillingProfile | None,
+    routes_text: str,
+    now: datetime,
+    settings=None,
 ) -> ProfileOut:
     """The profile as it applies at `now`: a scheduled change whose time has come is shown as
     applied (`profiles.country_view`) without this read writing anything."""
-    locked = profiles.country_lock(db, user.id, now) is not None
+    locked = profiles.country_lock(db, user.id, now, settings) is not None
     if row is None:
         return ProfileOut(
             name_or_company=None,
@@ -173,7 +178,9 @@ def _profile_out(
             pending_billing_country=None,
             pending_effective_at=None,
             route=None,
-            country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
+            country_change_allowed_at=profiles.country_change_allowed_at(
+                db, user.id, now, settings
+            ),
             country_locked=locked,
             **_suggestion(db, user, routes_text),
         )
@@ -187,7 +194,7 @@ def _profile_out(
         pending_billing_country=view.pending_billing_country,
         pending_effective_at=view.pending_effective_at,
         route=_route_of(view.billing_country, routes_text),
-        country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now),
+        country_change_allowed_at=profiles.country_change_allowed_at(db, user.id, now, settings),
         country_locked=locked,
         **(
             _suggestion(db, user, routes_text)
@@ -209,7 +216,7 @@ def read_profile(
     now = datetime.now(UTC)
     row = profiles.get_profile(db, user)
     routes_text = request.app.state.settings.billing_country_routes
-    return _profile_out(db, user, row, routes_text, now)
+    return _profile_out(db, user, row, routes_text, now, request.app.state.settings)
 
 
 @router.put(
@@ -246,7 +253,7 @@ def write_profile(
     )
     db.commit()
     routes_text = request.app.state.settings.billing_country_routes
-    return _profile_out(db, user, row, routes_text, now)
+    return _profile_out(db, user, row, routes_text, now, request.app.state.settings)
 
 
 @router.put(
@@ -277,7 +284,12 @@ def write_country(
     now = datetime.now(UTC)
     try:
         change = profiles.change_country(
-            db, user, body.billing_country, routes_text=routes_text, now=now
+            db,
+            user,
+            body.billing_country,
+            routes_text=routes_text,
+            now=now,
+            settings=request.app.state.settings,
         )
     except routing.RoutingError as exc:
         db.rollback()
@@ -287,7 +299,10 @@ def write_country(
         raise services.Refused(exc.status, exc.code, exc.message) from None
     db.commit()
     return CountryChangeOut(
-        result=change.result, profile=_profile_out(db, user, change.profile, routes_text, now)
+        result=change.result,
+        profile=_profile_out(
+            db, user, change.profile, routes_text, now, request.app.state.settings
+        ),
     )
 
 

@@ -541,20 +541,23 @@ def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime)
 def sweep(session: Session, now: datetime, settings: Settings) -> None:
     _sweep_events(session, now, settings)
     _sweep_payments(session, now, settings)
-    for after_money in (_issue_missing_invoices, _alert_stuck_refunds, _alert_old_pending):
+    steps = (
+        (_issue_missing_invoices.__name__, lambda: _issue_missing_invoices(session, now, settings)),
+        (_alert_stuck_refunds.__name__, lambda: _alert_stuck_refunds(session, now)),
+        (_alert_old_pending.__name__, lambda: _alert_old_pending(session, now)),
+    )
+    for name, after_money in steps:
         try:  # one failing check must not stop the others (or the next pass)
-            after_money(session, now)
+            after_money()
         except Exception as exc:
             session.rollback()
-            logger.error(
-                "billing sweep step %s failed: %s", after_money.__name__, type(exc).__name__
-            )
+            logger.error("billing sweep step %s failed: %s", name, type(exc).__name__)
 
 
-def _issue_missing_invoices(session: Session, now: datetime) -> None:
+def _issue_missing_invoices(session: Session, now: datetime, settings: Settings) -> None:
     """Stage S9: a used payment with no invoice (its handler failed, or it was settled before the
     stage) gets one now, with its receipt mail."""
-    invoices.issue_missing(session, now)
+    invoices.issue_missing(session, now, settings)
 
 
 def _alert_stuck_refunds(session: Session, now: datetime) -> None:

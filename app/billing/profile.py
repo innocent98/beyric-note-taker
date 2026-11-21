@@ -56,9 +56,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.billing import routing
+from app.billing import cutover, routing
 from app.billing.types import BillingError
 from app.billing.zone_countries import country_for_zone
+from app.config import Settings
 from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
     BillingCountryChange,
@@ -149,13 +150,19 @@ def live_subscription(db: Session, user_id: int, now: datetime) -> LiveSubscript
 _PAID_STATUSES = ("succeeded", "refunded", "partly_refunded")
 
 
-def country_lock(db: Session, user_id: int, now: datetime) -> CountryLock | None:
+def country_lock(
+    db: Session, user_id: int, now: datetime, settings: Settings | None = None
+) -> CountryLock | None:
     """None while the person has never paid and has no live subscription: the country is then
     free to change, instantly and without limit. Otherwise a `CountryLock` and the change rules
-    apply. Once a person has paid it stays locked even after the plan ends."""
+    apply. Once a person has paid it stays locked even after the plan ends. A payment made before
+    the go-live cutover (`BILLING_LIVE_SINCE`, passed as `settings`) took no money and does not
+    lock."""
     first_paid = db.scalar(
         select(func.min(func.coalesce(Payment.paid_at, Payment.created_at))).where(
-            Payment.payer_user_id == user_id, Payment.status.in_(_PAID_STATUSES)
+            Payment.payer_user_id == user_id,
+            Payment.status.in_(_PAID_STATUSES),
+            cutover.live_only(Payment.created_at, settings),
         )
     )
     if first_paid is not None:
@@ -236,11 +243,13 @@ def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:
     return True
 
 
-def country_change_allowed_at(db: Session, user_id: int, now: datetime) -> datetime | None:
+def country_change_allowed_at(
+    db: Session, user_id: int, now: datetime, settings: Settings | None = None
+) -> datetime | None:
     """When the next change is allowed, or None when one is allowed now: always before the person
     has paid. Only real changes made since the lock began count (a row with an `old_country`); the
     first choice does not, and neither do the changes made while the country was still free."""
-    lock = country_lock(db, user_id, now)
+    lock = country_lock(db, user_id, now, settings)
     if lock is None:
         return None
     conditions = [
@@ -320,6 +329,7 @@ def change_country(
     *,
     routes_text: str = routing.DEFAULT_ROUTES,
     now: datetime | None = None,
+    settings: Settings | None = None,
 ) -> CountryChange:
     """Set or change the person's billing country under the rules in the module note. Raises a
     `routing.RoutingError` for a country that is missing, not a country, or not routable, and
@@ -350,8 +360,8 @@ def change_country(
 
     scheduled_for = None
     # Before the first payment nothing is locked: any change applies at once (see the module note).
-    if old is not None and country_lock(db, user.id, now) is not None:
-        allowed_at = country_change_allowed_at(db, user.id, now)
+    if old is not None and country_lock(db, user.id, now, settings) is not None:
+        allowed_at = country_change_allowed_at(db, user.id, now, settings)
         if allowed_at is not None:
             raise CountryChangeRefused(
                 409,
