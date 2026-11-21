@@ -32,7 +32,11 @@ held a pilot grant never gets a trial (`app/trial.py`), so after this they have 
 trial and must buy a plan, UNLESS `--trial-for-ended-pilot` (only valid with `--end-pilot`) is
 also given: then each person whose pilot ended in this run, who is confirmed, active and not an
 administrator, is given ONE ordinary trial by the app's own `trial.give` (so length and days are
-what a new sign-up gets, counted from the run; `TRIAL_SECONDS` must be above 0). It bypasses only
+what a new sign-up gets, counted from the run). It REFUSES to run (dry run too) when `TRIAL_SECONDS`
+is 0 or a daily trial budget is too small for the people owed one, and if an eligible person is
+given no trial anyway that person's whole transaction, the pilot's end included, rolls back and a
+re-run retries both. It also settles each ended-pilot person's unbooked pilot-era usage onto their
+grants first (`hours.reconcile_backlog`), so it cannot come off the new trial. It bypasses only
 the rule that a past pilot used the trial up, for this one-time conversion; a person who already
 holds a trial gets none, and a second `--apply` gives none.
 
@@ -106,6 +110,11 @@ LABELS = {
 }
 
 
+class TrialNotGiven(Exception):
+    """An eligible ended-pilot person was given no trial: that person's whole transaction (the
+    pilot's end included) rolls back, so a re-run retries both."""
+
+
 class Refusal(Exception):
     """The run must not start; the message is safe to print."""
 
@@ -137,7 +146,6 @@ class Report:
     trial_for_ended: bool = False
     pilot_people: int = 0
     trials_owed: int = 0
-    trial_off: bool = False
     failed_people: int = 0
 
 
@@ -278,6 +286,23 @@ def close_person(
     user = session.get(User, user_id) if user_id is not None else None
     if user is not None:
         hours.lock_person(session, user)  # no recording is counted against these hours meanwhile
+    if end_pilot and user is None:
+        # a deleted person's pilot grants have no owner to lock; a person who signed up again with
+        # the same email is matched to them by fingerprint, so lock those people instead
+        hashes = session.scalars(
+            _pilot_grants_in_force(now, None).with_only_columns(HourGrant.email_hash).distinct()
+        ).all()
+        if hashes:
+            for other in session.scalars(
+                select(User).where(trial._hash_of_user_email().in_(hashes)).order_by(User.id)
+            ):
+                hours.lock_person(session, other)
+    if end_pilot and user is not None and not user.is_admin:
+        # Settle the usage counted during the pilot that no grant has been charged for, WHILE the
+        # pilot is still in force: otherwise `entitlements.unallocated_seconds` would take it off
+        # whatever the person holds next (the new trial, or the first plan they buy). Idempotent;
+        # it changes nobody's hours left (`app/hours.py`).
+        hours.reconcile_backlog(session, user, now)
     changed = Counts()
     ids = session.scalars(
         _live_test_subscriptions(before, user_id)
@@ -362,7 +387,19 @@ def close_person(
             # account, TRIAL_SECONDS 0, and anyone who already holds a trial.
             if trial.give(session, user, now, settings, after_pilot=True) is not None:
                 changed.trials = 1
+            elif _trial_eligible(session, user):
+                # eligible, yet nothing was given (the budget, a change since the dry run): do NOT
+                # end the pilot without the trial the owner chose; roll this person back whole
+                raise TrialNotGiven
     return changed
+
+
+def _trial_eligible(session: Session, user: User) -> bool:
+    """Whether an ended-pilot person is owed the trial: confirmed, active, not an administrator,
+    and no trial grant of their own (the rule `trial.give` applies with `after_pilot`)."""
+    if user.is_admin or user.status != "active" or user.email_verified_at is None:
+        return False
+    return not trial.had_one(session, user, ("trial",))
 
 
 def trials_owed(session: Session, now: datetime, settings: Settings) -> int:
@@ -378,13 +415,11 @@ def trials_owed(session: Session, now: datetime, settings: Settings) -> int:
         ).all()
         if u is not None
     }
-    owed = 0
-    for user in session.scalars(select(User).where(User.id.in_(owners))):
-        if user.is_admin or user.status != "active" or user.email_verified_at is None:
-            continue
-        if not trial.had_one(session, user, ("trial",)):
-            owed += 1
-    return owed
+    return sum(
+        1
+        for user in session.scalars(select(User).where(User.id.in_(owners)))
+        if _trial_eligible(session, user)
+    )
 
 
 # ---- the run ----
@@ -410,6 +445,11 @@ def check_guards(
         raise Refusal("--trial-for-ended-pilot is only valid together with --end-pilot.")
     if max_age_minutes < 1:
         raise Refusal("--max-age-minutes must be 1 or more.")
+    if trial_for_ended_pilot and not trial.enabled(settings):
+        raise Refusal(
+            "--trial-for-ended-pilot needs TRIAL_SECONDS above 0 in this process: with 0 no trial "
+            "can be given, and the pilot would end with nothing in its place."
+        )
     try:
         before = parse_instant(before_text, name="--before")
     except ValueError as exc:
@@ -464,6 +504,15 @@ def check_guards(
             "Billing, Refunds as made or not made, pause again, take a NEW T, and run again. "
             "(The runbook's step 2 gate counts them BEFORE the pause so this does not happen.)"
         )
+    if trial_for_ended_pilot and settings.trial_daily_budget_seconds:
+        owed = trials_owed(session, now, settings)
+        needed = trial.given_in_window(session, now) + owed * settings.trial_seconds
+        if needed > settings.trial_daily_budget_seconds:
+            raise Refusal(
+                f"the daily trial budget (TRIAL_DAILY_BUDGET_SECONDS) is too small for {owed} "
+                "trial(s) now: some people would lose their pilot and get no trial. Raise the "
+                "budget for this run, or run without --trial-for-ended-pilot."
+            )
     if end_pilot:
         busy = _meetings_running_or_due(session)
         if busy:
@@ -592,7 +641,6 @@ def _run(
     report.people = len(who)
     report.end_pilot = end_pilot
     report.trial_for_ended = trial_for_ended
-    report.trial_off = not trial.enabled(settings)
     if end_pilot:
         with factory() as session:
             if trial_for_ended:
@@ -657,8 +705,6 @@ def _print_table(report: Report, apply: bool, out: Callable[[str], None]) -> Non
     if report.trial_for_ended:
         if apply:
             out(f"Ordinary trials given to ended-pilot people: {report.changed.trials}")
-        elif report.trial_off:
-            out("Trials to give: 0 (TRIAL_SECONDS is 0: no trial would be given).")
         else:
             out(f"Trials to give to ended-pilot people: {report.trials_owed}")
     header = f"{'':56}{'before':>8}"
