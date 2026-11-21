@@ -29,7 +29,12 @@ admin-gift grants never, no mail, no bell entry. Its dry run counts the grants a
 holding them. It refuses while a meeting is being recorded or a join is due within 10 minutes
 (the deploy gate's two questions), because it would end hours a recording is using. A person who
 held a pilot grant never gets a trial (`app/trial.py`), so after this they have no hours and no
-trial and must buy a plan.
+trial and must buy a plan, UNLESS `--trial-for-ended-pilot` (only valid with `--end-pilot`) is
+also given: then each person whose pilot ended in this run, who is confirmed, active and not an
+administrator, is given ONE ordinary trial by the app's own `trial.give` (so length and days are
+what a new sign-up gets, counted from the run; `TRIAL_SECONDS` must be above 0). It bypasses only
+the rule that a past pilot used the trial up, for this one-time conversion; a person who already
+holds a trial gets none, and a second `--apply` gives none.
 
 What `--apply` does (and nothing else, plus the pilot grants under `--end-pilot`):
 
@@ -69,7 +74,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import delete, func, or_, select, text, true, update  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
-from app import hours  # noqa: E402
+from app import hours, trial  # noqa: E402
 from app.billing import states  # noqa: E402
 from app.billing.cutover import parse_instant  # noqa: E402
 from app.config import Settings  # noqa: E402
@@ -112,9 +117,10 @@ class Counts:
     cards: int = 0
     payments: int = 0
     pilot: int = 0  # counted only under --end-pilot
+    trials: int = 0  # ordinary trials given under --trial-for-ended-pilot (not part of the proof)
 
     def add(self, other: "Counts") -> None:
-        for kind in KINDS:
+        for kind in (*KINDS, "trials"):
             setattr(self, kind, getattr(self, kind) + getattr(other, kind))
 
     def total(self) -> int:
@@ -128,7 +134,10 @@ class Report:
     after: Counts | None = None
     people: int = 0
     end_pilot: bool = False
+    trial_for_ended: bool = False
     pilot_people: int = 0
+    trials_owed: int = 0
+    trial_off: bool = False
     failed_people: int = 0
 
 
@@ -260,6 +269,8 @@ def close_person(
     before: datetime,
     now: datetime,
     end_pilot: bool = False,
+    settings: Settings | None = None,
+    trial_for_ended_pilot: bool = False,
 ) -> Counts:
     """Close this person's test-era rows in the caller's transaction (the caller commits). Each
     update re-checks the condition it selected on, so a row another process changed in between is
@@ -344,7 +355,36 @@ def close_person(
                     .returning(HourGrant.id)
                 ).all()
             )
+        if trial_for_ended_pilot and changed.pilot and user is not None and settings is not None:
+            # the person's pilot ended in THIS transaction: the ordinary trial, by the app's own
+            # function (length, days, budget and ledger rules as for a new sign-up), bypassing only
+            # "a past pilot used the trial up". It refuses an admin, an unconfirmed or suspended
+            # account, TRIAL_SECONDS 0, and anyone who already holds a trial.
+            if trial.give(session, user, now, settings, after_pilot=True) is not None:
+                changed.trials = 1
     return changed
+
+
+def trials_owed(session: Session, now: datetime, settings: Settings) -> int:
+    """How many people whose pilot would end now would be given the trial: confirmed, active, not
+    an admin, no trial grant of their own, and `TRIAL_SECONDS` above 0. (A daily budget, if one is
+    set, can reduce it at the run.)"""
+    if not trial.enabled(settings):
+        return 0
+    owners = {
+        u
+        for u in session.scalars(
+            _pilot_grants_in_force(now, EVERYONE).with_only_columns(HourGrant.user_id).distinct()
+        ).all()
+        if u is not None
+    }
+    owed = 0
+    for user in session.scalars(select(User).where(User.id.in_(owners))):
+        if user.is_admin or user.status != "active" or user.email_verified_at is None:
+            continue
+        if not trial.had_one(session, user, ("trial",)):
+            owed += 1
+    return owed
 
 
 # ---- the run ----
@@ -357,6 +397,7 @@ def check_guards(
     now: datetime,
     max_age_minutes: int = MAX_AGE_MINUTES,
     end_pilot: bool = False,
+    trial_for_ended_pilot: bool = False,
 ) -> datetime:
     """Everything that must hold before anything is read or changed. Returns `T` as UTC. Counts
     only in every message."""
@@ -365,6 +406,8 @@ def check_guards(
             "--before is required: the moment the closeout starts, as an ISO 8601 timestamp with "
             "its zone, for example 2026-11-22T09:30:00Z. The same value goes in BILLING_LIVE_SINCE."
         )
+    if trial_for_ended_pilot and not end_pilot:
+        raise Refusal("--trial-for-ended-pilot is only valid together with --end-pilot.")
     if max_age_minutes < 1:
         raise Refusal("--max-age-minutes must be 1 or more.")
     try:
@@ -488,6 +531,7 @@ def run(
     out: Callable[[str], None] = print,
     max_age_minutes: int = MAX_AGE_MINUTES,
     end_pilot: bool = False,
+    trial_for_ended_pilot: bool = False,
 ) -> int:
     """The whole closeout. Returns the exit code. A database error outside one person's
     transaction prints its type only (a SQLAlchemy message carries the statement's values)."""
@@ -501,16 +545,21 @@ def run(
             out,
             max_age_minutes,
             end_pilot,
+            trial_for_ended_pilot,
         )
     except Exception as exc:
         out(f"FAILED ({type(exc).__name__}): nothing further was done. Read the lines above.")
         return EXIT_FAILED
 
 
-def _run(factory, settings, before_text, apply, now, out, max_age_minutes, end_pilot) -> int:
+def _run(
+    factory, settings, before_text, apply, now, out, max_age_minutes, end_pilot, trial_for_ended
+) -> int:
     try:
         with factory() as session:
-            before = check_guards(session, settings, before_text, now, max_age_minutes, end_pilot)
+            before = check_guards(
+                session, settings, before_text, now, max_age_minutes, end_pilot, trial_for_ended
+            )
     except Refusal as exc:
         out(f"REFUSED: {exc}")
         return EXIT_REFUSED
@@ -524,6 +573,14 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes, end_p
             "--end-pilot: every pilot hour grant still in force also ends now (an administrator's "
             "never; no mail, no bell entry). Those people will have no hours and no trial."
         )
+    if trial_for_ended:
+        out(
+            "--trial-for-ended-pilot: each person whose pilot ends in this run, who is confirmed, "
+            "active and not an administrator, is given ONE ordinary trial (the app's own trial "
+            "function, so length and days are what a new sign-up gets, from this run). This "
+            "deliberately bypasses the rule that a past pilot used the trial up, for this one-time "
+            "conversion only; a person who already holds a trial gets none."
+        )
     if not apply:
         out("Read the counts below, then run again with --apply.")
 
@@ -534,8 +591,12 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes, end_p
         session.rollback()
     report.people = len(who)
     report.end_pilot = end_pilot
+    report.trial_for_ended = trial_for_ended
+    report.trial_off = not trial.enabled(settings)
     if end_pilot:
         with factory() as session:
+            if trial_for_ended:
+                report.trials_owed = trials_owed(session, now, settings)
             report.pilot_people = len(
                 set(
                     session.scalars(
@@ -551,7 +612,9 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes, end_p
         for user_id in who:
             with factory() as session:
                 try:
-                    changed = close_person(session, user_id, before, now, end_pilot)
+                    changed = close_person(
+                        session, user_id, before, now, end_pilot, settings, trial_for_ended
+                    )
                     session.commit()
                 except Exception as exc:  # one person's failure never stops the others
                     session.rollback()
@@ -591,6 +654,13 @@ def _print_table(report: Report, apply: bool, out: Callable[[str], None]) -> Non
     out(f"People with rows to close: {report.people}")
     if report.end_pilot:
         out(f"People holding pilot hours in force (counted before): {report.pilot_people}")
+    if report.trial_for_ended:
+        if apply:
+            out(f"Ordinary trials given to ended-pilot people: {report.changed.trials}")
+        elif report.trial_off:
+            out("Trials to give: 0 (TRIAL_SECONDS is 0: no trial would be given).")
+        else:
+            out(f"Trials to give to ended-pilot people: {report.trials_owed}")
     header = f"{'':56}{'before':>8}"
     header += f"{'changed':>9}{'after':>7}" if apply else f"{'to change':>11}"
     out(header)
@@ -617,6 +687,11 @@ def main(argv: list[str] | None = None) -> int:
         help="also end every pilot hour grant still in force (owner decision; off by default)",
     )
     parser.add_argument(
+        "--trial-for-ended-pilot",
+        action="store_true",
+        help="with --end-pilot: give each ended-pilot person ONE ordinary trial (owner's option)",
+    )
+    parser.add_argument(
         "--max-age-minutes",
         type=int,
         default=MAX_AGE_MINUTES,
@@ -634,6 +709,7 @@ def main(argv: list[str] | None = None) -> int:
         apply=args.apply,
         max_age_minutes=args.max_age_minutes,
         end_pilot=args.end_pilot,
+        trial_for_ended_pilot=args.trial_for_ended_pilot,
     )
 
 
