@@ -420,11 +420,11 @@ def _gate(session: Session, join: ScheduledJoin, now: datetime, settings: Settin
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     ended = False
     if event is not None:
-        rule = (session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS).auto_join_rule
+        prefs = session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS
         decision = will_join(
             event,
             event.override,
-            JoinSettings(rule=rule, teams_join_enabled=settings.teams_join_enabled),
+            JoinSettings.for_user(prefs, teams_join_enabled=settings.teams_join_enabled),
             now=now,
         )
         if decision.reason == "ended":

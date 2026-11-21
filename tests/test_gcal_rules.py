@@ -33,8 +33,8 @@ def make(**fields) -> ParsedEvent:
     return replace(BASE, **fields)
 
 
-def settings(rule="all", teams=False) -> JoinSettings:
-    return JoinSettings(rule=rule, teams_join_enabled=teams)
+def settings(rule="all", teams=False, join_unanswered=False) -> JoinSettings:
+    return JoinSettings(rule=rule, teams_join_enabled=teams, join_unanswered=join_unanswered)
 
 
 # ---- the decision table (spec 7.5) ----
@@ -143,6 +143,103 @@ def test_the_one_click_override_joins_an_unanswered_invite_from_a_stranger():
     stranger = make(self_response="needsAction", organizer_self=False, organizer_same_org=False)
     assert will_join(stranger, True, settings("all"), now=NOW) == JoinDecision(True, "ok")
     assert will_join(stranger, None, settings("none"), now=NOW).reason == "rule_none"
+
+
+# ---- "Also join invites I haven't answered yet" (`join_unanswered`) ----
+#
+# The new cell of the truth table, written as its own function so it is not a copy of the code
+# under test: the box lifts the `not_accepted` wait and nothing else.
+
+UNANSWERED_RESPONSES = [None, "needsAction", "accepted", "tentative", "declined"]
+
+
+def expected_with_the_box(rule, organizer, response, same_org, box, override):
+    if response == "declined":
+        return (False, "declined")  # nothing lifts a decline, the override included
+    if override is False:
+        return (False, "override_off")
+    if override is True:
+        return (True, "ok")
+    if rule == "none":
+        return (False, "rule_none")
+    if rule == "organizer":
+        return (True, "ok") if organizer is True else (False, "not_organizer")
+    unanswered = response == "needsAction" or (response is None and organizer is False)
+    if unanswered and organizer is not True and not same_org and not box:
+        return (False, "not_accepted")
+    return (True, "ok")
+
+
+@pytest.mark.parametrize(
+    ("rule", "organizer", "response", "same_org", "box", "override"),
+    list(
+        itertools.product(
+            RULES, ORGANIZERS, UNANSWERED_RESPONSES, [True, False], [True, False], OVERRIDES
+        )
+    ),
+)
+def test_the_unanswered_box_truth_table(rule, organizer, response, same_org, box, override):
+    event = make(organizer_self=organizer, self_response=response, organizer_same_org=same_org)
+    got = will_join(event, override, settings(rule, join_unanswered=box), now=NOW)
+    assert got == JoinDecision(
+        *expected_with_the_box(rule, organizer, response, same_org, box, override)
+    )
+
+
+def test_the_box_joins_a_strangers_unanswered_invite_and_off_it_still_waits():
+    stranger = make(self_response="needsAction", organizer_self=False, organizer_same_org=False)
+    off = will_join(stranger, None, settings("all", join_unanswered=False), now=NOW)
+    on = will_join(stranger, None, settings("all", join_unanswered=True), now=NOW)
+    assert off == JoinDecision(False, "not_accepted")
+    assert on == JoinDecision(True, "ok")
+    # An invite with no entry for the owner at all is unanswered too.
+    group = make(self_response=None, organizer_self=False, organizer_same_org=False)
+    assert will_join(group, None, settings("all", join_unanswered=True), now=NOW).join is True
+
+
+def test_the_box_never_lifts_what_the_event_itself_forbids():
+    stranger = {"self_response": "needsAction", "organizer_self": False}
+    box = settings("all", join_unanswered=True)
+    forbidden = [
+        ({"self_response": "declined", "organizer_self": False}, "declined"),
+        ({**stranger, "status": "cancelled"}, "cancelled"),
+        ({**stranger, "all_day": True}, "all_day"),
+        ({**stranger, "platform": "teams"}, "teams_unsupported"),
+        ({**stranger, "event_type": "focusTime"}, "event_type"),
+        ({**stranger, "platform": None}, "no_link"),
+        ({**stranger, "ends_at": BASE.starts_at + timedelta(hours=7)}, "too_long"),
+        ({**stranger, "starts_at": NOW - timedelta(hours=2), "ends_at": NOW}, "ended"),
+    ]
+    for fields, reason in forbidden:
+        assert will_join(make(**fields), None, box, now=NOW) == JoinDecision(False, reason)
+        assert will_join(make(**fields), True, box, now=NOW) == JoinDecision(False, reason)
+
+
+def test_the_box_does_nothing_under_organizer_or_none():
+    stranger = make(self_response="needsAction", organizer_self=False, organizer_same_org=False)
+    assert will_join(
+        stranger, None, settings("organizer", join_unanswered=True), now=NOW
+    ).reason == ("not_organizer")
+    assert will_join(stranger, None, settings("none", join_unanswered=True), now=NOW).reason == (
+        "rule_none"
+    )
+
+
+def test_the_box_is_off_unless_it_is_asked_for():
+    assert JoinSettings(rule="all", teams_join_enabled=False).join_unanswered is False
+
+
+def test_for_user_reads_the_stored_box_and_a_missing_row_means_off():
+    from types import SimpleNamespace
+
+    row = SimpleNamespace(auto_join_rule="all", join_unanswered=True)
+    assert JoinSettings.for_user(row, teams_join_enabled=True) == JoinSettings(
+        "all", True, join_unanswered=True
+    )
+    assert JoinSettings.for_user(None, teams_join_enabled=False) == JoinSettings("all", False)
+    # A stand-in that predates the column (or a test double) reads as off.
+    old = SimpleNamespace(auto_join_rule="organizer")
+    assert JoinSettings.for_user(old, teams_join_enabled=False) == JoinSettings("organizer", False)
 
 
 # ---- what an override can never beat ----

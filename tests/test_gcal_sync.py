@@ -15,7 +15,7 @@ from sqlalchemy import inspect, select
 from app import gcal_sync
 from app.bot_provider import BotProviderError
 from app.calendar_source import SyncBatch
-from app.gcal_sync import ApplyResult, apply_batch
+from app.gcal_sync import ApplyResult, apply_batch, rerun_rules
 from app.models import (
     CalendarConnection,
     CalendarEvent,
@@ -316,6 +316,102 @@ def test_a_stranger_invite_follows_the_c7_rule(session, world):
     session.commit()
     apply(session, world, batch(invite))
     assert only_join(session).state == "scheduled"
+
+
+def stranger_invite(event_id: str = "evt-1", **fields) -> dict:
+    """An invite from outside the user's organisation that nobody has answered."""
+    return raw_event(
+        event_id,
+        organizer={"email": "stranger@elsewhere.test"},
+        attendees=[
+            {"email": "stranger@elsewhere.test", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.test", "self": True, "responseStatus": "needsAction"},
+        ],
+        **fields,
+    )
+
+
+def test_the_box_never_sends_the_bot_into_a_strangers_meeting_that_has_started(session, world):
+    """What only the box makes joinable waits for its start: a run time already past would put the
+    bot into a meeting under way (a sync, a re-run and a revive all go through `_reconcile`)."""
+    world.user_settings.join_unanswered = True
+    session.commit()
+    started = stranger_invite("evt-started", start=NOW - timedelta(minutes=5))
+    upcoming = stranger_invite("evt-soon", start=NOW + timedelta(minutes=10), code="aaa-bbbb-ccc")
+    apply(session, world, batch(started, upcoming))
+    by_title = {e.source_event_id: e for e in events(session)}
+    made = {j.calendar_event_id for j in joins(session)}
+    assert made == {by_title["evt-soon"].id}
+
+
+def test_a_meeting_under_way_that_the_person_switched_on_still_joins_with_the_box_ticked(
+    session, world
+):
+    world.user_settings.join_unanswered = True
+    session.commit()
+    started = stranger_invite("evt-started", start=NOW - timedelta(minutes=5))
+    apply(session, world, batch(started))
+    (event,) = events(session)
+    assert joins(session) == []
+    event.override = True  # the person's own switch: nothing to do with the box any more
+    session.commit()
+    apply(session, world, batch(started))
+    assert only_join(session).state == "scheduled"
+
+
+def test_a_started_meeting_the_rules_allow_without_the_box_is_unchanged_by_it(session, world):
+    """An ordinary event under way still gets its join within the 15 minutes, box or not."""
+    world.user_settings.join_unanswered = True
+    session.commit()
+    apply(session, world, batch(raw_event(start=NOW - timedelta(minutes=5))))
+    assert only_join(session).state == "scheduled"
+
+
+def test_a_join_made_by_someone_else_a_moment_ago_does_not_fail_the_rerun(
+    session, world, monkeypatch
+):
+    """The box's re-run and a sync can both see an event with no join; the unique index lets one
+    create it and the other carries on (no IntegrityError reaches the caller)."""
+    world.user_settings.join_unanswered = True
+    session.commit()
+    invite = stranger_invite()
+    apply(session, world, batch(invite))
+    (event,) = events(session)
+    only_join(session)  # the sync made it
+    monkeypatch.setattr("app.gcal_sync._joins_by_event_id", lambda *args, **kwargs: {})
+    result = rerun_rules(
+        session, world.conn, world.user_settings, [event], now=NOW, settings=SETTINGS
+    )
+    assert result.created == 0
+    assert len(joins(session)) == 1
+
+
+def test_a_stranger_invite_joins_when_the_person_ticked_the_box(session, world):
+    world.user_settings.join_unanswered = True
+    session.commit()
+    invite = raw_event(
+        organizer={"email": "stranger@elsewhere.test"},
+        attendees=[
+            {"email": "stranger@elsewhere.test", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.test", "self": True, "responseStatus": "needsAction"},
+        ],
+    )
+    apply(session, world, batch(invite))
+    assert only_join(session).state == "scheduled"
+
+
+def test_a_declined_stranger_invite_never_joins_even_with_the_box_ticked(session, world):
+    world.user_settings.join_unanswered = True
+    session.commit()
+    invite = raw_event(
+        organizer={"email": "stranger@elsewhere.test"},
+        attendees=[
+            {"email": "stranger@elsewhere.test", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.test", "self": True, "responseStatus": "declined"},
+        ],
+    )
+    apply(session, world, batch(invite))
+    assert joins(session) == []
 
 
 def test_an_unanswered_invite_from_the_users_own_workspace_joins(session):

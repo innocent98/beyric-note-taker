@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Alert, Button, Icon, SelectField } from "@/components/ui";
+import { Alert, Button, Checkbox, Icon, SelectField } from "@/components/ui";
 import type { AlertKind } from "@/components/ui/alert";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
@@ -81,12 +81,26 @@ function messageFor(notice: CalendarNotice, state: CalendarState | null): Messag
   }
 }
 
-// The designer's three rules (`autoRules` in Beyric Note Taker.dc.html).
+// The designer's three rules (`autoRules` in Beyric Note Taker.dc.html). LEAD-DESIGNED (2026-11-21):
+// the first rule's sentence says what it does. Without the box below it (`join_unanswered`) an invite
+// nobody answered from outside the person's organisation waits for them, so the sentence names that
+// exception while the box is off; with the box ticked it is the designer's original sentence.
 const RULES = [
   ["all", "All meetings with a video link", "Every event on your calendar with a meeting link."],
   ["organizer", "Only meetings I organise", "Skip meetings other people invited you to."],
   ["none", "Only when I turn it on", "Pick meetings one by one from the Upcoming list."],
 ] as const;
+const ALL_EXCEPT_UNANSWERED =
+  "Every event on your calendar with a meeting link, except invites you haven't answered from outside your organisation.";
+
+// LEAD-DESIGNED (2026-11-21), not in the designer's file: the box under the first rule. The words
+// are the lead's; the box is the designer's `Checkbox` and the help line is the rules' own
+// description style (`cal-rule-desc`).
+const UNANSWERED_LABEL = "Also join invites I haven't answered yet";
+const UNANSWERED_HELP_OFF =
+  "Off: the note taker waits until you accept an invite from someone outside your organisation.";
+const UNANSWERED_HELP_ON = "On: the note taker joins them without waiting for you to accept.";
+const UNANSWERED_HELP_OTHER_RULE = "Only used with All meetings with a video link.";
 
 const PERMISSIONS_URL = "https://myaccount.google.com/permissions";
 
@@ -125,7 +139,11 @@ export function SettingsCalendar({
   const busy = useRef(false);
   // A rule or template being written: shown as chosen while the server answers, then replaced by
   // its answer (or dropped, with a message, when it fails).
-  const [saving, setSaving] = useState<{ rule?: AutoJoinRule; template?: number } | null>(null);
+  const [saving, setSaving] = useState<{
+    rule?: AutoJoinRule;
+    template?: number;
+    join_unanswered?: boolean;
+  } | null>(null);
   const writing = useRef(false);
 
   // The redirect's query has been read; drop it so a reload does not show the message again.
@@ -181,7 +199,10 @@ export function SettingsCalendar({
     setDisconnecting(false);
   }
 
-  async function save(body: CalendarSettingsInput, shown: { rule?: AutoJoinRule; template?: number }) {
+  async function save(
+    body: CalendarSettingsInput,
+    shown: { rule?: AutoJoinRule; template?: number; join_unanswered?: boolean },
+  ) {
     if (writing.current) return;
     writing.current = true;
     setSaving(shown);
@@ -200,6 +221,8 @@ export function SettingsCalendar({
   // Outlook is drawn live only when the server says so; otherwise the page is exactly what it was.
   const outlookOn = state?.microsoft_enabled === true;
   const provider = (state?.provider ?? "google") as CalendarProvider;
+  // The box as shown: where it was just pressed to while the server answers, else what it stores.
+  const unanswered = saving?.join_unanswered ?? state?.join_unanswered ?? false;
   const connectLabel = (which: CalendarProvider) =>
     connecting === which
       ? "Connecting..."
@@ -360,8 +383,9 @@ export function SettingsCalendar({
                 <div id="cal-rules-label" className="cal-field-label">
                   Join automatically
                 </div>
-                {RULES.map(([code, label, description]) => {
+                {RULES.map(([code, label, plain]) => {
                   const chosen = (saving?.rule ?? state.rule) === code;
+                  const description = code === "all" && !unanswered ? ALL_EXCEPT_UNANSWERED : plain;
                   return (
                     <label key={code} className={`cal-rule${chosen ? " cal-rule-on" : ""}`}>
                       <input
@@ -383,6 +407,24 @@ export function SettingsCalendar({
                     </label>
                   );
                 })}
+              </div>
+
+              <div className="cal-rules">
+                <Checkbox
+                  id="join-unanswered"
+                  checked={unanswered}
+                  disabled={saving !== null || state.rule !== "all"}
+                  aria-describedby="join-unanswered-help"
+                  onChange={(event) => {
+                    const ticked = event.target.checked;
+                    if (ticked !== state.join_unanswered) void save({ join_unanswered: ticked }, { join_unanswered: ticked });
+                  }}
+                >
+                  {UNANSWERED_LABEL}
+                </Checkbox>
+                <div id="join-unanswered-help" className="cal-rule-desc">
+                  {state.rule !== "all" ? UNANSWERED_HELP_OTHER_RULE : unanswered ? UNANSWERED_HELP_ON : UNANSWERED_HELP_OFF}
+                </div>
               </div>
 
               {/* Only for a Google calendar: the tip is about Google Meet (the server sends no address
@@ -442,6 +484,7 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     last_error: null,
     rule: current.rule,
     rule_text: current.rule_text,
+    join_unanswered: current.join_unanswered,
     calendar_template_id: current.calendar_template_id,
     auto_join_paused: current.auto_join_paused,
     auto_join_paused_text: current.auto_join_paused_text,

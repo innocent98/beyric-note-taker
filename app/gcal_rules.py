@@ -50,6 +50,20 @@ class ParsedEventLike(Protocol):
 class JoinSettings:
     rule: str  # all, organizer or none
     teams_join_enabled: bool
+    # Under `all` only: also join an invite the user has not answered from outside their own
+    # organisation. Off unless the person ticked "Also join invites I haven't answered yet".
+    join_unanswered: bool = False
+
+    @classmethod
+    def for_user(cls, prefs, *, teams_join_enabled: bool) -> "JoinSettings":
+        """The settings of one person: `prefs` is their `UserSettings` row, or the stand-in for a
+        person without one (`rule` `all`, nothing else ticked). Every caller builds the settings
+        here, so a new setting cannot be read in one place and forgotten in another."""
+        return cls(
+            rule=prefs.auto_join_rule if prefs is not None else "all",
+            teams_join_enabled=teams_join_enabled,
+            join_unanswered=bool(getattr(prefs, "join_unanswered", False)),
+        )
 
 
 @dataclass(frozen=True)
@@ -66,7 +80,8 @@ def will_join(
     What the event is comes first (cancelled, all-day, not a normal event, over, too long,
     declined, no link we can use): nothing the user switches on can change it. Then the user's
     switch for this meeting (`override`), which beats the rule in both directions. Then the rule,
-    and under `all` an unanswered invite from outside the user's organisation still waits.
+    and under `all` an unanswered invite from outside the user's organisation still waits, unless
+    the person ticked `join_unanswered`. Declined never joins, ticked or not.
     """
     if settings.rule not in AUTO_JOIN_RULES:
         raise ValueError(f"unknown auto-join rule: {settings.rule!r}")
@@ -100,9 +115,14 @@ def will_join(
         # unanswered as one they have not answered; no organiser information is a solo event.
         event.self_response is None and event.organizer_self is False
     )
-    if unanswered and event.organizer_self is not True and not event.organizer_same_org:
+    if (
+        unanswered
+        and not settings.join_unanswered
+        and event.organizer_self is not True
+        and not event.organizer_same_org
+    ):
         # An invite nobody answered, from someone outside the user's own organisation: anyone can
         # send one with a meeting link, so it must not send the bot (and take the only slot)
-        # until the user accepts it or switches it on.
+        # until the user accepts it or switches it on, or has chosen to join such invites.
         return JoinDecision(False, "not_accepted")
     return JoinDecision(True, OK)

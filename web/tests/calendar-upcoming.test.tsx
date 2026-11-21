@@ -6,7 +6,7 @@ import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { ApiError } from "@/lib/api/client";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
 import type { CalendarEvent, CalendarState } from "@/lib/api/types";
-import { calendarBody, settingsBody, settingsError } from "./helpers";
+import { calendarBody, settingsBody, settingsError, unansweredBody } from "./helpers";
 
 const mocks = vi.hoisted(() => ({ override: vi.fn(), get: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { calendar: { override: mocks.override, get: mocks.get } } }));
@@ -48,6 +48,48 @@ describe("the operator has paused auto-join", () => {
   it("draws no line when it is not paused", () => {
     show(withEvents);
     expect(screen.queryByText(/Auto-join is paused/)).toBeNull();
+  });
+});
+
+// LEAD-DESIGNED (2026-11-21): a row whose switch is not "Will join" says why in a visible muted line,
+// not only in the tooltip. The bodies are the ones captured from the running app with the box off and
+// on (docs/fe-captures/join-unanswered/).
+describe("the reason is visible text", () => {
+  const WAITING = "Waiting for you to accept the invite. Settings can join these too.";
+  const boxOff = unansweredBody<CalendarState>("05-state-default.json");
+  const boxOn = unansweredBody<CalendarState>("07-settings-box-on.json");
+  const rowOf = (state: CalendarState, title: string) => {
+    show(state);
+    return rows().find((row) => within(row).queryByText(title) !== null) as HTMLElement;
+  };
+
+  it("shows the server's not-accepted reason under the platform line of an Off row, once, with no tooltip repeating it", () => {
+    const row = rowOf(boxOff, "Partnership idea");
+    const reason = within(row).getByText(WAITING);
+    expect(reason.closest("p")?.className).toBe("meta-line");
+    expect(reason.closest("p")?.previousElementSibling?.textContent).toContain("Google Meet");
+    expect(within(row).getByText("Off").closest("[title]")).toBeNull();
+    expect(within(row).getByRole("switch").getAttribute("aria-describedby")).toBe(reason.id);
+  });
+
+  it("shows the reason of a row that cannot be joined too", () => {
+    const row = rowOf(boxOff, "Budget review");
+    expect(within(row).getByText("You declined this invite").closest("p")?.className).toBe("meta-line");
+  });
+
+  it("draws no reason line for a row that will join", () => {
+    const row = rowOf(boxOn, "Partnership idea");
+    expect(within(row).getByText("Will join")).toBeTruthy();
+    expect(row.querySelectorAll("p.meta-line")).toHaveLength(1); // the platform line only
+    expect(within(row).queryByText(WAITING)).toBeNull();
+  });
+
+  it("takes the line away when the switch is pressed to on, and brings the new one back from the server's answer", async () => {
+    const off = boxOff.upcoming.find((e) => e.title === "Partnership idea") as CalendarEvent;
+    mocks.override.mockResolvedValue({ ...off, will_join: true, will_join_text: "Will join", reason_text: null });
+    const row = rowOf(boxOff, "Partnership idea");
+    await userEvent.click(within(row).getByRole("switch"));
+    await waitFor(() => expect(within(row).queryByText(WAITING)).toBeNull());
   });
 });
 
@@ -120,18 +162,16 @@ describe("connected", () => {
     const lunch = rows()[2];
     expect(within(lunch).getByText("No meeting link")).toBeTruthy();
     expect(within(lunch).getByText("Cannot join")).toBeTruthy();
-    expect(within(lunch).getByText("Cannot join").closest("[title]")?.getAttribute("title")).toBe(
-      "Add a meeting link to this event to record it",
-    );
+    expect(within(lunch).getByText("Add a meeting link to this event to record it")).toBeTruthy();
+    expect(within(lunch).getByText("Cannot join").closest("[title]")).toBeNull();
   });
 
-  it("shows Off with its reason on hover, and the designer's three words only", () => {
+  it("shows Off with its reason as a line, and the designer's three words only", () => {
     show(withEvents);
     const words = rows().map((row) => within(row).getByText(/^(Will join|Off|Cannot join)$/).textContent);
     expect(words).toEqual(["Will join", "Will join", "Cannot join", "Cannot join", "Cannot join", "Will join", "Off"]);
-    expect(within(rows()[6]).getByText("Off").closest("[title]")?.getAttribute("title")).toBe(
-      "Waiting for you to accept the invite",
-    );
+    expect(within(rows()[6]).getByText("Waiting for you to accept the invite")).toBeTruthy();
+    expect(within(rows()[6]).getByText("Off").closest("[title]")).toBeNull();
     expect(within(rows()[0]).getByText("Will join").closest("[title]")).toBeNull();
   });
 
@@ -228,9 +268,7 @@ describe("the switch on each row", () => {
     await userEvent.click(switchIn(rows()[0]));
     expect(mocks.override).toHaveBeenCalledWith(nowOff.id, false);
     await waitFor(() => expect(within(rows()[0]).getByText("Off")).toBeTruthy());
-    expect(within(rows()[0]).getByText("Off").closest("[title]")?.getAttribute("title")).toBe(
-      "You switched this meeting off",
-    );
+    expect(within(rows()[0]).getByText("You switched this meeting off")).toBeTruthy();
     expect(switchIn(rows()[0]).getAttribute("aria-checked")).toBe("false");
     expect(switchIn(rows()[1]).getAttribute("aria-checked")).toBe("true"); // the others stay as they were
   });
@@ -239,7 +277,7 @@ describe("the switch on each row", () => {
     mocks.override.mockResolvedValue(invited);
     show(withEvents);
     const row = rows()[6];
-    expect(switchIn(row).getAttribute("title")).toBe("Waiting for you to accept the invite");
+    expect(within(row).getByText("Waiting for you to accept the invite")).toBeTruthy();
     await userEvent.click(switchIn(row));
     expect(mocks.override).toHaveBeenCalledWith(invited.id, true);
     await waitFor(() => expect(within(rows()[6]).getByText("Will join")).toBeTruthy());
@@ -263,7 +301,7 @@ describe("the switch on each row", () => {
     show(withEvents);
     const row = rows()[2];
     expect(within(row).getByText("No meeting link")).toBeTruthy();
-    expect(switchIn(row).getAttribute("title")).toBe("Add a meeting link to this event to record it");
+    expect(within(row).getByText("Add a meeting link to this event to record it")).toBeTruthy();
     await userEvent.click(switchIn(row));
     expect(mocks.override).not.toHaveBeenCalled();
     expect(switchIn(row).getAttribute("aria-checked")).toBe("false");

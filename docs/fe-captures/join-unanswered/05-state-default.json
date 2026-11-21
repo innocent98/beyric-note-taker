@@ -1,0 +1,143 @@
+{
+  "note": "Connected, rule `all`, the box never ticked: `join_unanswered` is false, `rule_text` names the exception, and `Partnership idea` (an unanswered invite from outside the person's organisation) is `Off` with the reason `Waiting for you to accept the invite`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "account_email": "grace@example.test",
+      "provider": "google",
+      "last_sync_at": "2026-11-21T11:03:14.385299+01:00",
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
+      "join_unanswered": false,
+      "calendar_template_id": 1,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "microsoft_enabled": false,
+      "bot_invite_email": null,
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-21T13:03:00+01:00",
+          "ends_at": "2026-11-21T13:33:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 1,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 2,
+          "title": "Customer call",
+          "starts_at": "2026-11-21T16:03:00+01:00",
+          "ends_at": "2026-11-21T16:33:00+01:00",
+          "platform": "zoom",
+          "platform_label": "Zoom",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 2,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 3,
+          "title": "Lunch with Sam",
+          "starts_at": "2026-11-21T19:03:00+01:00",
+          "ends_at": "2026-11-21T19:33:00+01:00",
+          "platform": null,
+          "platform_label": null,
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "Add a meeting link to this event to record it",
+          "join_id": null,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 4,
+          "title": "Vendor sync",
+          "starts_at": "2026-11-22T13:03:00+01:00",
+          "ends_at": "2026-11-22T13:33:00+01:00",
+          "platform": "teams",
+          "platform_label": "Microsoft Teams",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 3,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 5,
+          "title": "Budget review",
+          "starts_at": "2026-11-22T17:03:00+01:00",
+          "ends_at": "2026-11-22T17:33:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "You declined this invite",
+          "join_id": null,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 6,
+          "title": "Sprint 🚀 planning · 週次",
+          "starts_at": "2026-11-23T13:03:00+01:00",
+          "ends_at": "2026-11-23T13:33:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 4,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 7,
+          "title": "Partnership idea",
+          "starts_at": "2026-11-23T18:03:00+01:00",
+          "ends_at": "2026-11-23T18:33:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Off",
+          "reason_text": "Waiting for you to accept the invite. Settings can join these too.",
+          "join_id": null,
+          "can_send_now": false,
+          "not_recorded_text": null
+        }
+      ]
+    }
+  }
+}

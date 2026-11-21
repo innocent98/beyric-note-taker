@@ -676,6 +676,37 @@ def test_a_meeting_switched_off_while_dispatching_sends_nothing(session, host, c
     assert host.bots_sent == 0 and state_of(session, join) == ("cancelled", "override_off")
 
 
+def make_an_unanswered_stranger_invite(session, join):
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    event.organizer_self = False
+    event.organizer_same_org = False
+    event.self_response = "needsAction"
+    session.commit()
+
+
+def test_an_unanswered_stranger_invite_is_stopped_at_run_time_unless_the_box_is_ticked(
+    session, host, cal, ada
+):
+    """With the box off, an unanswered invite from a stranger is stopped when its time comes: the
+    runner judges the join again with the stored settings, so a join made while the box was ticked
+    does not outlive the tick."""
+    join = materialise(session, ada, cal)
+    make_an_unanswered_stranger_invite(session, join)
+    ada.user_settings.join_unanswered = False
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 0 and state_of(session, join) == ("cancelled", "not_accepted")
+
+
+def test_an_unanswered_stranger_invite_is_sent_when_the_box_is_ticked(session, host, cal, ada):
+    join = materialise(session, ada, cal)
+    make_an_unanswered_stranger_invite(session, join)
+    ada.user_settings.join_unanswered = True
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 1 and state_of(session, join) == ("joined", None)
+
+
 def test_the_rule_organiser_only_stops_a_meeting_the_owner_does_not_organise(
     session, host, cal, ada
 ):

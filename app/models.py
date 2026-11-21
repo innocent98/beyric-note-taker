@@ -506,6 +506,10 @@ class UserSettings(Base):
         BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     auto_join_rule: Mapped[str] = mapped_column(String(16), default="all", server_default="all")
+    # Under the rule `all`: also join an invite this person has not answered, from outside their
+    # organisation. Off by default: every user's bot shares one Google account, so a stranger's
+    # invite must not send it anywhere until the person says so.
+    join_unanswered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     calendar_template_id: Mapped[int | None] = mapped_column(
         ForeignKey("templates.id", ondelete="SET NULL")
     )
