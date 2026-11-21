@@ -835,7 +835,7 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\", with the exception named while\n`join_unanswered` is false). `join_unanswered` is the person's tick on \"Also join invites I\nhaven't answered yet\" (false until they tick it): under `all`, an invite they have not\nanswered from outside their organisation joins only when it is true. It is stored whatever the\nrule, and does nothing under `organizer` or `none`: show the box disabled there.\n`calendar_template_id` is the person's own template chosen for calendar meetings, null for the\ndefault (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
           "account_email": {
             "anyOf": [
@@ -887,6 +887,10 @@
           },
           "connected": {
             "title": "Connected",
+            "type": "boolean"
+          },
+          "join_unanswered": {
+            "title": "Join Unanswered",
             "type": "boolean"
           },
           "last_error": {
@@ -976,6 +980,7 @@
           "last_error",
           "rule",
           "rule_text",
+          "join_unanswered",
           "calendar_template_id",
           "auto_join_paused",
           "auto_join_paused_text",
@@ -4507,7 +4512,7 @@
       },
       "SettingsIn": {
         "additionalProperties": false,
-        "description": "What to change; a field that is left out stays as it is. `rule` is `all` (every event with\na video link), `organizer` (only meetings the person organises) or `none` (only the meetings\nthey switch on). Changing it also clears their per-meeting switches on events that have not\nstarted, and re-decides every event from the new rule. `calendar_template_id` is one of the\nperson's own templates, or null for the default; it also reaches the meetings already planned\nthat have not sent a bot. At least one field is needed.",
+        "description": "What to change; a field that is left out stays as it is. `rule` is `all` (every event with\na video link), `organizer` (only meetings the person organises) or `none` (only the meetings\nthey switch on). Changing it also clears their per-meeting switches on events that have not\nstarted, and re-decides every event from the new rule. `calendar_template_id` is one of the\nperson's own templates, or null for the default; it also reaches the meetings already planned\nthat have not sent a bot. `join_unanswered` is the box \"Also join invites I haven't answered\nyet\" (a real true or false; never null). Changing it re-decides every stored event, like a\nrule change, but keeps the person's per-meeting switches. At least one field is needed.",
         "properties": {
           "calendar_template_id": {
             "anyOf": [
@@ -4519,6 +4524,17 @@
               }
             ],
             "title": "Calendar Template Id"
+          },
+          "join_unanswered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Unanswered"
           },
           "rule": {
             "anyOf": [
@@ -7087,7 +7103,7 @@
     },
     "/api/admin/users/{user_id}": {
       "delete": {
-        "description": "Delete an account and everything of theirs. The user is signed out and their slot is free\nat once; the worker then removes their data (bots stopped, recordings deleted at the bot provider and\nhere). The hours ledger keeps seconds only. 409 `last_admin`.",
+        "description": "Delete an account and everything of theirs. The user is signed out and their slot is free at\nonce; the worker then removes their data (bots stopped, recordings deleted at the bot provider\nand here). The hours ledger keeps seconds only. 409 `last_admin`.",
         "operationId": "delete_user",
         "parameters": [
           {
@@ -8161,7 +8177,7 @@
     },
     "/api/calendar/settings": {
       "put": {
-        "description": "Change the auto-join rule and/or the template for calendar meetings (CSRF header needed);\na field left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so\nthe page can redraw from it. A changed `rule` clears the person's per-meeting switches on events\nthat have not started, then decides every stored event again from the new rule: joins it now\nforbids are cancelled and joins it now allows are made or revived (the same rules the sync\napplies; nothing is fetched from Google and no bot is sent here). Choosing the rule that is\nalready set changes nothing. 404 `not_found` for a template that is not the caller's own,\n404 `calendar_unavailable` while the calendar features are off.",
+        "description": "Change the auto-join rule, the box \"Also join invites I haven't answered yet\" and/or the\ntemplate for calendar meetings (CSRF header needed); a field left out stays as it is. Answers\nwith the whole state, as `GET /api/calendar` does, so the page can redraw from it. A changed\n`rule` clears the person's per-meeting switches on events that have not started; a changed\n`rule` or `join_unanswered` then decides every stored event again: joins it now forbids are\ncancelled and joins it now allows are made or revived (the same rules the sync applies;\nnothing is fetched from Google and no bot is sent here; a join whose bot is in is never\ntouched). Choosing a value that is already set changes nothing. 404 `not_found` for a\ntemplate that is not the caller's own, 404 `calendar_unavailable` while the calendar features\nare off.",
         "operationId": "calendar_settings",
         "requestBody": {
           "content": {
@@ -9815,7 +9831,7 @@
     },
     "/api/meetings/{meeting_id}": {
       "delete": {
-        "description": "Delete a meeting and everything taken from it: transcript, notes, translations, decisions,\nopen questions, review items, notifications, mail still waiting to be sent, the audio and\nthe provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate\nor anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are\nbeing written, 409 `meeting_busy` when the worker holds it (try again), 502\n`recording_delete_failed` when the provider would not remove the recording: nothing is deleted.",
+        "description": "Delete a meeting and everything taken from it: transcript, notes, translations, decisions,\nopen questions, review items, notifications, mail still waiting to be sent, the audio and the\nprovider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate\nor anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are\nbeing written, 409 `meeting_busy` when the worker holds it (try again), 502\n`recording_delete_failed` when the provider would not remove the recording: nothing is\ndeleted.",
         "operationId": "delete_meeting",
         "parameters": [
           {

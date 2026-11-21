@@ -172,6 +172,14 @@ What the list is: events that have not ended and start within the next **7 days*
 most **100**. Cancelled events are left out. The eighth event in the capture (in 10 days) is not in
 the list.
 
+> **Changed 2026-11-21 (PR "Also join invites I haven't answered yet"):** `GET /api/calendar` and every
+> answer of `PUT /api/calendar/settings` now carry a boolean **`join_unanswered`**, and `rule_text` for the
+> rule `all` depends on it (section 3b has real bodies, `docs/fe-captures/join-unanswered/`, cited
+> **#uNN**). The bodies in `docs/fe-captures/calendar-state/` and `calendar-settings/` were captured
+> before that and **lack `join_unanswered`; their `rule_text` for `all` says "Joining all meetings"**,
+> which is now what the server says only when `join_unanswered` is true. Everything else in them is
+> unchanged.
+
 ### The rule (#09, #10, #11)
 
 `rule` is `all`, `organizer` or `none`; `rule_text` is the designer's label for the Meetings page
@@ -191,7 +199,8 @@ when you turn it on"). It is changed with `PUT /api/calendar/settings` (section 
 | `bot_invite_email` | The note taker's Google address when the server may tell people to add it to an event's guest list (so the bot skips the waiting room on Google Meet), else `null`. **Present as a string or `null`** (the generated type marks it optional). Draw the Settings tip only when `connected` is true, `provider` is `google` and this is a string. A public address, never write one in the web code. Real bodies and the rule: `docs/fe-integration-guide-bot-invite-tip.md` (#05 and #10 there) |
 | `last_sync_at` | UTC, with microseconds. The last time the calendar was read completely; `null` before the first sync. It does not move while syncs fail |
 | `last_error` | The last failure in plain words, or `null` after a success |
-| `rule`, `rule_text` | The auto-join rule and its label (always present) |
+| `rule`, `rule_text` | The auto-join rule and its label (always present). For `all`: "Joining all meetings" when `join_unanswered` is true, else "Joining all meetings except unanswered invites from outside your organisation" (#u05, #u07) |
+| `join_unanswered` | Boolean, **always present** since 2026-11-21: the tick on "Also join invites I haven't answered yet". `false` for everyone until they tick it. Stored whatever the rule is, but it only does anything under `all` (section 3b) |
 | `calendar_template_id` | The person's own template chosen for calendar meetings, or `null` for the default. **Always present.** Sign-up gives every account its General copy, so for real accounts it is a number (`1` in #05, #09); `null` appears only after the person is sent back to the default (#w10) |
 | `upcoming[].id` | The event's id: what the switch sends (`PUT /api/calendar/events/{id}/override`) |
 | `upcoming[].starts_at`, `ends_at` | UTC, `Z` suffix, whole seconds |
@@ -289,8 +298,9 @@ and 403 `csrf_rejected` without the header (#w39). Captured by `scripts/capture_
 
 ### `PUT /api/calendar/settings`: the rule and the template
 
-Body: `{"rule": "all" | "organizer" | "none"}`, `{"calendar_template_id": <id> | null}`, or both. **A field
-left out stays as it is.** At least one is required. The answer is the **whole state** (the same body as
+Body: any of `{"rule": "all" | "organizer" | "none"}`, `{"calendar_template_id": <id> | null}` and
+`{"join_unanswered": true | false}` (section 3b). **A field left out stays as it is.** At least one is
+required. The answer is the **whole state** (the same body as
 `GET /api/calendar`), so redraw the Settings card and anything that reads `rule`, `rule_text`,
 `calendar_template_id` or `upcoming` from it.
 
@@ -350,7 +360,7 @@ not-connected state with the new rule); the screen only offers them when connect
 | Status | `code` | Body | When |
 |---|---|---|---|
 | 404 | `not_found` | `{"error": {"code": "not_found", "message": "No such template"}}` (#w14, #w15) | the id is not one of the caller's own templates, or does not exist: the same answer, and **nothing is stored, the rule in the same body included** |
-| 422 | `validation_error` | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send a rule, a calendar_template_id, or both"}]}}` (#w16) | an empty body |
+| 422 | `validation_error` | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send a rule, a calendar_template_id, or both"}]}}` (#w16, **old wording**) | an empty body. Since 2026-11-21 the message is "Value error, send at least one of rule, join_unanswered or calendar_template_id" (#u17); never show it, the generic text is what the page uses |
 | 422 | `validation_error` | `... "fields": [{"field": "rule", "message": "Input should be 'all', 'organizer' or 'none'"}]` (#w17) | an unknown rule (`null` for `rule`, other fields and strings for the id are 422 too: covered by tests, not captured) |
 
 404 and 422 are developer text: show "Something went wrong. Please try again." and put the control back.
@@ -410,6 +420,94 @@ real sync job); what the runner will do with the changed join rows (task C12 is 
 #w21, #w27, #w33 are the stored `scheduled_joins` as the routes left them). A meeting already past its start by
 more than 15 minutes shows `Will join` after a switch on, but no join is made for it (spec 7.7, "In progress").
 
+## 3b. "Also join invites I haven't answered yet" (`join_unanswered`)
+
+**What it is, in the person's terms.** Under the rule "All meetings with a video link", an invite the person
+has not answered, from someone **outside their own organisation**, is **not** joined: the row says `Off`,
+"Waiting for you to accept the invite" (`not_accepted`). Every account's bot is the same Google account, so
+anyone could send an invite with a meeting link and the bot would knock on it. The box lifts that wait for
+this person. **It is off for everyone until they tick it.** Everything else stays: a declined invite never
+joins, and no link, cancelled, all-day, too long, over and the event types are unchanged; a per-meeting
+switch still beats the rule; the person's hours and bot limits are unchanged; the host still has to admit
+the bot. Captured by `scripts/capture_join_unanswered.py` into `docs/fe-captures/join-unanswered/NN-*.json`
+(**#uNN**), real app, real Postgres, real HTTP, the events through the real sync job over a fake Google, so
+**no real Google calendar was read** and no bot was sent. (The timestamps in these files carry `+01:00`
+because the scratch Postgres ran on a Mac in that zone; that is not part of this change.)
+
+### Reading it
+
+`GET /api/calendar` (#u05), trimmed to the changed fields and the two rows that matter:
+
+```json
+{
+  "rule": "all",
+  "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
+  "join_unanswered": false,
+  "upcoming": [
+    {"id": 5, "title": "Budget review", "will_join": false, "will_join_text": "Cannot join", "reason_text": "You declined this invite", "join_id": null},
+    {"id": 7, "title": "Partnership idea", "will_join": false, "will_join_text": "Off", "reason_text": "Waiting for you to accept the invite", "join_id": null}
+  ]
+}
+```
+
+(The real body has every field of section 2 for each row; see `05-state-default.json`.)
+
+### Writing it
+
+`PUT /api/calendar/settings` with `{"join_unanswered": true}` (#u07). Same CSRF header as every write. The
+answer is the **whole state**; redraw from it:
+
+```json
+{
+  "rule": "all",
+  "rule_text": "Joining all meetings",
+  "join_unanswered": true,
+  "upcoming": [
+    {"id": 7, "title": "Partnership idea", "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 6}
+  ]
+}
+```
+
+What the server did before it answered (#u06, #u08, #u13 are the stored joins): ticking made the join for
+`Partnership idea` (`scheduled`, #u08); clearing it again cancelled that same row with `skip_reason`
+`not_accepted` (#u13). Like a rule change, the server decides every stored event again; **unlike** a rule
+change it **keeps the person's per-meeting switches** (a rule change clears them on meetings that have not
+started). A meeting whose bot is already in is never touched. Sending the value that is already stored
+changes nothing (#u09).
+
+### Rules for the box on the Settings card
+
+- Draw it under "All meetings with a video link" as the checkbox "Also join invites I haven't answered yet".
+  The help line says what each state means (off: "the note taker waits until you accept an invite from
+  someone outside your organisation").
+- **It does nothing under `organizer` or `none`.** Draw it **disabled** there (still showing the stored
+  value) with "Only used with All meetings with a video link". The server keeps the value across a rule
+  change: after `{"rule": "organizer"}` the answer still says `join_unanswered: true` (#u10), and back under
+  `all` it counts again (#u11).
+- Send `{"join_unanswered": <the new value>}` alone when the box is pressed; never send `null` (422).
+- The Upcoming list now shows `reason_text` as visible text under the platform line whenever the switch is
+  not "Will join" (it used to be only the switch's tooltip).
+
+### Errors (all 422, nothing stored)
+
+| Body | Response (verbatim) |
+|---|---|
+| `{"join_unanswered": null}` (#u14) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send at least one of rule, join_unanswered or calendar_template_id"}]}}` |
+| `{"join_unanswered": "yes"}` (#u15) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "join_unanswered", "message": "Input should be a valid boolean"}]}}` |
+| `{"join_unanswered": true, "join_everything": true}` (#u16) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "join_everything", "message": "Extra inputs are not permitted"}]}}` |
+| `{}` (#u17) | the same body as the first row |
+
+The 401, 403 and 404 `calendar_unavailable` answers are the ones in section 3a; they were not captured again.
+
+### UX consequences to surface
+
+- **A tick can make the bot knock on a stranger's meeting.** The checkbox text must not be shortened to
+  something that hides that; the help line says who is meant ("someone outside your organisation").
+- **The Upcoming header label changes with the box** (`rule_text`): without the tick it names the exception.
+  Print `rule_text` as it comes.
+- **Turning the box off cancels the joins it had made** for meetings that have not started: rows flip back
+  to `Off` in the answer. Do not keep showing "Will join" from an older list.
+
 ## 4. Polling
 
 None needed. The pages read once per load (the Meetings page also re-reads whenever its meeting list
@@ -460,6 +558,10 @@ a minute; an automatic refresh is a later improvement.
 | `PUT /api/calendar/settings` (rule, template, both, empty, bad rule, foreign and unknown template, no calendar connected), `PUT .../override` (on, off, clear, an unaccepted invite, 409 declined, Teams and no link, foreign, unknown and after-disconnect 404, bad body, 401, 403, feature off) (#w01 to #w44) | verified live against the running app, Google faked; the stored `scheduled_joins` after each write are in the captures |
 | Rule change clears switches on meetings that have not started and keeps those in progress; choosing the same rule changes nothing; template reaches planned joins but not `joined` ones; another user's rows untouched; every 409 reason (declined, over, cancelled, all-day, too long, no link, Teams) | verified by the pytest suite against a real Postgres (63 tests, mutation-checked); the captures show declined, Teams, no link, the rule change and the same-rule call over HTTP |
 | What the runner (C12) does with the changed rows | **not verified**: C12 is not built |
+| `join_unanswered` read, ticked, ticked again, kept across a rule change, cleared; the joins made and cancelled by it; 422 for `null`, a non-boolean, an unknown field and an empty body (#u05 to #u18) | verified live against the running app, Google faked; the stored `scheduled_joins` after each write are in the captures |
+| `join_unanswered` truth table (every rule x organiser x response x same-organisation x box x switch), the re-run on change, the runner's re-check at send time, the migration round trip | verified by the pytest suite against a real Postgres (see the SOP `docs/sop/2026-11-21-join-unanswered-invites.md`) |
+| The older bodies in `calendar-state/` and `calendar-settings/` | **stale in one way**: no `join_unanswered`, and `rule_text` "Joining all meetings" for `all` (see the note in section 2) |
+| An unanswered invite from a real stranger on a real Google calendar, the bot being admitted | **not verified**: needs a real calendar and a real meeting |
 | A real Google calendar, a real consent screen (including the wording of Google's own unverified-app warning, which the page describes but has not seen), real `hd` and scope names | **not verified**: needs Adebayo's Gmail test account (checklist C3 and C5 live steps) |
 
 ## 7. `GET /api/calendar/recurring` (the Recurring cards on Meetings)

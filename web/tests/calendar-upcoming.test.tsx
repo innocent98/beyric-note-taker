@@ -6,7 +6,7 @@ import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { ApiError } from "@/lib/api/client";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
 import type { CalendarEvent, CalendarState } from "@/lib/api/types";
-import { calendarBody, settingsBody, settingsError } from "./helpers";
+import { calendarBody, settingsBody, settingsError, unansweredBody } from "./helpers";
 
 const mocks = vi.hoisted(() => ({ override: vi.fn(), get: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { calendar: { override: mocks.override, get: mocks.get } } }));
@@ -48,6 +48,48 @@ describe("the operator has paused auto-join", () => {
   it("draws no line when it is not paused", () => {
     show(withEvents);
     expect(screen.queryByText(/Auto-join is paused/)).toBeNull();
+  });
+});
+
+// LEAD-DESIGNED (2026-11-21): a row whose switch is not "Will join" says why in a visible muted line,
+// not only in the tooltip. The bodies are the ones captured from the running app with the box off and
+// on (docs/fe-captures/join-unanswered/).
+describe("the reason is visible text", () => {
+  const boxOff = unansweredBody<CalendarState>("05-state-default.json");
+  const boxOn = unansweredBody<CalendarState>("07-settings-box-on.json");
+  const rowOf = (state: CalendarState, title: string) => {
+    show(state);
+    return rows().find((row) => within(row).queryByText(title) !== null) as HTMLElement;
+  };
+
+  it("shows 'Waiting for you to accept the invite' under the platform line of an Off row, and keeps the tooltip", () => {
+    const row = rowOf(boxOff, "Partnership idea");
+    const reason = within(row).getByText("Waiting for you to accept the invite");
+    expect(reason.closest("p")?.className).toBe("meta-line");
+    expect(reason.closest("p")?.previousElementSibling?.textContent).toContain("Google Meet");
+    expect(within(row).getByText("Off").closest("[title]")?.getAttribute("title")).toBe(
+      "Waiting for you to accept the invite",
+    );
+  });
+
+  it("shows the reason of a row that cannot be joined too", () => {
+    const row = rowOf(boxOff, "Budget review");
+    expect(within(row).getByText("You declined this invite").closest("p")?.className).toBe("meta-line");
+  });
+
+  it("draws no reason line for a row that will join", () => {
+    const row = rowOf(boxOn, "Partnership idea");
+    expect(within(row).getByText("Will join")).toBeTruthy();
+    expect(row.querySelectorAll("p.meta-line")).toHaveLength(1); // the platform line only
+    expect(within(row).queryByText("Waiting for you to accept the invite")).toBeNull();
+  });
+
+  it("takes the line away when the switch is pressed to on, and brings the new one back from the server's answer", async () => {
+    const off = boxOff.upcoming.find((e) => e.title === "Partnership idea") as CalendarEvent;
+    mocks.override.mockResolvedValue({ ...off, will_join: true, will_join_text: "Will join", reason_text: null });
+    const row = rowOf(boxOff, "Partnership idea");
+    await userEvent.click(within(row).getByRole("switch"));
+    await waitFor(() => expect(within(row).queryByText("Waiting for you to accept the invite")).toBeNull());
   });
 });
 

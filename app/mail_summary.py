@@ -216,10 +216,7 @@ def auto_join_sentence(
     if not found.calendar_recurring_id:
         return None
     prefs = session.get(UserSettings, user.id)
-    join_settings = JoinSettings(
-        rule=prefs.auto_join_rule if prefs else "all",
-        teams_join_enabled=settings.teams_join_enabled,
-    )
+    join_settings = JoinSettings.for_user(prefs, teams_join_enabled=settings.teams_join_enabled)
     events = session.scalars(
         select(CalendarEvent).where(
             CalendarEvent.user_id == user.id,

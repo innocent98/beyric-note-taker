@@ -24,6 +24,11 @@ const subscribe = () => () => {};
 // switches can change. Pressing it writes the person's choice (`PUT .../override`) and the row is
 // replaced by the server's answer, words included.
 //
+// LEAD-DESIGNED (2026-11-21): the designer's file has the reason only as the switch's tooltip, so a
+// person saw "Off" with nothing to say why. A row whose switch is not "Will join" also shows the
+// server's `reason_text` as a muted line under the platform line (the row's own `meta-line`); the
+// tooltip stays.
+//
 // A row the note taker did not get into (`not_recorded_text`) says so under its title, with a
 // Send now while `can_send_now` (LEAD-DESIGNED, 2026-11-08: the designer's file draws neither); the
 // button is the same one the Not recorded list has and needs `sendNow`, the shared control.
@@ -223,6 +228,7 @@ function Row({
           {duration ? <span>{duration}</span> : null}
           {event.attendee_count > 0 ? <span>{plural(event.attendee_count, "person", "people")}</span> : null}
         </p>
+        {hint && !on ? <p className="meta-line">{hint}</p> : null}
         {missed ? (
           <p className="nr-reason">
             Not recorded: {missed}

@@ -174,7 +174,10 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "last_sync_at": None,
         "last_error": None,
         "rule": "all",
-        "rule_text": "Joining all meetings",
+        "rule_text": (
+            "Joining all meetings except unanswered invites from outside your organisation"
+        ),
+        "join_unanswered": False,
         "calendar_template_id": None,
         "auto_join_paused": False,
         "auto_join_paused_text": None,
@@ -526,7 +529,10 @@ def test_the_guest_count_is_a_number_never_a_list_of_addresses(web, session, lin
 @pytest.mark.parametrize(
     ("rule", "words"),
     [
-        ("all", "Joining all meetings"),
+        (
+            "all",
+            "Joining all meetings except unanswered invites from outside your organisation",
+        ),
         ("organizer", "Joining meetings you organise"),
         ("none", "Auto-join is off"),
     ],

@@ -181,7 +181,8 @@ describe("connected", () => {
     const group = screen.getByRole("radiogroup", { name: "Join automatically" });
     const radios = within(group).getAllByRole("radio") as HTMLInputElement[];
     expect(radios.map((r) => r.closest("label")!.textContent)).toEqual([
-      "All meetings with a video linkEvery event on your calendar with a meeting link.",
+      // Without the box ticked (the capture predates it) the first sentence names the exception.
+      "All meetings with a video linkEvery event on your calendar with a meeting link, except invites you haven't answered from outside your organisation.",
       "Only meetings I organiseSkip meetings other people invited you to.",
       "Only when I turn it onPick meetings one by one from the Upcoming list.",
     ]);

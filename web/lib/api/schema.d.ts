@@ -79,9 +79,9 @@ export interface paths {
         post?: never;
         /**
          * Delete User
-         * @description Delete an account and everything of theirs. The user is signed out and their slot is free
-         *     at once; the worker then removes their data (bots stopped, recordings deleted at the bot provider and
-         *     here). The hours ledger keeps seconds only. 409 `last_admin`.
+         * @description Delete an account and everything of theirs. The user is signed out and their slot is free at
+         *     once; the worker then removes their data (bots stopped, recordings deleted at the bot provider
+         *     and here). The hours ledger keeps seconds only. 409 `last_admin`.
          */
         delete: operations["delete_user"];
         options?: never;
@@ -362,14 +362,16 @@ export interface paths {
         get?: never;
         /**
          * Calendar Settings
-         * @description Change the auto-join rule and/or the template for calendar meetings (CSRF header needed);
-         *     a field left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so
-         *     the page can redraw from it. A changed `rule` clears the person's per-meeting switches on events
-         *     that have not started, then decides every stored event again from the new rule: joins it now
-         *     forbids are cancelled and joins it now allows are made or revived (the same rules the sync
-         *     applies; nothing is fetched from Google and no bot is sent here). Choosing the rule that is
-         *     already set changes nothing. 404 `not_found` for a template that is not the caller's own,
-         *     404 `calendar_unavailable` while the calendar features are off.
+         * @description Change the auto-join rule, the box "Also join invites I haven't answered yet" and/or the
+         *     template for calendar meetings (CSRF header needed); a field left out stays as it is. Answers
+         *     with the whole state, as `GET /api/calendar` does, so the page can redraw from it. A changed
+         *     `rule` clears the person's per-meeting switches on events that have not started; a changed
+         *     `rule` or `join_unanswered` then decides every stored event again: joins it now forbids are
+         *     cancelled and joins it now allows are made or revived (the same rules the sync applies;
+         *     nothing is fetched from Google and no bot is sent here; a join whose bot is in is never
+         *     touched). Choosing a value that is already set changes nothing. 404 `not_found` for a
+         *     template that is not the caller's own, 404 `calendar_unavailable` while the calendar features
+         *     are off.
          */
         put: operations["calendar_settings"];
         post?: never;
@@ -710,11 +712,12 @@ export interface paths {
         /**
          * Delete Meeting
          * @description Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
-         *     open questions, review items, notifications, mail still waiting to be sent, the audio and
-         *     the provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+         *     open questions, review items, notifications, mail still waiting to be sent, the audio and the
+         *     provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
          *     or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
          *     being written, 409 `meeting_busy` when the worker holds it (try again), 502
-         *     `recording_delete_failed` when the provider would not remove the recording: nothing is deleted.
+         *     `recording_delete_failed` when the provider would not remove the recording: nothing is
+         *     deleted.
          */
         delete: operations["delete_meeting"];
         options?: never;
@@ -2882,8 +2885,13 @@ export interface components {
          *     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
          *     `last_error` is the last failure in plain words, null when the last attempt worked.
          *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
-         *     and `rule_text` its label ("Joining all meetings"). `calendar_template_id` is the person's own
-         *     template chosen for calendar meetings, null for the default (their first, oldest, template).
+         *     and `rule_text` its label ("Joining all meetings", with the exception named while
+         *     `join_unanswered` is false). `join_unanswered` is the person's tick on "Also join invites I
+         *     haven't answered yet" (false until they tick it): under `all`, an invite they have not
+         *     answered from outside their organisation joins only when it is true. It is stored whatever the
+         *     rule, and does nothing under `organizer` or `none`: show the box disabled there.
+         *     `calendar_template_id` is the person's own template chosen for calendar meetings, null for the
+         *     default (their first, oldest, template).
          *     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
          *     (`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and
          *     `auto_join_paused_text` is the line to show (null when it is not paused).
@@ -2909,6 +2917,8 @@ export interface components {
             calendar_template_id: number | null;
             /** Connected */
             connected: boolean;
+            /** Join Unanswered */
+            join_unanswered: boolean;
             /** Last Error */
             last_error: string | null;
             /** Last Sync At */
@@ -4184,11 +4194,15 @@ export interface components {
          *     they switch on). Changing it also clears their per-meeting switches on events that have not
          *     started, and re-decides every event from the new rule. `calendar_template_id` is one of the
          *     person's own templates, or null for the default; it also reaches the meetings already planned
-         *     that have not sent a bot. At least one field is needed.
+         *     that have not sent a bot. `join_unanswered` is the box "Also join invites I haven't answered
+         *     yet" (a real true or false; never null). Changing it re-decides every stored event, like a
+         *     rule change, but keeps the person's per-meeting switches. At least one field is needed.
          */
         SettingsIn: {
             /** Calendar Template Id */
             calendar_template_id?: number | null;
+            /** Join Unanswered */
+            join_unanswered?: boolean | null;
             /** Rule */
             rule?: ("all" | "organizer" | "none") | null;
         };

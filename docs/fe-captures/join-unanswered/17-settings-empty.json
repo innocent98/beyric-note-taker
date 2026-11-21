@@ -1,0 +1,32 @@
+{
+  "note": "Nothing to change: 422. The message now names all three fields (it used to name two).",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "body",
+            "message": "Value error, send at least one of rule, join_unanswered or calendar_template_id"
+          }
+        ]
+      }
+    }
+  }
+}

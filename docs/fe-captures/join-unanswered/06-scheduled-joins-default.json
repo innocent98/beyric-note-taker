@@ -1,0 +1,37 @@
+{
+  "note": "The joins the sync made with the box off: `Partnership idea` has none.",
+  "content": {
+    "joins": [
+      {
+        "event": "Weekly planning",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Customer call",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Vendor sync",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Sprint 🚀 planning · 週次",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Quarterly offsite",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      }
+    ]
+  }
+}

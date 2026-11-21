@@ -65,7 +65,9 @@ SYNCABLE = ("connected", "degraded")
 MAX_PER_RUN = 50
 ERROR_LIMIT = 300
 # What a user without a settings row gets (sign-up creates one, so this is a safety net).
-DEFAULT_USER_SETTINGS = SimpleNamespace(auto_join_rule="all", calendar_template_id=None)
+DEFAULT_USER_SETTINGS = SimpleNamespace(
+    auto_join_rule="all", calendar_template_id=None, join_unanswered=False
+)
 
 # The bot keeps trying to get in until this long after the start (spec 7.6).
 DEADLINE_AFTER_START = timedelta(minutes=15)
@@ -174,9 +176,9 @@ def apply_batch(
     settings: Settings | None = None,
     provider: BotProvider | None = None,
 ) -> ApplyResult:
-    """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule` and
-    `calendar_template_id`. `provider` is only needed (and only built when absent) to stop a bot
-    whose event was cancelled."""
+    """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule`,
+    `join_unanswered` and `calendar_template_id`. `provider` is only needed (and only built when
+    absent) to stop a bot whose event was cancelled."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     settings = settings or get_settings()
@@ -185,8 +187,8 @@ def apply_batch(
         conn=conn,
         now=now,
         lead=timedelta(seconds=settings.autojoin_lead_seconds),
-        join_settings=JoinSettings(
-            rule=user_settings.auto_join_rule, teams_join_enabled=settings.teams_join_enabled
+        join_settings=JoinSettings.for_user(
+            user_settings, teams_join_enabled=settings.teams_join_enabled
         ),
         template_id=_own_template(session, conn.user_id, user_settings.calendar_template_id),
     )
@@ -239,8 +241,8 @@ def rerun_rules(
         conn=conn,
         now=now,
         lead=timedelta(seconds=settings.autojoin_lead_seconds),
-        join_settings=JoinSettings(
-            rule=user_settings.auto_join_rule, teams_join_enabled=settings.teams_join_enabled
+        join_settings=JoinSettings.for_user(
+            user_settings, teams_join_enabled=settings.teams_join_enabled
         ),
         template_id=_own_template(session, conn.user_id, user_settings.calendar_template_id),
     )

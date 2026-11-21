@@ -1,0 +1,43 @@
+{
+  "note": "The re-run made the join for `Partnership idea` (state `scheduled`). `Budget review` (declined) still has none.",
+  "content": {
+    "joins": [
+      {
+        "event": "Weekly planning",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Customer call",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Vendor sync",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Sprint 🚀 planning · 週次",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Partnership idea",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Quarterly offsite",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      }
+    ]
+  }
+}

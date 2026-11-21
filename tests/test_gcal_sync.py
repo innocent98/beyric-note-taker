@@ -318,6 +318,34 @@ def test_a_stranger_invite_follows_the_c7_rule(session, world):
     assert only_join(session).state == "scheduled"
 
 
+def test_a_stranger_invite_joins_when_the_person_ticked_the_box(session, world):
+    world.user_settings.join_unanswered = True
+    session.commit()
+    invite = raw_event(
+        organizer={"email": "stranger@elsewhere.test"},
+        attendees=[
+            {"email": "stranger@elsewhere.test", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.test", "self": True, "responseStatus": "needsAction"},
+        ],
+    )
+    apply(session, world, batch(invite))
+    assert only_join(session).state == "scheduled"
+
+
+def test_a_declined_stranger_invite_never_joins_even_with_the_box_ticked(session, world):
+    world.user_settings.join_unanswered = True
+    session.commit()
+    invite = raw_event(
+        organizer={"email": "stranger@elsewhere.test"},
+        attendees=[
+            {"email": "stranger@elsewhere.test", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.test", "self": True, "responseStatus": "declined"},
+        ],
+    )
+    apply(session, world, batch(invite))
+    assert joins(session) == []
+
+
 def test_an_unanswered_invite_from_the_users_own_workspace_joins(session):
     world = make_world(session, hosted_domain="acme.example")
     invite = raw_event(

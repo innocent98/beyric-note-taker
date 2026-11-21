@@ -41,11 +41,17 @@ REASON_TEXT = {
 UNKNOWN_REASON_TEXT = "Will not join"  # a reason added to the rules before it was given words
 
 # The designer's label for the rule (the Meetings page's Upcoming header).
+# LEAD-DESIGNED: the designer's "Joining all meetings" is only true when the person ticked "Also
+# join invites I haven't answered yet"; without the tick `will_join` leaves out an unanswered
+# invite from outside their organisation, so the label says so.
 RULE_TEXT = {
     "all": "Joining all meetings",
     "organizer": "Joining meetings you organise",
     "none": "Auto-join is off",
 }
+ALL_EXCEPT_UNANSWERED_TEXT = (
+    "Joining all meetings except unanswered invites from outside your organisation"
+)
 
 RECONNECT_TEXT = {
     "revoked": "Google access was removed. Connect again to carry on.",
@@ -102,7 +108,9 @@ def join_reason(decision: JoinDecision) -> str | None:
     return REASON_TEXT.get(decision.reason, UNKNOWN_REASON_TEXT)
 
 
-def rule_text(rule: str) -> str:
+def rule_text(rule: str, join_unanswered: bool = False) -> str:
+    if rule == "all" and not join_unanswered:
+        return ALL_EXCEPT_UNANSWERED_TEXT
     return RULE_TEXT.get(rule, RULE_TEXT["all"])
 
 

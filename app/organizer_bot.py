@@ -125,11 +125,11 @@ def _can_place(
         return False
     if not connection_ok(other):
         return False
-    rule = (session.get(UserSettings, other.user_id) or DEFAULT_USER_SETTINGS).auto_join_rule
+    prefs = session.get(UserSettings, other.user_id) or DEFAULT_USER_SETTINGS
     decision = will_join(
         event,
         event.override,
-        JoinSettings(rule=rule, teams_join_enabled=settings.teams_join_enabled),
+        JoinSettings.for_user(prefs, teams_join_enabled=settings.teams_join_enabled),
         now=now,
     )
     if not decision.join:

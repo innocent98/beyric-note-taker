@@ -76,6 +76,12 @@ def stored_rule(session, user) -> str | None:
     return row.auto_join_rule if row else None
 
 
+def stored_box(session, user) -> bool | None:
+    session.expire_all()
+    row = session.get(UserSettings, user.id)
+    return row.join_unanswered if row else None
+
+
 def stored_override(session, event) -> bool | None:
     session.expire_all()
     return session.get(CalendarEvent, event.id).override
@@ -150,6 +156,10 @@ def test_each_of_the_three_rules_can_be_chosen(web, session, owner, linked, rule
         {"rule": "all", "auto_join_rule": "none"},
         {"calendar_template_id": "7"},
         {"calendar_template_id": True},
+        {"join_unanswered": None},
+        {"join_unanswered": "yes"},
+        {"join_unanswered": 1},
+        {"rule": "all", "join_unanswered": None},
     ],
 )
 def test_a_bad_settings_body_is_422_and_stores_nothing(web, session, owner, linked, body):
@@ -360,6 +370,158 @@ def test_one_users_rule_change_never_touches_another_users_events(
     assert stored_override(session, theirs) is True
     assert join_of(session, theirs).state == theirs_join.state == "scheduled"
     assert stored_rule(session, stranger) in (None, "all")
+
+
+# ---- "Also join invites I haven't answered yet" ----
+
+STRANGER_INVITE = {"organizer_self": False, "self_response": "needsAction"}
+
+
+def test_the_box_is_off_by_default_and_the_get_says_so(web, session, owner, linked):
+    body = web.get(URL).json()
+    assert body["join_unanswered"] is False
+    assert body["rule_text"].startswith("Joining all meetings except unanswered invites")
+    assert stored_box(session, owner) in (None, False)
+
+
+def test_putting_the_box_stores_it_and_answers_with_the_whole_state(web, session, owner, linked):
+    response = web.put(SETTINGS_URL, {"join_unanswered": True})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["join_unanswered"] is True
+    assert body["rule"] == "all" and body["rule_text"] == "Joining all meetings"
+    assert stored_box(session, owner) is True
+    assert web.get(URL).json()["join_unanswered"] is True
+    assert web.put(SETTINGS_URL, {"join_unanswered": False}).json()["join_unanswered"] is False
+    assert stored_box(session, owner) is False
+
+
+def test_an_absent_box_keeps_the_stored_value_and_so_does_changing_something_else(
+    web, session, owner, linked
+):
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    template = make_template(session, owner)
+    assert web.put(SETTINGS_URL, {"calendar_template_id": template.id}).status_code == 200
+    assert stored_box(session, owner) is True
+    assert web.put(SETTINGS_URL, {"rule": "organizer"}).json()["join_unanswered"] is True
+    assert stored_box(session, owner) is True  # kept under a rule where it does nothing
+    assert stored_rule(session, owner) == "organizer"
+
+
+def test_an_unknown_field_is_refused_and_the_box_stays(web, session, owner, linked):
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    error_of(
+        web.put(SETTINGS_URL, {"join_unanswered": False, "join_everything": True}),
+        422,
+        "validation_error",
+    )
+    assert stored_box(session, owner) is True
+
+
+def test_the_box_can_be_set_before_a_calendar_is_connected(web, session, owner):
+    body = web.put(SETTINGS_URL, {"join_unanswered": True}).json()
+    assert (body["connected"], body["join_unanswered"]) == (False, True)
+    assert stored_box(session, owner) is True
+
+
+def test_ticking_the_box_makes_an_unanswered_future_invite_join_and_schedules_it(
+    web, session, owner, linked
+):
+    template = make_template(session, owner)
+    web.put(SETTINGS_URL, {"calendar_template_id": template.id})
+    event = add_event(session, linked, 1, hours=2, **STRANGER_INVITE)
+    assert upcoming_of(web, event)["will_join"] is False
+    assert join_of(session, event) is None
+
+    body = web.put(SETTINGS_URL, {"join_unanswered": True}).json()
+    [item] = body["upcoming"]
+    assert (item["will_join"], item["will_join_text"], item["reason_text"]) == (
+        True,
+        "Will join",
+        None,
+    )
+    join = join_of(session, event)
+    assert join is not None and join.state == "scheduled"
+    assert join.template_id == template.id and join.native_id == event.native_id
+
+
+def test_clearing_the_box_cancels_a_join_that_has_not_started(web, session, linked):
+    event = add_event(session, linked, 1, hours=2, **STRANGER_INVITE)
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    scheduled = join_of(session, event)
+    assert scheduled.state == "scheduled"
+
+    body = web.put(SETTINGS_URL, {"join_unanswered": False}).json()
+    cancelled = join_of(session, event)
+    assert cancelled.id == scheduled.id
+    assert (cancelled.state, cancelled.skip_reason) == ("cancelled", "not_accepted")
+    [item] = body["upcoming"]
+    assert (item["will_join_text"], item["reason_text"]) == (
+        "Off",
+        "Waiting for you to accept the invite",
+    )
+
+
+def test_clearing_the_box_never_touches_a_join_whose_bot_is_in(web, session, linked):
+    event = add_event(session, linked, 1, hours=-0.2, length=1, **STRANGER_INVITE)
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    scheduled = join_of(session, event)
+    assert scheduled.state == "scheduled"
+    scheduled.state = "joined"  # the runner sent the bot
+    session.commit()
+    web.put(SETTINGS_URL, {"join_unanswered": False})
+    assert join_of(session, event).state == "joined"
+
+
+def test_the_box_keeps_the_per_meeting_switches_a_rule_change_would_clear(web, session, linked):
+    on = add_event(session, linked, 1, hours=2, override=True, **STRANGER_INVITE)
+    off = add_event(session, linked, 2, hours=3, override=False, **STRANGER_INVITE)
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    assert stored_override(session, on) is True and stored_override(session, off) is False
+    assert join_of(session, off) is None or join_of(session, off).state == "cancelled"
+
+
+def test_the_box_does_not_join_what_stays_forbidden(web, session, linked):
+    declined = add_event(
+        session, linked, 1, hours=2, organizer_self=False, self_response="declined"
+    )
+    no_link = add_event(
+        session,
+        linked,
+        2,
+        hours=3,
+        platform=None,
+        meeting_url=None,
+        native_id=None,
+        **STRANGER_INVITE,
+    )
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    assert join_of(session, declined) is None or join_of(session, declined).state == "cancelled"
+    assert join_of(session, no_link) is None
+    assert upcoming_of(web, declined)["will_join_text"] == "Cannot join"
+
+
+def test_the_box_has_no_effect_under_the_other_rules(web, session, linked):
+    event = add_event(session, linked, 1, hours=2, **STRANGER_INVITE)
+    web.put(SETTINGS_URL, {"rule": "organizer"})
+    web.put(SETTINGS_URL, {"join_unanswered": True})
+    assert join_of(session, event) is None or join_of(session, event).state == "cancelled"
+    assert upcoming_of(web, event)["reason_text"] == "Skipped because you are not the organiser"
+    web.put(SETTINGS_URL, {"rule": "all"})
+    assert join_of(session, event).state == "scheduled"  # the stored box counts again under all
+
+
+def test_one_users_box_never_touches_another_users_events(
+    capp, web, session, owner, stranger, google, linked
+):
+    other = browser(capp, OTHER_EMAIL)
+    connect_google(other, google, email="other@example.test", sub="g-other-1")
+    theirs = add_event(session, connection_of(session, stranger), 9, hours=2, **STRANGER_INVITE)
+    mine = add_event(session, linked, 1, hours=2, **STRANGER_INVITE)
+    assert web.put(SETTINGS_URL, {"join_unanswered": True}).status_code == 200
+    assert join_of(session, mine).state == "scheduled"
+    assert join_of(session, theirs) is None
+    assert stored_box(session, stranger) in (None, False)
 
 
 # ---- the per-meeting switch ----
