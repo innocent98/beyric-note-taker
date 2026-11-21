@@ -966,16 +966,145 @@ def test_the_flag_needs_end_pilot(session, factory, world, pilots):
     assert snapshot(session) == snap
 
 
-def test_with_trial_seconds_zero_no_trial_is_given(session, factory, world, pilots):
-    code, out = run(factory, end_pilot=True, trial_for_ended_pilot=True)  # TRIAL_SECONDS default 0
-    assert code == 0 and "Trials to give: 0 (TRIAL_SECONDS is 0" in out
+def test_with_trial_seconds_zero_the_flag_refuses_rather_than_end_a_pilot_for_nothing(
+    session, factory, world, pilots
+):
+    snap = snapshot(session)
 
-    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True)
+    for apply in (False, True):  # TRIAL_SECONDS is 0 by default
+        code, out = run(factory, apply=apply, end_pilot=True, trial_for_ended_pilot=True)
+        assert code == 2 and "needs TRIAL_SECONDS above 0" in out, out
+    assert snapshot(session) == snap  # the pilot did NOT end
+    # without the flag the same settings still end the pilot (the owner's other option)
+    assert run(factory, apply=True, end_pilot=True)[0] == 0
 
+
+def test_a_daily_trial_budget_too_small_for_the_people_owed_refuses(
+    session, factory, world, pilots
+):
+    other = make_user(session, "yan@example.test")
+    add_grant(session, other, "pilot")  # two eligible people now: zed and yan
+    snap = snapshot(session)
+
+    code, out = run(
+        factory,
+        apply=True,
+        end_pilot=True,
+        trial_for_ended_pilot=True,
+        cfg=settings(trial_seconds=3 * HOUR, trial_daily_budget_seconds=3 * HOUR),
+    )
+
+    assert code == 2 and "daily trial budget" in out and "2 trial(s)" in out, out
+    assert snapshot(session) == snap
+    # a budget that covers both lets it run
+    code, out = run(
+        factory,
+        apply=True,
+        end_pilot=True,
+        trial_for_ended_pilot=True,
+        cfg=settings(trial_seconds=3 * HOUR, trial_daily_budget_seconds=6 * HOUR),
+    )
     assert code == 0, out
-    assert trials_of(session, pilots.zed) == []
+    assert len(trials_of(session, pilots.zed)) == len(trials_of(session, other)) == 1
+
+
+def test_an_eligible_person_who_gets_no_trial_keeps_their_pilot_and_a_rerun_retries(
+    session, factory, world, pilots, monkeypatch
+):
+    from app import trial
+
+    cfg = settings(**TRIAL_CFG)
+    real = trial.give
+    monkeypatch.setattr(trial, "give", lambda *a, **kw: None)  # nothing given, nothing raised
+
+    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)
+
+    assert code == 1 and "PROOF: FAILED" in out and "FAILED for one person (TrialNotGiven)" in out
     session.expire_all()
-    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW  # the pilot still ended
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW + timedelta(days=20)
+    assert trials_of(session, pilots.zed) == []
+    monkeypatch.setattr(trial, "give", real)  # the cause is gone: the re-run does both
+    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)
+    assert code == 0, out
+    session.expire_all()
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW
+    assert len(trials_of(session, pilots.zed)) == 1
+
+
+def test_pilot_usage_nobody_charged_does_not_come_off_the_new_trial(
+    session, factory, world, pilots, monkeypatch
+):
+    """Usage counted during the pilot with no allocation would, once the pilot has ended, be taken
+    off whatever the person holds next. The closeout settles it onto the pilot first."""
+    from app import entitlements, hours
+    from app.models import UsageAllocation, UsageEntry
+    from app.usage import email_hash
+
+    entry = UsageEntry(
+        user_id=pilots.zed.id,
+        email_hash=email_hash(pilots.zed.email),
+        seconds=HOUR,
+        counted_at=ERA + timedelta(days=1),
+    )
+    session.add(entry)
+    session.commit()  # counted, never allocated: the S1 backlog
+    cfg = settings(**TRIAL_CFG)
+    after = NOW + timedelta(minutes=1)
+
+    # control: with the reconcile switched off the trial loses the hour
+    real = hours.reconcile_backlog
+    monkeypatch.setattr(hours, "reconcile_backlog", lambda *a, **kw: 0)
+    assert run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)[0] == 0
+    assert entitlements.status(session, pilots.zed, after).seconds_left == 2 * HOUR
+    session.rollback()
+    # (put the world back for the real run)
+    session.execute(
+        text("delete from hour_grants where kind = 'trial' and user_id = :u"), {"u": pilots.zed.id}
+    )
+    session.execute(
+        text("update hour_grants set expires_at = :e where id = :i"),
+        {"e": NOW + timedelta(days=20), "i": pilots.zed_pilot.id},
+    )
+    session.commit()
+    monkeypatch.setattr(hours, "reconcile_backlog", real)
+
+    assert run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)[0] == 0
+
+    session.expire_all()
+    assert session.scalars(
+        select(UsageAllocation).where(UsageAllocation.usage_entry_id == entry.id)
+    ).all()  # the hour is now a row against the pilot
+    assert entitlements.status(session, pilots.zed, after).seconds_left == 3 * HOUR
+
+
+def test_a_deleted_persons_pilot_locks_the_person_who_signed_up_again(
+    session, factory, world, monkeypatch
+):
+    from app import hours
+    from app.usage import email_hash
+
+    again = make_user(session, "again@example.test")
+    ghost = HourGrant(
+        user_id=None,
+        email_hash=email_hash(again.email),
+        kind="pilot",
+        seconds=HOUR,
+        starts_at=ERA,
+        expires_at=NOW + timedelta(days=20),
+    )
+    session.add(ghost)
+    session.commit()
+    locked = []
+    real = hours.lock_person
+    monkeypatch.setattr(
+        hours, "lock_person", lambda sess, user: (locked.append(user.id), real(sess, user))
+    )
+
+    assert run(factory, apply=True, end_pilot=True)[0] == 0
+
+    assert again.id in locked
+    session.expire_all()
+    assert session.get(HourGrant, ghost.id).expires_at == NOW
 
 
 def test_the_dry_run_counts_the_trials_and_changes_nothing(session, factory, world, pilot_crowd):
