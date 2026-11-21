@@ -178,7 +178,7 @@ def test_a_dry_run_prints_counts_and_changes_nothing(session, factory, world):
     # ada and ben: 2 live subscriptions; 3 in-force bought grants (ada plan + pack, ben plan);
     # 2 cards; 1 abandoned checkout
     table = {kind: getattr(script.count(session, T, NOW), kind) for kind in script.KINDS}
-    assert table == {"subscriptions": 2, "grants": 3, "cards": 2, "payments": 1}
+    assert table == {"subscriptions": 2, "grants": 3, "cards": 2, "payments": 1, "pilot": 0}
 
 
 def test_apply_closes_every_kind_of_test_era_row(session, factory, world):
@@ -349,8 +349,8 @@ def test_one_persons_failure_rolls_back_that_person_and_the_rest_go_on(
 ):
     real = script.close_person
 
-    def broken_for_ada(sess, user_id, before, now):
-        changed = real(sess, user_id, before, now)  # real writes, then the failure
+    def broken_for_ada(sess, user_id, before, now, end_pilot=False):
+        changed = real(sess, user_id, before, now, end_pilot)  # real writes, then the failure
         if user_id == world.ada.id:
             raise RuntimeError("boom")
         return changed
@@ -556,7 +556,7 @@ def test_it_refuses_while_a_refund_of_a_test_payment_is_open(session, factory, w
     for apply in (False, True):
         code, out = run(factory, apply=apply)
         assert code == 2 and "refund(s) of test-era payments are still open" in out, out
-        assert "resolve it as made or not made" in out and "1 refund" in out
+        assert "as made or not made" in out and "1 refund" in out
     assert snapshot(session) == snap
 
 
