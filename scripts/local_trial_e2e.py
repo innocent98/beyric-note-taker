@@ -55,6 +55,7 @@ ROOT = P.ROOT
 OUT = ROOT / "docs" / "fe-captures" / "trial"
 P.OUT = OUT
 HOUR = 3600
+LAST_CAPTURE = 23  # the last capture number this script writes; higher ones are kept history
 PASSWORD = "-".join(["chosen", "local", "password", "1"])
 PEOPLE = {n: f"{n}@example.test" for n in ("gap", "ada")}
 
@@ -264,8 +265,11 @@ def main() -> None:
     if not sys.argv[1:]:
         sys.exit(__doc__)
     P.prepare_database()
+    # Delete only the captures this run recreates (01-23). 24-33 are the old pilot-end captures
+    # (the step was removed with the job); the billing guide cites them as history, so they stay.
     for old in OUT.glob("*.json"):
-        old.unlink()
+        if int(old.name.split("-", 1)[0]) <= LAST_CAPTURE:
+            old.unlink()
     OUT.mkdir(parents=True, exist_ok=True)
     engine = create_engine(P.scratch_url)
     proofs: list[str] = []
