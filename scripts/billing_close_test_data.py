@@ -23,7 +23,15 @@ Pause billing FIRST (`BILLING_ENABLED=false`, recreate web, worker and scheduler
 webhook route and the billing clock stop) and take `<T>` AFTER that, so no test row can be made
 between `<T>` and the flip. The script enforces it (see "REFUSES").
 
-What `--apply` does (and nothing else):
+With `--end-pilot` (owner decision 2026-11-21: nothing from the pilot is to carry over), every
+`pilot` hour grant still in force ALSO ends now: an administrator's never, trial, plan, pack and
+admin-gift grants never, no mail, no bell entry. Its dry run counts the grants and the people
+holding them. It refuses while a meeting is being recorded or a join is due within 10 minutes
+(the deploy gate's two questions), because it would end hours a recording is using. A person who
+held a pilot grant never gets a trial (`app/trial.py`), so after this they have no hours and no
+trial and must buy a plan.
+
+What `--apply` does (and nothing else, plus the pilot grants under `--end-pilot`):
 
 - subscriptions made before `<T>` that are `active` or `past_due` become `ended` (no next charge,
   no grace, no scheduled plan change; `canceled_at` is set when it was empty). No mail goes: this
@@ -58,7 +66,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import delete, func, or_, select, true, update  # noqa: E402
+from sqlalchemy import delete, func, or_, select, text, true, update  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
 from app import hours  # noqa: E402
@@ -68,6 +76,7 @@ from app.config import Settings  # noqa: E402
 from app.models import (  # noqa: E402
     HourGrant,
     Invoice,
+    Meeting,
     Payment,
     PaymentMethod,
     Refund,
@@ -82,12 +91,13 @@ PAYING_NOW = timedelta(minutes=30)
 MAX_AGE_MINUTES = 60
 EXIT_OK, EXIT_FAILED, EXIT_REFUSED = 0, 1, 2
 # the rows the table counts, in the order it prints them
-KINDS = ("subscriptions", "grants", "cards", "payments")
+KINDS = ("subscriptions", "grants", "cards", "payments", "pilot")
 LABELS = {
     "subscriptions": "live test-era subscriptions (active or past due)",
     "grants": "plan or pack hours still in force from test-era payments",
     "cards": "saved cards made before T",
     "payments": "payments still pending that were made before T",
+    "pilot": "pilot hour grants still in force (only with --end-pilot)",
 }
 
 
@@ -101,6 +111,7 @@ class Counts:
     grants: int = 0
     cards: int = 0
     payments: int = 0
+    pilot: int = 0  # counted only under --end-pilot
 
     def add(self, other: "Counts") -> None:
         for kind in KINDS:
@@ -116,6 +127,8 @@ class Report:
     changed: Counts = field(default_factory=Counts)
     after: Counts | None = None
     people: int = 0
+    end_pilot: bool = False
+    pilot_people: int = 0
     failed_people: int = 0
 
 
@@ -180,7 +193,21 @@ def _pending_test_payments(before: datetime, who):
     )
 
 
-def count(session: Session, before: datetime, now: datetime, who=EVERYONE) -> Counts:
+def _pilot_grants_in_force(now: datetime, who):
+    """Pilot hour grants not yet ended, except an administrator's (an admin's anything is never
+    touched). Grants whose person was deleted (no owner) are included."""
+    admins = select(User.id).where(User.is_admin.is_(True))
+    return select(HourGrant).where(
+        HourGrant.kind == "pilot",
+        or_(HourGrant.expires_at.is_(None), HourGrant.expires_at > now),
+        or_(HourGrant.user_id.is_(None), HourGrant.user_id.not_in(admins)),
+        _owner(HourGrant.user_id, who),
+    )
+
+
+def count(
+    session: Session, before: datetime, now: datetime, who=EVERYONE, end_pilot: bool = False
+) -> Counts:
     """How many rows of each kind are still open for this person (default: everyone)."""
 
     def n(query, id_column) -> int:
@@ -196,10 +223,13 @@ def count(session: Session, before: datetime, now: datetime, who=EVERYONE) -> Co
         grants=n(_in_force_test_grants(before, now, who), HourGrant.id),
         cards=n(_test_cards(before, who), PaymentMethod.id),
         payments=n(_pending_test_payments(before, who), Payment.id),
+        pilot=n(_pilot_grants_in_force(now, who), HourGrant.id) if end_pilot else 0,
     )
 
 
-def people(session: Session, before: datetime, now: datetime) -> list[int | None]:
+def people(
+    session: Session, before: datetime, now: datetime, end_pilot: bool = False
+) -> list[int | None]:
     """Everyone who has at least one row to close, as user ids (`None` stands for rows whose
     person was deleted). Ordered, so a run is repeatable."""
     found: set[int | None] = set()
@@ -210,13 +240,27 @@ def people(session: Session, before: datetime, now: datetime) -> list[int | None
         (_pending_test_payments(before, EVERYONE), Payment.payer_user_id),
     ):
         found.update(session.scalars(query.with_only_columns(owner).distinct()).all())
+    if end_pilot:
+        found.update(
+            session.scalars(
+                _pilot_grants_in_force(now, EVERYONE)
+                .with_only_columns(HourGrant.user_id)
+                .distinct()
+            ).all()
+        )
     return sorted(found, key=lambda u: (u is None, u or 0))
 
 
 # ---- closing one person ----
 
 
-def close_person(session: Session, user_id: int | None, before: datetime, now: datetime) -> Counts:
+def close_person(
+    session: Session,
+    user_id: int | None,
+    before: datetime,
+    now: datetime,
+    end_pilot: bool = False,
+) -> Counts:
     """Close this person's test-era rows in the caller's transaction (the caller commits). Each
     update re-checks the condition it selected on, so a row another process changed in between is
     left alone. Returns how many rows of each kind it changed."""
@@ -283,6 +327,23 @@ def close_person(session: Session, user_id: int | None, before: datetime, now: d
                 .returning(Payment.id)
             ).all()
         )
+    if end_pilot and not (user is not None and user.is_admin):
+        pilot_ids = session.scalars(
+            _pilot_grants_in_force(now, user_id).with_only_columns(HourGrant.id)
+        ).all()
+        if pilot_ids:
+            changed.pilot = len(
+                session.execute(
+                    update(HourGrant)
+                    .where(
+                        HourGrant.id.in_(pilot_ids),
+                        HourGrant.kind == "pilot",
+                        or_(HourGrant.expires_at.is_(None), HourGrant.expires_at > now),
+                    )
+                    .values(expires_at=now)
+                    .returning(HourGrant.id)
+                ).all()
+            )
     return changed
 
 
@@ -295,6 +356,7 @@ def check_guards(
     before_text: str | None,
     now: datetime,
     max_age_minutes: int = MAX_AGE_MINUTES,
+    end_pilot: bool = False,
 ) -> datetime:
     """Everything that must hold before anything is read or changed. Returns `T` as UTC. Counts
     only in every message."""
@@ -303,6 +365,8 @@ def check_guards(
             "--before is required: the moment the closeout starts, as an ISO 8601 timestamp with "
             "its zone, for example 2026-11-22T09:30:00Z. The same value goes in BILLING_LIVE_SINCE."
         )
+    if max_age_minutes < 1:
+        raise Refusal("--max-age-minutes must be 1 or more.")
     try:
         before = parse_instant(before_text, name="--before")
     except ValueError as exc:
@@ -351,9 +415,20 @@ def check_guards(
     if open_refunds:
         raise Refusal(
             f"{open_refunds} refund(s) of test-era payments are still open (outcome pending or "
-            "unknown). Close each first, while still on test keys: Admin, Billing, Refunds, "
-            "resolve it as made or not made. Then run again."
+            "unknown). They cannot be closed now: the pause switched the admin screen off. "
+            "Un-pause "
+            "(BILLING_ENABLED=true, recreate web, worker and scheduler), resolve each in Admin, "
+            "Billing, Refunds as made or not made, pause again, take a NEW T, and run again. "
+            "(The runbook's step 2 gate counts them BEFORE the pause so this does not happen.)"
         )
+    if end_pilot:
+        busy = _meetings_running_or_due(session)
+        if busy:
+            raise Refusal(
+                f"{busy} meeting(s) are being recorded, or a join is due within 10 minutes: "
+                "--end-pilot would end hours a recording is using. Wait until none is "
+                "(the runbook's gate check) and run again."
+            )
     paying = session.scalar(
         select(func.count()).where(
             Payment.status == "pending", Payment.created_at > now - PAYING_NOW
@@ -367,6 +442,24 @@ def check_guards(
             f"may be paying. Wait until {minutes} minutes after the last one, and run it again."
         )
     return before
+
+
+def _meetings_running_or_due(session: Session) -> int:
+    """The deploy gate's two questions (`deploy/gate.sh`): a meeting in progress, or a calendar
+    join waiting that is due within 10 minutes and not past its deadline."""
+    running = session.scalar(
+        select(func.count())
+        .select_from(Meeting)
+        .where(Meeting.status.in_(("bot_sent", "processing")))
+    )
+    due = session.scalar(
+        text(
+            "select count(*) from scheduled_joins "
+            "where state in ('scheduled', 'no_capacity', 'dispatching') "
+            "and run_at <= now() + interval '10 minutes' and deadline_at >= now()"
+        )
+    )
+    return (running or 0) + (due or 0)
 
 
 def without_invoice(session: Session, before: datetime) -> int:
@@ -394,22 +487,30 @@ def run(
     now: datetime | None = None,
     out: Callable[[str], None] = print,
     max_age_minutes: int = MAX_AGE_MINUTES,
+    end_pilot: bool = False,
 ) -> int:
     """The whole closeout. Returns the exit code. A database error outside one person's
     transaction prints its type only (a SQLAlchemy message carries the statement's values)."""
     try:
         return _run(
-            factory, settings, before_text, apply, now or datetime.now(UTC), out, max_age_minutes
+            factory,
+            settings,
+            before_text,
+            apply,
+            now or datetime.now(UTC),
+            out,
+            max_age_minutes,
+            end_pilot,
         )
     except Exception as exc:
         out(f"FAILED ({type(exc).__name__}): nothing further was done. Read the lines above.")
         return EXIT_FAILED
 
 
-def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> int:
+def _run(factory, settings, before_text, apply, now, out, max_age_minutes, end_pilot) -> int:
     try:
         with factory() as session:
-            before = check_guards(session, settings, before_text, now, max_age_minutes)
+            before = check_guards(session, settings, before_text, now, max_age_minutes, end_pilot)
     except Refusal as exc:
         out(f"REFUSED: {exc}")
         return EXIT_REFUSED
@@ -418,21 +519,39 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> in
     out(f"Billing closeout of test-era data, {mode}")
     out(f"T = {before:%Y-%m-%d %H:%M:%S} UTC: everything created before it is test-era.")
     out("Run deploy/backup.sh first: this cannot be undone by itself, the backup is the undo.")
+    if end_pilot:
+        out(
+            "--end-pilot: every pilot hour grant still in force also ends now (an administrator's "
+            "never; no mail, no bell entry). Those people will have no hours and no trial."
+        )
     if not apply:
         out("Read the counts below, then run again with --apply.")
 
     with factory() as session:
-        report = Report(before=count(session, before, now))
-        who = people(session, before, now)
+        report = Report(before=count(session, before, now, end_pilot=end_pilot))
+        who = people(session, before, now, end_pilot)
         uninvoiced = without_invoice(session, before)
         session.rollback()
     report.people = len(who)
+    report.end_pilot = end_pilot
+    if end_pilot:
+        with factory() as session:
+            report.pilot_people = len(
+                set(
+                    session.scalars(
+                        _pilot_grants_in_force(now, EVERYONE)
+                        .with_only_columns(HourGrant.user_id)
+                        .distinct()
+                    ).all()
+                )
+            )
+            session.rollback()
 
     if apply:
         for user_id in who:
             with factory() as session:
                 try:
-                    changed = close_person(session, user_id, before, now)
+                    changed = close_person(session, user_id, before, now, end_pilot)
                     session.commit()
                 except Exception as exc:  # one person's failure never stops the others
                     session.rollback()
@@ -441,7 +560,7 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> in
                     continue
             report.changed.add(changed)
         with factory() as session:
-            report.after = count(session, before, now)
+            report.after = count(session, before, now, end_pilot=end_pilot)
             session.rollback()
 
     _print_table(report, apply, out)
@@ -456,7 +575,8 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> in
     if report.failed_people == 0 and report.after.total() == 0:
         out(
             "PROOF: OK (no live test-era subscription, test card, expiring test hours or "
-            "pending test payment is left)"
+            "pending test payment is left"
+            + (", and no pilot hours are in force)" if end_pilot else ")")
         )
         return EXIT_OK
     out(
@@ -469,10 +589,14 @@ def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> in
 def _print_table(report: Report, apply: bool, out: Callable[[str], None]) -> None:
     out("")
     out(f"People with rows to close: {report.people}")
+    if report.end_pilot:
+        out(f"People holding pilot hours in force (counted before): {report.pilot_people}")
     header = f"{'':56}{'before':>8}"
     header += f"{'changed':>9}{'after':>7}" if apply else f"{'to change':>11}"
     out(header)
     for kind in KINDS:
+        if kind == "pilot" and not report.end_pilot:
+            continue
         row = f"{LABELS[kind]:56}{getattr(report.before, kind):>8}"
         if apply:
             assert report.after is not None
@@ -487,6 +611,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--before", help="T: ISO 8601 with a zone, in the past")
     parser.add_argument("--apply", action="store_true", help="change data (default: dry run)")
+    parser.add_argument(
+        "--end-pilot",
+        action="store_true",
+        help="also end every pilot hour grant still in force (owner decision; off by default)",
+    )
     parser.add_argument(
         "--max-age-minutes",
         type=int,
@@ -504,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
         args.before,
         apply=args.apply,
         max_age_minutes=args.max_age_minutes,
+        end_pilot=args.end_pilot,
     )
 
 

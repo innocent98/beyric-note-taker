@@ -199,7 +199,7 @@ def burn(session: Session, user: User, seconds: int) -> None:
 
 
 def buy(session: Session, user: User, plan: str = "plan_20h", country: str = "US") -> Payment:
-    profiles.change_country(session, user, country, now=LONG_AGO)
+    profiles.change_country(session, user, country, now=LONG_AGO, settings=None)
     session.commit()
     started = subs.start_plan_checkout(session, user, plan, SETTINGS, datetime.now(UTC))
     session.commit()
@@ -302,10 +302,10 @@ def scenario(name: str):
             else:
                 refund(session, payment, "first_plan_7d")
         if name in ("us", "pending"):
-            profiles.change_country(session, user, "US", now=LONG_AGO)
+            profiles.change_country(session, user, "US", now=LONG_AGO, settings=None)
             session.commit()
         if name == "ng":
-            profiles.change_country(session, user, "NG", now=LONG_AGO)
+            profiles.change_country(session, user, "NG", now=LONG_AGO, settings=None)
             session.commit()
         if name == "pending":
             subs.start_plan_checkout(session, user, "plan_20h", SETTINGS, now)

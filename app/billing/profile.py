@@ -151,13 +151,14 @@ _PAID_STATUSES = ("succeeded", "refunded", "partly_refunded")
 
 
 def country_lock(
-    db: Session, user_id: int, now: datetime, settings: Settings | None = None
+    db: Session, user_id: int, now: datetime, settings: Settings | None
 ) -> CountryLock | None:
     """None while the person has never paid and has no live subscription: the country is then
     free to change, instantly and without limit. Otherwise a `CountryLock` and the change rules
     apply. Once a person has paid it stays locked even after the plan ends. A payment made before
     the go-live cutover (`BILLING_LIVE_SINCE`, passed as `settings`) took no money and does not
-    lock."""
+    lock. `settings` is REQUIRED on purpose (a caller that left it out would silently get no
+    cutover): pass `None` only where there is no cutover to apply (tests, dev scripts)."""
     first_paid = db.scalar(
         select(func.min(func.coalesce(Payment.paid_at, Payment.created_at))).where(
             Payment.payer_user_id == user_id,
@@ -244,7 +245,7 @@ def apply_due_pending(profile: BillingProfile, now: datetime) -> bool:
 
 
 def country_change_allowed_at(
-    db: Session, user_id: int, now: datetime, settings: Settings | None = None
+    db: Session, user_id: int, now: datetime, settings: Settings | None
 ) -> datetime | None:
     """When the next change is allowed, or None when one is allowed now: always before the person
     has paid. Only real changes made since the lock began count (a row with an `old_country`); the
@@ -329,7 +330,7 @@ def change_country(
     *,
     routes_text: str = routing.DEFAULT_ROUTES,
     now: datetime | None = None,
-    settings: Settings | None = None,
+    settings: Settings | None,
 ) -> CountryChange:
     """Set or change the person's billing country under the rules in the module note. Raises a
     `routing.RoutingError` for a country that is missing, not a country, or not routable, and

@@ -39,6 +39,7 @@ from app import auth, services, signup
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
 from app.billing import profile as profiles
 from app.billing import routing
+from app.config import Settings
 from app.db import get_session
 from app.models import BillingProfile, User
 
@@ -163,7 +164,7 @@ def _profile_out(
     row: BillingProfile | None,
     routes_text: str,
     now: datetime,
-    settings=None,
+    settings: Settings,
 ) -> ProfileOut:
     """The profile as it applies at `now`: a scheduled change whose time has come is shown as
     applied (`profiles.country_view`) without this read writing anything."""

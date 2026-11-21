@@ -57,7 +57,7 @@ def history(session, user) -> list[tuple]:
 
 
 def set_country(session, user, country, now=NOW, **kw):
-    change = profiles.change_country(session, user, country, now=now, **kw)
+    change = profiles.change_country(session, user, country, now=now, **kw, settings=None)
     session.commit()
     return change
 
@@ -166,7 +166,9 @@ def test_a_crossing_change_is_judged_against_the_route_the_subscription_was_sold
     # an operator has since pointed every country, Nigeria too, at dollars through Flutterwave:
     # today's table says NG and GB pay alike, but the subscription was SOLD in naira (Paystack)
     table = "*=USD:flutterwave"
-    change = profiles.change_country(session, person, "GB", routes_text=table, now=NOW)
+    change = profiles.change_country(
+        session, person, "GB", routes_text=table, now=NOW, settings=None
+    )
 
     assert change.result == "scheduled"  # judged against the sold route, not today's table
 
@@ -343,7 +345,7 @@ def test_one_change_in_30_days_and_not_a_minute_sooner(session, person):
     assert session.get(BillingProfile, person_profile_id(session, person)).billing_country == "US"
 
     assert set_country(session, person, "NG", now=NOW + CHANGE_WINDOW).result == "applied"
-    assert profiles.country_change_allowed_at(session, person.id, NOW + CHANGE_WINDOW) == (
+    assert profiles.country_change_allowed_at(session, person.id, NOW + CHANGE_WINDOW, None) == (
         NOW + CHANGE_WINDOW + CHANGE_WINDOW
     )
 
@@ -355,7 +357,7 @@ def person_profile_id(session, user) -> int:
 def test_the_first_choice_is_not_a_change_so_one_fix_is_allowed_straight_after(session, person):
     has_paid(session, person)
     set_country(session, person, "NG", now=NOW)  # picked the wrong country by mistake
-    assert profiles.country_change_allowed_at(session, person.id, NOW) is None
+    assert profiles.country_change_allowed_at(session, person.id, NOW, None) is None
 
     assert set_country(session, person, "US", now=NOW + timedelta(minutes=2)).result == "applied"
 
@@ -369,7 +371,7 @@ def test_a_scheduled_change_counts_from_the_day_it_was_asked_not_the_day_it_appl
     seed_country(session, person, "US")
     set_country(session, person, "NG", now=NOW)  # takes effect in 12 days
 
-    allowed = profiles.country_change_allowed_at(session, person.id, NOW)
+    allowed = profiles.country_change_allowed_at(session, person.id, NOW, None)
 
     assert allowed == NOW + CHANGE_WINDOW
 
@@ -377,7 +379,7 @@ def test_a_scheduled_change_counts_from_the_day_it_was_asked_not_the_day_it_appl
 @pytest.mark.parametrize("bad", [None, "", "Nigeria", "ZZ", "UK"])
 def test_a_country_that_is_missing_or_not_one_is_refused_and_writes_nothing(session, person, bad):
     with pytest.raises(routing.RoutingError):
-        profiles.change_country(session, person, bad, now=NOW)
+        profiles.change_country(session, person, bad, now=NOW, settings=None)
     session.rollback()
     assert session.scalar(select(func.count()).select_from(BillingProfile)) == 0
     assert history(session, person) == []
@@ -385,7 +387,9 @@ def test_a_country_that_is_missing_or_not_one_is_refused_and_writes_nothing(sess
 
 def test_a_country_with_no_route_is_refused_and_writes_nothing(session, person):
     with pytest.raises(routing.CountryUnsupported):
-        profiles.change_country(session, person, "US", routes_text="NG=NGN:paystack", now=NOW)
+        profiles.change_country(
+            session, person, "US", routes_text="NG=NGN:paystack", now=NOW, settings=None
+        )
     session.rollback()
     assert session.scalar(select(func.count()).select_from(BillingProfile)) == 0
 
@@ -907,7 +911,9 @@ def test_two_simultaneous_changes_cannot_both_pass_the_30_day_rule(engine):
 
     def second_change():
         try:
-            profiles.change_country(b, b.get(User, user_id), "GB", now=NOW + timedelta(minutes=1))
+            profiles.change_country(
+                b, b.get(User, user_id), "GB", now=NOW + timedelta(minutes=1), settings=None
+            )
             outcome["result"] = "applied"
         except CountryChangeRefused as exc:
             outcome["result"] = exc.code
@@ -915,7 +921,9 @@ def test_two_simultaneous_changes_cannot_both_pass_the_30_day_rule(engine):
             b.rollback()
 
     try:
-        profiles.change_country(a, a.get(User, user_id), "US", now=NOW)  # holds the lock
+        profiles.change_country(
+            a, a.get(User, user_id), "US", now=NOW, settings=None
+        )  # holds the lock
         worker = threading.Thread(target=second_change)
         worker.start()
         time.sleep(1.0)
@@ -949,7 +957,7 @@ def test_a_change_waits_for_the_profile_row_lock(engine):
 
     def change():
         try:
-            profiles.change_country(b, b.get(User, user_id), "US", now=NOW)
+            profiles.change_country(b, b.get(User, user_id), "US", now=NOW, settings=None)
             b.commit()
             outcome["result"] = "applied"
         finally:
