@@ -26,8 +26,10 @@ const subscribe = () => () => {};
 //
 // LEAD-DESIGNED (2026-11-21): the designer's file has the reason only as the switch's tooltip, so a
 // person saw "Off" with nothing to say why. A row whose switch is not "Will join" also shows the
-// server's `reason_text` as a muted line under the platform line (the row's own `meta-line`); the
-// tooltip stays.
+// server's `reason_text` as a muted line under the platform line (the row's own `meta-line`), and
+// the switch points at it with `aria-describedby`. The tooltip is gone: it said the same thing a
+// second time (a reason is shown once; the tooltip stays nowhere, because every row with a reason
+// shows the line).
 //
 // A row the note taker did not get into (`not_recorded_text`) says so under its title, with a
 // Send now while `can_send_now` (LEAD-DESIGNED, 2026-11-08: the designer's file draws neither); the
@@ -228,7 +230,11 @@ function Row({
           {duration ? <span>{duration}</span> : null}
           {event.attendee_count > 0 ? <span>{plural(event.attendee_count, "person", "people")}</span> : null}
         </p>
-        {hint && !on ? <p className="meta-line">{hint}</p> : null}
+        {hint && !on ? (
+          <p className="meta-line" id={`cal-up-reason-${event.id}`}>
+            {hint}
+          </p>
+        ) : null}
         {missed ? (
           <p className="nr-reason">
             Not recorded: {missed}
@@ -261,7 +267,7 @@ function Row({
           aria-disabled={cannot ? true : undefined}
           aria-labelledby={`cal-up-name-${event.id} cal-up-state-${event.id}`}
           className={`cal-up-switch${cannot ? " cal-up-state-off" : ""}`}
-          title={hint ?? undefined}
+          aria-describedby={hint && !on ? `cal-up-reason-${event.id}` : undefined}
           onClick={onToggle}
         >
           <span className="cal-up-state" id={`cal-up-state-${event.id}`}>

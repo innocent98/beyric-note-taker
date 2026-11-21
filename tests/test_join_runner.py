@@ -687,8 +687,9 @@ def make_an_unanswered_stranger_invite(session, join):
 def test_an_unanswered_stranger_invite_is_stopped_at_run_time_unless_the_box_is_ticked(
     session, host, cal, ada
 ):
-    """The runner judges the join again with the stored settings, so a join made while the box was
-    ticked does not outlive it, and one made with the box ticked is sent."""
+    """With the box off, an unanswered invite from a stranger is stopped when its time comes: the
+    runner judges the join again with the stored settings, so a join made while the box was ticked
+    does not outlive the tick."""
     join = materialise(session, ada, cal)
     make_an_unanswered_stranger_invite(session, join)
     ada.user_settings.join_unanswered = False

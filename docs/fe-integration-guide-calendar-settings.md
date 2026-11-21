@@ -156,7 +156,7 @@ and time (the viewer's own zone, see section 5), title, `platform_label` (or **"
 it is `null`: the design's words), the duration, `N people` from `attendee_count` (left out when 0)
 and `will_join_text` at the right. **`will_join_text` is always one of the designer's three words:**
 
-| `will_join_text` | `reason_text` (the row's hover text; `null` when it will join) | Cases |
+| `will_join_text` | `reason_text` (show it as a line under the row's platform line since 2026-11-21, not as hover text; `null` when it will join) | Cases |
 |---|---|---|
 | `Will join` | `null` | normal |
 | `Off` | e.g. `Waiting for you to accept the invite` (#09), `Skipped because you are not the organiser` (#10), `Auto-join is set to only when you turn it on` (#11) | the rule or the person's own switch says no, and they could change it |
@@ -177,8 +177,9 @@ the list.
 > rule `all` depends on it (section 3b has real bodies, `docs/fe-captures/join-unanswered/`, cited
 > **#uNN**). The bodies in `docs/fe-captures/calendar-state/` and `calendar-settings/` were captured
 > before that and **lack `join_unanswered`; their `rule_text` for `all` says "Joining all meetings"**,
-> which is now what the server says only when `join_unanswered` is true. Everything else in them is
-> unchanged.
+> which is now what the server says only when `join_unanswered` is true. Their `not_accepted` `reason_text`
+> ("Waiting for you to accept the invite") now ends "... Settings can join these too." Everything else in
+> them is unchanged.
 
 ### The rule (#09, #10, #11)
 
@@ -424,7 +425,7 @@ more than 15 minutes shows `Will join` after a switch on, but no join is made fo
 
 **What it is, in the person's terms.** Under the rule "All meetings with a video link", an invite the person
 has not answered, from someone **outside their own organisation**, is **not** joined: the row says `Off`,
-"Waiting for you to accept the invite" (`not_accepted`). Every account's bot is the same Google account, so
+"Waiting for you to accept the invite. Settings can join these too." (`not_accepted`; before 2026-11-21 the text stopped after "invite"). Every account's bot is the same Google account, so
 anyone could send an invite with a meeting link and the bot would knock on it. The box lifts that wait for
 this person. **It is off for everyone until they tick it.** Everything else stays: a declined invite never
 joins, and no link, cancelled, all-day, too long, over and the event types are unchanged; a per-meeting
@@ -445,7 +446,7 @@ because the scratch Postgres ran on a Mac in that zone; that is not part of this
   "join_unanswered": false,
   "upcoming": [
     {"id": 5, "title": "Budget review", "will_join": false, "will_join_text": "Cannot join", "reason_text": "You declined this invite", "join_id": null},
-    {"id": 7, "title": "Partnership idea", "will_join": false, "will_join_text": "Off", "reason_text": "Waiting for you to accept the invite", "join_id": null}
+    {"id": 7, "title": "Partnership idea", "will_join": false, "will_join_text": "Off", "reason_text": "Waiting for you to accept the invite. Settings can join these too.", "join_id": null}
   ]
 }
 ```
@@ -486,7 +487,11 @@ changes nothing (#u09).
   `all` it counts again (#u11).
 - Send `{"join_unanswered": <the new value>}` alone when the box is pressed; never send `null` (422).
 - The Upcoming list now shows `reason_text` as visible text under the platform line whenever the switch is
-  not "Will join" (it used to be only the switch's tooltip).
+  not "Will join" (it used to be only the switch's tooltip, which is gone: show the reason once, and point
+  the switch at it with `aria-describedby`).
+- **A tick joins only meetings that have not started.** An unanswered stranger's meeting that is already
+  under way shows `Will join` with `join_id: null` after the tick (the rules say yes) and no bot is sent;
+  the person's own switch on that row joins it. Do not promise "joining now" next to the box.
 
 ### Errors (all 422, nothing stored)
 

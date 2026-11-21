@@ -384,7 +384,7 @@ def test_a_stranger_invite_waits_for_the_user(web, session, linked):
     assert item["will_join"] is False
     assert (item["will_join_text"], item["reason_text"]) == (
         "Off",
-        "Waiting for you to accept the invite",
+        "Waiting for you to accept the invite. Settings can join these too.",
     )
 
 

@@ -26,11 +26,12 @@ What it stores and what it never does:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import calendar_providers, calendar_states
@@ -338,15 +339,29 @@ def _reconcile(run: _Run, row: CalendarEvent, join: ScheduledJoin | None) -> Non
     if not (row.platform and row.native_id and row.meeting_url):
         return  # a link we recognise but cannot join yet (Teams until T1): nothing to schedule
     deadline_at = row.starts_at + DEADLINE_AFTER_START
+    # What only the box "Also join invites I haven't answered yet" makes joinable is a stranger's
+    # invite: it is joined only if it has not started (a run time already past would send the bot
+    # into a meeting under way). One that is under way can still be switched on by hand.
+    box_only = _joinable_only_by_the_box(run, row)
+    may_start = run.now <= deadline_at and not (box_only and row.starts_at <= run.now)
     if join is None:
-        if run.now <= deadline_at:  # past it and still on is "In progress", not an automatic join
+        if may_start:  # past it and still on is "In progress", not an automatic join
             _create_join(run, row, deadline_at)
     elif join.state == "cancelled":
-        if run.now <= deadline_at and not _closed_before_the_runner(run, join, row):
+        if may_start and not _closed_before_the_runner(run, join, row):
             _revive_join(run, join, row, deadline_at)
     elif join.state in MOVABLE or (join.state == "skipped" and join.skip_reason in MOVABLE_SKIPS):
         _move_join(run, join, row, deadline_at)
     # Anything else has a bot sent or is finished: the meeting is the truth now (spec 7.7).
+
+
+def _joinable_only_by_the_box(run: _Run, row: CalendarEvent) -> bool:
+    """Whether the event joins only because the person ticked the box: without the tick the rules
+    would say no (their own switch for the meeting, if any, is part of both answers)."""
+    if not run.join_settings.join_unanswered:
+        return False
+    without = replace(run.join_settings, join_unanswered=False)
+    return not will_join(row, row.override, without, now=run.now).join
 
 
 def _closed_before_the_runner(run: _Run, join: ScheduledJoin, row: CalendarEvent) -> bool:
@@ -361,22 +376,28 @@ def _closed_before_the_runner(run: _Run, join: ScheduledJoin, row: CalendarEvent
 
 
 def _create_join(run: _Run, row: CalendarEvent, deadline_at: datetime) -> None:
-    run.session.add(
-        ScheduledJoin(
-            user_id=run.conn.user_id,
-            source="calendar",
-            calendar_event_id=row.id,
-            platform=row.platform,
-            native_id=row.native_id,
-            meeting_url=row.meeting_url,
-            starts_at=row.starts_at,
-            ends_at=row.ends_at,
-            run_at=row.starts_at - run.lead,
-            deadline_at=deadline_at,
-            template_id=run.template_id,
-            state="scheduled",
-        )
+    join = ScheduledJoin(
+        user_id=run.conn.user_id,
+        source="calendar",
+        calendar_event_id=row.id,
+        platform=row.platform,
+        native_id=row.native_id,
+        meeting_url=row.meeting_url,
+        starts_at=row.starts_at,
+        ends_at=row.ends_at,
+        run_at=row.starts_at - run.lead,
+        deadline_at=deadline_at,
+        template_id=run.template_id,
+        state="scheduled",
     )
+    try:
+        # A savepoint: a sync and a re-run from the API (the box, a rule change) can both find the
+        # event without a join and both create one; the unique `(user_id, calendar_event_id)`
+        # index lets one win, and the loser must carry on (the join exists, which is the goal).
+        with run.session.begin_nested():
+            run.session.add(join)
+    except IntegrityError:
+        return
     run.result.created += 1
 
 

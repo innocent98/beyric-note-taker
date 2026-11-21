@@ -204,6 +204,7 @@ def test_the_box_never_lifts_what_the_event_itself_forbids():
         ({"self_response": "declined", "organizer_self": False}, "declined"),
         ({**stranger, "status": "cancelled"}, "cancelled"),
         ({**stranger, "all_day": True}, "all_day"),
+        ({**stranger, "platform": "teams"}, "teams_unsupported"),
         ({**stranger, "event_type": "focusTime"}, "event_type"),
         ({**stranger, "platform": None}, "no_link"),
         ({**stranger, "ends_at": BASE.starts_at + timedelta(hours=7)}, "too_long"),

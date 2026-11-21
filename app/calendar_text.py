@@ -34,7 +34,7 @@ REASON_TEXT = {
     "all_day": "All-day events are not joined",
     "event_type": "This kind of event is not joined",
     "not_organizer": "Skipped because you are not the organiser",
-    "not_accepted": "Waiting for you to accept the invite",
+    "not_accepted": "Waiting for you to accept the invite. Settings can join these too.",
     "rule_none": "Auto-join is set to only when you turn it on",
     "override_off": "You switched this meeting off",
 }

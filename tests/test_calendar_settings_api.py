@@ -445,6 +445,21 @@ def test_ticking_the_box_makes_an_unanswered_future_invite_join_and_schedules_it
     assert join.template_id == template.id and join.native_id == event.native_id
 
 
+def test_the_box_makes_no_join_for_a_strangers_started_meeting_but_one_for_a_later_one(
+    web, session, linked
+):
+    started = add_event(session, linked, 1, hours=-5 / 60, length=1, **STRANGER_INVITE)
+    soon = add_event(session, linked, 2, hours=10 / 60, **STRANGER_INVITE)
+    body = web.put(SETTINGS_URL, {"join_unanswered": True}).json()
+    assert join_of(session, started) is None
+    assert join_of(session, soon).state == "scheduled"
+    rows = {item["id"]: item for item in body["upcoming"]}
+    assert rows[started.id]["will_join_text"] == "Will join"  # the rules say yes ...
+    assert rows[started.id]["join_id"] is None  # ... but no bot is sent into a meeting under way
+    assert web.put(override_url(started.id), {"override": True}).status_code == 200
+    assert join_of(session, started).state == "scheduled"  # the person's own switch does it
+
+
 def test_clearing_the_box_cancels_a_join_that_has_not_started(web, session, linked):
     event = add_event(session, linked, 1, hours=2, **STRANGER_INVITE)
     web.put(SETTINGS_URL, {"join_unanswered": True})
@@ -458,7 +473,7 @@ def test_clearing_the_box_cancels_a_join_that_has_not_started(web, session, link
     [item] = body["upcoming"]
     assert (item["will_join_text"], item["reason_text"]) == (
         "Off",
-        "Waiting for you to accept the invite",
+        "Waiting for you to accept the invite. Settings can join these too.",
     )
 
 
@@ -712,7 +727,7 @@ def test_the_unanswered_invite_rule_is_unchanged_and_the_switch_is_the_one_click
     waiting = upcoming_of(web, stranger_invite)
     assert (waiting["will_join_text"], waiting["reason_text"]) == (
         "Off",
-        "Waiting for you to accept the invite",
+        "Waiting for you to accept the invite. Settings can join these too.",
     )
     assert upcoming_of(web, colleague_invite)["will_join"] is True
     assert upcoming_of(web, mine_unanswered)["will_join"] is True
