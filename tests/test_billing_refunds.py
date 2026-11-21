@@ -498,7 +498,7 @@ def test_a_refund_a_dead_process_left_pending_is_resolved_like_an_unknown_one(
     buy_plan(session, ada, providers.usd)
     payment = payment_of(session)
     # the process died after the row was written and before the provider answered
-    orphan = refunds._start(session, payment.id, "first_plan_7d", admin, None, T0 + DAY)
+    orphan = refunds._start(session, payment.id, "first_plan_7d", admin, None, settings(), T0 + DAY)
     assert orphan.status == "pending"
     with pytest.raises(refunds.Refused) as young:  # too young: the other process may be working
         refunds.resolve(session, orphan.id, "not_made", admin, T0 + DAY + timedelta(minutes=2))
@@ -640,7 +640,9 @@ def test_while_a_refund_is_pending_the_hours_it_covers_cannot_be_spent(
 ):
     buy_plan(session, ada, providers.usd)
     payment = payment_of(session)
-    refunds._start(session, payment.id, "first_plan_7d", admin, None, T0 + DAY)  # not yet answered
+    refunds._start(
+        session, payment.id, "first_plan_7d", admin, None, settings(), T0 + DAY
+    )  # not yet answered
     held = entitlements.held_after_backlog(session, ada, T0 + DAY + timedelta(seconds=1))
     assert [g.kind for g, _ in held] == []  # the grant is not in force: no recording can use it
 

@@ -30,6 +30,7 @@ from app.api_admin import require_admin
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
 from app.billing import refunds, subscriptions
 from app.billing.invoice_number import shown as shown_invoice_number
+from app.config import Settings
 from app.db import get_session
 from app.models import Invoice, Payment, Refund, User
 
@@ -127,7 +128,9 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _option(db: Session, payment: Payment, now: datetime) -> RefundOption | None:
+def _option(
+    db: Session, payment: Payment, now: datetime, settings: Settings
+) -> RefundOption | None:
     if payment.status != "succeeded":
         return None
     if payment.needs_refund_reason is not None:
@@ -143,7 +146,7 @@ def _option(db: Session, payment: Payment, now: datetime) -> RefundOption | None
             message="A renewal or an upgrade is not refunded unless it is a double charge.",
         )
     try:
-        refunds.assess(db, payment, reason, now, lock=False)
+        refunds.assess(db, payment, reason, now, settings, lock=False)
     except refunds.Refused as exc:
         return RefundOption(reason=reason, allowed=False, message=exc.message)
     return RefundOption(reason=reason, allowed=True, message=None)
@@ -161,14 +164,18 @@ def _brief(row: Refund | None) -> RefundBrief | None:
 
 @router.get("/payments")
 def list_payments(
+    request: Request,
     limit: int = Query(LIST_DEFAULT, ge=1, le=LIST_MAX),
     only: Literal["all", "needs_refund"] = Query("all"),
     db: Session = Depends(get_session),
 ) -> AdminPayments:
     """Recent payments, newest first, each with the one refund case that fits it and whether the
     rules allow it now. `only=needs_refund` lists the payments that succeeded and nothing could
-    use. A read."""
+    use. A read. Unlike the person's own lists, it keeps listing payments made before the go-live
+    cutover (`BILLING_LIVE_SINCE`): the admin sees all history, but such a payment offers no
+    refund (`before_go_live`)."""
     now = _now()
+    settings = request.app.state.settings
     query = select(Payment).order_by(Payment.id.desc()).limit(limit)
     if only == "needs_refund":
         query = query.where(Payment.needs_refund_reason.is_not(None))
@@ -195,7 +202,7 @@ def list_payments(
                     db.scalar(select(Invoice.number).where(Invoice.payment_id == payment.id))
                 ),
                 refund=_brief(newest),
-                refund_option=_option(db, payment, now),
+                refund_option=_option(db, payment, now, settings),
             )
         )
     return AdminPayments(payments=out)

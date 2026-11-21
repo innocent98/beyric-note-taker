@@ -19,7 +19,7 @@ Errors, in the API's one shape (`{"error": {"code", "message"}}`): 404 `not_foun
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app import services
 from app.api_schemas import ErrorResponse, UtcDatetime
-from app.billing import invoice_pdf
+from app.billing import cutover, invoice_pdf
 from app.billing.invoice_number import shown as shown_invoice_number
 from app.billing.invoice_number import stored_candidates
 from app.billing.profile_api import billing_user
@@ -92,13 +92,15 @@ def _refunded_at(db: Session, payment: Payment) -> datetime | None:
 
 @router.get("/invoices", responses=_NOT_FOUND)
 def list_invoices(
-    db: Session = Depends(get_session), user: User = Depends(billing_user)
+    request: Request, db: Session = Depends(get_session), user: User = Depends(billing_user)
 ) -> InvoicesOut:
-    """The caller's own invoices, newest first (at most 50). A read."""
+    """The caller's own invoices, newest first (at most 50). A read. Invoices of payments made
+    before the go-live cutover (`BILLING_LIVE_SINCE`) are not listed."""
+    settings = request.app.state.settings
     rows = db.execute(
         select(Invoice, Payment)
         .join(Payment, Payment.id == Invoice.payment_id)
-        .where(Invoice.payer_user_id == user.id)
+        .where(Invoice.payer_user_id == user.id, cutover.live_only(Payment.created_at, settings))
         .order_by(Invoice.id.desc())
         .limit(LIST_MAX)
     ).all()
@@ -119,18 +121,25 @@ def list_invoices(
     },
 )
 def download_invoice(
+    request: Request,
     number: str = Path(...),
     db: Session = Depends(get_session),
     user: User = Depends(billing_user),
 ) -> Response:
     """One of the caller's own invoices as a PDF. Built when asked and never stored: nothing about
-    it is cached. Someone else's number is a plain 404."""
+    it is cached. Someone else's number is a plain 404, and so is the number of an invoice made
+    before the go-live cutover (`BILLING_LIVE_SINCE`): to the person it does not exist."""
     if not NUMBER.fullmatch(number):
         raise HTTPException(404, "Not found.")
+    settings = request.app.state.settings
     row = db.execute(
         select(Invoice, Payment)
         .join(Payment, Payment.id == Invoice.payment_id)
-        .where(Invoice.number.in_(stored_candidates(number)), Invoice.payer_user_id == user.id)
+        .where(
+            Invoice.number.in_(stored_candidates(number)),
+            Invoice.payer_user_id == user.id,
+            cutover.live_only(Payment.created_at, settings),
+        )
     ).first()
     if row is None:
         raise HTTPException(404, "Not found.")

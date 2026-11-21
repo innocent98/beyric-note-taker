@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from app import entitlements, services
 from app.api_schemas import Body, ErrorResponse, UtcDatetime
-from app.billing import cancel_checkout, plans, renewals, routing, states, subscriptions
+from app.billing import cancel_checkout, cutover, plans, renewals, routing, states, subscriptions
 from app.billing.invoice_number import shown as shown_invoice_number
 from app.billing.profile_api import RouteOut, billing_user
 from app.db import get_session
@@ -205,13 +205,16 @@ def _payment_out(row: Payment, invoice_number: str | None = None) -> PaymentOut:
     )
 
 
-def _invoice_numbers(db: Session, rows) -> dict[int, str]:
-    """The invoice number of each of these payments that has one, by payment id."""
+def _invoice_numbers(db: Session, rows, settings) -> dict[int, str]:
+    """The invoice number of each of these payments that has one, by payment id. A payment made
+    before the go-live cutover (`BILLING_LIVE_SINCE`) shows none (its invoice is not shown)."""
     ids = [row.id for row in rows]
     if not ids:
         return {}
     found = db.execute(
-        select(Invoice.payment_id, Invoice.number).where(Invoice.payment_id.in_(ids))
+        select(Invoice.payment_id, Invoice.number)
+        .join(Payment, Payment.id == Invoice.payment_id)
+        .where(Invoice.payment_id.in_(ids), cutover.live_only(Payment.created_at, settings))
     )
     return {payment_id: shown_invoice_number(number) for payment_id, number in found}
 
@@ -326,7 +329,11 @@ def read_subscription(
     sub = subscriptions.latest_row(db, user.id)
     waiting = db.scalars(
         select(Payment)
-        .where(Payment.payer_user_id == user.id, Payment.status == "pending")
+        .where(
+            Payment.payer_user_id == user.id,
+            Payment.status == "pending",
+            cutover.live_only(Payment.created_at, settings),
+        )
         .order_by(Payment.id.desc())
     ).first()
     return StateOut(
@@ -383,35 +390,45 @@ def start_checkout(
 
 @router.get("/payments", responses=_NOT_FOUND)
 def list_payments(
+    request: Request,
     db: Session = Depends(get_session),
     user: User = Depends(billing_user),
 ) -> PaymentsOut:
-    """The caller's own payments, newest first (at most 50): the billing history. A read."""
+    """The caller's own payments, newest first (at most 50): the billing history. A read. Payments
+    made before the go-live cutover (`BILLING_LIVE_SINCE`) are not listed."""
+    settings = request.app.state.settings
     rows = db.scalars(
         select(Payment)
-        .where(Payment.payer_user_id == user.id)
+        .where(Payment.payer_user_id == user.id, cutover.live_only(Payment.created_at, settings))
         .order_by(Payment.id.desc())
         .limit(50)
     )
     rows = list(rows)
-    numbers = _invoice_numbers(db, rows)
+    numbers = _invoice_numbers(db, rows, settings)
     return PaymentsOut(payments=[_payment_out(row, numbers.get(row.id)) for row in rows])
 
 
 @router.get("/payments/{reference}", responses=_NOT_FOUND)
 def read_payment(
     reference: str,
+    request: Request,
     db: Session = Depends(get_session),
     user: User = Depends(billing_user),
 ) -> PaymentOut:
     """One of the caller's own payments. The page the payer returns to polls this until `status`
-    is no longer `pending`. Someone else's reference is a plain 404, the same as an unknown one."""
+    is no longer `pending`. Someone else's reference is a plain 404, the same as an unknown one,
+    and so is a payment made before the go-live cutover (`BILLING_LIVE_SINCE`)."""
+    settings = request.app.state.settings
     row = db.scalars(
-        select(Payment).where(Payment.reference == reference, Payment.payer_user_id == user.id)
+        select(Payment).where(
+            Payment.reference == reference,
+            Payment.payer_user_id == user.id,
+            cutover.live_only(Payment.created_at, settings),
+        )
     ).one_or_none()
     if row is None:
         raise HTTPException(404, "Not found.")
-    return _payment_out(row, _invoice_numbers(db, [row]).get(row.id))
+    return _payment_out(row, _invoice_numbers(db, [row], settings).get(row.id))
 
 
 @router.post(
@@ -449,7 +466,8 @@ def cancel_payment(
     out = CancelPaymentOut(
         result=done.result,
         payment=_payment_out(
-            done.payment, _invoice_numbers(db, [done.payment]).get(done.payment.id)
+            done.payment,
+            _invoice_numbers(db, [done.payment], request.app.state.settings).get(done.payment.id),
         ),
     )
     db.commit()

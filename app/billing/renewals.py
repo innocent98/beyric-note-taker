@@ -52,7 +52,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import alerts
-from app.billing import invoices, plans, refunds, routing, settle, states, subscriptions
+from app.billing import cutover, invoices, plans, refunds, routing, settle, states, subscriptions
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
@@ -607,6 +607,9 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
             BillingEvent.received_at <= now - SWEEP_AFTER,
             BillingEvent.received_at > now - SWEEP_LOOKBACK,
             BillingEvent.type.in_(("charge_succeeded", "charge_failed")),
+            # an event received before the go-live cutover is about a test payment: the live
+            # provider has no record of it, so asking again can only fail (`cutover`)
+            cutover.live_only(BillingEvent.received_at, settings),
         )
         .order_by(BillingEvent.received_at.desc())  # newest first: a stuck pile never starves it
         .limit(BATCH)
@@ -660,6 +663,9 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
         select(Payment)
         .where(
             Payment.created_at <= now - SWEEP_AFTER,
+            # a payment made before the go-live cutover is a test payment (`cutover`): never asked
+            # about on the live API
+            cutover.live_only(Payment.created_at, settings),
             or_(
                 and_(
                     Payment.status == "pending",
