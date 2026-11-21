@@ -3,6 +3,17 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-21, about 16:30 WAT: BILLING IS LIVE** (`main` at `7ca02a37`, Alembic head 0055 not verified on the server; SOP `docs/sop/2026-11-21-billing-go-live-executed.md`, runbook `docs/launch/billing-go-live-runbook.md`):
+- [x] Closeout of test-mode data run on the server (`--before 2026-11-21T14:45:33Z --end-pilot --trial-for-ended-pilot`: `PROOF: OK`; every billing table was empty; 4 pilot grants ended, 4 ordinary trials given)
+- [x] Live keys in `.env`, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE=2026-11-21T14:45:33Z`, billing open to everyone (`BILLING_ALLOWED_EMAILS=*`), `PAYSTACK_WEBHOOK_SECRET` deleted (classic `x-paystack-signature` with the secret key), one recreate, gap check `0 | 0 | 0`, webhook routes 401, no errors in the first hour
+- [ ] **First real payment per provider and refund (Adebayo, later):** Paystack NGN 25,000 on fresh account A, Flutterwave USD 18 on fresh account B, then admin refund; the first signed live webhook (`billing_events.signature_ok` true) proves the webhook path. NOT done: no real payment yet
+- [ ] After the first dollar payment: read Flutterwave's currency, rate and settlement, then decide on dollar settlement
+- [ ] First renewal in a month (cannot be proved earlier); trial cost watch (no daily trial cap)
+- [x] Vexa removed from the repo (#252), containers and volumes gone from the server; `.env` cleaned by `scripts/clean_env.py` (#248)
+- [x] No test-mode wording anywhere a person sees (#250); VAT not charged (Beyrichq not VAT-registered), TIN empty
+- [x] Google sensitive-scope verification submitted (waiting); Microsoft publisher domain verified, Partner Center verification in progress
+- [ ] Follow-ups: ~~remove the dead pilot-expiry job and mail~~ (done: addendum below); read-only live `proof` and `preflight` scripts; optional migration for the `bot_provider` default; transcript fallback review after a week; VAT add-on build only if Beyrichq registers; haven-api deploy prune (other project)
+
 **Addendum 2026-11-21: pilot-expiry job removed** (branch `chore/remove-pilot-expiry`, SOP `docs/sop/2026-11-21-remove-pilot-expiry.md`, no migration, Alembic head unchanged):
 - [x] `app/pilot_expiry.py`, the `pilot_expiry` scheduler job, its mail, its four settings (`PAID_PLANS_OPEN_ON` and the three `PILOT_EXPIRY_*`; only the job read them) and `tests/test_pilot_expiry.py` removed; trial logic and old `pilot` grant rows untouched
 - [x] An old `.env` line is ignored (`extra="ignore"`); `scripts/clean_env.py` lists and drops it; `trial_report.py` and `local_trial_e2e.py` lost their pilot parts
