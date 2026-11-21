@@ -61,15 +61,17 @@ def enabled(settings: Settings) -> bool:
     return settings.trial_seconds > 0
 
 
-def had_one(session: Session, user: User) -> bool:
-    """Whether the person (by id or by email fingerprint) has ever held a trial or a pilot grant,
-    in force or not."""
+def had_one(
+    session: Session, user: User, kinds: tuple[str, ...] = KINDS_THAT_USE_THE_TRIAL_UP
+) -> bool:
+    """Whether the person (by id or by email fingerprint) has ever held a grant of one of `kinds`
+    (default: a trial or a pilot grant), in force or not."""
     return (
         session.scalar(
             select(HourGrant.id)
             .where(
                 mine(user, HourGrant.user_id, HourGrant.email_hash),
-                HourGrant.kind.in_(KINDS_THAT_USE_THE_TRIAL_UP),
+                HourGrant.kind.in_(kinds),
             )
             .limit(1)
         )
@@ -89,11 +91,19 @@ def given_in_window(session: Session, now: datetime) -> int:
 
 
 def give(
-    session: Session, user: User, now: datetime, settings: Settings | None = None
+    session: Session,
+    user: User,
+    now: datetime,
+    settings: Settings | None = None,
+    *,
+    after_pilot: bool = False,
 ) -> HourGrant | None:
     """Give `user` the trial if they are owed one and the budget allows; else None. Flushes, never
     commits: the caller's transaction owns the row. Takes the app-wide trial lock first, so two
-    workers cannot give one person two trials or spend one budget twice."""
+    workers cannot give one person two trials or spend one budget twice. `after_pilot` is the ONE
+    exception to "a past pilot used the trial up": only a prior TRIAL grant then counts. It exists
+    for the one-time go-live conversion of ended pilot accounts
+    (`scripts/billing_close_test_data.py --trial-for-ended-pilot`); nothing else passes it."""
     settings = settings or get_settings()
     if not enabled(settings):
         return None
@@ -103,7 +113,7 @@ def give(
         text("select pg_advisory_xact_lock(:key)"),
         {"key": TRIAL_LOCK},
     )
-    if had_one(session, user):
+    if had_one(session, user, ("trial",) if after_pilot else KINDS_THAT_USE_THE_TRIAL_UP):
         return None
     budget = settings.trial_daily_budget_seconds
     if budget and given_in_window(session, now) + settings.trial_seconds > budget:

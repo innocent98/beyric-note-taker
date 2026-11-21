@@ -1,0 +1,25 @@
+{
+  "note": "The invoice of a payment made BEFORE the cutover: 404 `not_found`, the same body as an unknown number or another person's invoice.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/invoices/BN-2026-900001/pdf",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

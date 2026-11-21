@@ -2,6 +2,8 @@
 
 Audited 2026-11-21 on `main` at `f1509bc6` (Alembic head 0054). Read-only: nothing in this PR changes code. The runbook that uses this audit is `docs/launch/billing-go-live-runbook.md`; the questions for Adebayo are in `docs/launch/billing-go-live-questions.md`.
 
+**Update 2026-11-21: the closeout script and the `BILLING_LIVE_SINCE` filter this audit asks for are built (PR #255, `docs/sop/2026-11-21-go-live-closeout.md`).** Rows 9, 11, 15 and 25 are done; where the code differed from this design is listed in that SOP (a refund of a test-era payment is now refused `before_go_live`, and the sweeper skips test-era rows).
+
 Everything below was read in the code. **Nothing was run against a live provider**, so each "what the provider answers" is marked NOT VERIFIED where the code only handles it.
 
 ## The finding that matters most: what the flip does to rows made with test keys

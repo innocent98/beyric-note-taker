@@ -52,7 +52,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import alerts
-from app.billing import invoices, plans, refunds, routing, settle, states, subscriptions
+from app.billing import cutover, invoices, plans, refunds, routing, settle, states, subscriptions
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
@@ -541,20 +541,23 @@ def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime)
 def sweep(session: Session, now: datetime, settings: Settings) -> None:
     _sweep_events(session, now, settings)
     _sweep_payments(session, now, settings)
-    for after_money in (_issue_missing_invoices, _alert_stuck_refunds, _alert_old_pending):
+    steps = (
+        (_issue_missing_invoices.__name__, lambda: _issue_missing_invoices(session, now, settings)),
+        (_alert_stuck_refunds.__name__, lambda: _alert_stuck_refunds(session, now)),
+        (_alert_old_pending.__name__, lambda: _alert_old_pending(session, now)),
+    )
+    for name, after_money in steps:
         try:  # one failing check must not stop the others (or the next pass)
-            after_money(session, now)
+            after_money()
         except Exception as exc:
             session.rollback()
-            logger.error(
-                "billing sweep step %s failed: %s", after_money.__name__, type(exc).__name__
-            )
+            logger.error("billing sweep step %s failed: %s", name, type(exc).__name__)
 
 
-def _issue_missing_invoices(session: Session, now: datetime) -> None:
+def _issue_missing_invoices(session: Session, now: datetime, settings: Settings) -> None:
     """Stage S9: a used payment with no invoice (its handler failed, or it was settled before the
     stage) gets one now, with its receipt mail."""
-    invoices.issue_missing(session, now)
+    invoices.issue_missing(session, now, settings)
 
 
 def _alert_stuck_refunds(session: Session, now: datetime) -> None:
@@ -607,6 +610,9 @@ def _sweep_events(session: Session, now: datetime, settings: Settings) -> None:
             BillingEvent.received_at <= now - SWEEP_AFTER,
             BillingEvent.received_at > now - SWEEP_LOOKBACK,
             BillingEvent.type.in_(("charge_succeeded", "charge_failed")),
+            # an event received before the go-live cutover is about a test payment: the live
+            # provider has no record of it, so asking again can only fail (`cutover`)
+            cutover.live_only(BillingEvent.received_at, settings),
         )
         .order_by(BillingEvent.received_at.desc())  # newest first: a stuck pile never starves it
         .limit(BATCH)
@@ -660,6 +666,9 @@ def _sweep_payments(session: Session, now: datetime, settings: Settings) -> None
         select(Payment)
         .where(
             Payment.created_at <= now - SWEEP_AFTER,
+            # a payment made before the go-live cutover is a test payment (`cutover`): never asked
+            # about on the live API
+            cutover.live_only(Payment.created_at, settings),
             or_(
                 and_(
                     Payment.status == "pending",

@@ -55,7 +55,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.billing import notify, settle, subscriptions
+from app.billing import cutover, notify, settle, subscriptions
 from app.billing.provider import lookup_by_reference, provider_named
 from app.billing.types import NoRecord, ProviderError, ProviderTransaction, RetryLater
 from app.config import Settings
@@ -112,7 +112,9 @@ def cancel_checkout(db: Session, user: User, reference: str, settings: Settings,
     payment = db.scalars(
         select(Payment).where(Payment.reference == reference, Payment.payer_user_id == user.id)
     ).one_or_none()
-    if payment is None:  # someone else's reference is the same plain 404 as an unknown one
+    if payment is None or cutover.is_test_era(payment.created_at, settings):
+        # someone else's reference, an unknown one and a payment made before the go-live cutover
+        # (`BILLING_LIVE_SINCE`: the live provider has no record of it) are the same plain 404
         raise _refuse(404, "not_found", "Not found.")
     if payment.kind not in CANCELLABLE_KINDS:
         raise _refuse(409, "cannot_cancel", "This payment cannot be cancelled here.")

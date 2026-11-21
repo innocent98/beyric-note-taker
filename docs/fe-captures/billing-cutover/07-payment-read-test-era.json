@@ -1,0 +1,25 @@
+{
+  "note": "Reading the earlier payment by its reference: 404 `not_found`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/billing/payments/bn-1-e156993d8cc16c9c",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

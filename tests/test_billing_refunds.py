@@ -448,7 +448,7 @@ def test_a_person_who_looked_and_found_it_makes_the_payment_refunded(
     providers.usd.refund_error = OutcomeUnknown("timed out")
     refund = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
 
-    done = refunds.resolve(session, refund.id, "made", admin, T0 + 2 * DAY)
+    done = refunds.resolve(session, refund.id, "made", admin, T0 + 2 * DAY, settings())
 
     assert done.status == "submitted" and done.resolved_by == admin.id
     session.expire_all()
@@ -465,7 +465,7 @@ def test_a_person_who_looked_and_found_none_closes_it_and_restores_the_hours(
     providers.usd.refund_error = OutcomeUnknown("timed out")
     refund = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
 
-    done = refunds.resolve(session, refund.id, "not_made", admin, T0 + 2 * DAY)
+    done = refunds.resolve(session, refund.id, "not_made", admin, T0 + 2 * DAY, settings())
 
     assert done.status == "failed" and done.error == "confirmed_not_made"
     assert status(session, ada, T0 + 2 * DAY).seconds_left == P20
@@ -480,15 +480,17 @@ def test_resolve_only_works_on_an_unresolved_refund(session, ada, admin, provide
     payment = payment_of(session)
     done = ask(session, payment, "first_plan_7d", admin, T0 + DAY)
     with pytest.raises(refunds.Refused) as exc:
-        refunds.resolve(session, done.id, "not_made", admin, T0 + 2 * DAY)  # it exists: no
+        refunds.resolve(
+            session, done.id, "not_made", admin, T0 + 2 * DAY, settings()
+        )  # it exists: no
     assert (exc.value.status, exc.value.code) == (409, "not_unresolved")
     session.rollback()
     with pytest.raises(refunds.Refused) as gone:
-        refunds.resolve(session, 4242, "made", admin, T0)
+        refunds.resolve(session, 4242, "made", admin, T0, settings())
     assert gone.value.status == 404
     session.rollback()
     with pytest.raises(refunds.Refused) as bad:
-        refunds.resolve(session, done.id, "maybe", admin, T0)
+        refunds.resolve(session, done.id, "maybe", admin, T0, settings())
     assert bad.value.status == 422
 
 
@@ -498,10 +500,12 @@ def test_a_refund_a_dead_process_left_pending_is_resolved_like_an_unknown_one(
     buy_plan(session, ada, providers.usd)
     payment = payment_of(session)
     # the process died after the row was written and before the provider answered
-    orphan = refunds._start(session, payment.id, "first_plan_7d", admin, None, T0 + DAY)
+    orphan = refunds._start(session, payment.id, "first_plan_7d", admin, None, settings(), T0 + DAY)
     assert orphan.status == "pending"
     with pytest.raises(refunds.Refused) as young:  # too young: the other process may be working
-        refunds.resolve(session, orphan.id, "not_made", admin, T0 + DAY + timedelta(minutes=2))
+        refunds.resolve(
+            session, orphan.id, "not_made", admin, T0 + DAY + timedelta(minutes=2), settings()
+        )
     assert young.value.code == "not_unresolved"
     session.rollback()
     assert refused(session, payment, "first_plan_7d", admin, T0 + DAY) == "refund_in_progress"
@@ -517,7 +521,9 @@ def test_a_refund_a_dead_process_left_pending_is_resolved_like_an_unknown_one(
         )
         == 1
     )
-    done = refunds.resolve(session, orphan.id, "not_made", admin, T0 + DAY + timedelta(minutes=11))
+    done = refunds.resolve(
+        session, orphan.id, "not_made", admin, T0 + DAY + timedelta(minutes=11), settings()
+    )
     assert done.status == "failed"
     assert status(session, ada, T0 + 2 * DAY).seconds_left == P20
 
@@ -640,7 +646,9 @@ def test_while_a_refund_is_pending_the_hours_it_covers_cannot_be_spent(
 ):
     buy_plan(session, ada, providers.usd)
     payment = payment_of(session)
-    refunds._start(session, payment.id, "first_plan_7d", admin, None, T0 + DAY)  # not yet answered
+    refunds._start(
+        session, payment.id, "first_plan_7d", admin, None, settings(), T0 + DAY
+    )  # not yet answered
     held = entitlements.held_after_backlog(session, ada, T0 + DAY + timedelta(seconds=1))
     assert [g.kind for g, _ in held] == []  # the grant is not in force: no recording can use it
 
@@ -690,7 +698,9 @@ def test_a_late_success_after_the_refund_was_closed_as_not_made_changes_nothing_
         with Session(engine) as other:  # the person, on another connection, while the call hangs
             row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
             late = row.created_at + timedelta(minutes=11)
-            seen["closed"] = refunds.resolve(other, row.id, "not_made", admin, late).status
+            seen["closed"] = refunds.resolve(
+                other, row.id, "not_made", admin, late, settings()
+            ).status
         return original(tx_id, amount, reference=reference)  # the money DID move
 
     monkeypatch.setattr(providers.usd, "refund", slow)
@@ -723,7 +733,7 @@ def test_a_late_answer_does_not_crash_when_a_new_refund_is_already_live(
             with Session(engine) as other:
                 row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
                 late = row.created_at + timedelta(minutes=11)
-                refunds.resolve(other, row.id, "not_made", admin, late)
+                refunds.resolve(other, row.id, "not_made", admin, late, settings())
                 # a NEW refund starts and stays live (its provider call answers unknown)
                 providers.usd.refund_error = OutcomeUnknown("slow too")
                 again = refunds.request(
@@ -763,7 +773,7 @@ def test_a_late_success_after_the_person_said_made_is_no_alert(
         with Session(engine) as other:
             row = other.scalars(select(Refund).where(Refund.reference == reference)).one()
             late = row.created_at + timedelta(minutes=11)
-            refunds.resolve(other, row.id, "made", admin, late)
+            refunds.resolve(other, row.id, "made", admin, late, settings())
         return original(tx_id, amount, reference=reference)
 
     monkeypatch.setattr(providers.usd, "refund", slow)
@@ -825,7 +835,7 @@ def test_the_clock_does_not_charge_a_plan_with_an_unsettled_refund_and_catches_u
 
     # the person looked: no refund exists. The plan is the person's again and the clock charges once
     providers.usd.refund_error = None
-    refunds.resolve(session, refund.id, "not_made", admin, due)
+    refunds.resolve(session, refund.id, "not_made", admin, due, settings())
     assert renewals.run_due(session, due + timedelta(minutes=1), settings()) == 1
     assert len(providers.usd.charges) == 1
 

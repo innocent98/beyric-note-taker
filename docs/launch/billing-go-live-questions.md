@@ -1,4 +1,4 @@
-# Billing go-live: the six questions only you can answer
+# Billing go-live: the six questions only you can answer (ANSWERED 2026-11-21: see the table at the end)
 
 2026-11-21. Each has a proposed default: if you say nothing, the runbook (`docs/launch/billing-go-live-runbook.md`) follows the default. Nothing here blocks the work we do on our side (the closeout script and its filter, audit rows 9, 11 and 15).
 
@@ -12,3 +12,15 @@
 | 6 | **When do the pilot hours end?** `PAID_PLANS_OPEN_ON` is not set (the 4 pilot accounts hold 5 hours each); setting it ends every pilot grant 60 days later and mails each person 14 days before. The SOP says set it only after the lawyer has read the mail text. Sign-up is also open with no daily cap on the free 3-hour trials (`TRIAL_DAILY_BUDGET_SECONDS` unset) | Your promise to the pilot people, and how much trial spend you will carry | Leave `PAID_PLANS_OPEN_ON` unset on go-live day; set it when the lawyer has read the mail. Watch trial cost in the first day (runbook section 8) and set a daily cap only if the count surprises you |
 
 Not questions, because the repo already answers them: prices and plans (Starter 20 h, Pro 50 h, Scale 100 h, pack 10 h; naira and dollars), VAT not charged, seller name, address, registration number and email set, three-hour trial, refund cases (double charge, first plan within 7 days with no hours used, unused pack within 14 days). The Terms paid-plans section and the Privacy entries for the payment providers are lawyer items and do not block go-live (your decision).
+
+## Answers (the owner, 2026-11-21)
+
+| # | Answer | What the runbook and the code now do |
+|---|---|---|
+| 1 | **Both accounts are live** (Paystack and Flutterwave) | The "only one account is approved" path in runbook section 2 is optional, not the plan |
+| 2 | **Naira settlement first** | Nothing to set for dollars yet; the first real dollar payment (runbook section 5) is still the proof of what Flutterwave settles |
+| 3 | **TIN empty and VAT 0 until the accountant answers** | `BILLING_SELLER_TAX_ID` stays empty and `BILLING_VAT_RATE_BP` unset (the runbook's section 2 rows are unchanged) |
+| 4 | **Yes: end all test hours** ("everything should end and close") | The closeout ends test-era plans, packs and cards; with `--end-pilot` it also ends every pilot grant |
+| 5 | **No narrowing**: billing stays open to everyone (`BILLING_ALLOWED_EMAILS='*'`) | The runbook's narrowing step and its second restart are removed. The risk, in one sentence: a fault in the live payment path would meet a real customer; the owner accepted that |
+| 6 | **The pilot ends at go-live**, through the closeout (no pilot grant, no reminder mail; nobody else uses the app) | `scripts/billing_close_test_data.py --end-pilot` (one transaction per person, no mail, no bell entry, never an administrator's). `PAID_PLANS_OPEN_ON` stays unset; the 60-day pilot-expiry job is now dead code to remove later |
+

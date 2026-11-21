@@ -59,7 +59,7 @@ def make_catalog(session, *, ngn=True):
 
 
 def choose_country(session, user, country, now=LONG_AGO):
-    profiles.change_country(session, user, country, now=now)
+    profiles.change_country(session, user, country, now=now, settings=None)
     session.commit()
 
 

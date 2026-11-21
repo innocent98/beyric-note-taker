@@ -52,7 +52,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import alerts, entitlements, hours, usage
-from app.billing import notify, states
+from app.billing import cutover, notify, states
 from app.billing import subscriptions as subs
 from app.billing.provider import provider_named
 from app.billing.types import OutcomeUnknown, ProviderError
@@ -117,10 +117,12 @@ def _recording_running(db: Session, user: User) -> bool:
     )
 
 
-def _is_first_plan_payment(db: Session, payment: Payment) -> bool:
+def _is_first_plan_payment(db: Session, payment: Payment, settings: Settings) -> bool:
     """The earliest `plan` payment the person ever made that succeeded and was used, refunded ones
     included: a person who bought, was refunded and bought again has no second first payment. A
-    payment nothing could use (a double charge) is skipped, so it cannot hide the real first one."""
+    payment nothing could use (a double charge) is skipped, so it cannot hide the real first one.
+    Payments made before the go-live cutover (`BILLING_LIVE_SINCE`) are not counted: a person's
+    first LIVE plan payment is the first one made at or after it."""
     earliest = db.scalar(
         select(Payment.id)
         .where(
@@ -129,6 +131,7 @@ def _is_first_plan_payment(db: Session, payment: Payment) -> bool:
             Payment.status.in_(("succeeded", "refunded", "partly_refunded")),
             # a double-charged payment bought nothing: it must not be what "first" means
             Payment.needs_refund_reason.is_(None),
+            cutover.live_only(Payment.created_at, settings),
         )
         .order_by(Payment.paid_at.asc(), Payment.id.asc())
         .limit(1)
@@ -146,10 +149,24 @@ def _hours_untouched(db: Session, user: User, grant: HourGrant, now: datetime) -
 
 
 def assess(
-    db: Session, payment: Payment, reason: str, now: datetime, *, lock: bool = True
+    db: Session,
+    payment: Payment,
+    reason: str,
+    now: datetime,
+    settings: Settings,
+    *,
+    lock: bool = True,
 ) -> Assessment:
     """Whether `payment` may be refunded for `reason` now, judged on the facts. Raises `Refused`
     (409) naming what is wrong. Call it under the payment's row lock and the person's hours lock."""
+    if cutover.is_test_era(payment.created_at, settings):
+        # made before the go-live cutover (`BILLING_LIVE_SINCE`): the live provider has no record
+        # of it, so a refund call would end `unknown` and could never be asked for again
+        raise _refuse(
+            "before_go_live",
+            "This payment was made before billing went live: the provider has no record of it, "
+            "so it cannot be refunded here.",
+        )
     if payment.status == "refunded":
         raise _refuse("already_refunded", "This payment was refunded already.")
     if payment.status != "succeeded":
@@ -187,7 +204,7 @@ def assess(
             "not_used_for_hours",
             "Nothing was granted for this payment: refund it as a double charge.",
         )
-    if wanted_kind == "plan" and not _is_first_plan_payment(db, payment):
+    if wanted_kind == "plan" and not _is_first_plan_payment(db, payment, settings):
         raise _refuse(
             "not_first_payment",
             "Only a person's first plan payment can be refunded this way.",
@@ -241,7 +258,13 @@ def new_reference(payment_id: int) -> str:
 
 
 def _start(
-    db: Session, payment_id: int, reason: str, admin: User, note: str | None, now: datetime
+    db: Session,
+    payment_id: int,
+    reason: str,
+    admin: User,
+    note: str | None,
+    settings: Settings,
+    now: datetime,
 ) -> Refund:
     """Step one: check, write the refund row, end the grant it covers. Commits."""
     payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).first()
@@ -250,7 +273,7 @@ def _start(
     payer = db.get(User, payment.payer_user_id) if payment.payer_user_id else None
     if payer is not None:
         hours.lock_person(db, payer)
-    found = assess(db, payment, reason, now)
+    found = assess(db, payment, reason, now, settings)
     refund = Refund(
         payment_id=payment.id,
         reference=new_reference(payment.id),
@@ -351,7 +374,7 @@ def request(
     when the rules refuse it."""
     if reason not in REFUND_REASONS:
         raise Refused(422, "validation_error", "That is not a refund reason.")
-    refund = _start(db, payment_id, reason, admin, note, now)
+    refund = _start(db, payment_id, reason, admin, note, settings, now)
     refund_id, amount, reference = refund.id, refund.amount_minor, refund.reference
     payment = db.get(Payment, payment_id)
     provider_name, tx_id = payment.provider, payment.provider_tx_id
@@ -432,11 +455,16 @@ def _late_answer(
     )
 
 
-def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetime) -> Refund:
+def resolve(
+    db: Session, refund_id: int, outcome: str, admin: User, now: datetime, settings: Settings
+) -> Refund:
     """An admin says what the provider's dashboard shows for an `unknown` refund (or a `pending`
     one left by a dead process): `made` (it exists: the payment is refunded) or `not_made` (it does
     not: the refund is closed and the hours come back, so a new refund can be started). The only
-    way out of `unknown`; nothing here calls the provider."""
+    way out of `unknown`; nothing here calls the provider. A refund of a payment made before the
+    go-live cutover (`BILLING_LIVE_SINCE`) cannot be resolved: `made` would delete the person's
+    LIVE saved card and mail them, `not_made` would give test hours back (the closeout script
+    refuses to run while such a refund is open, so none should exist)."""
     if outcome not in ("made", "not_made"):
         raise Refused(422, "validation_error", "The outcome is `made` or `not_made`.")
     # Lock order everywhere: the payment, then the refund (as `request`'s last step does).
@@ -450,6 +478,12 @@ def resolve(db: Session, refund_id: int, outcome: str, admin: User, now: datetim
         .with_for_update()
         .execution_options(populate_existing=True)
     ).one()
+    if cutover.is_test_era(payment.created_at, settings):
+        raise _refuse(
+            "before_go_live",
+            "This refund is for a payment made before billing went live: it cannot be resolved "
+            "here.",
+        )
     waiting_too_long = refund.status == "pending" and now - refund.created_at >= STUCK_AFTER
     if refund.status != "unknown" and not waiting_too_long:
         raise _refuse("not_unresolved", "This refund is not waiting for a person to resolve it.")

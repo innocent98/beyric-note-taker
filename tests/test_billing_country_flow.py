@@ -45,8 +45,8 @@ def test_before_any_payment_the_country_changes_instantly_any_number_of_times(se
         ("US", "GB"),
         ("GB", "NG"),
     ]
-    assert profiles.country_lock(session, person.id, NOW) is None
-    assert profiles.country_change_allowed_at(session, person.id, NOW) is None
+    assert profiles.country_lock(session, person.id, NOW, None) is None
+    assert profiles.country_change_allowed_at(session, person.id, NOW, None) is None
 
 
 @pytest.mark.parametrize("status", ["pending", "failed"])
@@ -83,7 +83,10 @@ def test_changes_made_while_it_was_free_do_not_count_towards_the_30_days(session
         set_country(session, person, country, now=NOW + timedelta(minutes=minute))
     has_paid(session, person, at=NOW + timedelta(hours=1))  # then the first payment
 
-    assert profiles.country_change_allowed_at(session, person.id, NOW + timedelta(hours=2)) is None
+    assert (
+        profiles.country_change_allowed_at(session, person.id, NOW + timedelta(hours=2), None)
+        is None
+    )
     assert set_country(session, person, "US", now=NOW + timedelta(hours=2)).result == "applied"
     with pytest.raises(CountryChangeRefused):
         set_country(session, person, "NG", now=NOW + timedelta(hours=3))
@@ -93,7 +96,7 @@ def test_a_live_plan_locks_the_country_even_with_no_payment_on_record(session, p
     sell(monkeypatch, "US")
     set_country(session, person, "US", now=NOW - timedelta(days=1))
     set_country(session, person, "GB", now=NOW - timedelta(hours=1))  # one fix
-    assert profiles.country_lock(session, person.id, NOW) is not None
+    assert profiles.country_lock(session, person.id, NOW, None) is not None
 
     with pytest.raises(CountryChangeRefused) as raised:
         set_country(session, person, "FR", now=NOW)

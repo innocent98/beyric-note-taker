@@ -28,7 +28,7 @@ NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 
 
 def seed_country(session, user, country):
-    profiles.change_country(session, user, country, now=NOW - timedelta(days=100))
+    profiles.change_country(session, user, country, now=NOW - timedelta(days=100), settings=None)
     session.commit()
 
 

@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field, ValidationInfo, field_validator, model_validator
@@ -20,6 +20,28 @@ SKRIBBY_BOT_CEILING = 20
 # display names, no comments, no quoted local parts): this is a public address an operator types in.
 _LABEL = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
 _PLAIN_EMAIL = re.compile(rf"[a-z0-9][a-z0-9._%+-]*@{_LABEL}(\.{_LABEL})+")
+
+
+def parse_instant(value: str, *, name: str = "the timestamp") -> datetime:
+    """An ISO 8601 timestamp WITH its time zone (`2026-11-22T09:30:00Z` or `...+01:00`), as UTC.
+    Refused, never guessed: a missing zone (a Lagos clock read as UTC is an hour out), a date with
+    no time, and anything that is not a timestamp. The error names `name` and never the value."""
+    text = value.strip()
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        raise ValueError(
+            f"{name} must be an ISO 8601 timestamp with a time zone, "
+            "for example 2026-11-22T09:30:00Z"
+        ) from None
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError(
+            f"{name} has no time zone: write it with Z (UTC) or an offset such as +01:00, "
+            "for example 2026-11-22T09:30:00Z"
+        )
+    if "T" not in text.upper() and " " not in text:
+        raise ValueError(f"{name} must include a time, for example 2026-11-22T09:30:00Z")
+    return moment.astimezone(UTC)
 
 
 class Settings(BaseSettings):
@@ -233,6 +255,28 @@ class Settings(BaseSettings):
         """The tenants a Microsoft connection may come from; empty means any."""
         return frozenset(t for t in self.microsoft_allowed_tenants.split(",") if t)
 
+    @field_validator("billing_live_since")
+    @classmethod
+    def _billing_live_since_is_a_timestamp(cls, value: str) -> str:
+        """Garbage is refused at startup even while it would be ignored (`BILLING_LIVE` false):
+        a typo found on the day billing goes live is a typo that blocks the go-live."""
+        if value.strip():
+            parse_instant(value, name="BILLING_LIVE_SINCE")
+        return value
+
+    @model_validator(mode="after")
+    def _billing_live_since_is_not_in_the_future(self):
+        """While billing is live, a cutover still ahead would hide every live payment made before
+        it, so it is refused. (Not checked with `BILLING_LIVE` false: there it has no effect.)"""
+        if self.billing_live and self.billing_live_since.strip():
+            cutover = parse_instant(self.billing_live_since, name="BILLING_LIVE_SINCE")
+            if cutover > datetime.now(UTC):
+                raise ValueError(
+                    "BILLING_LIVE_SINCE is in the future: set it to the moment the closeout "
+                    "was run, which has already passed"
+                )
+        return self
+
     @model_validator(mode="after")
     def _paystack_keys_match_billing_live(self):
         """Test and live keys are never mixed (billing spec 5.7): with `BILLING_LIVE` false only
@@ -379,6 +423,14 @@ class Settings(BaseSettings):
     # (`sk_live_...`). A key of the other kind stops the process at startup naming the setting; the
     # key itself is never printed. Switch on only at go-live (S11).
     billing_live: bool = False
+    # The go-live cutover `T` (an ISO 8601 timestamp WITH its zone, `2026-11-22T09:30:00Z`; empty =
+    # none). While `BILLING_LIVE` is true, a payment created before it was made with test keys and
+    # is hidden from a person's lists and not counted as their first plan payment
+    # (`app/billing/cutover.py`). Set it to the same value the one-time closeout script was run
+    # with (`scripts/billing_close_test_data.py --before`). With `BILLING_LIVE` false it is
+    # ignored. A value that is not a timestamp with a zone, or that is in the future while
+    # `BILLING_LIVE` is true, stops the process at startup.
+    billing_live_since: str = ""
     # Where a provider sends the payer back after the hosted checkout (stage S8). Empty: the
     # app's own `/billing/return` page (`PUBLIC_BASE_URL` + `/billing/return`). The page only shows
     # the payment's state; nothing is granted there, so a wrong address costs nothing.

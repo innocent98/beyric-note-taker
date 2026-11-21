@@ -1,0 +1,63 @@
+{
+  "note": "The administrator still sees BOTH payments and their invoice numbers; the earlier one offers no refund (`refund_option.allowed` false, with the reason).",
+  "client": "root",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/billing/payments",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "payments": [
+        {
+          "id": 2,
+          "reference": "bn-2-289e7484fa547fe5",
+          "payer_email": "ada@example.test",
+          "provider": "flutterwave",
+          "kind": "pack",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1000,
+          "created_at": "2026-11-21T12:35:59.336228Z",
+          "paid_at": "2026-11-21T12:35:59.350864Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-900002",
+          "refund": null,
+          "refund_option": {
+            "reason": "pack_14d",
+            "allowed": true,
+            "message": null
+          }
+        },
+        {
+          "id": 1,
+          "reference": "bn-1-e156993d8cc16c9c",
+          "payer_email": "ada@example.test",
+          "provider": "flutterwave",
+          "kind": "plan",
+          "status": "succeeded",
+          "currency": "USD",
+          "amount_minor": 1800,
+          "created_at": "2026-11-20T11:35:58.642671Z",
+          "paid_at": "2026-11-21T12:35:59.210151Z",
+          "needs_refund_reason": null,
+          "invoice_number": "BN-2026-900001",
+          "refund": null,
+          "refund_option": {
+            "reason": "first_plan_7d",
+            "allowed": false,
+            "message": "This payment was made before billing went live: the provider has no record of it, so it cannot be refunded here."
+          }
+        }
+      ]
+    }
+  }
+}

@@ -39,7 +39,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app import mail
-from app.billing import notify
+from app.billing import cutover, notify
 from app.billing.invoice_pdf import SELLER_ZONE
 from app.config import Settings, get_settings
 from app.models import (
@@ -238,15 +238,18 @@ def on_payment_succeeded(db: Session, payment: Payment) -> None:
         )
 
 
-def issue_missing(session: Session, now: datetime) -> int:
+def issue_missing(session: Session, now: datetime, settings: Settings) -> int:
     """The sweeper's pass: invoice every succeeded, used payment that has none (a handler that
     failed, a payment settled before this stage). Oldest first, `BATCH` a pass, each in its own
-    transaction. Returns how many were issued."""
+    transaction. Returns how many were issued. A payment made before the go-live cutover
+    (`BILLING_LIVE_SINCE`) is never invoiced here: it would take a LIVE number and queue a receipt
+    for a payment that moved no money."""
     rows = session.scalars(
         select(Payment.id)
         .where(
             Payment.status == "succeeded",
             Payment.needs_refund_reason.is_(None),
+            cutover.live_only(Payment.created_at, settings),
             ~select(Invoice.id).where(Invoice.payment_id == Payment.id).exists(),
         )
         .order_by(Payment.id)

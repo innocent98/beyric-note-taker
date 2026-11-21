@@ -6,9 +6,9 @@ How to read it: every step has the exact command or click path and **one proof**
 
 Companion documents: `docs/launch/billing-go-live-code-audit.md` (what in the code depends on test data), `docs/launch/billing-go-live-questions.md` (the six things only you can answer).
 
-## 0. One thing must be built first
+## 0. The closeout (built: PR #255)
 
-The code audit found that **rows made with test keys will misbehave the moment live keys are in**: a Paystack test subscription gets stuck forever (the person can neither renew nor buy), a Flutterwave one sends three false "payment failed" mails, and test packs and plans keep their free hours. A one-time closeout script and a small filter must ship first (design and estimate in the audit; about one day). **Step 5 below is that script. Do not flip the keys before it has run.** It is not a question for you; it is our work.
+The code audit found that **rows made with test keys misbehave the moment live keys are in**: a Paystack test subscription gets stuck forever (the person can neither renew nor buy), a Flutterwave one sends three false "payment failed" mails, and test packs and plans keep their free hours. Two things were built for it and **shipped before this runbook can be used (PR #255, `docs/sop/2026-11-21-go-live-closeout.md`)**: a one-time closeout script, `scripts/billing_close_test_data.py`, and a setting `BILLING_LIVE_SINCE` that hides test-era payments from people. **Step 6 below is that script, and step 3 (pausing billing) must come first. Do not flip the keys before the script has run.** The script also ends every pilot hour grant (`--end-pilot`, owner decision 2026-11-21: nothing from the pilot carries over; no mail, nobody else uses the app). The owner decided (2026-11-21) that the people whose pilot ends also get one ordinary trial instead, so step 6 uses BOTH flags, `--end-pilot --trial-for-ended-pilot` (it needs `TRIAL_SECONDS` above 0, which production has at 10800): each gets 3 hours for 14 days from the run. The app sends them no mail; tell them yourself if you wish. `PAID_PLANS_OPEN_ON` must stay unset: the 60-day pilot expiry job and its mail are no longer wanted (dead code, to remove later). It is not a question for you; it is our work. The SOP has the same steps with the reason for each.
 
 ## 1. What you prepare yourself
 
@@ -35,10 +35,11 @@ File: `/opt/beyric-note-taker/.env`. All keys change in ONE edit, because `BILLI
 | `FLUTTERWAVE_SECRET_KEY` | test → live | Must NOT contain `_TEST` |
 | `FLUTTERWAVE_PUBLIC_KEY` | test → live | Accepted, not read by the app |
 | `FLUTTERWAVE_SECRET_HASH` | a new value you make up | The same text goes in the live dashboard's webhook page. Make it with `openssl rand -hex 32` in your own terminal; do not reuse the test one |
-| `BILLING_ALLOWED_EMAILS` | `'*'` → the two fresh test emails, comma separated, **for the first payments only** | With live keys and `'*'`, anyone could pay real money from the first minute. While the list is short, other people get the same 404 as billing off on the billing pages and routes (`app/billing/profile_api.py:50-60`); webhooks, the billing clock and hours are unaffected. Step 11 puts `'*'` back |
-| `BILLING_ENABLED`, `BILLING_COUNTRY_ROUTES`, `HOURS_MODE`, `FEATURE_GATES_MODE`, `TRIAL_SECONDS` | unchanged | Already `true`, default routes, `enforce`, `enforce`, `10800` |
+| `BILLING_ALLOWED_EMAILS` | **unchanged** (`'*'`): billing stays open to everyone | Owner decision 2026-11-21: no narrowing for the first payments. The risk, in one sentence: a fault in the live payment path would meet a real customer, and the owner accepted that |
+| `BILLING_ENABLED` | `false` in step 3 (the pause), back to `true` in step 7 | The pause is what keeps test rows from being made while the closeout runs |
+| `BILLING_COUNTRY_ROUTES`, `HOURS_MODE`, `FEATURE_GATES_MODE`, `TRIAL_SECONDS` | unchanged | Default routes, `enforce`, `enforce`, `10800` |
 | `BILLING_SELLER_NAME`, `…_ADDRESS`, `…_REGISTRATION_NO`, `…_EMAIL` | unchanged | Already set. `BILLING_SELLER_TAX_ID` stays empty (no tax ID): the invoice then shows no tax line. `BILLING_VAT_RATE_BP` stays unset (0): no VAT is charged |
-| `BILLING_LIVE_SINCE` | add, the cutover time `T` (UTC) | Only once the closeout PR (section 0) ships; its exact form is in that PR. `T` is the time you run the closeout in step 5, and the same value goes in `--before` and here |
+| `BILLING_LIVE_SINCE` | add: the cutover time `T`, the **same text** you pass to `--before` in step 6 (for example `2026-11-22T09:30:00Z`: UTC, with the `Z`) | Only has effect while `BILLING_LIVE` is true. Text with no zone, or not a timestamp, or in the future, stops web, worker and scheduler at startup naming this setting. It hides every payment made before `T` from people (invoice list and PDF, payments list) and from the first-payment refund rule; the admin screen still lists them |
 
 **The rule: test and live keys never mix.** With `BILLING_LIVE=true`, web, worker and scheduler **refuse to start** if any key is the wrong kind, and name the setting but never print the key. The messages (from `app/config.py`):
 
@@ -48,7 +49,7 @@ File: `/opt/beyric-note-taker/.env`. All keys change in ONE edit, because `BILLI
 
 `sk_live_` / `pk_live_` are the app's assumption; the Paystack pages I read do not state them. If Paystack's live keys look different the stack will not start, which is safe and obvious: tell the lead.
 
-**Only one account approved?** Go live with that provider alone. Remove all three variables of the other provider from `.env` (a hash without a key stops startup) and switch its country route off: for Paystack only, `BILLING_COUNTRY_ROUTES=NG=NGN:paystack,*=off`; for Flutterwave only, `BILLING_COUNTRY_ROUTES=NG=off,*=USD:flutterwave`. A refused country gets `billing_country_unsupported` (`deploy/README.md`).
+**Both accounts are live (owner, 2026-11-21), so this path is optional, not the plan.** If one turns out not to be, go live with the other alone. Remove all three variables of the other provider from `.env` (a hash without a key stops startup) and switch its country route off: for Paystack only, `BILLING_COUNTRY_ROUTES=NG=NGN:paystack,*=off`; for Flutterwave only, `BILLING_COUNTRY_ROUTES=NG=off,*=USD:flutterwave`. A refused country gets `billing_country_unsupported` (`deploy/README.md`).
 
 ## 3. Webhook setup in each live dashboard
 
@@ -69,7 +70,7 @@ Both URLs are the same ones test mode used. Set each in the dashboard **in live 
 for p in paystack flutterwave; do curl -s -o /dev/null -w "$p %{http_code}\n" -X POST "https://notes.beyrictech.com/api/billing/webhooks/$p" -H 'content-type: application/json' -d '{}'; done
 ```
 
-Expected: `paystack 401` and `flutterwave 401`. (From `app/billing/api.py`: 404 off, 401 bad signature, nothing stored.) Whether the raw body survives nginx and the Next.js proxy unchanged is proved only by the first real payment's signed event (step 8).
+Expected: `paystack 401` and `flutterwave 401`. (From `app/billing/api.py`: 404 off, 401 bad signature, nothing stored.) Whether the raw body survives nginx and the Next.js proxy unchanged is proved only by the first real payment's signed event (step 10).
 
 ## 4. The order of the switch
 
@@ -78,19 +79,19 @@ Do it in one sitting, on a quiet day, with Adebayo at the terminal. **Restart on
 | Step | Do | Proof (one) |
 |---|---|---|
 | **1. Accounts and dashboards ready** | Section 1 done, both webhooks created in live mode (section 3), the secret hash made | The two webhook rows show in the live dashboards |
-| **2. Backup** | `BACKUP_DIR=~/backups/beyric-notes bash deploy/backup.sh` (the path and form the deploy README's section 7 uses) | A new dump file stamped now: `ls -lt ~/backups/beyric-notes \| head -3` |
-| **3. Look at what is there** (read-only) | Paste the helper and queries below | The counts are known before anything changes (a record of what the closeout will close) |
-| **4. Gate check** | `bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'` and look for meetings in progress: `q <<<"select count(*) from meetings where status in ('bot_sent','processing');"` | Prints `no join is due` and the count is `0`. If a join is due it prints the time and exits 1: wait, then ask again |
-| **5. Closeout** (needs the closeout PR deployed, section 0) | `docker compose exec -T web python scripts/billing_close_test_data.py --before <T> </dev/null` (dry run), read it, then `--apply` | The script prints `PROOF: OK`: zero live test-era subscriptions, zero test cards, zero test packs or plan hours in force |
-| **6. Edit `.env`** | `cp -p .env .env.before-live-$(date +%Y%m%d-%H%M)`, then edit `.env` yourself and make the changes in section 2 | `grep -E '^(BILLING_LIVE\|PAYSTACK_SECRET_KEY\|FLUTTERWAVE_SECRET_KEY)=' .env \| cut -c1-24` shows `BILLING_LIVE=true`, a `PAYSTACK_SECRET_KEY=sk_live_` prefix and a Flutterwave key with no `_TEST` (do not paste this output into chat) |
-| **7. Recreate** (a restart does not re-read `.env`) | `docker compose up -d --force-recreate web worker scheduler` | `docker compose ps` shows web, worker and scheduler Up, and `docker compose exec -T web printenv BILLING_LIVE </dev/null` prints `true`. If web exits, `docker compose logs web --tail 30` names the wrong setting (section 2) |
-| **8. Webhook route** | The curl in section 3 | `paystack 401`, `flutterwave 401` |
-| **9. First real payments** | Section 5, one provider at a time | Section 5's proof |
-| **10. Refund each** | Section 6 | Section 6's proof |
-| **11. Open to everyone** | Only after both refunds are `submitted` and both webhook events were decided. Repeat step 4 (gate check), set `BILLING_ALLOWED_EMAILS='*'` in `.env`, then `docker compose up -d --force-recreate web worker scheduler` | `docker compose exec -T web printenv BILLING_ALLOWED_EMAILS </dev/null` prints `*`, and a normal pilot account opens `/billing` and sees the plans |
+| **2. Gate check** (a recreate follows; the gate is checked again before the second one) | `bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'` and look for meetings in progress: `q <<<"select count(*) from meetings where status in ('bot_sent','processing');"` | Prints `no join is due` and the count is `0`. If a join is due it prints the time and exits 1: wait, then ask again. **Also, before the pause (the admin screen is switched off by it):** `q <<<"select count(*) from refunds where status in ('pending','unknown');"` must print `0`; if not, resolve each open refund in Admin, Billing, Refunds as made or not made first (every payment before the flip is a test payment, so every open refund is a test refund) |
+| **3. Pause billing** (so no test row can be made while the closeout runs; **this comes BEFORE the backup and before `T`**) | `cp -p .env .env.before-live-$(date +%Y%m%d-%H%M)`, edit `.env` yourself: `BILLING_ENABLED=false` (nothing else), then `docker compose up -d --force-recreate web worker scheduler`. This stops new checkouts, the billing pages and routes (a plain 404), the webhook route and the billing clock (renewals, retries, the sweeper); hours, recordings and the trial go on as before. People see no billing screens until step 8 | `docker compose exec -T web printenv BILLING_ENABLED </dev/null` prints `false`, and the curl in section 3 answers `404` for both providers (billing off). Then wait: a checkout opened a few minutes ago may still be paid on the provider's page; the closeout refuses to run while a payment made in the last 30 minutes is still pending |
+| **4. Backup** | `BACKUP_DIR=~/backups/beyric-notes bash deploy/backup.sh` (the path and form the deploy README's section 7 uses) | A new dump file stamped now: `ls -lt ~/backups/beyric-notes \| head -3`. **It is the only undo** for the closeout |
+| **5. Look at what is there** (read-only) | Paste the helper and queries below | The counts are known before anything changes (a record of what the closeout will close) |
+| **6. Closeout** (needs PR #255 deployed; **take `T` now, after the pause**) | `T=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo "$T"`. Dry run (changes nothing): `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" --end-pilot --trial-for-ended-pilot </dev/null`, read the counts against step 5, then apply: `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" --apply --end-pilot --trial-for-ended-pilot </dev/null; echo "exit $?"`. A line starting `REFUSED` says why and nothing was changed: a payment still pending in the last 30 minutes (wait), a billing row made at or after `T` (billing was not paused: pause it, take a new `T`), a `T` older than 60 minutes (take a new one), or `--trial-for-ended-pilot` needs `TRIAL_SECONDS` above 0 and a daily trial budget (if one is set) big enough for the people owed a trial, or it refuses; a test refund still open (the admin screen is off while billing is paused: un-pause with `BILLING_ENABLED=true` and a recreate, resolve it in Admin, Billing, Refunds, pause again, take a NEW `T`; step 2 counts them before the pause so this should not happen). ``--end-pilot` also refuses while a meeting is being recorded or a join is due (wait, then run again). `FAILED for one person` lines or a deadlock with a refund someone was making: run the same command again, it only does what is left | The last lines say `PROOF: OK` and `exit 0`: zero live test-era subscriptions, zero test cards, zero test packs or plan hours in force, zero pending test checkouts. If it still fails, restore the step 4 backup and tell the lead |
+| **7. Edit `.env`: the live settings, in ONE edit** | Edit `.env` yourself and make every change in section 2 together: the live keys and the webhook secret and hash, `BILLING_LIVE=true`, **`BILLING_LIVE_SINCE=<the T from step 6>`** and `BILLING_ENABLED=true` (billing comes back on only here, with live keys) | `grep -E '^(BILLING_LIVE\|BILLING_ENABLED\|PAYSTACK_SECRET_KEY\|FLUTTERWAVE_SECRET_KEY)=' .env \| cut -c1-24` shows `BILLING_LIVE=true`, `BILLING_ENABLED=true`, a `PAYSTACK_SECRET_KEY=sk_live_` prefix and a Flutterwave key with no `_TEST` (do not paste this output into chat) |
+| **8. Recreate** (a restart does not re-read `.env`; **ONE recreate for all of step 7**) | Repeat the gate check of step 2, then `docker compose up -d --force-recreate web worker scheduler` | `docker compose ps` shows web, worker and scheduler Up, and `docker compose exec -T web printenv BILLING_LIVE </dev/null` prints `true`, and the same command with `printenv BILLING_LIVE_SINCE` prints your `T`. If web exits, `docker compose logs web --tail 30` names the wrong setting (section 2) |
+| **9. Nothing was made in the gap, the webhook route, and the old test webhooks** | Before anyone pays: `q <<<"select (select count(*) from payments where created_at >= '$T') as payments, (select count(*) from subscriptions where created_at >= '$T') as subscriptions, (select count(*) from payment_methods where created_at >= '$T') as cards;"` (it must run in the same terminal as step 6 so `$T` is set), then the curl in section 3. Then **remove the webhook URL from both providers' TEST dashboards** (Paystack and Flutterwave, test mode): a test webhook that arrived after the flip would be a test event hitting the live endpoint | The query prints `0 \| 0 \| 0` (any other number: stop and tell the lead, because a row made after `T` and before the flip is a test row the app now reads as live), and the curl prints `paystack 401`, `flutterwave 401` |
+| **10. First real payments** | Section 5, one provider at a time | Section 5's proof |
+| **11. Refund each** | Section 6 | Section 6's proof |
 | **12. Watch** | Section 8 | the first-hour checks |
 
-The read-only helper and the step 3 queries (they cannot write: the session is read-only):
+The read-only helper and the step 5 queries (they cannot write: the session is read-only):
 
 ```bash
 q() { docker compose exec -T db sh -c 'PGOPTIONS="-c default_transaction_read_only=on" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1'; }
@@ -157,9 +158,9 @@ Paystack refund states you may meet on the dashboard: `pending`, `processing`, `
 
 ## 7. Invoice numbering and test-era invoices
 
-**Numbering starts at `BN-<year>-000001` for live.** Proved by the code, not yet live: test invoices were counted under a negative year in `invoice_counters` (`app/billing/invoices.py:87-102`), live ones under the positive year, so the first live invoice is `BN-2026-000001` (the year is Lagos time; a payment after 1 January 2027 starts `BN-2027-000001`). The step 3 query shows the state before; the section 5 query shows the first live number. **Your two refunded payments use up numbers 000001 and 000002**, so your first real customer is `BN-<year>-000003`. A refunded invoice stays on file with its REFUNDED notice; nothing is deleted. Whether the accountant wants those two voided differently is question 3.
+**Numbering starts at `BN-<year>-000001` for live.** Proved by the code, not yet live: test invoices were counted under a negative year in `invoice_counters` (`app/billing/invoices.py:87-102`), live ones under the positive year, so the first live invoice is `BN-2026-000001` (the year is Lagos time; a payment after 1 January 2027 starts `BN-2027-000001`). The step 5 query shows the state before; the section 5 query shows the first live number. **Your two refunded payments use up numbers 000001 and 000002**, so your first real customer is `BN-<year>-000003`. A refunded invoice stays on file with its REFUNDED notice; nothing is deleted. Whether the accountant wants those two voided differently is question 3.
 
-**Test-era invoices, the recommendation: show only live invoices once live.** Today they list and download with numbers `BN-2026-9000NN` for payments where no money moved (`docs/sop/2026-11-20-remove-test-mode-markers.md`). It needs a code change, in the closeout PR: a `BILLING_LIVE_SINCE` setting and a filter in five places (invoice list and PDF route, payments list, `_invoice_numbers`, the first-payment refund rule). It is described in the audit. Admins keep seeing everything.
+**Test-era invoices: only live invoices are shown once live (built, PR #255).** Test-era invoices had numbers `BN-2026-9000NN` for payments where no money moved (`docs/sop/2026-11-20-remove-test-mode-markers.md`). With `BILLING_LIVE_SINCE` set, the person's invoice list and PDF route (a plain 404), the payments list and the first-payment refund rule ignore every payment made before it. Admins keep seeing everything, and a test-era payment offers no refund (409 `before_go_live`).
 
 ## 8. After go-live: what to watch
 
@@ -223,20 +224,20 @@ Could not read: https://developer.flutterwave.com/docs/going-live and https://de
 |---|---|
 | Startup refuses wrong-kind keys with the quoted messages | verified in code and by the existing tests (not run live) |
 | 401 from the webhook route for an unsigned call | verified in code (`app/billing/api.py`); not curled today |
-| A signed live webhook reaches the app unchanged through nginx and Next.js | **not verified live** (proved by step 8 of section 4 / section 5 proof) |
+| A signed live webhook reaches the app unchanged through nginx and Next.js | **not verified live** (proved by step 10 of section 4 / section 5 proof) |
 | Live checkout, verify and refund calls on both providers | **not verified live** (test mode only) |
 | Flutterwave accepts USD from this account, and what it settles | **not verified** (spec 5.6 still open) |
 | Saved-card renewal live, both providers | **not verified live** (needs a month) |
 | What Paystack answers to a test card token on the live API, and what Flutterwave answers (HTTP 400 per the adapter's note) | **not verified**; the closeout makes it moot |
 | Whether fees return on a refund | **not verified** (neither provider's refund pages say) |
 | The numbering starts at `BN-<year>-000001` | verified in code and by tests; not yet seen on a live row |
-| The closeout script, `BILLING_LIVE_SINCE` filter | **not built** (this PR is docs only) |
+| The closeout script, `BILLING_LIVE_SINCE` filter | built and tested on a scratch Postgres (PR #255); **not yet run on the production database**: the dry run in step 6 is its first real run |
 
 ## 11. Follow-ups
 
 | Item | Size |
 |---|---|
-| Closeout script and `BILLING_LIVE_SINCE` filter (blocks go-live) | about one day plus an Opus review |
+| Closeout script and `BILLING_LIVE_SINCE` filter | done (PR #255) |
 | A read-only live `proof` and `preflight` for `scripts/billing_test_purchase.py` | half a day |
 | Fix the stale line in `deploy/README.md:127` about a "not a tax document" test invoice | minutes |
 | Terms paid-plans section and Privacy entries for Paystack and Flutterwave (lawyer; does not block) | lawyer |

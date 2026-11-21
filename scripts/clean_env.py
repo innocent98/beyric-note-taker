@@ -135,6 +135,7 @@ LAYOUT = [
             "PILOT_EXPIRY_NOTICE_DAYS",
             "PILOT_EXPIRY_MIN_NOTICE_DAYS",
             "BILLING_LIVE",
+            "BILLING_LIVE_SINCE",
             "BILLING_COUNTRY_ROUTES",
             "BILLING_RETURN_URL",
             "BILLING_SELLER_NAME",
@@ -169,8 +170,9 @@ UNUSED_PREFIX = "VEXA_"
 UNUSED_NAMES = ("BOT_NAME", "BOT_PROVIDER")
 
 # Removed only when the value IS the code's default (app/config.py), so the app behaves the same
-# without the line. Left out on purpose, although they have a default: BILLING_LIVE and
-# TOKEN_ENC_KEY_VERSION (explicit safety and rotation state).
+# without the line. Left out on purpose, although they have a default: BILLING_LIVE,
+# BILLING_LIVE_SINCE (the go-live cutover, written down on purpose) and TOKEN_ENC_KEY_VERSION
+# (explicit safety and rotation state).
 # kind: s = text, i = whole number, b = true/false. tests/test_clean_env.py checks each default
 # against Settings, so this table cannot drift from the code.
 DEFAULTS = {
