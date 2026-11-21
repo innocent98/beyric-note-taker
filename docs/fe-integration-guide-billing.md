@@ -3165,6 +3165,8 @@ Capture 04, the list (trimmed to the one row):
 
 **What the person with an ended test plan sees.** `GET /api/billing/subscription` still returns the closed test-era subscription as the person's newest ended subscription (`subscription.status` `ended`, with its plan and period), and `state` is derived from it, so these people see **"no plan / ended"** (the screen the FE already draws for `ended`, `web/components/billing/billing-view.tsx`), not an empty first-time state, and the plans are open for them to buy again. Their hours from that plan are gone. Draw `ended` as you already do; do not treat it as an error and do not try to hide it. (Shape unchanged; not captured, because it is an existing state.)
 
+**What a former pilot person sees (the closeout run with `--end-pilot`, owner decision 2026-11-21).** The pilot hours end at go-live and such a person gets no trial, so they are in the plain "no plan" state: `GET /subscription` shows `state` `none`, `hours.seconds_left` 0, and a recording or a join is refused (`no_plan`, the same refusal as anyone with nothing); the plans screen is the way forward. Nothing new to draw; there is no mail and no bell entry for it. Shape unchanged, not captured (an existing state; the values are pinned by `tests/test_billing_closeout.py` at the hours layer, not over HTTP).
+
 ### What the administrator sees (admin only)
 
 `GET /api/admin/billing/payments` **still lists both payments**, with their invoice numbers (capture 11). The earlier payment's `refund_option` is not allowed, and says why:

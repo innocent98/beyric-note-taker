@@ -66,6 +66,22 @@ Payments, invoices and refunds are never deleted. Each update re-checks the cond
 | Parked test webhook events in `billing_events` | the sweeper skips events received before `T`; they are left in the table untouched |
 | Open refunds on test payments | the script REFUSES while one is `pending` or `unknown`; and `refunds.resolve` refuses a refund of a test-era payment once the cutover is in force (`before_go_live`), because `made` would delete the person's LIVE saved card and mail them and `not_made` would give test hours back |
 
+## `--end-pilot`: the pilot ends at go-live (owner decision 2026-11-21)
+
+The owner's words: everything should end and close; no pilot grant, no reminder mail, nobody else uses the app. It is an explicit, separate opt-in (`--end-pilot`), so the plain closeout never touches pilot hours.
+
+| What | Behaviour |
+|---|---|
+| Dry run | its own table row and a line "People holding pilot hours in force": counts only, no names |
+| `--apply --end-pilot` | every `pilot` grant still in force gets `expires_at = now`, one transaction per person under the same hours lock. Never trial, plan, pack or admin-gift grants (the plain closeout's own rules cover the bought ones); never an administrator's grant; a deleted person's grants are included. **No mail, no bell entry** (it only updates `hour_grants`; a test counts mail and notifications before and after) |
+| Refuses | while a meeting is being recorded (`bot_sent`, `processing`) or a join is due within 10 minutes (the deploy gate's two questions, in Python), because it would end hours a recording is using |
+| Ledger | usage allocations are kept; ended grants stay as history (the same move as every other ended grant); idempotent |
+| `PROOF: OK` | additionally means no pilot hours are in force |
+
+**What a person who held a pilot grant sees afterwards.** They have no hours and **no trial**: `app/trial.py` gives a trial only to someone who never held a `trial` or `pilot` grant (`KINDS_THAT_USE_THE_TRIAL_UP`), and that stays true. Their state is `none` with 0 seconds and no grant (the same as anyone with nothing), a recording is refused with `no_plan`, and they must buy a plan. A test pins these values (`tests/test_billing_closeout.py`). The FE needs nothing new: this is the existing "no plan" state.
+
+**`PAID_PLANS_OPEN_ON` must stay unset.** `app/pilot_expiry.py` (the 60-day expiry job and its 14-day mail) does nothing while it is unset, and it must stay that way: the job is now dead code to remove in a later change (with `docs/sop/2026-11-17-trial-and-pilot-expiry.md`'s pilot half). Nothing here removes it.
+
 ## Rejected alternatives
 
 - **A `test_mode` column on `payments`, `subscriptions`, `payment_methods` and `hour_grants`**: a migration on four money tables for a one-time event, with a backfill that would itself need a cutover time. One timestamp does the same job with no schema change. (`invoices.test_mode` already exists and stays; it only picks the number series.)
@@ -73,6 +89,7 @@ Payments, invoices and refunds are never deleted. Each update re-checks the cond
 - **Wait for the test subscriptions to end by themselves**: under test keys they renew successfully, so they never end.
 - **Calling `renewals._close`** to end the subscriptions: it mails the person "Your plan has ended".
 - **Deleting test payments and invoices**: they are money records and history; hiding is enough, and an admin keeps them.
+- **Ending pilot grants inside the plain closeout**: the owner's decision is explicit and a plain run must never end hours it was not asked to; a separate flag keeps its dry run readable.
 - **Assuming UTC for a timestamp with no zone**: an hour of error would silently move the line.
 
 ## Files
@@ -107,14 +124,14 @@ The runbook (`docs/launch/billing-go-live-runbook.md`, section 4, steps 2 to 9) 
 
 | # | Do | Proof |
 |---|---|---|
-| 1 | **Gate check** (a recreate follows): `bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'` | prints `no join is due` |
+| 1 | **Gate check** (a recreate follows): `bash -c '. deploy/gate.sh; join_due_soon && echo "no join is due"'`. **And, before the pause** (the pause switches the admin screen off): `q <<<"select count(*) from refunds where status in ('pending','unknown');"` | prints `no join is due`, and the refund count is `0`. If not, resolve each open refund in Admin, Billing, Refunds as made or not made first (every payment before the flip is a test payment) |
 | 2 | **Pause billing.** Edit `.env` yourself: `BILLING_ENABLED=false` (nothing else), then `docker compose up -d --force-recreate web worker scheduler`. This stops new checkouts, the billing pages and routes (404), the webhook route and the billing clock (renewals, retries, sweeper); hours and recordings go on | `docker compose exec -T web printenv BILLING_ENABLED </dev/null` prints `false`, and the webhook curl in the runbook answers `404` for both providers |
 | 3 | **Back up the database**: `BACKUP_DIR=~/backups/beyric-notes bash deploy/backup.sh` | `ls -lt ~/backups/beyric-notes \| head -3` shows a new dump stamped now. **This is the only undo** |
 | 4 | **Take `T` now, after the pause**, in UTC, and keep it in this terminal: `T=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo "$T"` | prints a time ending in `Z`, such as `2026-11-22T09:30:00Z` |
-| 5 | **Dry run** (changes nothing): `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" </dev/null` | says `DRY RUN`, a table of counts and `PROOF: not run`. A line starting `REFUSED` means do not go on; it says why (see the table below) |
+| 5 | **Dry run** (changes nothing): `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" --end-pilot </dev/null` | says `DRY RUN`, a table of counts and `PROOF: not run`. A line starting `REFUSED` means do not go on; it says why (see the table below) |
 | 6 | **Read the table.** Compare with the runbook's step 5 queries: the live test-era subscriptions, the bought hours in force, the saved cards, the abandoned checkouts. Trial, pilot and gift hours are never in it | the counts match; if a count is far larger than expected, stop |
-| 7 | **Apply**: `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" --apply </dev/null; echo "exit $?"` | the last lines say `PROOF: OK (...)` and `exit 0`. `PROOF: FAILED` or `exit 1`: run the same command again (it only does what is left); if it fails again, restore the backup (below) and tell the lead |
-| 8 | **Edit `.env` yourself, ONE edit**: the live keys and secrets, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE=<the T from step 4, exactly as printed>`, `BILLING_ALLOWED_EMAILS` narrowed to the two fresh test emails, and `BILLING_ENABLED=true` | `grep -E '^(BILLING_LIVE\|BILLING_LIVE_SINCE\|BILLING_ENABLED)=' .env` prints the three lines; `BILLING_LIVE_SINCE` ends in `Z` (do not paste keys into chat) |
+| 7 | **Apply**: `docker compose exec -T web python scripts/billing_close_test_data.py --before "$T" --apply --end-pilot </dev/null; echo "exit $?"` | the last lines say `PROOF: OK (...)` and `exit 0`. `PROOF: FAILED` or `exit 1`: run the same command again (it only does what is left); if it fails again, restore the backup (below) and tell the lead |
+| 8 | **Edit `.env` yourself, ONE edit**: the live keys and secrets, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE=<the T from step 4, exactly as printed>`, and `BILLING_ENABLED=true` (`BILLING_ALLOWED_EMAILS` stays `'*'`: owner decision, no narrowing) | `grep -E '^(BILLING_LIVE\|BILLING_LIVE_SINCE\|BILLING_ENABLED)=' .env` prints the three lines; `BILLING_LIVE_SINCE` ends in `Z` (do not paste keys into chat) |
 | 9 | **Recreate, ONE restart** (repeat the gate check first): `docker compose up -d --force-recreate web worker scheduler` | `docker compose ps` shows web, worker and scheduler Up, and `docker compose exec -T web printenv BILLING_LIVE_SINCE </dev/null` prints `T`. If web exits, `docker compose logs web --tail 30` names `BILLING_LIVE_SINCE` (no zone, not a timestamp, or in the future) |
 | 10 | **Check the gap and the old webhooks, before anyone pays.** With the runbook's `q` helper: `q <<SQL` ... `select (select count(*) from payments where created_at >= '$T') as payments, (select count(*) from subscriptions where created_at >= '$T') as subscriptions, (select count(*) from payment_methods where created_at >= '$T') as cards; SQL`. Then **remove the webhook URL from both providers' TEST dashboards** | prints `0 \| 0 \| 0`. Any other number means a row was made after `T` and before the flip: stop and tell the lead. (Also the read-only check that nothing before `T` is live: `select status, count(*) from subscriptions where created_at < '$T' group by 1;` shows no `active` or `past_due`, and `select count(*) from payment_methods where created_at < '$T';` prints `0`) |
 
@@ -126,7 +143,9 @@ The runbook (`docs/launch/billing-go-live-runbook.md`, section 4, steps 2 to 9) 
 | `--before is older than 60 minutes` | take a new `T` (the bound is `--max-age-minutes N`, default 60) |
 | `BILLING_LIVE is true` | the flip was done early: stop and tell the lead |
 | `billing rows were made at or after --before` (counts of payments, subscriptions, saved cards) | billing was not paused (or a row was made since): pause it, take a new `T`; if rows already exist, tell the lead (they are test rows the closeout would skip) |
-| `refund(s) of test-era payments are still open` | in the admin screen, Billing, Refunds, resolve each one as made or not made while still on test keys (before the flip), then run again |
+| `refund(s) of test-era payments are still open` | the pause switched the admin screen off, so: un-pause (`BILLING_ENABLED=true`, recreate web, worker and scheduler), resolve each in Admin, Billing, Refunds as made or not made, pause again, take a NEW T, run again. Step 1's count exists so this does not happen |
+| `meeting(s) are being recorded, or a join is due` (only with `--end-pilot`) | wait until none is (the step 1 gate), then run again |
+| `--max-age-minutes must be 1 or more` | use a positive number |
 | `payment(s) made in the last 30 minutes are still pending` | someone may be at the provider's page: wait until 30 minutes after the last one |
 
 **Two lines to know.** The script holds a person's hours lock and then their payment row; a refund being made at the same moment takes them in the other order and can deadlock: Postgres ends one side, that person is counted as failed, and running the command again finishes them (billing is paused, so this should not happen). Rows of a deleted person (no owner) are closed without an hours lock, because there is no person to lock; with billing paused nothing else touches them.
