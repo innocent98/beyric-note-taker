@@ -282,3 +282,75 @@ def test_a_persons_first_live_plan_payment_is_the_first_after_the_cutover(
     )
     assert refund.status == "submitted"
     assert providers.usd.refunds == [(live_payment.provider_tx_id, live_payment.amount_minor)]
+
+
+# ---- the rest of the places a test payment must not count (Opus review of PR 255) ----
+
+
+def test_a_test_era_payment_with_no_invoice_is_never_invoiced_after_go_live(session, providers):
+    """`issue_missing` would give it a LIVE gap-free number and queue a receipt mail."""
+    ada = make_user(session, "ada@example.test")
+    buy_plan(session, ada, providers.usd, FIRST_ERA, token="tok-test")
+    session.execute(text("delete from invoices"))
+    session.commit()
+    live_cfg = settings(billing_live=True, billing_live_since=T_TEXT)
+
+    assert invoices.issue_missing(session, FIRST_LIVE, live_cfg) == 0
+    assert session.scalars(select(Invoice)).all() == []
+    # control: without the cutover the same sweep issues it
+    assert invoices.issue_missing(session, FIRST_LIVE, settings()) == 1
+
+
+def test_a_test_payment_does_not_lock_the_billing_country(session, providers):
+    from app.billing import profile as profiles
+
+    ada = make_user(session, "ada@example.test")
+    buy_plan(session, ada, providers.usd, FIRST_ERA, token="tok-test")
+    session.execute(text("update subscriptions set status = 'ended'"))  # the closeout's end state
+    session.commit()
+    live_cfg = settings(billing_live=True, billing_live_since=T_TEXT)
+
+    assert profiles.country_lock(session, ada.id, FIRST_LIVE, live_cfg) is None  # free again
+    assert profiles.country_change_allowed_at(session, ada.id, FIRST_LIVE, live_cfg) is None
+    # control: without the cutover she is locked by the test payment
+    assert profiles.country_lock(session, ada.id, FIRST_LIVE, settings()) is not None
+    # and the country can be changed at once (the change takes effect, nothing scheduled)
+    change = profiles.change_country(session, ada, "NG", now=FIRST_LIVE, settings=live_cfg)
+    assert change.result != "scheduled"
+    session.rollback()
+
+
+def test_a_refund_of_a_test_payment_cannot_be_resolved_after_go_live(session, providers):
+    """`made` would delete the person's LIVE saved card and mail them; `not_made` would give test
+    hours back. The closeout refuses to run while one is open, and resolve refuses too."""
+    from app.models import Refund
+
+    ada = make_user(session, "ada@example.test")
+    admin = make_user(session, "root@example.test", admin=True)
+    buy_plan(session, ada, providers.usd, FIRST_ERA, token="tok-test")
+    payment = session.scalars(select(Payment).order_by(Payment.id)).first()
+    session.add(
+        Refund(
+            payment_id=payment.id,
+            reference=f"bnrf-{payment.id}-bbbbbbbbbbbbbbbb",
+            reason="first_plan_7d",
+            status="unknown",
+            amount_minor=payment.amount_minor,
+            currency=payment.currency,
+            created_at=FIRST_ERA + timedelta(hours=1),
+        )
+    )
+    session.commit()
+    refund = session.scalars(select(Refund)).one()
+    live_cfg = settings(billing_live=True, billing_live_since=T_TEXT)
+
+    for outcome in ("made", "not_made"):
+        with pytest.raises(refunds.Refused) as exc:
+            refunds.resolve(session, refund.id, outcome, admin, FIRST_LIVE, live_cfg)
+        session.rollback()
+        assert (exc.value.status, exc.value.code) == (409, "before_go_live")
+    session.refresh(refund)
+    assert refund.status == "unknown"
+    # control: before the cutover is in force the same call resolves it
+    done = refunds.resolve(session, refund.id, "not_made", admin, FIRST_LIVE, settings())
+    assert done.status == "failed"
