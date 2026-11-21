@@ -285,6 +285,27 @@ def test_leftover_keys_of_the_removed_bot_host_are_dropped_and_named_without_val
     assert_no_secret(result)
 
 
+def test_leftover_pilot_expiry_lines_are_dropped_whatever_their_value(tmp_path):
+    """The pilot-expiry job was removed on 2026-11-21: its four settings are no longer read."""
+    text = (
+        REQUIRED_TEXT
+        + "PAID_PLANS_OPEN_ON=2027-02-01\nPILOT_EXPIRY_DAYS=60\n"
+        + "PILOT_EXPIRY_NOTICE_DAYS=30\nPILOT_EXPIRY_MIN_NOTICE_DAYS=\n"
+    )
+    path = write_env(tmp_path, text)
+    dry = run(path)
+    assert dry.returncode == 0
+    assert (
+        "removed, no longer read by the app (4): PAID_PLANS_OPEN_ON, PILOT_EXPIRY_DAYS, "
+        "PILOT_EXPIRY_NOTICE_DAYS, PILOT_EXPIRY_MIN_NOTICE_DAYS"
+    ) in dry.stdout
+    assert "not recognised (0)" in dry.stdout
+    assert run(path, "--apply").returncode == 0
+    new = path.read_text()
+    assert "PAID_PLANS_OPEN_ON" not in new and "PILOT_EXPIRY" not in new
+    assert f"POSTGRES_PASSWORD={PG}\n" in new
+
+
 def test_a_leftover_with_a_dollar_or_a_quote_does_not_block_apply(tmp_path):
     text = REQUIRED_TEXT + "VEXA_DB_PASSWORD=a$B\nVEXA_API_KEY='x$y'\n"
     path = write_env(tmp_path, text)

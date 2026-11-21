@@ -130,10 +130,6 @@ LAYOUT = [
             "MICROSOFT_ORGANIZER_DOMAIN_TRUST",
             "TRIAL_DAYS",
             "TRIAL_DAILY_BUDGET_SECONDS",
-            "PAID_PLANS_OPEN_ON",
-            "PILOT_EXPIRY_DAYS",
-            "PILOT_EXPIRY_NOTICE_DAYS",
-            "PILOT_EXPIRY_MIN_NOTICE_DAYS",
             "BILLING_LIVE",
             "BILLING_LIVE_SINCE",
             "BILLING_COUNTRY_ROUTES",
@@ -166,8 +162,19 @@ REQUIRED = ("POSTGRES_PASSWORD", "SESSION_SECRET", "SKRIBBY_API_KEY", "OPENAI_AP
 # URL), and so do `BOT_NAME` (the name of that host's bot) and `BOT_PROVIDER` (there is one
 # provider). `COMPOSE_PROFILES` goes only when it is exactly `vexa`: that was the profile that
 # started the host; any other value is someone else's and is kept.
+# The pilot-expiry settings went the same way on 2026-11-21
+# (docs/sop/2026-11-21-remove-pilot-expiry.md): the job is gone, so a leftover line of any value
+# is removed. A server .env that still holds one starts fine either way: `Settings` ignores names
+# it does not know.
 UNUSED_PREFIX = "VEXA_"
-UNUSED_NAMES = ("BOT_NAME", "BOT_PROVIDER")
+UNUSED_NAMES = (
+    "BOT_NAME",
+    "BOT_PROVIDER",
+    "PAID_PLANS_OPEN_ON",
+    "PILOT_EXPIRY_DAYS",
+    "PILOT_EXPIRY_NOTICE_DAYS",
+    "PILOT_EXPIRY_MIN_NOTICE_DAYS",
+)
 
 # Removed only when the value IS the code's default (app/config.py), so the app behaves the same
 # without the line. Left out on purpose, although they have a default: BILLING_LIVE,
@@ -222,10 +229,6 @@ DEFAULTS = {
     "MICROSOFT_ORGANIZER_DOMAIN_TRUST": ("b", False),
     "TRIAL_DAYS": ("i", 14),
     "TRIAL_DAILY_BUDGET_SECONDS": ("i", 0),
-    "PAID_PLANS_OPEN_ON": ("s", ""),
-    "PILOT_EXPIRY_DAYS": ("i", 60),
-    "PILOT_EXPIRY_NOTICE_DAYS": ("i", 14),
-    "PILOT_EXPIRY_MIN_NOTICE_DAYS": ("i", 7),
     "BILLING_COUNTRY_ROUTES": ("s", "NG=NGN:paystack,*=USD:flutterwave"),
     "BILLING_RETURN_URL": ("s", ""),
     "BILLING_SELLER_NAME": ("s", "Beyrichq LTD"),

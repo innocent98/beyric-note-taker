@@ -1,5 +1,5 @@
-"""What the trial sweep and the pilot expiry would do right now (billing stage S10): a dry run to
-read BEFORE setting `TRIAL_SECONDS` or `PAID_PLANS_OPEN_ON`.
+"""What the trial sweep would do right now (billing stage S10): a dry run to read BEFORE setting
+`TRIAL_SECONDS`.
 
 Run it where the app's `.env` is:
 
@@ -12,11 +12,11 @@ has, so to see what values you intend to set would do, pass them to the command:
     docker compose exec -T -e TRIAL_SECONDS=10800 -e HOURS_MODE=enforce web \
         python scripts/trial_report.py </dev/null
 
-It never gives or expires anything: only the scheduler jobs do, and only once the settings are set.
+It never gives anything: only the scheduler job does, and only once the setting is set.
 """
 
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import func, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import pilot_expiry, trial  # noqa: E402
+from app import trial  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.models import HourGrant  # noqa: E402
 
@@ -37,12 +37,11 @@ def _hours(seconds: int) -> str:
 
 
 def build(session: Session, settings: Settings, now: datetime) -> list[str]:
-    lines = [f"Trial and pilot expiry report, {now:%Y-%m-%d %H:%M} UTC", ""]
+    lines = [f"Trial report, {now:%Y-%m-%d %H:%M} UTC", ""]
     enforcing = settings.hours_mode == "enforce"
     lines.append(
         f"HOURS_MODE is {settings.hours_mode} ({'enforcing' if enforcing else 'NOT enforcing'}); "
-        f"FEATURE_GATES_MODE is {settings.feature_gates_mode}. The trial does not depend on them; "
-        "the pilot expiry acts only under HOURS_MODE=enforce."
+        f"FEATURE_GATES_MODE is {settings.feature_gates_mode}. The trial does not depend on them."
     )
     lines += ["", "TRIAL"]
     if settings.trial_seconds <= 0:
@@ -70,35 +69,6 @@ def build(session: Session, settings: Settings, now: datetime) -> list[str]:
                 f"Hours that would be given at once: {_hours(waiting * settings.trial_seconds)}."
             )
     lines += _trial_lapse(session, settings, now, enforcing)
-    lines += ["", "PILOT EXPIRY"]
-    end = pilot_expiry.end_of(settings)
-    if end is None:
-        lines.append("PAID_PLANS_OPEN_ON is unset: no pilot hours expire and no mail goes.")
-        return lines
-    holders = pilot_expiry._holders(session, now)
-    told = [u for u in holders if pilot_expiry._pilot_seconds_left(session, u, now) > 0]
-    lines.append(
-        f"Paid plans open {settings.paid_plans_open_on}; pilot hours can be used until the end of "
-        f"{pilot_expiry.last_day_of(end)} (UTC)."
-    )
-    lines.append(
-        f"The one mail goes {settings.pilot_expiry_notice_days} days before: "
-        f"from {end - timedelta(days=settings.pilot_expiry_notice_days):%Y-%m-%d} UTC; nobody's "
-        f"hours end sooner than {settings.pilot_expiry_min_notice_days} days after their mail."
-    )
-    if not enforcing:
-        lines.append(
-            "NOTE: HOURS_MODE is not enforce, so the job would do nothing yet (no end, no mail)."
-        )
-    lines.append(
-        f"People holding pilot grants in force: {len(holders)}; with hours left (they would be "
-        f"mailed): {len(told)}."
-    )
-    if end <= now:
-        lines.append(
-            "WARNING: that end is already past. If any pilot grant was never given an end, "
-            "nothing expires until the date is moved."
-        )
     return lines
 
 

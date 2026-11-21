@@ -31,7 +31,6 @@ from app import (
     accounts,
     mail,
     maintenance,
-    pilot_expiry,
     series,
     series_mail,
     shares,
@@ -71,29 +70,15 @@ def register_default_sweeps(
     # Reminders before recurring meetings (W8): a cheap look every minute, on the sync loop with
     # the sweeps so it never delays a dispatch tick. It only queues mail; the mail loop sends it.
     scheduler.register("series_reminders", MINUTE, series_mail.queue_due_reminders, loop="sync")
-    # Billing S10, both off by default and registered only when switched on, so a server with the
-    # flags unset runs exactly the jobs it ran before. The trial sweep gives a trial to a confirmed
-    # account that holds none (a budget-delayed one, one made before the flag went on); the pilot
-    # job gives pilot grants their end and sends the one mail (`app/trial.py`,
-    # `app/pilot_expiry.py`).
+    # Billing S10, off by default and registered only when switched on, so a server with the flag
+    # unset runs exactly the jobs it ran before. The trial sweep gives a trial to a confirmed
+    # account that holds none (a budget-delayed one, one made before the flag went on)
+    # (`app/trial.py`).
     if settings.trial_seconds > 0:
         scheduler.register(
             "trial_sweep",
             MINUTE,
             lambda session, now: trial.sweep(session, now, settings),
-            loop="sync",
-        )
-    if settings.paid_plans_open_on is not None:
-        if settings.hours_mode != "enforce":
-            logger.warning(
-                "PAID_PLANS_OPEN_ON is set but HOURS_MODE is %s: no pilot hours expire and no mail "
-                "goes until HOURS_MODE=enforce",
-                settings.hours_mode,
-            )
-        scheduler.register(
-            "pilot_expiry",
-            HOURLY,
-            lambda session, now: pilot_expiry.run(session, now, settings),
             loop="sync",
         )
 

@@ -3,6 +3,11 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-21: pilot-expiry job removed** (branch `chore/remove-pilot-expiry`, SOP `docs/sop/2026-11-21-remove-pilot-expiry.md`, no migration, Alembic head unchanged):
+- [x] `app/pilot_expiry.py`, the `pilot_expiry` scheduler job, its mail, its four settings (`PAID_PLANS_OPEN_ON` and the three `PILOT_EXPIRY_*`; only the job read them) and `tests/test_pilot_expiry.py` removed; trial logic and old `pilot` grant rows untouched
+- [x] An old `.env` line is ignored (`extra="ignore"`); `scripts/clean_env.py` lists and drops it; `trial_report.py` and `local_trial_e2e.py` lost their pilot parts
+- [x] Notes on the trial SOP, the go-live closeout SOP and the FE billing guide's pilot paragraph; **not verified:** the server, `local_trial_e2e.py` (lint only), the full suite (CI)
+
 **Addendum 2026-11-21: join invites I haven't answered yet** (branch `feature/join-unanswered-invites`, SOP `docs/sop/2026-11-21-join-unanswered-invites.md`, migration 0055, **Alembic head now 0055**):
 - [x] Per-person checkbox "Also join invites I haven't answered yet" under the rule "All meetings with a video link" (`user_settings.join_unanswered`, off by default; shared-Google-account risk in the SOP)
 - [x] `will_join` skips `not_accepted` only while the box is off; `JoinSettings.for_user` is the one constructor (sync, API, runner re-check, organiser bot, mail)
