@@ -665,3 +665,227 @@ def test_the_dry_run_says_how_many_test_payments_have_no_invoice(session, factor
     code, out = run(factory)
 
     assert code == 0 and "1 succeeded test payment(s) have no invoice" in out
+
+
+# ---- --end-pilot (owner decision 2026-11-21) and the delta review ----
+
+
+def add_grant(session, user, kind, *, expires=NOW + timedelta(days=20), seconds=3 * HOUR):
+    grant = HourGrant(
+        user_id=user.id if user else None,
+        email_hash="h-" + kind,
+        kind=kind,
+        seconds=seconds,
+        starts_at=ERA,
+        expires_at=expires,
+    )
+    session.add(grant)
+    session.commit()
+    return grant
+
+
+class Pilots:
+    """A person with only a pilot grant, an administrator with one, a deleted person's, one that
+    already ended, and ben (World) who holds a pilot, a trial and an admin gift."""
+
+    def __init__(self, session, world):
+        self.zed = make_user(session, "zed@example.test")
+        self.zed_pilot = add_grant(session, self.zed, "pilot")
+        self.root = make_user(session, "root@example.test", admin=True)
+        self.root_pilot = add_grant(session, self.root, "pilot")
+        self.ghost_pilot = add_grant(session, None, "pilot")
+        self.old_end = NOW - timedelta(days=3)
+        self.ended_pilot = add_grant(session, self.zed, "pilot", expires=self.old_end)
+        self.ben_grants = [g for g in grants(session, world.ben) if g.kind != "plan_period"]
+
+
+@pytest.fixture
+def pilots(session, world):
+    return Pilots(session, world)
+
+
+def test_without_the_flag_pilot_hours_are_never_touched(session, factory, world, pilots):
+    assert run(factory, apply=True)[0] == 0
+
+    session.expire_all()
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW + timedelta(days=20)
+    assert session.get(HourGrant, pilots.ghost_pilot.id).expires_at == NOW + timedelta(days=20)
+
+
+def test_end_pilot_dry_run_counts_grants_and_people_and_changes_nothing(
+    session, factory, world, pilots
+):
+    snap = snapshot(session)
+
+    code, out = run(factory, end_pilot=True)
+
+    assert code == 0, out
+    assert snapshot(session) == snap
+    assert "--end-pilot" in out and "no mail, no bell entry" in out
+    # in force: ben's, zed's, the deleted person's (the administrator's and the ended one are not)
+    assert script.count(session, T, NOW, end_pilot=True).pilot == 3
+    assert "People holding pilot hours in force (counted before): 3" in out
+    assert "pilot hour grants still in force" in out
+    assert "example.test" not in out
+
+
+def test_end_pilot_ends_only_pilot_grants_of_people_who_are_not_admins(
+    session, factory, world, pilots
+):
+    from app.models import MailOutbox, Notification
+
+    mail_before = session.scalar(select(func.count()).select_from(MailOutbox))
+    bell_before = session.scalar(select(func.count()).select_from(Notification))
+    ben_kept = [(g.id, g.kind, g.expires_at) for g in pilots.ben_grants if g.kind != "pilot"]
+
+    code, out = run(factory, apply=True, end_pilot=True)
+
+    assert code == 0 and "PROOF: OK" in out and "no pilot hours are in force" in out, out
+    session.expire_all()
+    for grant in (pilots.zed_pilot, pilots.ghost_pilot):
+        assert session.get(HourGrant, grant.id).expires_at == NOW
+    ben_pilot = next(g for g in pilots.ben_grants if g.kind == "pilot")
+    assert session.get(HourGrant, ben_pilot.id).expires_at == NOW
+    # an administrator's pilot grant, and one that had already ended, are exactly as they were
+    assert session.get(HourGrant, pilots.root_pilot.id).expires_at == NOW + timedelta(days=20)
+    assert session.get(HourGrant, pilots.ended_pilot.id).expires_at == pilots.old_end
+    # ben's trial and admin gift are untouched
+    for grant_id, kind, expires in ben_kept:
+        assert session.get(HourGrant, grant_id).expires_at == expires, kind
+    # no mail and no bell entry
+    assert session.scalar(select(func.count()).select_from(MailOutbox)) == mail_before
+    assert session.scalar(select(func.count()).select_from(Notification)) == bell_before
+
+
+def test_end_pilot_is_idempotent_and_leaves_hours_ledger_rows(session, factory, world, pilots):
+    from app import hours
+    from app.models import UsageAllocation, UsageEntry
+    from app.usage import email_hash
+
+    entry = UsageEntry(user_id=pilots.zed.id, email_hash=email_hash(pilots.zed.email), seconds=HOUR)
+    session.add(entry)
+    session.flush()
+    hours.allocate(session, pilots.zed, entry, NOW - timedelta(days=1))
+    session.commit()
+    allocations = session.scalars(select(UsageAllocation.id)).all()
+    assert run(factory, apply=True, end_pilot=True)[0] == 0
+    once = snapshot(session)
+
+    code, out = run(factory, apply=True, end_pilot=True)
+
+    assert code == 0 and "PROOF: OK" in out and snapshot(session) == once
+    assert session.scalars(select(UsageAllocation.id)).all() == allocations  # nothing deleted
+
+
+def test_a_person_whose_pilot_ended_has_no_hours_and_no_trial(session, factory, world, pilots):
+    from app import entitlements, trial
+
+    assert run(factory, apply=True, end_pilot=True)[0] == 0
+    session.expire_all()
+
+    seen = entitlements.status(session, pilots.zed, NOW + timedelta(minutes=1))
+    # state `none`, no seconds, no grant at all: the same thing a person with nothing sees
+    assert (seen.state, seen.seconds_left, seen.has_grant) == ("none", 0, False)
+    # they held a pilot, so the trial is never given to them (`KINDS_THAT_USE_THE_TRIAL_UP`)
+    assert pilots.zed.id not in [u.id for u in trial.waiting(session)]
+    decision = entitlements.check_join(session, pilots.zed, NOW + timedelta(minutes=1))
+    assert not decision.allowed
+    assert decision.reason == "no_plan"  # the same refusal as for anyone with nothing
+
+
+def test_end_pilot_refuses_while_a_join_is_due_or_a_meeting_is_running(
+    session, factory, world, pilots
+):
+    from app.models import Meeting, ScheduledJoin, Template
+
+    real_now = datetime.now(UTC)
+    join = ScheduledJoin(
+        user_id=pilots.zed.id,
+        platform="zoom",
+        native_id="1",
+        meeting_url="u",
+        starts_at=real_now,
+        ends_at=real_now + timedelta(hours=1),
+        run_at=real_now + timedelta(minutes=5),
+        deadline_at=real_now + timedelta(hours=1),
+    )
+    session.add(join)
+    session.commit()
+    snap = snapshot(session)
+
+    for apply in (False, True):
+        code, out = run(factory, apply=apply, end_pilot=True)
+        assert code == 2 and "join is due within 10 minutes" in out, out
+    assert snapshot(session) == snap
+    assert run(factory, apply=True)[0] == 0  # the plain closeout is not held up by it
+
+    session.delete(join)
+    template = Template(owner_user_id=pilots.zed.id, name="G", instructions="x")
+    session.add(template)
+    session.flush()
+    session.add(
+        Meeting(
+            owner_user_id=pilots.zed.id,
+            url="u",
+            platform="zoom",
+            native_id="1",
+            template_id=template.id,
+            status="processing",
+        )
+    )
+    session.commit()
+    code, out = run(factory, apply=True, end_pilot=True)
+    assert code == 2 and "being recorded" in out
+    session.execute(text("update meetings set status = 'ready'"))
+    session.commit()
+    assert run(factory, apply=True, end_pilot=True)[0] == 0
+
+
+def test_one_persons_failure_under_end_pilot_leaves_their_pilot_hours(
+    session, factory, world, pilots, monkeypatch
+):
+    real = script.close_person
+
+    def broken_for_zed(sess, user_id, before, now, end_pilot=False):
+        changed = real(sess, user_id, before, now, end_pilot)
+        if user_id == pilots.zed.id:
+            raise RuntimeError("boom")
+        return changed
+
+    monkeypatch.setattr(script, "close_person", broken_for_zed)
+
+    code, out = run(factory, apply=True, end_pilot=True)
+
+    assert code == 1 and "PROOF: FAILED" in out
+    session.expire_all()
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW + timedelta(days=20)
+    ben_pilot = next(g for g in pilots.ben_grants if g.kind == "pilot")
+    assert session.get(HourGrant, ben_pilot.id).expires_at == NOW
+
+
+def test_an_open_refund_refusal_names_the_un_pause_path(session, factory, world):
+    first = session.scalars(select(Payment).order_by(Payment.id)).first()
+    make_refund(session, first, "unknown")
+
+    code, out = run(factory, apply=True)
+
+    assert code == 2
+    for words in ("Un-pause", "BILLING_ENABLED=true", "pause again", "NEW T"):
+        assert words in out, words
+
+
+def test_a_zero_max_age_is_refused_not_obeyed(session, factory, world):
+    for bad in (0, -5):
+        code, out = run(factory, max_age_minutes=bad)
+        assert code == 2 and "--max-age-minutes must be 1 or more" in out
+
+
+def test_the_country_functions_will_not_run_without_settings(session, world):
+    from app.billing import profile as profiles
+
+    with pytest.raises(TypeError):
+        profiles.country_lock(session, world.ada.id, NOW)
+    with pytest.raises(TypeError):
+        profiles.country_change_allowed_at(session, world.ada.id, NOW)
+    with pytest.raises(TypeError):
+        profiles.change_country(session, world.ada, "US", now=NOW)
