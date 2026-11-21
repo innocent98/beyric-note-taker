@@ -19,6 +19,10 @@ turns `BILLING_LIVE` on, so the app hides what the script closed.
 2. Run it WITHOUT `--apply`: a dry run that prints counts only. Read it.
 3. Run it again WITH `--apply`. It ends with `PROOF: OK` or says what is left.
 
+Pause billing FIRST (`BILLING_ENABLED=false`, recreate web, worker and scheduler: checkouts, the
+webhook route and the billing clock stop) and take `<T>` AFTER that, so no test row can be made
+between `<T>` and the flip. The script enforces it (see "REFUSES").
+
 What `--apply` does (and nothing else):
 
 - subscriptions made before `<T>` that are `active` or `past_due` become `ended` (no next charge,
@@ -35,8 +39,12 @@ exit code is 1 if any person failed or the proof does not hold. It is safe to ru
 second `--apply` changes nothing).
 
 It REFUSES to run (exit 2, nothing changed) unless `--before` is a timestamp with a zone that is
-not in the future, `BILLING_LIVE` is false in this process (it must run BEFORE the flip), and no
-payment made in the last 10 minutes is still `pending` (someone is paying: wait and run again).
+not in the future and not older than 60 minutes (`--max-age-minutes N` changes that),
+`BILLING_LIVE` is false in this process (it must run BEFORE the flip), no payment, subscription or
+saved card was created at or after `<T>` (a row made after `<T>` is a test row the app would treat
+as live), no refund of a test-era payment is still open (`pending` or `unknown`: resolve it in the
+admin screen first), and no payment made in the last 30 minutes is still `pending` (someone may be
+paying: wait and run again).
 
 The output is counts and times only: no name, email, token, reference or id is ever printed.
 """
@@ -57,9 +65,21 @@ from app import hours  # noqa: E402
 from app.billing import states  # noqa: E402
 from app.billing.cutover import parse_instant  # noqa: E402
 from app.config import Settings  # noqa: E402
-from app.models import HourGrant, Payment, PaymentMethod, Subscription, User  # noqa: E402
+from app.models import (  # noqa: E402
+    HourGrant,
+    Invoice,
+    Payment,
+    PaymentMethod,
+    Refund,
+    Subscription,
+    User,
+)
 
-PAYING_NOW = timedelta(minutes=10)  # a pending payment younger than this: someone is paying
+# A payment still `pending` that is younger than this: someone may be at the provider's page.
+PAYING_NOW = timedelta(minutes=30)
+# `--before` older than this many minutes is refused (override with `--max-age-minutes`): a stale
+# `T` would leave every row made between it and now alive.
+MAX_AGE_MINUTES = 60
 EXIT_OK, EXIT_FAILED, EXIT_REFUSED = 0, 1, 2
 # the rows the table counts, in the order it prints them
 KINDS = ("subscriptions", "grants", "cards", "payments")
@@ -270,9 +290,14 @@ def close_person(session: Session, user_id: int | None, before: datetime, now: d
 
 
 def check_guards(
-    session: Session, settings: Settings, before_text: str | None, now: datetime
+    session: Session,
+    settings: Settings,
+    before_text: str | None,
+    now: datetime,
+    max_age_minutes: int = MAX_AGE_MINUTES,
 ) -> datetime:
-    """Everything that must hold before anything is read or changed. Returns `T` as UTC."""
+    """Everything that must hold before anything is read or changed. Returns `T` as UTC. Counts
+    only in every message."""
     if not before_text or not before_text.strip():
         raise Refusal(
             "--before is required: the moment the closeout starts, as an ISO 8601 timestamp with "
@@ -287,10 +312,47 @@ def check_guards(
             "--before is in the future: it must be a moment that has already passed "
             "(use the current time in UTC)."
         )
+    if now - before > timedelta(minutes=max_age_minutes):
+        raise Refusal(
+            f"--before is older than {max_age_minutes} minutes: take a fresh time AFTER billing "
+            "was paused (or pass --max-age-minutes N if you really mean it). A stale time leaves "
+            "every test row made since it open."
+        )
     if settings.billing_live:
         raise Refusal(
             "BILLING_LIVE is true in this process: the closeout runs BEFORE the flip, while the "
             "app is still on test keys. Nothing was changed."
+        )
+    since = {
+        "payments": session.scalar(select(func.count()).where(Payment.created_at >= before)),
+        "subscriptions": session.scalar(
+            select(func.count()).where(Subscription.created_at >= before)
+        ),
+        "saved cards": session.scalar(
+            select(func.count()).where(PaymentMethod.created_at >= before)
+        ),
+    }
+    if any(since.values()):
+        found = ", ".join(f"{n} {kind}" for kind, n in since.items() if n)
+        raise Refusal(
+            f"billing rows were made at or after --before ({found}). While BILLING_LIVE is false "
+            "they are test rows the closeout would skip and the app would then treat as live. "
+            "Pause billing first (BILLING_ENABLED=false, recreate web, worker and scheduler), "
+            "take a new T after that, and run again; if rows were already made, ask the lead."
+        )
+    open_refunds = session.scalar(
+        select(func.count())
+        .select_from(Refund)
+        .where(
+            Refund.status.in_(("pending", "unknown")),
+            Refund.payment_id.in_(_test_payment_ids(before)),
+        )
+    )
+    if open_refunds:
+        raise Refusal(
+            f"{open_refunds} refund(s) of test-era payments are still open (outcome pending or "
+            "unknown). Close each first, while still on test keys: Admin, Billing, Refunds, "
+            "resolve it as made or not made. Then run again."
         )
     paying = session.scalar(
         select(func.count()).where(
@@ -299,11 +361,28 @@ def check_guards(
     )
     session.rollback()
     if paying:
+        minutes = int(PAYING_NOW.total_seconds() // 60)
         raise Refusal(
-            f"{paying} payment(s) made in the last {int(PAYING_NOW.total_seconds() // 60)} "
-            "minutes are still pending: someone is paying. Wait a few minutes and run it again."
+            f"{paying} payment(s) made in the last {minutes} minutes are still pending: someone "
+            f"may be paying. Wait until {minutes} minutes after the last one, and run it again."
         )
     return before
+
+
+def without_invoice(session: Session, before: datetime) -> int:
+    """Succeeded, used, test-era payments that have no invoice. Information only: the app never
+    invoices a test-era payment once the cutover is set (`invoices.issue_missing`)."""
+    return (
+        session.scalar(
+            select(func.count()).where(
+                Payment.status == "succeeded",
+                Payment.needs_refund_reason.is_(None),
+                Payment.created_at < before,
+                ~select(Invoice.id).where(Invoice.payment_id == Payment.id).exists(),
+            )
+        )
+        or 0
+    )
 
 
 def run(
@@ -314,12 +393,23 @@ def run(
     apply: bool,
     now: datetime | None = None,
     out: Callable[[str], None] = print,
+    max_age_minutes: int = MAX_AGE_MINUTES,
 ) -> int:
-    """The whole closeout. Returns the exit code."""
-    now = now or datetime.now(UTC)
+    """The whole closeout. Returns the exit code. A database error outside one person's
+    transaction prints its type only (a SQLAlchemy message carries the statement's values)."""
+    try:
+        return _run(
+            factory, settings, before_text, apply, now or datetime.now(UTC), out, max_age_minutes
+        )
+    except Exception as exc:
+        out(f"FAILED ({type(exc).__name__}): nothing further was done. Read the lines above.")
+        return EXIT_FAILED
+
+
+def _run(factory, settings, before_text, apply, now, out, max_age_minutes) -> int:
     try:
         with factory() as session:
-            before = check_guards(session, settings, before_text, now)
+            before = check_guards(session, settings, before_text, now, max_age_minutes)
     except Refusal as exc:
         out(f"REFUSED: {exc}")
         return EXIT_REFUSED
@@ -334,6 +424,7 @@ def run(
     with factory() as session:
         report = Report(before=count(session, before, now))
         who = people(session, before, now)
+        uninvoiced = without_invoice(session, before)
         session.rollback()
     report.people = len(who)
 
@@ -354,6 +445,10 @@ def run(
             session.rollback()
 
     _print_table(report, apply, out)
+    out(
+        f"Information: {uninvoiced} succeeded test payment(s) have no invoice. The app never "
+        "invoices a test-era payment after go-live, so none will be issued."
+    )
     if not apply:
         out("PROOF: not run (a dry run changes nothing).")
         return EXIT_OK
@@ -392,12 +487,24 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--before", help="T: ISO 8601 with a zone, in the past")
     parser.add_argument("--apply", action="store_true", help="change data (default: dry run)")
+    parser.add_argument(
+        "--max-age-minutes",
+        type=int,
+        default=MAX_AGE_MINUTES,
+        help=f"refuse a --before older than this (default {MAX_AGE_MINUTES})",
+    )
     args = parser.parse_args(argv)
 
     from app.config import get_settings
     from app.db import SessionLocal
 
-    return run(SessionLocal, get_settings(), args.before, apply=args.apply)
+    return run(
+        SessionLocal,
+        get_settings(),
+        args.before,
+        apply=args.apply,
+        max_age_minutes=args.max_age_minutes,
+    )
 
 
 if __name__ == "__main__":

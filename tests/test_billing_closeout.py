@@ -102,7 +102,7 @@ def snapshot(session):
 class World:
     """People in every state the closeout must treat differently."""
 
-    def __init__(self, session, providers):
+    def __init__(self, session, providers, with_live=False):
         self.session, self.providers = session, providers
         # ada: a test plan (Flutterwave) with a card, plus a test pack bought on it
         self.ada = make_user(session, "ada@example.test")
@@ -137,6 +137,8 @@ class World:
         self.cat = make_user(session, "cat@example.test")
         choose_country(session, self.cat, "US")
         self.abandoned = subs.start_plan_checkout(session, self.cat, "p20", settings(), ERA).payment
+        if not with_live:
+            return
         # dan: a LIVE plan bought after T, with a card, a pack and a checkout still pending
         self.dan = make_user(session, "dan@example.test")
         buy_plan(session, self.dan, providers.usd, LIVE_AT, token="tok-dan")
@@ -152,6 +154,13 @@ class World:
 @pytest.fixture
 def world(session, providers):
     return World(session, providers)
+
+
+@pytest.fixture
+def world_live(session, providers):
+    """The same, plus rows made AFTER the cutover (dan's live plan, eve's pending checkout). The
+    script refuses to run while such rows exist, so these are for tests that call it directly."""
+    return World(session, providers, with_live=True)
 
 
 # ---- what it does ----
@@ -205,32 +214,29 @@ def test_apply_closes_every_kind_of_test_era_row(session, factory, world):
     assert world.providers.usd.lookups == [] and world.providers.ngn.lookups == []
 
 
-def test_nothing_made_after_t_is_touched(session, factory, world):
+def test_nothing_made_after_t_is_touched(session, world_live):
+    """Called directly (the whole run refuses while rows after T exist): the person with a live
+    plan made after T and the one with a live pending checkout have nothing to close."""
     live_sub = session.scalars(
-        select(Subscription).where(Subscription.user_id == world.dan.id)
+        select(Subscription).where(Subscription.user_id == world_live.dan.id)
     ).one()
-    live_grant = grants(session, world.dan, "plan_period")[0]
-    before = (
-        live_sub.status,
-        live_grant.expires_at,
-        session.get(Payment, world.live_pending.id).status,
+    live_grant = grants(session, world_live.dan, "plan_period")[0]
+    before = snapshot(session)
+
+    for person in (world_live.dan, world_live.eve):
+        assert script.count(session, T, NOW, person.id).total() == 0
+        assert script.close_person(session, person.id, T, NOW).total() == 0
+    session.commit()
+
+    assert snapshot(session)["subs"] == before["subs"]
+    assert subs.live_row(session, world_live.dan.id) is not None
+    assert live_sub.status == "active" and grants(session, world_live.dan, "plan_period")[0] == (
+        live_grant
     )
-
-    code, out = run(factory, apply=True)
-
-    assert code == 0, out
-    session.expire_all()
-    live_sub = session.scalars(
-        select(Subscription).where(Subscription.user_id == world.dan.id)
+    assert session.get(Payment, world_live.live_pending.id).status == "pending"
+    assert session.scalars(
+        select(PaymentMethod).where(PaymentMethod.user_id == world_live.dan.id)
     ).one()
-    assert subs.live_row(session, world.dan.id) is not None
-    after = (
-        live_sub.status,
-        grants(session, world.dan, "plan_period")[0].expires_at,
-        session.get(Payment, world.live_pending.id).status,
-    )
-    assert after == before and after[0] == "active" and after[2] == "pending"
-    assert session.scalars(select(PaymentMethod).where(PaymentMethod.user_id == world.dan.id)).one()
 
 
 def test_money_records_are_never_deleted(session, factory, world):
@@ -245,7 +251,7 @@ def test_money_records_are_never_deleted(session, factory, world):
     run(factory, apply=True)
 
     session.expire_all()
-    assert counts() == before and before[1] >= 4  # four paid test or live payments have invoices
+    assert counts() == before and before[1] == 3  # the three paid test payments have invoices
     for payment in session.scalars(select(Payment)):
         # a payment only ever moves from pending to failed
         assert payment.status == statuses[payment.id] or (
@@ -317,25 +323,25 @@ def test_it_refuses_while_billing_is_live(session, factory, world):
 
 
 def test_it_refuses_while_someone_is_paying(session, factory, world):
-    recent = NOW - timedelta(minutes=3)
+    close = T + timedelta(minutes=5)  # T is five minutes old
     session.execute(
         text("update payments set created_at = :t where id = :i"),
-        {"t": recent, "i": world.live_pending.id},
+        {"t": T - timedelta(minutes=5), "i": world.abandoned.id},  # before T, 10 minutes ago
     )
     session.commit()
     snap = snapshot(session)
 
-    code, out = run(factory, apply=True)
+    code, out = run(factory, apply=True, now=close)
 
-    assert code == 2 and "someone is paying" in out
+    assert code == 2 and "may be paying" in out and "30 minutes" in out
     assert snapshot(session) == snap
-    # a pending payment older than ten minutes does not stop it
+    # one made more than 30 minutes before the run does not stop it
     session.execute(
         text("update payments set created_at = :t where id = :i"),
-        {"t": NOW - timedelta(minutes=11), "i": world.live_pending.id},
+        {"t": close - timedelta(minutes=31), "i": world.abandoned.id},
     )
     session.commit()
-    assert run(factory, apply=True)[0] == 0
+    assert run(factory, apply=True, now=close)[0] == 0
 
 
 def test_one_persons_failure_rolls_back_that_person_and_the_rest_go_on(
@@ -423,12 +429,12 @@ def test_a_closed_subscription_is_never_charged_or_asked_about(session, factory,
     )
 
 
-def test_the_sweeper_skips_test_era_payments_and_events(session, factory, world, monkeypatch):
+def test_the_sweeper_skips_test_era_payments_and_events(session, factory, world_live, monkeypatch):
     """Pending test checkouts, failed test checkouts with a page, and parked test webhook events
     are never asked about on the live API once the cutover is in force."""
     page = new_payment(
         session,
-        payer=world.cat,
+        payer=world_live.cat,
         provider="flutterwave",
         kind="plan",
         currency="USD",
@@ -451,7 +457,7 @@ def test_the_sweeper_skips_test_era_payments_and_events(session, factory, world,
     # the abandoned checkout is a few hours old, so it is inside the sweep's look-back window
     session.execute(
         text("update payments set created_at = :t where id = :i"),
-        {"t": T - timedelta(hours=5), "i": world.abandoned.id},
+        {"t": T - timedelta(hours=5), "i": world_live.abandoned.id},
     )
     session.commit()
     parsed: list[bytes] = []
@@ -460,21 +466,202 @@ def test_the_sweeper_skips_test_era_payments_and_events(session, factory, world,
         parsed.append(raw)
         raise ValueError("not a real event")
 
-    monkeypatch.setattr(world.providers.usd, "parse_event", spy)
+    monkeypatch.setattr(world_live.providers.usd, "parse_event", spy)
     far = NOW + timedelta(hours=3)  # the sweep looks back days, so every row above is in range
 
     renewals.sweep(session, far, settings(billing_live=True, billing_live_since=T_TEXT))
 
-    asked = world.providers.usd.lookups + world.providers.ngn.lookups
-    assert asked == [world.live_pending.reference]  # eve's checkout, made after T; no test-era one
+    asked = world_live.providers.usd.lookups + world_live.providers.ngn.lookups
+    assert asked == [
+        world_live.live_pending.reference
+    ]  # eve's checkout, made after T; no test-era one
     assert parsed == []
     # control: without the cutover the same sweep asks about the test-era rows too
-    world.providers.usd.lookups.clear()
-    world.providers.ngn.lookups.clear()
+    world_live.providers.usd.lookups.clear()
+    world_live.providers.ngn.lookups.clear()
     session.execute(text("update payments set last_checked_at = null"))
     session.commit()
     renewals.sweep(session, far, settings())
-    assert {world.abandoned.reference, page.reference} <= set(
-        world.providers.usd.lookups + world.providers.ngn.lookups
+    assert {world_live.abandoned.reference, page.reference} <= set(
+        world_live.providers.usd.lookups + world_live.providers.ngn.lookups
     )
     assert len(parsed) == 1
+
+
+# ---- the window between T and the flip, a stale T, open refunds (Opus review of PR 255) ----
+
+
+def test_it_refuses_when_billing_rows_were_made_at_or_after_t(session, factory, world_live):
+    """Rows made after T while BILLING_LIVE is false are test rows the closeout would skip and the
+    app would then read as live: the run refuses, and says how many, never whose."""
+    snap = snapshot(session)
+
+    code, out = run(factory, apply=True)
+
+    assert code == 2 and out.startswith("REFUSED"), out
+    assert "made at or after --before" in out and "Pause billing first" in out
+    assert "2 payments" in out and "1 subscriptions" in out and "1 saved cards" in out
+    assert "example.test" not in out and "tok-dan" not in out
+    assert snapshot(session) == snap
+    assert run(factory, apply=False)[0] == 2  # a dry run says so too
+
+
+def test_a_checkout_finished_after_t_stops_the_run(session, factory, world):
+    """A failed test checkout paid after the closeout would make a new test plan dated after T:
+    the guard sees any row at or after T, so it cannot start the run then."""
+    assert run(factory, apply=True)[0] == 0
+    ben = world.ben
+    buy_plan(session, ben, world.providers.ngn, T + timedelta(minutes=2), country="NG", token="x")
+
+    code, out = run(factory, apply=True)
+
+    assert code == 2 and "made at or after --before" in out
+
+
+def test_a_stale_before_is_refused_unless_the_age_is_raised(session, factory, world):
+    snap = snapshot(session)
+    late = T + timedelta(minutes=61)
+
+    code, out = run(factory, apply=True, now=late)
+
+    assert code == 2 and "older than 60 minutes" in out and "--max-age-minutes" in out
+    assert snapshot(session) == snap
+    assert run(factory, apply=True, now=T + timedelta(minutes=60))[0] == 0  # the bound is 60
+    assert run(factory, apply=True, now=T + timedelta(hours=5), max_age_minutes=600)[0] == 0
+
+
+def make_refund(session, payment, status):
+    from app.models import Refund
+
+    session.add(
+        Refund(
+            payment_id=payment.id,
+            reference=f"bnrf-{payment.id}-aaaaaaaaaaaaaaaa",
+            reason="first_plan_7d",
+            status=status,
+            amount_minor=payment.amount_minor,
+            currency=payment.currency,
+            created_at=ERA + timedelta(days=1),
+        )
+    )
+    session.commit()
+
+
+@pytest.mark.parametrize("status", ["pending", "unknown"])
+def test_it_refuses_while_a_refund_of_a_test_payment_is_open(session, factory, world, status):
+    first = session.scalars(select(Payment).order_by(Payment.id)).first()
+    make_refund(session, first, status)
+    snap = snapshot(session)
+
+    for apply in (False, True):
+        code, out = run(factory, apply=apply)
+        assert code == 2 and "refund(s) of test-era payments are still open" in out, out
+        assert "resolve it as made or not made" in out and "1 refund" in out
+    assert snapshot(session) == snap
+
+
+def test_a_decided_refund_does_not_stop_the_run(session, factory, world):
+    first = session.scalars(select(Payment).order_by(Payment.id)).first()
+    make_refund(session, first, "submitted")
+
+    assert run(factory, apply=True)[0] == 0
+
+
+def test_a_grant_linked_only_through_the_subscription_is_closed(session, world):
+    """An upgrade's grant can carry the subscription and a payment made after T (or none)."""
+    sub = session.scalars(select(Subscription).where(Subscription.user_id == world.ada.id)).one()
+    odd = HourGrant(
+        user_id=world.ada.id,
+        email_hash="h",
+        kind="plan_period",
+        seconds=HOUR,
+        starts_at=ERA,
+        expires_at=NOW + timedelta(days=5),
+        subscription_id=sub.id,
+    )
+    session.add(odd)
+    session.commit()
+
+    changed = script.close_person(session, world.ada.id, T, NOW)
+    session.commit()
+
+    assert changed.grants == 3  # the plan's, the pack's and this one
+    session.refresh(odd)
+    assert odd.expires_at == NOW
+
+
+def test_a_partly_used_grant_keeps_its_allocations(session, factory, world):
+    from app import hours
+    from app.models import UsageAllocation, UsageEntry
+    from app.usage import email_hash
+
+    entry = UsageEntry(user_id=world.ada.id, email_hash=email_hash(world.ada.email), seconds=HOUR)
+    session.add(entry)
+    session.flush()
+    hours.allocate(session, world.ada, entry, ERA + timedelta(days=1))
+    session.commit()
+    allocated = session.scalars(select(UsageAllocation.grant_id)).all()
+    assert allocated  # an hour was taken from a bought grant
+
+    assert run(factory, apply=True)[0] == 0
+
+    session.expire_all()
+    for grant_id in allocated:
+        grant = session.get(HourGrant, grant_id)
+        assert grant is not None and grant.expires_at == NOW  # ended, not deleted
+    assert session.scalars(select(UsageAllocation)).all()  # the ledger is intact
+
+
+def test_one_person_with_test_and_live_history_keeps_the_live_side(session, factory, world):
+    """Ada paid on test keys, the closeout ran, then she paid live: closing her again (direct call;
+    the whole run refuses once rows exist after T) leaves everything live untouched."""
+    assert run(factory, apply=True)[0] == 0
+    live_at = NOW + timedelta(hours=1)
+    buy_plan(session, world.ada, world.providers.usd, live_at, token="tok-live-ada")
+    stamp_live = text(
+        "update subscriptions set created_at = :t where user_id = :u and status = 'active'"
+    )
+    session.execute(stamp_live, {"t": live_at, "u": world.ada.id})
+    session.execute(
+        text("update payment_methods set created_at = :t where user_id = :u"),
+        {"t": live_at, "u": world.ada.id},
+    )
+    session.commit()
+    before = snapshot(session)
+
+    assert script.count(session, T, live_at + timedelta(hours=1), world.ada.id).total() == 0
+    assert script.close_person(session, world.ada.id, T, live_at + timedelta(hours=1)).total() == 0
+    session.commit()
+
+    assert snapshot(session) == before
+    live = subs.live_row(session, world.ada.id)
+    assert live is not None and live.created_at == live_at
+    assert session.scalars(select(PaymentMethod).where(PaymentMethod.user_id == world.ada.id)).one()
+    # her test plan and test hours stay ended
+    assert [g.expires_at for g in grants(session, world.ada, "plan_period")][0] == NOW
+
+
+def test_a_database_error_prints_its_type_and_nothing_it_carried(
+    session, factory, world, monkeypatch
+):
+    from sqlalchemy.exc import OperationalError
+
+    def broken(*a, **kw):
+        raise OperationalError("SELECT * FROM users WHERE id = 4242", {"id": 4242}, Exception("x"))
+
+    monkeypatch.setattr(script, "check_guards", broken)
+
+    code, out = run(factory, apply=True)
+
+    assert code == 1 and "OperationalError" in out
+    assert "4242" not in out and "SELECT" not in out
+    monkeypatch.undo()
+
+
+def test_the_dry_run_says_how_many_test_payments_have_no_invoice(session, factory, world):
+    session.execute(text("delete from invoices where id = (select min(id) from invoices)"))
+    session.commit()
+
+    code, out = run(factory)
+
+    assert code == 0 and "1 succeeded test payment(s) have no invoice" in out
