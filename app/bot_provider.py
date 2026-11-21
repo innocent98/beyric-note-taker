@@ -1,18 +1,21 @@
 """The bot layer's one interface: what the app asks of whatever puts a bot in a meeting.
 
 The worker, the pipeline, `place_bot`, the join runner, deletion and the routes depend on
-`BotProvider` and on the names here, never on a vendor's client. Two providers exist:
-`app.vexa.VexaProvider` (the self-hosted Vexa, the default) and `app.skribby.SkribbyProvider` (the
-hosted Skribby). Which one runs is the `BOT_PROVIDER` setting (default `vexa`); `build_provider()`
-turns that into an object, and an unknown value stops the process at startup (`app/config.py`).
-A meeting remembers which provider ran it (`meetings.bot_provider`), and `provider_for` hands the
-callers that work on an existing meeting (the pipeline, deletion, cancel and end) that provider,
-whatever the setting says now, so flipping `BOT_PROVIDER` never strands a meeting in flight.
+`BotProvider` and on the names here, never on a vendor's client. One provider exists:
+`app.skribby.SkribbyProvider` (the hosted Skribby). `build_provider()` builds it
+(`DEFAULT_PROVIDER`); a new provider adds a factory to `PROVIDER_FACTORIES` and nothing else. A
+meeting remembers which provider ran it (`meetings.bot_provider`), and `provider_for` hands the
+callers that work on an existing meeting (the pipeline, deletion, cancel and end) that provider.
+
+**Retired providers.** Old meetings still say `bot_provider = 'vexa'` (the self-hosted Vexa, removed
+on 2026-11-20 after its last recording copy was deleted). That is data, not code: `provider_for`
+hands such a meeting `RetiredProvider`, which asks nothing of anyone and treats the provider's copy
+as already gone. See `RETIRED_PROVIDERS` and `docs/sop/2026-11-20-remove-vexa.md`.
 
 The interface is exactly the calls the app makes today, with the rules the callers already rely on:
 
-- `send_bot(url)`: put a bot in the meeting; returns the provider's id for it (an int for Vexa, a
-  UUID string for Skribby; callers only ever store it as text and hand it back).
+- `send_bot(url)`: put a bot in the meeting; returns the provider's id for it (a UUID
+  string for Skribby; callers only ever store it as text and hand it back).
 - `get_meeting(platform, code)` and `get_meeting_by_id(id)`: the bot's live status, segments,
   recording and failure text.
 - `stop_bot(platform, code)`: take the bot out; nothing there is not an error. Keyed by code alone.
@@ -36,9 +39,9 @@ send for a live code is `BotDuplicate`, and `stop_bot` takes out whichever bot h
 **Bounded.** `send_bot` is called while the placement lock is held, so it must return or raise
 within `SEND_DEADLINE_SECONDS` however the network behaves.
 
-**Status vocabulary.** `BotMeeting.status` is Vexa's lifecycle words (`requested`, `joining`,
-`awaiting_admission`, `active`, `needs_help`, `stopping`, `completed`, `failed`), and the pipeline
-reads Vexa's `completion_reason` and `failure_reason` texts. A new provider maps its own states
+**Status vocabulary.** `BotMeeting.status` is the lifecycle words the pipeline reads (`requested`,
+`joining`, `awaiting_admission`, `active`, `needs_help`, `stopping`, `completed`, `failed`), and the
+pipeline reads `completion_reason` and `failure_reason` texts. A new provider maps its own states
 into that vocabulary (see the SOP, `docs/sop/2026-11-08-bot-provider-seam.md`); replacing it with
 a provider-neutral enum is a later step this seam makes possible.
 
@@ -46,12 +49,15 @@ This module imports nothing from the app at module level (the settings are read 
 `build_provider`), so `app/config.py` can read `PROVIDER_FACTORIES` for the startup check.
 """
 
+import logging
 import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 # The provider's id for a bot: whatever `send_bot` returned, stored as text on the meeting.
 BotId = int | str
@@ -118,7 +124,7 @@ class BotRegionMismatch(BotProviderError):
 
 
 class BotNotFound(BotProviderError):
-    """The provider does not know the meeting (HTTP 404 on Vexa). Still a `BotProviderError`, so
+    """The provider does not know the meeting (HTTP 404). Still a `BotProviderError`, so
     every caller that retries is unchanged; `app/deletion.py` reads it as "nothing there to wait
     for"."""
 
@@ -134,10 +140,10 @@ class BotMeeting:
     # The provider's own words for why the bot failed, e.g. "[Zoom Web] zoom_requires_rtms: ...".
     failure_reason: str | None = None
     # The provider's id for this meeting (the one `send_bot` returns), when the body carries one.
-    vexa_id: BotId | None = None
-    # The bot has stood in the waiting room (`awaiting_admission` in Vexa's own transition
-    # history). Vexa raises `needs_help` there as a warning that its lobby budget is running out,
-    # which is not a prompt the bot is stuck on.
+    provider_id: BotId | None = None
+    # The bot has stood in the waiting room (`awaiting_admission` in the provider's transition
+    # history). `needs_help` there is a warning that its lobby budget is running out, which is
+    # not a prompt the bot is stuck on.
     reached_lobby: bool = False
     # Where the last transcript segment ends, in seconds from the start of the recording, for a
     # provider that times its transcript (Skribby). Read only by `TRANSCRIPT_SOURCE=skribby`, to
@@ -176,7 +182,7 @@ class BotProvider(Protocol):
     """What the app asks of a bot provider. See the module docstring for the rules every
     implementation keeps. The names of the parameters are the ones callers use as keywords."""
 
-    # A real provider also has a class attribute `name` (`vexa`, `skribby`), the value stored in
+    # A real provider also has a class attribute `name` (`skribby`), the value stored in
     # `meetings.bot_provider`; it is not part of this check so a test double needs none
     # (`provider_name`, `provider_for`).
 
@@ -187,19 +193,13 @@ class BotProvider(Protocol):
         prefer `get_meeting_by_id` whenever the provider's id is known."""
         ...
 
-    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting: ...
+    def get_meeting_by_id(self, provider_bot_id: str | int) -> BotMeeting: ...
 
     def stop_bot(self, platform: str, native_id: str) -> None: ...
 
     def delete_recording(self, recording_id: int) -> None: ...
 
     def download_audio(self, recording_id: int, media_id: int, path: Path) -> None: ...
-
-
-def _vexa() -> BotProvider:
-    from app.vexa import VexaProvider  # inside: app/vexa.py imports this module
-
-    return VexaProvider()
 
 
 # Skribby keeps what it has seen of its bots in the process (`SkribbyProvider`): one object per
@@ -220,18 +220,68 @@ def _skribby() -> BotProvider:
     return provider
 
 
-# One entry per provider the app can run. A new provider adds its factory here and nothing else:
-# the startup check in `app/config.py` and `build_provider` both read this table.
-PROVIDER_FACTORIES: dict[str, Callable[[], BotProvider]] = {"vexa": _vexa, "skribby": _skribby}
+# One entry per provider the app can run. A new provider adds its factory here and nothing else.
+PROVIDER_FACTORIES: dict[str, Callable[[], BotProvider]] = {"skribby": _skribby}
+
+# The provider new bots go to, and the one a meeting row is taken to have when a caller has none.
+DEFAULT_PROVIDER = "skribby"
+
+# Provider names that old meeting rows still carry but that no longer exist in the code. Their bots
+# and recordings are gone (checked before the removal); `provider_for` answers for them with
+# `RetiredProvider`. The data stays: the rows are history the owner can still read.
+RETIRED_PROVIDERS = frozenset({"vexa"})
+
+
+class RetiredProvider:
+    """Stands in for a provider that is gone, for the meetings it ran.
+
+    Nothing is asked of the network. Every call answers as if the provider's copy were already
+    deleted, which is the true state: a recording that is gone is "nothing to wait for" to deletion
+    and retention, and a bot that is gone is "not there" to a lookup.
+
+    - `get_meeting`, `get_meeting_by_id`, `download_audio`: `BotNotFound` (the provider does not
+      know it). The pipeline does not call these for a retired meeting: `advance_meeting` fails an
+      unfinished one first (`is_retired`).
+    - `stop_bot`, `delete_recording`: succeed at once (nothing there is not an error).
+    - `send_bot`: `BotProviderError`; a new bot never goes to a retired provider (a hand retry
+      uses the provider in use now, not this one).
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def send_bot(self, meeting_url: str) -> BotId:
+        raise BotProviderError(f"provider {self.name!r} is retired and takes no new bots")
+
+    def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
+        raise BotNotFound(f"provider {self.name!r} is retired")
+
+    def get_meeting_by_id(self, provider_bot_id: str | int) -> BotMeeting:
+        raise BotNotFound(f"provider {self.name!r} is retired")
+
+    def stop_bot(self, platform: str, native_id: str) -> None:
+        return None
+
+    def delete_recording(self, recording_id: int) -> None:
+        # An audit trail, no network: the copy was checked gone before the provider was removed.
+        logger.info(
+            "recording %s of retired provider %r is taken as already deleted",
+            recording_id,
+            self.name,
+        )
+
+    def download_audio(self, recording_id: int, media_id: int, path: Path) -> None:
+        raise BotNotFound(f"provider {self.name!r} is retired")
+
+
+def is_retired(meeting_provider: str | None) -> bool:
+    """Whether a meeting's remembered provider no longer exists (`RETIRED_PROVIDERS`)."""
+    return (meeting_provider or "").strip().lower() in RETIRED_PROVIDERS
 
 
 def build_provider(name: str | None = None) -> BotProvider:
-    """The provider named by the `BOT_PROVIDER` setting (or by `name`, for a test)."""
-    if name is None:
-        from app.config import get_settings  # inside: app/config.py reads this module
-
-        name = get_settings().bot_provider
-    name = name.strip().lower()  # as the setting is read, so an explicit name is not stricter
+    """The provider `DEFAULT_PROVIDER` names (or the one named by `name`, for a test)."""
+    name = (DEFAULT_PROVIDER if name is None else name).strip().lower()
     try:
         factory = PROVIDER_FACTORIES[name]
     except KeyError:
@@ -242,13 +292,9 @@ def build_provider(name: str | None = None) -> BotProvider:
 
 def provider_name(provider: object) -> str:
     """The name to store on a new meeting for the provider that sent its bot. A provider has a
-    `name`; a test double that has none counts as whatever the setting says."""
+    `name`; a test double that has none counts as `DEFAULT_PROVIDER`."""
     name = getattr(provider, "name", None)
-    if isinstance(name, str) and name:
-        return name
-    from app.config import get_settings
-
-    return get_settings().bot_provider
+    return name if isinstance(name, str) and name else DEFAULT_PROVIDER
 
 
 def provider_region(provider: object) -> str | None:
@@ -262,11 +308,11 @@ def provider_for(
 ) -> BotProvider:
     """The provider that ran a meeting, for work on a meeting that already exists.
 
-    `default` is the provider the caller was given (the setting's, or a test's). It is used unless
+    `default` is the provider the caller was given (the usual one, or a test's). It is used unless
     it is a real provider with a different `name` than the one the meeting remembers: then the
-    meeting's own provider is built (a Vexa meeting still in flight after the setting moved to
-    Skribby, or the other way round). A `default` with no name (a test double) is always used, and
-    so is the default for a meeting that remembers a name this build does not know.
+    meeting's own provider is built. A `default` with no name (a test double) is used for every
+    other name, and so is the default for a meeting that remembers a name this build does not know.
+    A meeting that remembers a retired name (`RETIRED_PROVIDERS`) always gets a `RetiredProvider`.
 
     A hosted provider's region is part of where a bot is: when the meeting remembers a region and
     the provider talks to another, `BotRegionMismatch` is raised instead of asking a provider that
@@ -274,6 +320,8 @@ def provider_for(
     """
     wanted = (meeting_provider or "").strip().lower()
     have = getattr(default, "name", None) if default is not None else None
+    if wanted in RETIRED_PROVIDERS:
+        return RetiredProvider(wanted)  # whatever the caller was given: nothing is asked of it
     if default is not None and (not isinstance(have, str) or not wanted or have == wanted):
         provider = default
     elif wanted in PROVIDER_FACTORIES:

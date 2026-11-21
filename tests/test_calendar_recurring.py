@@ -28,7 +28,7 @@ from tests.test_calendar_connect import (
 from tests.test_web import OTHER_EMAIL, make_settings
 
 capp, google, settings, vault_key, web = cc.capp, cc.google, cc.settings, cc.vault_key, cc.web
-fake_openai, fake_vexa, owner, stranger = tw.fake_openai, tw.fake_vexa, tw.owner, tw.stranger
+fake_openai, fake_bot, owner, stranger = tw.fake_openai, tw.fake_bot, tw.owner, tw.stranger
 
 URL = "/api/calendar/recurring"
 NOW = datetime(2026, 11, 4, 10, 0, tzinfo=UTC)  # a Wednesday
@@ -204,21 +204,21 @@ def test_it_needs_a_login(capp, owner):
     error_of(browser(capp, log_in=False).get(URL), 401, "not_authenticated")
 
 
-def test_it_is_dark_while_the_calendar_flag_is_off(engine, google, fake_vexa, fake_openai, owner):
+def test_it_is_dark_while_the_calendar_flag_is_off(engine, google, fake_bot, fake_openai, owner):
     off = make_settings(
         google_client_id="id.apps.example.test",
         google_client_secret="s3cret",
         calendar_enabled=False,
     )
-    web = browser(build_app(engine, off, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, off, google, fake_bot, fake_openai))
     error_of(web.get(URL), 404, "calendar_unavailable")
 
 
-def test_it_is_dark_without_a_google_client(engine, google, fake_vexa, fake_openai, owner):
+def test_it_is_dark_without_a_google_client(engine, google, fake_bot, fake_openai, owner):
     from app import google_oauth
 
     bare = make_settings(calendar_enabled=True)
-    app = build_app(engine, bare, google, fake_vexa, fake_openai)
+    app = build_app(engine, bare, google, fake_bot, fake_openai)
     app.dependency_overrides[google_oauth.get_google] = lambda: None
     error_of(browser(app).get(URL), 404, "calendar_unavailable")
 

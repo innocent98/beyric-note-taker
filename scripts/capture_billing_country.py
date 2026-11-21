@@ -46,7 +46,7 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import BillingCountryChange, Payment, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 Recorder = base.Recorder
 PASSWORD = "-".join(["capture", "person", "password"])  # a placeholder, scratch database only
@@ -349,7 +349,7 @@ def main() -> None:
         billing_allowed_emails="*",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     server, server_base = base.start_server(app)
     engine = create_engine(base.SCRATCH_URL)
     try:

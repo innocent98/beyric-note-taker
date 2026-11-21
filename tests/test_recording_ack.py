@@ -26,8 +26,8 @@ from tests.test_web import (  # noqa: F401
     PASSWORD,
     anon_client,
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_user,
     owner,
     template,
@@ -181,9 +181,9 @@ def test_the_acknowledgement_is_the_callers_own_and_needs_login_and_the_header(
 
 
 def test_an_account_that_never_acknowledged_can_still_send_the_bot(
-    api, template, fake_vexa, session, owner
+    api, template, fake_bot, session, owner
 ):
     assert owner.recording_ack_at is None
     response = create(api, template)
-    assert response.status_code == 201 and fake_vexa.sent
+    assert response.status_code == 201 and fake_bot.sent
     assert session.scalars(select(Meeting).where(Meeting.owner_user_id == owner.id)).first()

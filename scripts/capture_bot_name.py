@@ -4,7 +4,7 @@
 
 Same setup as `scripts/capture_bot_invite_tip.py` (it imports `capture_calendar_connect` for the
 HTTP recorder, the scratch database and the app server): real migrations, the real app under
-uvicorn, real HTTP. The server runs as production would, `BOT_PROVIDER=skribby`, with the REAL
+uvicorn, real HTTP. The server runs as production would, with the REAL
 Skribby client pointed at a local stand-in for Skribby's API (`StandInSkribby`), which saves the
 body of every `POST /bot` it receives: that file shows exactly what `bot_name` the app sends.
 
@@ -20,7 +20,6 @@ import sys
 
 # Read by `get_settings()` (the meeting answer and the provider factory) when they run, so they are
 # set before anything imports the app. All placeholders.
-os.environ["BOT_PROVIDER"] = "skribby"
 os.environ["SKRIBBY_API_KEY"] = "capture-placeholder-key"
 os.environ["SKRIBBY_BOT_NAME"] = "Beyric Meeting Support"
 

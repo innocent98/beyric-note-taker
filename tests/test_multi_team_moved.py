@@ -24,8 +24,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
@@ -46,7 +46,7 @@ from tests.test_web import make_user
 ADA, DEE = "owner@example.test", "dee@example.test"
 
 
-class NoVexa:
+class NoBot:
     """`purge_user(..., force=True)` never calls the provider."""
 
 
@@ -391,7 +391,7 @@ def test_when_the_recorder_deletes_their_account_the_team_keeps_a_moved_meeting(
 ):
     move(sign_in(app, ADA), world.private, world.x)
     gone = session.get(User, world.ada.id)
-    deletion.purge_user(session, gone, NoVexa(), force=True)
+    deletion.purge_user(session, gone, NoBot(), force=True)
     kept = session.get(Meeting, world.private.id)
     assert kept is not None and kept.owner_team_id == world.x.id
     assert world.private.id in ids_of(session, world.pat)  # the team still reads it
@@ -409,7 +409,7 @@ def test_when_the_recorder_deletes_their_account_the_team_keeps_a_moved_meeting(
 
 
 def test_deleting_the_account_still_deletes_private_and_shared_meetings(session, world):
-    deletion.purge_user(session, session.get(User, world.ada.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.ada.id), NoBot(), force=True)
     assert session.get(Meeting, world.private.id) is None
     assert session.get(Meeting, world.in_x.id) is None
     assert session.get(Meeting, world.in_z.id) is not None  # Zed's, untouched
@@ -418,8 +418,8 @@ def test_deleting_the_account_still_deletes_private_and_shared_meetings(session,
 def test_the_purged_account_is_not_purged_twice_and_its_email_is_free_again(session, world):
     moved(session, world.private, world.x)
     gone = session.get(User, world.ada.id)
-    deletion.purge_user(session, gone, NoVexa(), force=True)
-    assert deletion.purge_deleted(session, NoVexa()) == 0  # the hollow row is not a pending purge
+    deletion.purge_user(session, gone, NoBot(), force=True)
+    assert deletion.purge_deleted(session, NoBot()) == 0  # the hollow row is not a pending purge
     assert session.scalar(select(User.id).where(User.email == ADA)) is None
 
 
@@ -431,7 +431,7 @@ def test_a_moved_meeting_goes_with_its_team_when_the_last_member_deletes_their_a
     world.private.owner_team_id = alone.id
     session.commit()
     meeting_id = world.private.id
-    deletion.purge_user(session, session.get(User, world.ada.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.ada.id), NoBot(), force=True)
     assert session.get(Meeting, meeting_id) is None
 
 
@@ -446,7 +446,7 @@ def test_a_moved_meeting_returns_to_its_recorder_when_the_team_is_deleted_and_th
     teams.leave(session, world.ada, datetime.now(UTC), team_id=team_w.id)
     session.commit()
     assert world.private.id not in ids_of(session, world.ada)
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.refresh(world.private)
     assert world.private.owner_team_id is None and world.private.owner_user_id == world.ada.id
     assert world.private.id in ids_of(session, world.ada)
@@ -459,9 +459,9 @@ def test_a_moved_meeting_of_a_former_member_is_deleted_with_its_team(session, wo
     world.private.owner_team_id = team_w.id
     session.commit()
     meeting_id = world.private.id
-    deletion.purge_user(session, session.get(User, world.ada.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.ada.id), NoBot(), force=True)
     assert session.get(Meeting, meeting_id) is not None
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     assert session.get(Meeting, meeting_id) is None
 
 

@@ -61,7 +61,7 @@ from app.config import Settings  # noqa: E402
 from app.limits import Limit  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import AppState, MailOutbox, User  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 
 class StandInGoogle(google_oauth.GoogleOAuth):
@@ -74,7 +74,7 @@ class StandInGoogle(google_oauth.GoogleOAuth):
         return self.identity
 
 
-class FakeVexa:
+class FakeBot:
     def send_bot(self, url):
         return 4242
 
@@ -210,7 +210,7 @@ def main() -> None:
         google_client_secret="capture-client-secret",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: FakeBot()
     app.dependency_overrides[google_oauth.get_google] = lambda: StandInGoogle(settings)
     limits = app.state.public_limits
     limits.signup_address = Limit(limits.store, "signup_address", 10_000, 3600)  # one address calls

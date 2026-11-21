@@ -6,10 +6,10 @@ Same setup as `scripts/capture_calendar_state.py` (it imports `capture_calendar_
 HTTP recorder, the scratch database and the app server): real migrations, the real app under
 uvicorn, real HTTP, the Google connection made through the real connect flow.
 
-The server is started as production would run it with the tip on: `BOT_PROVIDER=skribby`, a signed
+The server is started as production would run it with the tip on: Skribby as the provider, a signed
 in account (`SKRIBBY_ACCOUNT_ID`) and `BOT_INVITE_EMAIL`. Every value is a placeholder. The same two
-reads are then captured with the address unset, with the account unset and with Vexa as provider,
-to show the field is `null` (present, not absent) whenever the server may not say it.
+reads are then captured with the address unset, with the account unset and with the provider as
+provider, to show the field is `null` (present, not absent) whenever the server may not say it.
 
 Files go to `docs/fe-captures/bot-invite-tip/NN-name.json`.
 
@@ -24,7 +24,6 @@ import sys
 
 # The app reads these at start through `get_settings()` (the meeting answer does), so they are set
 # before anything imports it. All placeholders.
-os.environ["BOT_PROVIDER"] = "skribby"
 os.environ["SKRIBBY_API_KEY"] = "capture-placeholder-key"
 os.environ["SKRIBBY_ACCOUNT_ID"] = "11111111-2222-3333-4444-555555555555"
 os.environ["BOT_INVITE_EMAIL"] = "note@example.test"
@@ -45,7 +44,7 @@ from app.config import Settings, get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Meeting, Template, User  # noqa: E402
 from app.pipeline import REASON_NOT_LET_IN  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from tests.fakes.google import FakeGoogle, FakeGoogleCalendar  # noqa: E402
 
 Recorder = base.Recorder
@@ -150,7 +149,6 @@ def run(app, server_base, engine, google) -> None:
     for name, env, value in (
         ("address-unset", "BOT_INVITE_EMAIL", ""),
         ("no-account", "SKRIBBY_ACCOUNT_ID", ""),
-        ("vexa", "BOT_PROVIDER", "vexa"),
     ):
         saved = os.environ[env]
         os.environ[env] = value
@@ -194,7 +192,7 @@ def main() -> None:
     )
     google = FakeGoogle(settings)
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     server, server_base = base.start_server(app)
     engine = create_engine(base.SCRATCH_URL)

@@ -1,7 +1,7 @@
 """Speaker-labelled transcripts and meeting notes, written by an OpenAI chat model.
 
 The accurate transcript (from the transcription model) is the only source of facts. The live
-Vexa text is a poor transcript (in testing it flipped "can" to "can't" and invented "London"
+bot text is a poor transcript (in testing it flipped "can" to "can't" and invented "London"
 and "Berlin"), so it is used solely to work out who said what.
 """
 

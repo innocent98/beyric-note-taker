@@ -22,16 +22,26 @@ SCRIPT = ROOT / "scripts" / "clean_env.py"
 PG = "pg-FAKE-4f1d9a"
 SESSION = "session-FAKE-" + "x" * 40
 OPENAI = "sk-FAKE-openai-7e2b"
-VEXA_DB = "vexadb-FAKE-31c8"
-VEXA_STORE = "vexastore-FAKE-90aa"
-SECRETS = [PG, SESSION, OPENAI, VEXA_DB, VEXA_STORE]
+SKRIBBY = "skr-FAKE-key-52d1"
+GONE_DB = "gonedb-FAKE-31c8"
+GONE_STORE = "gonestore-FAKE-90aa"
+SECRETS = [PG, SESSION, OPENAI, SKRIBBY, GONE_DB, GONE_STORE]
 
 REQUIRED_TEXT = (
-    f"POSTGRES_PASSWORD={PG}\n"
-    f"SESSION_SECRET={SESSION}\n"
-    f"OPENAI_API_KEY={OPENAI}\n"
-    f"VEXA_DB_PASSWORD={VEXA_DB}\n"
-    f"VEXA_STORAGE_SECRET={VEXA_STORE}\n"
+    f"POSTGRES_PASSWORD={PG}\nSESSION_SECRET={SESSION}\n"
+    f"SKRIBBY_API_KEY={SKRIBBY}\nOPENAI_API_KEY={OPENAI}\n"
+)
+
+# What a server .env may still hold after the self-hosted bot host (Vexa) was removed.
+LEFTOVER_TEXT = (
+    f"VEXA_DB_PASSWORD={GONE_DB}\n"
+    f"VEXA_STORAGE_SECRET={GONE_STORE}\n"
+    "VEXA_API_KEY=vxk-FAKE-1\n"
+    "VEXA_IMAGE_TAG=v012\n"
+    "VEXA_BASE_URL=http://localhost:8056\n"
+    'BOT_NAME="Beyric Note Taker (recording)"\n'
+    "BOT_PROVIDER=skribby\n"
+    "COMPOSE_PROFILES=vexa\n"
 )
 
 
@@ -77,15 +87,18 @@ def test_the_dry_run_report_lists_every_kind_of_key_by_name(tmp_path):
     text = (
         REQUIRED_TEXT
         + "POLL_INTERVAL_SECONDS=30\nPAYSTACK_WEBHOOK_SECRET=\nMADE_UP_KEY=hidden-FAKE-value\n"
-        + "BOT_PROVIDER=skribby\nBOT_PROVIDER=skribby\n"
+        + "MULTI_TEAM_ENABLED=true\nMULTI_TEAM_ENABLED=true\n"
+        + "VEXA_API_KEY=hidden-FAKE-leftover\nBOT_PROVIDER=skribby\n"
     )
     result = run(write_env(tmp_path, text))
     out = result.stdout
     assert "removed, same as the code default (1): POLL_INTERVAL_SECONDS" in out
     assert "empty line that means the same as none (1): PAYSTACK_WEBHOOK_SECRET" in out
     assert "not recognised (1): MADE_UP_KEY" in out
-    assert "(1): BOT_PROVIDER" in out  # the duplicate
+    assert "(1): MULTI_TEAM_ENABLED" in out  # the duplicate
+    assert "no longer read by the app (2): VEXA_API_KEY, BOT_PROVIDER" in out
     assert "hidden-FAKE-value" not in out + result.stderr
+    assert "hidden-FAKE-leftover" not in out + result.stderr
 
 
 # ---- the rewrite ----
@@ -95,6 +108,7 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
     text = (
         "# old comment about proxies\r\n"
         'SKRIBBY_BOT_NAME="Beyric Note Taker"\r\n'
+        f"SKRIBBY_API_KEY={SKRIBBY}\r\n"
         f"POSTGRES_PASSWORD={PG}\r\n"
         'MAIL_FROM="Beyric Note Taker <no-reply@notes.beyrictech.com>"\r\n'
         f"SESSION_SECRET={SESSION}\r\n"
@@ -102,8 +116,6 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
         f"OPENAI_API_KEY={OPENAI}\r\n"
         "TOKEN_ENC_KEY=ab#cd=ef==\r\n"
         "OWNER_EMAIL=a@example.com\r\n"
-        f"VEXA_STORAGE_SECRET={VEXA_STORE}\r\n"
-        f"VEXA_DB_PASSWORD={VEXA_DB}\r\n"
         "GOOGLE_CLIENT_ID=\r\n"
         "BILLING_ALLOWED_EMAILS=a@example.com,b@example.com"  # no final newline
     )
@@ -126,6 +138,7 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
         "TOKEN_ENC_KEY=ab#cd=ef==\n"
         "\n"
         "# ---- Bot provider (Skribby) ----\n"
+        f"SKRIBBY_API_KEY={SKRIBBY}\n"
         'SKRIBBY_BOT_NAME="Beyric Note Taker"\n'
         "\n"
         "# ---- Transcription and notes ----\n"
@@ -133,10 +146,6 @@ def test_apply_writes_the_layout_and_keeps_every_value_byte_for_byte(tmp_path):
         "\n"
         "# ---- Billing ----\n"
         "BILLING_ALLOWED_EMAILS=a@example.com,b@example.com\n"
-        "\n"
-        "# ---- Vexa (to remove once its cleanup is done) ----\n"
-        f"VEXA_DB_PASSWORD={VEXA_DB}\n"
-        f"VEXA_STORAGE_SECRET={VEXA_STORE}\n"
     )
     assert_no_secret(result)
 
@@ -169,26 +178,26 @@ def test_apply_twice_changes_nothing_the_second_time(tmp_path):
 
 
 def test_the_last_of_two_duplicate_keys_is_the_value_kept(tmp_path):
-    text = REQUIRED_TEXT + "BOT_PROVIDER=vexa\nMULTI_TEAM_ENABLED=true\nBOT_PROVIDER=skribby\n"
+    text = REQUIRED_TEXT + "HOURS_MODE=enforce\nMULTI_TEAM_ENABLED=true\nHOURS_MODE=off\n"
     path = write_env(tmp_path, text)
     assert run(path, "--apply").returncode == 0
     new = path.read_text()
-    assert new.count("BOT_PROVIDER=") == 1
-    assert "BOT_PROVIDER=skribby\n" in new
-    assert "BOT_PROVIDER=vexa" not in new
+    assert new.count("HOURS_MODE=") == 1
+    assert "HOURS_MODE=off\n" in new
+    assert "HOURS_MODE=enforce" not in new
 
 
 def test_quoted_values_with_spaces_hashes_and_equals_survive(tmp_path):
     text = (
         REQUIRED_TEXT
-        + "BOT_NAME='Beyric (recording) #1 = ok'\n"
+        + "SKRIBBY_BOT_NAME='Beyric (recording) #1 = ok'\n"
         + 'MAIL_FROM="A # B <a@example.com>"   # a note\n'
         + 'BILLING_SELLER_ADDRESS="Lagos,\nNigeria"\n'
     )
     path = write_env(tmp_path, text)
     assert run(path, "--apply").returncode == 0
     new = path.read_text()
-    assert "BOT_NAME='Beyric (recording) #1 = ok'\n" in new
+    assert "SKRIBBY_BOT_NAME='Beyric (recording) #1 = ok'\n" in new
     assert 'MAIL_FROM="A # B <a@example.com>"   # a note\n' in new
     assert 'BILLING_SELLER_ADDRESS="Lagos,\nNigeria"\n' in new
 
@@ -225,26 +234,79 @@ def test_a_value_equal_to_the_code_default_goes_and_a_different_one_stays(tmp_pa
 def test_keys_whose_default_is_not_a_plain_constant_are_never_removed(tmp_path):
     text = (
         REQUIRED_TEXT
-        + "BOT_MAX_LOCAL=1\nTEAMS_JOIN_ENABLED=true\nBILLING_LIVE=false\nTOKEN_ENC_KEY_VERSION=1\n"
-        + "BOT_PROVIDER=skribby\nAPP_ENV=production\nCOOKIE_SECURE=true\nHOURS_MODE=off\n"
-        + 'VEXA_IMAGE_TAG=v012\nBOT_NAME="Beyric Note Taker (recording)"\n'
+        + "BOT_MAX_LOCAL=1\nTEAMS_JOIN_ENABLED=false\nBILLING_LIVE=false\nTOKEN_ENC_KEY_VERSION=1\n"
+        + "APP_ENV=production\nCOOKIE_SECURE=true\nHOURS_MODE=off\n"
     )
     path = write_env(tmp_path, text)
     assert run(path, "--apply").returncode == 0
     new = path.read_text()
     for kept in (
-        "BOT_MAX_LOCAL=1",
-        "TEAMS_JOIN_ENABLED=true",
+        "BOT_MAX_LOCAL=1",  # not the default (20)
+        "TEAMS_JOIN_ENABLED=false",  # not the default (true)
         "BILLING_LIVE=false",
         "TOKEN_ENC_KEY_VERSION=1",
-        "BOT_PROVIDER=skribby",
         "APP_ENV=production",
         "COOKIE_SECURE=true",
         "HOURS_MODE=off",
-        "VEXA_IMAGE_TAG=v012",
-        'BOT_NAME="Beyric Note Taker (recording)"',
     ):
         assert kept in new
+
+
+def test_the_bot_limit_and_teams_lines_that_equal_the_default_now_go(tmp_path):
+    text = REQUIRED_TEXT + "BOT_MAX_LOCAL=20\nTEAMS_JOIN_ENABLED=true\n"
+    path = write_env(tmp_path, text)
+    assert run(path, "--apply").returncode == 0
+    new = path.read_text()
+    assert "BOT_MAX_LOCAL" not in new and "TEAMS_JOIN_ENABLED" not in new
+
+
+# ---- what the removal of the self-hosted bot host (Vexa) leaves behind ----
+
+
+def test_leftover_keys_of_the_removed_bot_host_are_dropped_and_named_without_values(tmp_path):
+    path = write_env(tmp_path, REQUIRED_TEXT + LEFTOVER_TEXT + "MULTI_TEAM_ENABLED=true\n")
+    dry = run(path)
+    assert dry.returncode == 0
+    assert (
+        "removed, no longer read by the app (8): VEXA_DB_PASSWORD, VEXA_STORAGE_SECRET, "
+        "VEXA_API_KEY, VEXA_IMAGE_TAG, VEXA_BASE_URL, BOT_NAME, BOT_PROVIDER, COMPOSE_PROFILES"
+    ) in dry.stdout
+    assert "not recognised (0)" in dry.stdout
+    assert_no_secret(dry)
+    result = run(path, "--apply")
+    assert result.returncode == 0, result.stderr
+    new = path.read_text()
+    for gone in ("VEXA_", "BOT_NAME=", "BOT_PROVIDER", "COMPOSE_PROFILES"):
+        assert gone not in new
+    assert "MULTI_TEAM_ENABLED=true\n" in new and f"POSTGRES_PASSWORD={PG}\n" in new
+    assert "Not recognised" not in new
+    assert_no_secret(result)
+
+
+def test_a_leftover_with_a_dollar_or_a_quote_does_not_block_apply(tmp_path):
+    text = REQUIRED_TEXT + "VEXA_DB_PASSWORD=a$B\nVEXA_API_KEY='x$y'\n"
+    path = write_env(tmp_path, text)
+    assert run(path, "--apply").returncode == 0
+    assert "VEXA_" not in path.read_text()
+
+
+def test_a_compose_profiles_line_is_dropped_only_when_it_is_exactly_the_old_profile(tmp_path):
+    for value, gone in (("vexa", True), ('"Vexa"', True), ("other", False), ("vexa,other", False)):
+        folder = tmp_path / f"p{len(list(tmp_path.iterdir()))}"
+        folder.mkdir()
+        path = write_env(folder, REQUIRED_TEXT + f"COMPOSE_PROFILES={value}\n")
+        assert run(path, "--apply").returncode == 0
+        assert ("COMPOSE_PROFILES" not in path.read_text()) is gone, value
+
+
+def test_the_settings_still_start_on_a_server_env_that_has_the_leftovers(tmp_path):
+    """The app must start before the cleaner is run: the leftover lines are ignored, not refused."""
+    path = tmp_path / ".env"
+    path.write_text(REQUIRED_TEXT + LEFTOVER_TEXT + "BOT_PROVIDER=vexa\n")
+    settings = Settings(_env_file=str(path))
+    assert settings.skribby_bot_name  # built; nothing of the bot host is a setting any more
+    assert not any("vexa" in name for name in Settings.model_fields)
+    assert "bot_name" not in Settings.model_fields and "bot_provider" not in Settings.model_fields
 
 
 def test_a_kept_value_with_a_dollar_blocks_apply_and_is_named_not_shown(tmp_path):
@@ -288,12 +350,12 @@ def test_an_empty_paystack_webhook_secret_is_dropped_and_a_set_one_is_kept(tmp_p
 
 
 def test_unrecognised_keys_are_kept_at_the_bottom_and_named(tmp_path):
-    text = REQUIRED_TEXT + "SOMETHING_ELSE=keep-FAKE-me\nCOMPOSE_PROFILES=vexa\n"
+    text = REQUIRED_TEXT + "SOMETHING_ELSE=keep-FAKE-me\nCOMPOSE_PROFILES=other\n"
     path = write_env(tmp_path, text)
     result = run(path, "--apply")
     new = path.read_text()
     assert new.endswith(
-        "# ---- Not recognised (kept) ----\nSOMETHING_ELSE=keep-FAKE-me\nCOMPOSE_PROFILES=vexa\n"
+        "# ---- Not recognised (kept) ----\nSOMETHING_ELSE=keep-FAKE-me\nCOMPOSE_PROFILES=other\n"
     )
     assert "SOMETHING_ELSE, COMPOSE_PROFILES" in result.stdout
     assert_no_secret(result, "keep-FAKE-me")
@@ -320,9 +382,8 @@ def untouched(path, tmp_path, text):
     [
         "POSTGRES_PASSWORD",
         "SESSION_SECRET",
+        "SKRIBBY_API_KEY",
         "OPENAI_API_KEY",
-        "VEXA_DB_PASSWORD",
-        "VEXA_STORAGE_SECRET",
     ],
 )
 def test_a_missing_required_key_refuses_and_names_it(tmp_path, missing):
@@ -360,7 +421,7 @@ def test_an_unparseable_line_refuses_without_quoting_it(tmp_path):
     path = write_env(tmp_path, text)
     result = run(path, "--apply")
     assert result.returncode != 0
-    assert "line 6" in result.stderr
+    assert "line 5" in result.stderr
     assert "FAKE-garbage-9931" not in result.stdout + result.stderr
     untouched(path, tmp_path, text)
 
@@ -565,7 +626,6 @@ def test_every_secret_and_password_in_env_example_is_empty():
         "EDGE_SHARED_SECRET",
         "RESEND_API_KEY",
         "SKRIBBY_API_KEY",
-        "VEXA_API_KEY",
         "TOKEN_ENC_KEY",
     ]
     for key in secrets:
@@ -584,14 +644,11 @@ def _load_example_into_env(monkeypatch, tmp_path, drop=()):
 
 
 def test_the_app_refuses_to_start_on_the_example_as_it_stands(monkeypatch, tmp_path):
-    from pydantic import ValidationError
-
-    from app import auth
+    from app import auth, skribby
 
     _load_example_into_env(monkeypatch, tmp_path)
-    with pytest.raises(ValidationError):  # skribby with an empty key
-        Settings(_env_file=None)
-    _load_example_into_env(monkeypatch, tmp_path, drop={"BOT_PROVIDER"})
+    with pytest.raises(ValueError, match="SKRIBBY_API_KEY"):  # the processes refuse an empty key
+        skribby.require_configured(Settings(_env_file=None))
     with pytest.raises(RuntimeError, match="session_secret"):  # check_start refuses an empty one
         auth.check_start(Settings(_env_file=None))
 
@@ -604,7 +661,7 @@ def test_migration_0006_refuses_the_example_owner_values(monkeypatch, tmp_path):
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    _load_example_into_env(monkeypatch, tmp_path, drop={"BOT_PROVIDER"})
+    _load_example_into_env(monkeypatch, tmp_path)
     with pytest.raises(RuntimeError, match="OWNER_EMAIL and OWNER_PASSWORD"):
         module._owner()
 
@@ -612,7 +669,7 @@ def test_migration_0006_refuses_the_example_owner_values(monkeypatch, tmp_path):
 def test_every_required_compose_variable_is_empty_in_the_example():
     compose = (ROOT / "compose.yaml").read_text()
     required = set(re.findall(r"\$\{([A-Z_]+):\?", compose))
-    assert {"POSTGRES_PASSWORD", "VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET"} <= required
+    assert required == {"POSTGRES_PASSWORD"}
     for key in required:
         assert example_values()[key] == "", key
 
@@ -633,7 +690,6 @@ def _docker_compose_available() -> bool:
 def test_compose_refuses_the_example_as_it_stands(tmp_path):
     (tmp_path / "compose.yaml").write_text((ROOT / "compose.yaml").read_text())
     (tmp_path / ".env").write_text((ROOT / ".env.example").read_text())
-    (tmp_path / ".env.vexa").write_text("")
     env = {k: v for k, v in os.environ.items() if k != "COMPOSE_PROFILES"}
 
     def config():
@@ -648,13 +704,12 @@ def test_compose_refuses_the_example_as_it_stands(tmp_path):
 
     refused = config()
     assert refused.returncode != 0
-    # compose names ONE missing variable per run, and which one varies between runs
+    # compose names ONE missing variable per run: only that it refuses is asserted
     assert "required variable" in refused.stderr
     filled = (ROOT / ".env.example").read_text()
-    for key in ("POSTGRES_PASSWORD", "VEXA_DB_PASSWORD", "VEXA_STORAGE_SECRET"):
-        filled = filled.replace(f"\n{key}=\n", f"\n{key}=x\n")
+    filled = filled.replace("\nPOSTGRES_PASSWORD=\n", "\nPOSTGRES_PASSWORD=x\n")
     (tmp_path / ".env").write_text(filled)
-    assert config().returncode == 0  # so the refusal above was really about those three
+    assert config().returncode == 0  # so the refusal above was really about that one
 
 
 # ---- review fixes: case, partial backup, a file that changed under us ----

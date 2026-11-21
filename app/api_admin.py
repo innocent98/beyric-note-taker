@@ -118,9 +118,9 @@ def patch_user(
     responses={code: {"model": ErrorResponse} for code in (404, 409)},
 )
 def delete_user(user_id: int, session: Session = Depends(get_session)) -> AdminDeleting:
-    """Delete an account and everything of theirs. The user is signed out and their slot is free
-    at once; the worker then removes their data (bots stopped, recordings deleted at Vexa and
-    here). The hours ledger keeps seconds only. 409 `last_admin`."""
+    """Delete an account and everything of theirs. The user is signed out and their slot is free at
+    once; the worker then removes their data (bots stopped, recordings deleted at the bot provider
+    and here). The hours ledger keeps seconds only. 409 `last_admin`."""
     admin.schedule_deletion(session, admin.user_or_404(session, user_id))
     return AdminDeleting(status="deleting")
 

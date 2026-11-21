@@ -7087,7 +7087,7 @@
     },
     "/api/admin/users/{user_id}": {
       "delete": {
-        "description": "Delete an account and everything of theirs. The user is signed out and their slot is free\nat once; the worker then removes their data (bots stopped, recordings deleted at Vexa and\nhere). The hours ledger keeps seconds only. 409 `last_admin`.",
+        "description": "Delete an account and everything of theirs. The user is signed out and their slot is free\nat once; the worker then removes their data (bots stopped, recordings deleted at the bot provider and\nhere). The hours ledger keeps seconds only. 409 `last_admin`.",
         "operationId": "delete_user",
         "parameters": [
           {
@@ -9815,7 +9815,7 @@
     },
     "/api/meetings/{meeting_id}": {
       "delete": {
-        "description": "Delete a meeting and everything taken from it: transcript, notes, translations, decisions,\nopen questions, review items, notifications, mail still waiting to be sent, the audio and\nVexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate\nor anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are\nbeing written, 409 `meeting_busy` when the worker holds it (try again), 502\n`recording_delete_failed` when Vexa would not remove the recording: nothing is deleted.",
+        "description": "Delete a meeting and everything taken from it: transcript, notes, translations, decisions,\nopen questions, review items, notifications, mail still waiting to be sent, the audio and\nthe provider's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate\nor anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are\nbeing written, 409 `meeting_busy` when the worker holds it (try again), 502\n`recording_delete_failed` when the provider would not remove the recording: nothing is deleted.",
         "operationId": "delete_meeting",
         "parameters": [
           {

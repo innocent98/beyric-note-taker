@@ -32,8 +32,8 @@ from tests.test_web import (  # noqa: F401  (fixtures used by name)
     anon_client,
     app,
     client,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     owner,
     template,
@@ -48,7 +48,6 @@ ADDRESS = "note@example.test"  # placeholder, never a real mailbox
 def tip_settings(**overrides) -> Settings:
     """Skribby, signed in, with the address set: every condition of the rule met."""
     values = {
-        "bot_provider": "skribby",
         "skribby_api_key": KEY,
         "skribby_account_id": ACCOUNT,
         "bot_invite_email": ADDRESS,
@@ -119,11 +118,10 @@ def test_skribby_signed_in_with_the_address_shows_it():
 @pytest.mark.parametrize(
     "missing",
     [
-        {"bot_provider": "vexa"},  # Vexa's bot is nobody's guest
         {"skribby_account_id": ""},  # a guest bot has no address to invite
         {"bot_invite_email": ""},  # the operator has not set it
     ],
-    ids=["vexa", "no-account", "no-address"],
+    ids=["no-account", "no-address"],
 )
 def test_any_one_condition_missing_hides_it(missing):
     assert tip_settings(**missing).bot_invite_email_shown is None
@@ -173,7 +171,7 @@ def test_a_meeting_the_bot_was_not_let_into_gets_the_address(reason):
         "zoom",
         "teams",
         "no-platform",
-        "vexa-ran-it",
+        "retired-provider-ran-it",
         "joining",
         "in-the-call",
         "ready",
@@ -188,7 +186,7 @@ def test_the_page_says_nothing_otherwise(fields):
 
 
 def test_a_meeting_gets_nothing_while_the_server_is_not_set_up_for_it():
-    for off in ({"bot_provider": "vexa"}, {"skribby_account_id": ""}, {"bot_invite_email": ""}):
+    for off in ({"skribby_account_id": ""}, {"bot_invite_email": ""}):
         assert meeting_invite_email(meeting(), tip_settings(**off)) is None
 
 
@@ -255,26 +253,25 @@ def test_the_detail_is_null_while_the_server_is_not_set_up_for_it(api, session, 
 # ---- the calendar response ----
 
 
-def app_with(engine, google, fake_vexa, fake_openai, **overrides):
+def app_with(engine, google, fake_bot, fake_openai, **overrides):
     values = {
         "google_client_id": cc.CLIENT_ID,
         "google_client_secret": "s3cret",
         "calendar_enabled": True,
         "token_enc_key": cc.KEY,
-        "bot_provider": "skribby",
         "skribby_api_key": KEY,
         "skribby_account_id": ACCOUNT,
         "bot_invite_email": ADDRESS,
     }
     return build_app(
-        engine, make_settings(**{**values, **overrides}), google, fake_vexa, fake_openai
+        engine, make_settings(**{**values, **overrides}), google, fake_bot, fake_openai
     )
 
 
 def test_the_calendar_answer_carries_the_address_connected_or_not(
-    engine, google, fake_vexa, fake_openai, owner
+    engine, google, fake_bot, fake_openai, owner
 ):
-    web = browser(app_with(engine, google, fake_vexa, fake_openai))
+    web = browser(app_with(engine, google, fake_bot, fake_openai))
     assert web.get(URL).json()["bot_invite_email"] == ADDRESS
     connect_google(web, google)
     connected = web.get(URL).json()
@@ -286,13 +283,13 @@ def test_the_calendar_answer_carries_the_address_connected_or_not(
 
 @pytest.mark.parametrize(
     "off",
-    [{"bot_provider": "vexa"}, {"skribby_account_id": ""}, {"bot_invite_email": ""}],
-    ids=["vexa", "no-account", "no-address"],
+    [{"skribby_account_id": ""}, {"bot_invite_email": ""}],
+    ids=["no-account", "no-address"],
 )
 def test_the_calendar_answer_has_null_when_a_condition_is_missing(
-    engine, google, fake_vexa, fake_openai, owner, off
+    engine, google, fake_bot, fake_openai, owner, off
 ):
-    web = browser(app_with(engine, google, fake_vexa, fake_openai, **off))
+    web = browser(app_with(engine, google, fake_bot, fake_openai, **off))
     connect_google(web, google)
     body = web.get(URL).json()
     assert "bot_invite_email" in body and body["bot_invite_email"] is None

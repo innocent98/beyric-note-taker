@@ -1,22 +1,22 @@
 """Client for the hosted Skribby meeting-bot API, and `SkribbyProvider`, its `BotProvider` face.
 
-Selected with `BOT_PROVIDER=skribby` (`app/bot_provider.py`); Vexa stays the default. The design,
-every decision and what is lost against Vexa are in `docs/sop/2026-11-08-skribby-provider.md`.
+The one provider the app runs (`app/bot_provider.py`). The design and every decision are in
+`docs/sop/2026-11-08-skribby-provider.md`.
 In short:
 
 - **Polling only.** Skribby makes one webhook delivery per event and no retry; the worker already
   looks at each live meeting every `POLL_INTERVAL_SECONDS`, so there is no inbound route.
 - **Skribby speaks in bot ids (UUIDs); the seam speaks in meeting codes and integers.** The id is
-  stored as text in `meetings.vexa_meeting_id` like Vexa's. A stop by `(platform, code)` and a
-  duplicate check need the bot behind a code, which Skribby cannot look up (it has no list call), so
-  the provider asks our own `meetings` table (`DbLedger`) and remembers the bots it sent in this
-  process (the window before the meeting row is committed). The recording is addressed by an integer
-  *handle* made from the UUID (`recording_handle`): it fits `meetings.vexa_recording_id`, and the
-  UUID comes back through the meetings table or this process's recent lookups.
+  stored as text in `meetings.provider_bot_id`. A stop by `(platform, code)` and a duplicate check
+  need the bot behind a code, which Skribby cannot look up (it has no list call), so the provider
+  asks our own `meetings` table (`DbLedger`) and remembers the bots it sent in this process (the
+  window before the meeting row is committed). The recording is addressed by an integer *handle*
+  made from the UUID (`recording_handle`): it fits `meetings.provider_recording_id`, and the UUID
+  comes back through the meetings table or this process's recent lookups.
 - **Skribby's transcript is only evidence of who spoke.** Our own transcription still writes the
   transcript from the downloaded audio; Skribby's segments (`speaker_name` and text) become the
-  `BotMeeting.segments` that label speakers, exactly where Vexa's live segments go.
-- **States are mapped into Vexa's vocabulary** (`map_bot`): the pipeline reads those words.
+  `BotMeeting.segments` that label speakers, which is where the pipeline reads the speaker segments.
+- **States are mapped into the pipeline's vocabulary** (`map_bot`): the pipeline reads those words.
 - **Secrets.** The API key is read once, kept in the client, sent only in the `Authorization`
   header to Skribby's own origin, and removed from every error text. Nothing here logs a request
   body or a meeting link (a Zoom link carries its passcode).
@@ -149,7 +149,7 @@ RECORDING_PENDING = "in_progress"
 TERMINAL = ("completed", "failed")
 
 # A recording handle is the first 60 bits of the bot's UUID with a marker bit above them, so it
-# fits a BigInteger and is never mistaken for a Vexa recording id.
+# fits a BigInteger and is never mistaken for an integer recording id.
 HANDLE_MARK = 1 << 60
 UUID_BITS_DROPPED = 68
 
@@ -202,7 +202,7 @@ def recording_handle(bot_id: str) -> int:
 
 def handle_prefix(handle: int) -> str | None:
     """The first 15 hex digits of the UUID a handle was made from, in the UUID's own spacing
-    (`xxxxxxxx-xxxx-xxx`); None for a number that is not a handle (a Vexa recording id)."""
+    (`xxxxxxxx-xxxx-xxx`); None for a number that is not a handle (an integer recording id)."""
     if not HANDLE_MARK <= handle < HANDLE_MARK << 1:
         return None
     digits = f"{handle & (HANDLE_MARK - 1):015x}"
@@ -211,7 +211,7 @@ def handle_prefix(handle: int) -> str | None:
 
 def bot_uuid(value: str | int) -> str:
     """The canonical lower-case UUID text of a bot id, or `SkribbyNotFound` for anything else (a
-    Vexa id handed to the wrong provider is "no such bot", never a request with a made-up path)."""
+    An id handed to the wrong provider is "no such bot", never a request with a made-up path)."""
     try:
         return str(uuid.UUID(str(value)))
     except ValueError:
@@ -814,7 +814,7 @@ _LIVE = {
     "leaving": "stopping",
 }
 # How Skribby's `stop_reason` of a finished bot reads in the pipeline's words: a normal end says
-# nothing (as Vexa's does), being removed is `evicted` (the pipeline's removal notice), our own stop
+# nothing, being removed is `evicted` (the pipeline's removal notice), our own stop
 # is `stopped`; any other reason (`empty_meeting_timeout`, `silence_detection_triggered`, ...) is
 # kept as Skribby wrote it.
 _FINISHED_REASON = {"kicked": "evicted", "manually_stopped": "stopped", "meeting_ended": None}
@@ -864,7 +864,7 @@ def map_bot(
     speaker name that is one of them is never used). `speaker_events` is the meeting's
     speaker-events record (`speaker_events_record`), given by the caller for a finished bot when
     `NAME_BY_MEET_TIMELINE` or `SPEAKER_LINE_CORRECTION` is on; without it the timeline names
-    nothing and no line moves. `vexa_id` is left for the caller to set."""
+    nothing and no line moves. `provider_id` is left for the caller to set."""
     raw = body.get("status")
     if not isinstance(raw, str):
         raise SkribbyError("get_meeting failed: 'status' is not a string")
@@ -987,13 +987,13 @@ class DbLedger:
 
         with self._session() as session:
             rows = session.scalars(
-                select(Meeting.vexa_meeting_id)
+                select(Meeting.provider_bot_id)
                 .where(
                     Meeting.bot_provider == "skribby",
                     Meeting.platform == platform,
                     Meeting.native_id == code,
                     Meeting.status == "bot_sent",
-                    Meeting.vexa_meeting_id.is_not(None),
+                    Meeting.provider_bot_id.is_not(None),
                 )
                 .order_by(Meeting.id.desc())
             )
@@ -1013,7 +1013,7 @@ class DbLedger:
                     Meeting.platform == platform,
                     Meeting.native_id == code,
                     Meeting.status == "bot_sent",
-                    Meeting.vexa_meeting_id.is_(None),
+                    Meeting.provider_bot_id.is_(None),
                     Meeting.completion_reason == SEND_UNCONFIRMED,
                 )
                 .order_by(Meeting.id.desc())
@@ -1024,7 +1024,7 @@ class DbLedger:
                 return False
             # As `pipeline._settle_unconfirmed` does when the bot shows up: pinned to its id, and
             # the "starting the bot" marker cleared so the worker's next look reads its state.
-            row.vexa_meeting_id = bot_id
+            row.provider_bot_id = bot_id
             row.completion_reason = None
             row.bot_state_seen_at = None
             session.commit()
@@ -1037,10 +1037,10 @@ class DbLedger:
 
         with self._session() as session:
             rows = session.scalars(
-                select(Meeting.vexa_meeting_id)
+                select(Meeting.provider_bot_id)
                 .where(
                     Meeting.bot_provider == "skribby",
-                    Meeting.vexa_meeting_id.like(prefix + "%"),
+                    Meeting.provider_bot_id.like(prefix + "%"),
                 )
                 .limit(3)
             )
@@ -1162,7 +1162,7 @@ class SkribbyClient:
                     self._max_poll_hours * 60 - TIME_LIMIT_MARGIN_MINUTES - WAITING_ROOM_MINUTES,
                 ),
             ),
-            # Off: a quiet stretch must not send the bot away (Vexa never left for silence; the
+            # Off: a quiet stretch must not send the bot away (a bot must not leave for silence; the
             # "only person left" rule below ends a bot whose call is over). Skribby's default is
             # 15 minutes.
             "silence_detection": 0,
@@ -1627,7 +1627,7 @@ class SkribbyProvider:
             tuple(dict.fromkeys(n for n in names if n)),
             speaker_events=self._events_for_naming(body, bot_id, timeout),
         )
-        info.vexa_id = bot_id
+        info.provider_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)
         if info.status in TERMINAL:
@@ -1796,11 +1796,11 @@ class SkribbyProvider:
         raise SkribbyNotFound("get_meeting failed: no bot of ours is known on that meeting")
 
     def get_meeting_by_id(
-        self, vexa_meeting_id: str | int, own_names: tuple[str, ...] = ()
+        self, provider_bot_id: str | int, own_names: tuple[str, ...] = ()
     ) -> BotMeeting:
-        return self._look(bot_uuid(vexa_meeting_id), own_names=own_names)
+        return self._look(bot_uuid(provider_bot_id), own_names=own_names)
 
-    def get_speaker_events(self, vexa_meeting_id: str | int) -> dict[str, Any] | None:
+    def get_speaker_events(self, provider_bot_id: str | int) -> dict[str, Any] | None:
         """Who was speaking when, from the meeting platform itself (see `speaker_events_record`),
         for the evidence kept to diagnose a bad labelling. A request of its own, separate from the
         fetch that labels speakers, so nothing about it can break that: never raises, and any
@@ -1808,7 +1808,7 @@ class SkribbyProvider:
         exception class only (never a name)."""
         try:
             body = self._client.get_bot(
-                bot_uuid(vexa_meeting_id), params={"with-speaker-events": "true"}
+                bot_uuid(provider_bot_id), params={"with-speaker-events": "true"}
             )
             return speaker_events_record(body)
         except Exception as exc:
@@ -1877,6 +1877,15 @@ class SkribbyProvider:
         self._client.download(url, Path(path))
 
 
+def require_configured(settings) -> None:
+    """Stop a process at startup when `SKRIBBY_API_KEY` is not set, naming the setting (never a
+    key): with no key no bot can be sent, and it is better to fail at start than at the first
+    meeting. Called by the three processes' entry points (web's factory, worker, scheduler), not
+    while the settings are built, so tools and tests that never send a bot need no key."""
+    if not settings.skribby_api_key.strip():
+        raise ValueError("SKRIBBY_API_KEY is not set: no bot can be sent to a meeting")
+
+
 def check_region_unchanged(settings, session_factory: Callable[[], Any] | None = None) -> int:
     """Say loudly, at startup, when Skribby meetings of ANOTHER region still hold data.
 
@@ -1885,9 +1894,9 @@ def check_region_unchanged(settings, session_factory: Callable[[], Any] | None =
     Skribby operation on such a meeting is refused with `BotRegionMismatch` (see
     `provider_for`), so a lookup never reads 404 as "no speaker names" and a delete is never marked
     done: they wait and are logged, until the region is set back. Logs an ERROR naming the setting
-    and returns how many meetings are affected. No-op unless Skribby is the provider; a database
-    that cannot be reached is a warning."""
-    if settings.bot_provider != "skribby":
+    and returns how many meetings are affected. No-op while Skribby is not configured (no key); a
+    database that cannot be reached is a warning."""
+    if not settings.skribby_api_key.strip():
         return 0
     from sqlalchemy import func, select
     from sqlalchemy.exc import SQLAlchemyError

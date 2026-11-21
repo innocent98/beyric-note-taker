@@ -4,7 +4,6 @@ Runs on the owner's Mac, standard library only, and talks to nothing but the two
 It never calls notes.beyrictech.com and never reads production data.
 
     python3 tools/bakeoff/bakeoff.py run --arm skribby-guest --meet-url https://meet.google.com/abc-defg-hij
-    python3 tools/bakeoff/bakeoff.py note --arm vexa --meet-url ... --result admitted
     python3 tools/bakeoff/bakeoff.py report
 
 See tools/bakeoff/README.md for the plain-words steps.
@@ -37,6 +36,8 @@ except Exception:  # pragma: no cover - depends on the machine
 UTC = timezone(timedelta(0), "UTC")
 
 RUN_ARMS = ("skribby-guest", "skribby-auth", "recall-guest")
+# `vexa` is the hand-entered arm of the 2026-11-07 comparison: it can no longer be run, but the
+# recorded log (docs/spike/bakeoff-results) still has its rows and the report must show them.
 ALL_ARMS = ("vexa",) + RUN_ARMS
 ARM_VENDOR = {
     "vexa": None,
@@ -962,7 +963,7 @@ def build_report(rows, cap_hours: float = DEFAULT_CAP_HOURS) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="bakeoff.py",
-        description="Compare Vexa, Skribby and Recall bots on real Google Meet joins.",
+        description="Compare Skribby and Recall bots on real Google Meet joins.",
     )
     p.add_argument(
         "--log", help=f"CSV log path (default {DEFAULT_LOG.relative_to(DEFAULT_LOG.parents[2])})"
@@ -1023,22 +1024,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--dry-run", action="store_true", help="print the exact requests and send nothing"
     )
-
-    note = sub.add_parser("note", help="record by hand what a Vexa bot did")
-    note.add_argument("--arm", required=True, choices=("vexa",))
-    note.add_argument("--meet-url", required=True)
-    note.add_argument("--result", required=True, choices=NOTE_RESULTS)
-    note.add_argument(
-        "--seconds-to-door",
-        type=float,
-        metavar="N",
-        help="seconds from pressing start in the Beyric app until the bot was in the call",
-    )
-    note.add_argument(
-        "--reason", default="", help="what you saw, e.g. 'Google said it could not join'"
-    )
-    note.add_argument("--host-type", choices=HOST_TYPES)
-    note.add_argument("--note", default="")
 
     rep = sub.add_parser("report", help="show the results so far")
     rep.add_argument("--cap-hours", type=float, help="the cap shown next to the minutes used")
@@ -1131,26 +1116,6 @@ def cmd_run(args, env, deps) -> int:
     return 0
 
 
-def cmd_note(args, env, deps) -> int:
-    out = deps["out"]
-    code = meeting_code(args.meet_url)
-    log = Path(args.log or env.get("BAKEOFF_LOG") or DEFAULT_LOG)
-    admitted = args.result in ("admitted", "knocked-then-admitted")
-    notes = []
-    if args.seconds_to_door is not None and not admitted:
-        notes.append(f"{args.seconds_to_door:.0f}s until the bot's answer")
-    if args.note:
-        notes.append(args.note)
-    notes.append("entered by hand")
-    outcome = Outcome(
-        args.result, args.reason, None, args.seconds_to_door if admitted else None, notes
-    )
-    row = make_row(deps["now"](), "vexa", args.host_type, code, outcome, None, [])
-    append_row(log, row)
-    print(f"Logged a Vexa trial: {args.result}. File: {log}", file=out)
-    return 0
-
-
 def cmd_report(args, env, deps) -> int:
     log = Path(args.log or env.get("BAKEOFF_LOG") or DEFAULT_LOG)
     rows = read_rows(log)
@@ -1172,9 +1137,7 @@ def main(argv=None, *, transport=None, clock=None, sleep=None, now=None, out=Non
     }
     args = build_parser().parse_args(argv)
     try:
-        return {"run": cmd_run, "note": cmd_note, "report": cmd_report}[args.command](
-            args, env, deps
-        )
+        return {"run": cmd_run, "report": cmd_report}[args.command](args, env, deps)
     except BakeoffError as exc:
         print(f"Problem: {exc}", file=deps["out"])
         return 2

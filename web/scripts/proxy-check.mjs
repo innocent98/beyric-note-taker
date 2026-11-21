@@ -7,7 +7,7 @@
 //        --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD"
 //
 // It logs in and creates two templates (one per side) in whichever database FastAPI uses, so run
-// it against a scratch stack, never the pilot. It creates nothing with Vexa.
+// it against a scratch stack, never the pilot. It sends no bot.
 import { parseArgs } from "node:util";
 
 const { values } = parseArgs({

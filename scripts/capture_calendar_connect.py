@@ -75,13 +75,13 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from tests.fakes.google import FakeGoogle  # noqa: E402
 
 CALENDAR_SCOPE = google_oauth.CALENDAR_SCOPE
 
 
-class FakeVexa:
+class FakeBot:
     def send_bot(self, url):
         return 4242
 
@@ -586,7 +586,7 @@ def main() -> None:
     )
     google = FakeGoogle(settings)
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: FakeBot()
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     server, base = start_server(app)
     engine = create_engine(SCRATCH_URL)

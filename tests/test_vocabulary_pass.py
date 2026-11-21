@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app import pipeline, retry, vocabulary_pass
 from app.config import Settings
 from app.models import AiRun, VocabularyTerm
-from tests.test_pipeline import FakeOpenAI, FakeVexa, env, meeting, run  # noqa: F401
+from tests.test_pipeline import FakeBot, FakeOpenAI, env, meeting, run  # noqa: F401
 from tests.test_skribby_evidence import EVIDENCE, rows
 from tests.test_transcript_source import (  # noqa: F401  (fixtures and helpers used by name)
     done,
@@ -321,7 +321,7 @@ def test_in_skribby_mode_the_owners_terms_are_applied_and_the_cost_is_in_the_led
     mode()
     with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
-    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    run(session, skribby_meeting, FakeBot(done(long_segments())), openai)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert "Alfa7" in skribby_meeting.transcript and "alpha7 " not in skribby_meeting.transcript
     assert skribby_meeting.speaker_transcript == skribby_meeting.transcript
@@ -342,7 +342,7 @@ def test_in_skribby_mode_the_owners_terms_are_applied_and_the_cost_is_in_the_led
 def test_an_owner_with_no_terms_makes_no_call(session, skribby_meeting, mode):
     mode()
     openai = VocabularyModel()
-    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    run(session, skribby_meeting, FakeBot(done(long_segments())), openai)
     assert skribby_meeting.transcript_source == "skribby"
     assert openai.vocabulary_calls == 0 and ledger(session, skribby_meeting.id, "vocabulary") == []
 
@@ -362,24 +362,16 @@ def test_only_the_owners_own_terms_are_sent(session, skribby_meeting, mode, stra
         return real(**kwargs)
 
     openai.chat.completions.create = spy
-    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    run(session, skribby_meeting, FakeBot(done(long_segments())), openai)
     assert "Alfa7" in seen and all("Secret" not in x for x in seen)
 
 
 def test_own_mode_never_makes_the_call(session, skribby_meeting):
     with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
-    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)  # default: own
+    run(session, skribby_meeting, FakeBot(done(long_segments())), openai)  # default: own
     assert skribby_meeting.transcript_source == "own"
     assert openai.vocabulary_calls == 0 and ledger(session, skribby_meeting.id, "vocabulary") == []
-
-
-def test_a_vexa_meeting_in_skribby_mode_never_makes_the_call(session, meeting, mode):
-    mode()
-    with_terms(session, meeting, "Alfa7")
-    openai = VocabularyModel()
-    run(session, meeting, FakeVexa(done(long_segments())), openai)  # bot_provider is vexa
-    assert meeting.transcript_source == "own" and openai.vocabulary_calls == 0
 
 
 def test_a_model_that_takes_the_vocabulary_is_not_asked_again(
@@ -393,7 +385,7 @@ def test_a_model_that_takes_the_vocabulary_is_not_asked_again(
     monkeypatch.setattr(pipeline, "get_settings", lambda: settings)
     with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
-    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    run(session, skribby_meeting, FakeBot(done(long_segments())), openai)
     assert skribby_meeting.transcript_source == "skribby"
     assert openai.vocabulary_calls == 0 and ledger(session, skribby_meeting.id, "vocabulary") == []
 
@@ -405,7 +397,7 @@ def test_a_discarded_answer_keeps_skribbys_text_and_is_still_billed(
     with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel(reply=lambda s: s.replace("[Ada]:", "[Adam]:"))
     with caplog.at_level(logging.INFO):
-        run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+        run(session, skribby_meeting, FakeBot(done(long_segments())), openai)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert "[Adam]" not in skribby_meeting.transcript and "Alfa7" not in skribby_meeting.transcript
     assert skribby_meeting.transcript.startswith("[Ada]: alpha0")
@@ -424,7 +416,7 @@ def test_a_failing_pass_or_ledger_write_never_stops_the_meeting(
 
     monkeypatch.setattr("app.pipeline.vocabulary_pass.apply_vocabulary", boom)
     with caplog.at_level(logging.WARNING):
-        run(session, skribby_meeting, FakeVexa(done(long_segments())), VocabularyModel())
+        run(session, skribby_meeting, FakeBot(done(long_segments())), VocabularyModel())
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert skribby_meeting.transcript.startswith("[Ada]: alpha0")
     assert "the vocabulary pass was not made (RuntimeError)" in caplog.text
@@ -447,7 +439,7 @@ def test_a_failing_ledger_write_costs_only_the_row(
         "app.pipeline.vocabulary_pass.apply_vocabulary", one_call_but_a_broken_ledger
     )
     with caplog.at_level(logging.WARNING):
-        run(session, skribby_meeting, FakeVexa(done(long_segments())), VocabularyModel())
+        run(session, skribby_meeting, FakeBot(done(long_segments())), VocabularyModel())
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert "Alfa7" in skribby_meeting.transcript  # the corrected text is still used
     assert "ledger row was not saved" in caplog.text
@@ -460,7 +452,7 @@ def test_the_evidence_and_the_shadow_numbers_are_unaffected_by_the_pass(
     mode()
     with_terms(session, skribby_meeting, "Alfa7")
     poll = replace(done(long_segments()), evidence=EVIDENCE)
-    run(session, skribby_meeting, FakeVexa(poll), VocabularyModel())
+    run(session, skribby_meeting, FakeBot(poll), VocabularyModel())
     [row] = rows(session)
     assert row.items == EVIDENCE["items"]
     assert not session.scalars(select(AiRun).where(AiRun.kind == "shadow")).first()

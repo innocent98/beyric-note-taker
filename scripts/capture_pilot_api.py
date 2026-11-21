@@ -13,7 +13,7 @@ What is real: the app, auth, CSRF, validation, rate limits, database, migrations
 every error, the mail the app queues (read back from `mail_outbox`, which is what the worker would
 send) and the Google redirect URL the app builds. What is not: Resend (nothing is sent; the
 outbox row is what a mail would contain), Google's own servers (the consent screen and the token
-exchange are replaced by a stand-in that returns a chosen identity: see `StandInGoogle`), Vexa and
+exchange are replaced by a stand-in that returns a chosen identity: see `StandInGoogle`), the provider and
 the worker. The files say so wherever it matters.
 
 Secrets in the files are masked: CSRF tokens become `<csrf-A>`, `<csrf-B>` in order of first
@@ -68,7 +68,7 @@ from app.config import Settings  # noqa: E402
 from app.limits import Limit, PublicLimits  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import MailOutbox  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 
 class StandInGoogle(google_oauth.GoogleOAuth):
@@ -81,7 +81,7 @@ class StandInGoogle(google_oauth.GoogleOAuth):
         return self.identity
 
 
-class FakeVexa:
+class FakeBot:
     def send_bot(self, url):
         return 4242
 
@@ -217,7 +217,7 @@ def main() -> None:
         google_client_secret="capture-client-secret",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: FakeBot()
     app.dependency_overrides[google_oauth.get_google] = lambda: StandInGoogle(settings)
     # Every call comes from one address, so the sign-up address limit (5 an hour) would stop the
     # walk-through; it is raised here and the real one is shown at the very end.

@@ -71,6 +71,7 @@ from app.pipeline import (
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
+    REASON_PROVIDER_GONE,
     SEND_UNCONFIRMED,
     audio_path,
     is_join_failure,
@@ -103,9 +104,9 @@ STEP_TEXT = {
     "speakers": "Working out who said what",
     "notes": "Writing the notes",
 }
-# What the owner reads while the bot is in a call, by the state the worker last saw Vexa report.
-# `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something is
-# being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
+# What the owner reads while the bot is in a call, by the state the worker last saw the provider
+# report. `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something
+# is being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
 BOT_STATE_TEXT = {
     "requested": "Starting the bot",
     SEND_UNCONFIRMED: "Starting the bot",
@@ -121,12 +122,12 @@ BOT_STATE_TEXT = {
 }
 # After "End now and write the notes": the bot has been told to leave and has not been seen gone.
 BOT_ENDING_TEXT = "The bot is leaving the meeting. The notes start once it has gone"
-# Vexa reported the call over but the recording is not ready to download yet.
+# The provider reported the call over but the recording is not ready to download yet.
 CALL_ENDED_TEXT = "The call ended; finishing the recording"
-# A live state older than this many poll intervals is not shown as current: the worker is behind,
-# or Vexa has not answered for a while. The worker handles meetings one at a time, so a pass on
+# A live state older than this many poll intervals is not shown as current: the worker is behind, or
+# the provider has not answered for a while. The worker handles meetings one at a time, so a pass on
 # another meeting (minutes of transcription) leaves this one unseen for that long: the window only
-# covers a slow Vexa and a short pass, not a long one.
+# covers a slow provider and a short pass, not a long one.
 BOT_STATE_STALE_POLLS = 4
 BOT_STATE_UNSURE_TEXT = "Checking on the bot..."
 STATUS_TONES = {
@@ -153,14 +154,9 @@ class Refused(Exception):
 
 
 def get_bot_provider() -> BotProvider:
-    """The provider the `BOT_PROVIDER` setting names. The routes depend on this; tests replace it
-    with `app.dependency_overrides`."""
+    """The provider new bots go to (`app.bot_provider.DEFAULT_PROVIDER`). The routes depend on
+    this; tests replace it with `app.dependency_overrides`."""
     return build_provider()
-
-
-# The name tests and capture scripts override by. The same function object, so an override of
-# either name replaces the other.
-get_vexa = get_bot_provider
 
 
 def get_openai_client():
@@ -296,7 +292,7 @@ def bot_state_is_stale(meeting: Meeting, now: datetime | None = None) -> bool:
 def status_text(meeting: Meeting, now: datetime | None = None) -> str:
     """Plain words for the owner. "Recording" is said only once something is being captured, and a
     live state is said only while a recent poll has seen it; a bot whose state is not known (an
-    older meeting, Vexa not reachable) reads "Bot sent"."""
+    older meeting, provider not reachable) reads "Bot sent"."""
     if meeting.status == "bot_sent":
         reason = meeting.completion_reason or ""
         if reason == BOT_END_REQUESTED and meeting.terminal_seen_at is None:
@@ -314,7 +310,7 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
                 )
             )
         if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
-            return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
+            return CALL_ENDED_TEXT  # the provider said the call is over; the recording is made
         return "Bot sent"
     if meeting.status == "processing":
         return STEP_TEXT.get(meeting.step, "Working on it")
@@ -341,6 +337,8 @@ def retry_block(meeting: Meeting, now: datetime | None = None) -> str | None:
         if is_join_failure(meeting) and not manual_retry_wait(meeting, now or datetime.now(UTC)):
             return None
         return "no_audio"
+    if meeting.failure_reason == REASON_PROVIDER_GONE:
+        return "no_audio"  # every try would fail again at once: there is nothing to resume from
     if meeting.failure_reason == REASON_NO_SPEECH:
         return "no_speech"  # the same audio would give the same result
     if meeting.transcript is None and meeting.audio_deleted_at is not None:
@@ -620,7 +618,7 @@ def _send_failed() -> Refused:
 
 def create_meeting(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     user: User,
     url: str,
     template_id: int | None,
@@ -628,7 +626,7 @@ def create_meeting(
     title: str | None = None,
 ) -> Meeting:
     try:
-        return _create_meeting(session, vexa, user, url.strip(), template_id, settings, title)
+        return _create_meeting(session, provider, user, url.strip(), template_id, settings, title)
     except Refused:
         session.rollback()  # also releases the advisory lock
         raise
@@ -636,7 +634,7 @@ def create_meeting(
 
 def _create_meeting(
     session: Session,
-    vexa,
+    provider,
     user: User,
     url: str,
     template_id: int | None,
@@ -674,7 +672,9 @@ def _create_meeting(
         title=title,  # cleaned when stored (`titles.event_title`); blank = the fallback name
     )
     try:
-        return placement.place_bot(session, vexa, request, now=datetime.now(UTC), settings=settings)
+        return placement.place_bot(
+            session, provider, request, now=datetime.now(UTC), settings=settings
+        )
     except PlacementRefused as exc:
         raise placement_refusal(exc) from None
     except BotProviderError as exc:
@@ -746,14 +746,15 @@ def _lock_meeting(session: Session, meeting: Meeting) -> Meeting:
         ) from None
 
 
-def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
-    """Ask Vexa to take the bot out, or roll back and refuse with a plain 502 (the message never
-    carries Vexa's own text; a meeting code the client will not send is the same failure)."""
+def _stop_bot_or_refuse(session: Session, provider, meeting: Meeting) -> None:
+    """Ask the provider to take the bot out, or roll back and refuse with a plain 502 (the message
+    never carries the provider's own text; a meeting code the client will not send is the same
+    failure)."""
     if not placement.may_stop_bot(session, meeting):
         logger.info("meeting %s: the bot at its code is a newer meeting's, left alone", meeting.id)
         return  # this meeting's own bot is already gone; its owner carries on
     try:
-        provider_for(vexa, meeting.bot_provider, meeting.bot_region).stop_bot(
+        provider_for(provider, meeting.bot_provider, meeting.bot_region).stop_bot(
             meeting.platform, meeting.native_id
         )
     except (BotProviderError, ValueError) as exc:
@@ -764,7 +765,7 @@ def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
         ) from None
 
 
-def cancel_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
+def cancel_meeting(session: Session, provider: BotProvider, meeting: Meeting) -> Meeting:
     """Take the bot out of a meeting it has not finished recording. No OpenAI call is made."""
     locked = _lock_meeting(session, meeting)
     if locked.status != "bot_sent":
@@ -790,13 +791,13 @@ def cancel_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Mee
             "The bot is already leaving and the notes will be written from what it recorded, "
             "so this meeting can't be cancelled now.",
         )
-    _stop_bot_or_refuse(session, vexa, locked)
+    _stop_bot_or_refuse(session, provider, locked)
     locked.status, locked.failure_reason = "failed", REASON_CANCELLED
     session.commit()
     return locked
 
 
-def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> None:
+def delete_meeting(session: Session, provider: BotProvider, meeting: Meeting) -> None:
     """Delete a meeting and everything derived from it (spec 3.3), for good.
 
     Refused (409 `meeting_active`) while the bot is in the call or the notes are being written:
@@ -805,7 +806,7 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
     decisions, open questions, review items and notifications reference it `ON DELETE CASCADE`,
     and a table added later must do the same: `tests/test_meeting_delete.py` fails until it does),
     plus what no foreign key can reach: mail still waiting for the meeting (its id sits in a JSON
-    payload), the audio folder, and Vexa's copy of the recording. Rows kept on purpose, with
+    payload), the audio folder, and the provider's copy of the recording. Rows kept on purpose, with
     `meeting_id` nulled: `usage_entries` (the hours stay spent), `ai_runs` (cost and the daily
     translation count) and `scheduled_joins` (the calendar event stays joined, so the scheduler
     does not send a bot to it again). None of those holds a word of the meeting.
@@ -822,16 +823,17 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
     meeting_id = locked.id
     try:
         if locked.audio_deleted_at is None:
-            # Settle Vexa's side the way account deletion does: a cancelled meeting never had the
-            # recording id stored, so ask Vexa for it (waiting out its grace) before it is lost.
-            holder = provider_for(vexa, locked.bot_provider, locked.bot_region)
+            # Settle the provider's side the way account deletion does: a cancelled meeting never
+            # had the recording id stored, so ask the provider for it (waiting out its grace) before
+            # it is lost.
+            holder = provider_for(provider, locked.bot_provider, locked.bot_region)
             recording_id = deletion.recording_to_delete(
                 session, holder, locked, datetime.now(UTC), set()
             )
             deletion.delete_provider_copy(holder, locked, recording_id)
     except (BotProviderError, ValueError) as exc:
         session.rollback()
-        logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)
+        logger.warning("meeting %s: provider cleanup failed (%s)", meeting_id, type(exc).__name__)
         raise Refused(
             502,
             "recording_delete_failed",
@@ -889,8 +891,8 @@ def can_end(meeting: Meeting) -> bool:
 
 def can_cancel(meeting: Meeting) -> bool:
     """Cancel discards the meeting, so it is not offered once the owner has asked the bot to leave
-    to have the notes written (Vexa answers a second stop with 404, which would pass for success
-    and quietly throw the recording away)."""
+    to have the notes written (a provider may answer a second stop with 404, which would pass for
+    success and quietly throw the recording away)."""
     return meeting.status == "bot_sent" and meeting.completion_reason not in (
         BOT_END_REQUESTED,
         SEND_UNCONFIRMED,  # a stop now would find nothing and the late bot would be orphaned
@@ -916,12 +918,12 @@ def _check_endable(meeting: Meeting) -> None:
         raise _not_endable()
 
 
-def end_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
+def end_meeting(session: Session, provider: BotProvider, meeting: Meeting) -> Meeting:
     """Take the bot out of the call and let the pipeline write the notes from what it recorded.
 
     Unlike `cancel_meeting` nothing is discarded: the meeting stays `bot_sent`, marked
-    `end_requested`, and the worker carries on as for any call that ended (Vexa reports the bot
-    gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
+    `end_requested`, and the worker carries on as for any call that ended (the provider reports the
+    bot gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
     that recorded nothing ends as the same "nothing was recorded" failure as any empty meeting."""
     _check_endable(meeting)  # without the lock: a meeting being processed must not make us wait
     locked = _lock_meeting(session, meeting)
@@ -930,7 +932,7 @@ def end_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meetin
     except Refused:
         session.rollback()
         raise
-    _stop_bot_or_refuse(session, vexa, locked)
+    _stop_bot_or_refuse(session, provider, locked)
     locked.completion_reason = BOT_END_REQUESTED
     locked.bot_state_seen_at = datetime.now(UTC)
     session.commit()
@@ -938,7 +940,9 @@ def end_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meetin
     return locked
 
 
-def retry_meeting(session: Session, meeting: Meeting, vexa: BotProvider | None = None) -> Meeting:
+def retry_meeting(
+    session: Session, meeting: Meeting, provider: BotProvider | None = None
+) -> Meeting:
     now = datetime.now(UTC)
     refused = is_join_failure(meeting)
     if retry_block(meeting, now) is not None:
@@ -950,7 +954,7 @@ def retry_meeting(session: Session, meeting: Meeting, vexa: BotProvider | None =
             else "This meeting cannot be retried.",
         )
     if refused:
-        return _send_refused_meeting_again(session, vexa or get_bot_provider(), meeting)
+        return _send_refused_meeting_again(session, provider or get_bot_provider(), meeting)
     # The step is kept. A fresh polling start keeps the time limit from failing it at once.
     meeting.status, meeting.failure_reason = "processing", None
     meeting.started_polling_at = now
@@ -958,7 +962,9 @@ def retry_meeting(session: Session, meeting: Meeting, vexa: BotProvider | None =
     return meeting
 
 
-def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
+def _send_refused_meeting_again(
+    session: Session, provider: BotProvider, meeting: Meeting
+) -> Meeting:
     """Send a new bot to a meeting Google refused. It goes through the same pre-flight as a new
     meeting (hours, the user's bots, a bot already in that meeting, room on the host) under the
     same placement lock, so a retry can never take a slot a new meeting was promised."""
@@ -986,7 +992,7 @@ def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Me
         session.rollback()
         raise placement_refusal(exc) from None
     try:
-        sent = send_again(locked, vexa, raise_duplicate=True)
+        sent = send_again(locked, provider, raise_duplicate=True)
     except BotDuplicate:  # a bot that is not ours is in that meeting
         session.rollback()
         raise placement_refusal(PlacementRefused("meeting_has_note_taker")) from None
@@ -997,10 +1003,10 @@ def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Me
     # If the commit fails the new bot has no row that knows it: it is stopped (`commit_or_stop`).
     placement.commit_or_stop(
         session,
-        vexa,
+        provider,
         platform=locked.platform,
         native_id=locked.native_id,
-        vexa_id=locked.vexa_meeting_id or None,  # text: a Skribby bot's id is a UUID
+        provider_id=locked.provider_bot_id or None,  # text: a Skribby bot's id is a UUID
     )
     return locked
 

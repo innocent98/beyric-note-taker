@@ -32,7 +32,7 @@ from app.models import (
     User,
     UserSettings,
 )
-from app.services import get_openai_client, get_vexa
+from app.services import get_bot_provider, get_openai_client
 from tests.fakes.google import REVOKE_URL, FakeGoogle
 from tests.test_api import Api, error_of
 from tests.test_web import (  # noqa: F401
@@ -40,8 +40,8 @@ from tests.test_web import (  # noqa: F401
     OWNER_EMAIL,
     ZOOM,
     add_meeting,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
     owner,
@@ -80,7 +80,7 @@ def google(settings):
     return FakeGoogle(settings)
 
 
-def build_app(engine, settings, google, fake_vexa, fake_openai):
+def build_app(engine, settings, google, fake_bot, fake_openai):
     app = create_app(settings)
 
     def session_override():
@@ -88,15 +88,15 @@ def build_app(engine, settings, google, fake_vexa, fake_openai):
             yield s
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_vexa] = lambda: fake_vexa
+    app.dependency_overrides[get_bot_provider] = lambda: fake_bot
     app.dependency_overrides[get_openai_client] = lambda: fake_openai
     app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
     return app
 
 
 @pytest.fixture
-def capp(engine, settings, google, fake_vexa, fake_openai):
-    return build_app(engine, settings, google, fake_vexa, fake_openai)
+def capp(engine, settings, google, fake_bot, fake_openai):
+    return build_app(engine, settings, google, fake_bot, fake_openai)
 
 
 def browser(app, email=OWNER_EMAIL, *, log_in=True) -> Api:
@@ -265,14 +265,14 @@ def test_a_missing_return_to_lands_on_the_calendar_settings(web, session):
 
 
 def test_the_feature_is_dark_unless_the_calendar_flag_and_a_google_client_are_set(
-    engine, settings, google, fake_vexa, fake_openai, owner
+    engine, settings, google, fake_bot, fake_openai, owner
 ):
     off = settings.model_copy(update={"calendar_enabled": False})
-    web = browser(build_app(engine, off, google, fake_vexa, fake_openai))
+    web = browser(build_app(engine, off, google, fake_bot, fake_openai))
     error_of(web.post(CONNECT, {}), 404, "calendar_unavailable")
     error_of(web.get(CALLBACK + "?code=x&state=y"), 404, "calendar_unavailable")
 
-    app = build_app(engine, settings, google, fake_vexa, fake_openai)
+    app = build_app(engine, settings, google, fake_bot, fake_openai)
     app.dependency_overrides[google_oauth.get_google] = lambda: None  # no client configured
     error_of(browser(app).post(CONNECT, {}), 404, "calendar_unavailable")
 
@@ -302,14 +302,14 @@ def test_the_redirect_uri_comes_from_a_short_allow_list(settings):
 
 
 def test_the_unverified_app_notice_is_shown_until_google_has_verified_the_app(
-    engine, settings, google, fake_vexa, fake_openai, owner
+    engine, settings, google, fake_bot, fake_openai, owner
 ):
     for verified, expected in ((False, True), (True, False)):
         app = build_app(
             engine,
             settings.model_copy(update={"google_app_verified": verified}),
             google,
-            fake_vexa,
+            fake_bot,
             fake_openai,
         )
         body = browser(app).post(CONNECT, {}).json()
@@ -683,9 +683,9 @@ def test_a_reply_without_a_token_keeps_old_scopes_google_did_not_repeat(
 
 
 def test_a_reply_without_a_token_follows_the_testing_flag_for_the_expiry_hint(
-    engine, settings, google, fake_vexa, fake_openai, session, owner
+    engine, settings, google, fake_bot, fake_openai, session, owner
 ):
-    connect_google(browser(build_app(engine, settings, google, fake_vexa, fake_openai)), google)
+    connect_google(browser(build_app(engine, settings, google, fake_bot, fake_openai)), google)
     google.issue_refresh_token = False
 
     def again(testing: bool):
@@ -693,7 +693,7 @@ def test_a_reply_without_a_token_follows_the_testing_flag_for_the_expiry_hint(
             engine,
             settings.model_copy(update={"google_oauth_testing": testing}),
             google,
-            fake_vexa,
+            fake_bot,
             fake_openai,
         )
         connect_google(browser(app), google)
@@ -867,14 +867,14 @@ def test_two_users_connect_separately_and_only_see_their_own_row(capp, web, sess
 
 
 def test_expected_expiry_set_to_seven_days_only_while_testing_flag_is_on_and_clear_when_off(
-    engine, settings, google, fake_vexa, fake_openai, session, owner
+    engine, settings, google, fake_bot, fake_openai, session, owner
 ):
     def run(testing: bool):
         app = build_app(
             engine,
             settings.model_copy(update={"google_oauth_testing": testing}),
             google,
-            fake_vexa,
+            fake_bot,
             fake_openai,
         )
         connect_google(browser(app), google)
@@ -1057,7 +1057,7 @@ def test_disconnect_keeps_meetings_usage_and_settings(web, session, owner, googl
     assert after.auto_join_rule == "organizer" and after.calendar_template_id == template.id
 
 
-def test_running_calendar_meeting_keeps_going(web, session, owner, google, template, fake_vexa):
+def test_running_calendar_meeting_keeps_going(web, session, owner, google, template, fake_bot):
     connect_google(web, google)
     conn = connection_of(session, owner)
     _, join = add_join(session, conn, owner, "joined", 1)
@@ -1070,11 +1070,11 @@ def test_running_calendar_meeting_keeps_going(web, session, owner, google, templ
     session.expire_all()
     running = session.get(Meeting, meeting.id)
     assert running.status == "bot_sent" and running.source == "calendar"
-    assert not getattr(fake_vexa, "stopped", [])  # nobody told the bot to leave
+    assert not getattr(fake_bot, "stopped", [])  # nobody told the bot to leave
 
 
 def test_join_in_dispatching_state_is_cancelled_not_sent(
-    web, session, owner, google, fake_vexa, template
+    web, session, owner, google, fake_bot, template
 ):
     connect_google(web, google)
     conn = connection_of(session, owner)
@@ -1213,13 +1213,13 @@ def test_disconnect_needs_a_login_and_the_csrf_token(capp, owner):
 
 
 def test_disconnect_still_works_while_the_calendar_features_are_switched_off(
-    engine, settings, google, fake_vexa, fake_openai, session, owner, web
+    engine, settings, google, fake_bot, fake_openai, session, owner, web
 ):
     """The privacy promise (delete on disconnect) must not depend on the feature flag."""
     connect_google(web, google)
     add_join(session, connection_of(session, owner), owner, "scheduled", 1)
     off = settings.model_copy(update={"calendar_enabled": False})
-    app = build_app(engine, off, google, fake_vexa, fake_openai)
+    app = build_app(engine, off, google, fake_bot, fake_openai)
     assert browser(app).post(DISCONNECT).status_code == 200
     assert count(session, ScheduledJoin) == 0
     assert connection_of(session, owner).status == "disconnected"
@@ -1227,11 +1227,11 @@ def test_disconnect_still_works_while_the_calendar_features_are_switched_off(
 
 
 def test_disconnect_deletes_locally_even_with_no_google_client_configured(
-    engine, settings, google, fake_vexa, fake_openai, session, owner, web
+    engine, settings, google, fake_bot, fake_openai, session, owner, web
 ):
     connect_google(web, google)
     add_join(session, connection_of(session, owner), owner, "scheduled", 1)
-    app = build_app(engine, settings, google, fake_vexa, fake_openai)
+    app = build_app(engine, settings, google, fake_bot, fake_openai)
     app.dependency_overrides[google_oauth.get_google] = lambda: None
     response = browser(app).post(DISCONNECT)
     assert response.status_code == 200 and response.json()["revoked"] is False

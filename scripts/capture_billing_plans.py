@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.main import create_app
 from app.models import Subscription
-from app.services import get_vexa
+from app.services import get_bot_provider
 
 base = cbs.base
 OUT = base.ROOT / "docs" / "fe-captures" / "billing-plans"
@@ -345,7 +345,7 @@ def main() -> None:
         billing_allowed_emails="*",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+    app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     server, on = base.start_server(app)
     engine = create_engine(base.SCRATCH_URL)
     try:

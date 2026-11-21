@@ -756,7 +756,7 @@ def send_now_route(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ) -> SendNowOut:
     """Send the note taker to a meeting it did not get into (CSRF header needed, no body). `join_id`
     comes from `GET /api/not-recorded` or an Upcoming row. Allowed while the meeting is still on,
@@ -772,7 +772,7 @@ def send_now_route(
     bot. The join's retry window restarts: 15 minutes from now."""
     sent = send_now.send_now(
         session,
-        vexa,
+        provider,
         user,
         join_id,
         now=_now(),

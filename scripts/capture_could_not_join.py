@@ -4,15 +4,14 @@
 
 The argument is any Postgres server the script may create a scratch database on. It runs the real
 migrations there, makes three Google Meet meetings the bot "was sent to" and lets the REAL pipeline
-(`pipeline.advance_meeting`) see Vexa report: the waiting room timed out, the host declined, and an
-ordinary bot failure (which must say nothing). Then it starts the real app under uvicorn, logs in
-and fetches the bell. The queued "Could not join" mail is rendered by the real template and written
-next to the responses. Each exchange goes to `docs/fe-captures/could-not-join/NN-name.json`.
+(`pipeline.advance_meeting`) see the provider report: the waiting room timed out, the host declined,
+and an ordinary bot failure (which must say nothing). Then it starts the real app under uvicorn,
+logs in and fetches the bell. The queued "Could not join" mail is rendered by the real template and
+written next to the responses. Each exchange goes to `docs/fe-captures/could-not-join/NN-name.json`.
 
 What is real: the app, the pipeline, the alerts code, the mail template, CSRF and every response.
-What is not: Vexa (a stub that answers with the three states). Cookie values and CSRF tokens are
-masked; the e-mail address and password are placeholders.
-"""
+What is not: the provider (a stub that answers with the three states). Cookie values and CSRF tokens
+are masked; the e-mail address and password are placeholders."""
 
 import json
 import os
@@ -51,27 +50,27 @@ from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import mail_templates, pipeline  # noqa: E402
+from app.bot_provider import BotMeeting  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import MailOutbox, Meeting, Template, User, UserSettings  # noqa: E402
-from app.vexa import VexaMeeting  # noqa: E402
 
 SEEN = datetime(2026, 11, 7, 11, 58, tzinfo=UTC)  # the poll that saw the failure
-TIMED_OUT = VexaMeeting(status="failed", completion_reason="awaiting_admission_timeout")
-DECLINED = VexaMeeting(status="failed", completion_reason="awaiting_admission_rejected")
-CRASHED = VexaMeeting(status="failed", failure_reason="Chrome crashed")
+TIMED_OUT = BotMeeting(status="failed", completion_reason="awaiting_admission_timeout")
+DECLINED = BotMeeting(status="failed", completion_reason="awaiting_admission_rejected")
+CRASHED = BotMeeting(status="failed", failure_reason="Chrome crashed")
 
 
-class StubVexa:
+class StubBot:
     """Answers every lookup with one fixed state."""
 
-    def __init__(self, answer: VexaMeeting) -> None:
+    def __init__(self, answer: BotMeeting) -> None:
         self.answer = answer
 
     def get_meeting(self, platform, native_id):
         return self.answer
 
-    def get_meeting_by_id(self, vexa_meeting_id):
+    def get_meeting_by_id(self, provider_bot_id):
         return self.answer
 
 
@@ -156,7 +155,7 @@ def seed(engine, settings) -> None:
                 platform="google_meet",
                 native_id=code,
                 template_id=template.id,
-                vexa_meeting_id="1",
+                provider_bot_id="1",
                 started_polling_at=SEEN - timedelta(minutes=15),
             )
             session.add(meeting)
@@ -164,13 +163,13 @@ def seed(engine, settings) -> None:
         session.commit()
         for meeting, (_, answer) in zip(meetings, cases, strict=True):
             pipeline.advance_meeting(
-                session, meeting.id, vexa=StubVexa(answer), openai_client=None, now=SEEN
+                session, meeting.id, provider=StubBot(answer), openai_client=None, now=SEEN
             )
         # A second failure of the same meeting changes nothing (the dedupe).
         meetings[0].status, meetings[0].step = "bot_sent", "waiting"
         session.commit()
         pipeline.advance_meeting(
-            session, meetings[0].id, vexa=StubVexa(TIMED_OUT), openai_client=None, now=SEEN
+            session, meetings[0].id, provider=StubBot(TIMED_OUT), openai_client=None, now=SEEN
         )
         for meeting in meetings:
             session.refresh(meeting)

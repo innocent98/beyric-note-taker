@@ -695,7 +695,7 @@ def test_a_graph_batch_becomes_rows_and_joins_through_apply_batch(session, micro
         SyncBatch(raw_events=raw, next_sync_token=None, complete=True, full=True),
         user_settings,
         now=NOW,
-        settings=make_settings(autojoin_lead_seconds=60),
+        settings=make_settings(autojoin_lead_seconds=60, teams_join_enabled=False),
     )
     rows = {e.source_event_id: e for e in session.query(CalendarEvent).filter_by(user_id=user.id)}
     # a cancelled event never seen before has nothing to cancel: no row

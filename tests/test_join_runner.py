@@ -1,7 +1,7 @@
 """The join runner (plan task C12): calendar meetings get their bot, exactly once, at the right
 time, and never after the owner no longer wants it.
 
-Real Postgres, the real materialiser (`apply_batch`), `place_bot()` and `FakeVexaHost` (a counter of
+Real Postgres, the real materialiser (`apply_batch`), `place_bot()` and `FakeBotHost` (a counter of
 the bots it was asked to start); the calendar source is a small stub (`StubCalendar`) for the
 re-check, and `FakeGoogleCalendar` for the end-to-end test. The clock is injected. Google bodies are
 synthetic.
@@ -35,7 +35,7 @@ from app.models import (
     UserSettings,
 )
 from app.usage import email_hash
-from tests.fakes.vexa_host import FakeVexaHost
+from tests.fakes.bot_host import FakeBotHost
 from tests.test_gcal_sync import batch, make_world, raw_event
 from tests.test_web import make_settings, make_user
 
@@ -94,7 +94,7 @@ class StubCalendar:
 
 @pytest.fixture
 def host():
-    return FakeVexaHost()
+    return FakeBotHost()
 
 
 @pytest.fixture
@@ -441,11 +441,11 @@ def test_a_row_that_missed_its_deadline_long_ago_is_closed_without_telling_anyon
 
 
 def test_a_send_that_fails_is_tried_again_and_told_to_the_admins(session, host, cal, ada):
-    from app.vexa import VexaError
+    from app.bot_provider import BotProviderError
 
     make_user(session, "admin@example.test", admin=True)
     join = materialise(session, ada, cal)
-    host.error = VexaError("send_bot failed: boom")
+    host.error = BotProviderError("send_bot failed: boom")
     run(session, host, cal, at(-1))
     assert state_of(session, join) == ("scheduled", None) and host.bots_sent == 0
     assert len(notes(session, "calendar.join_failed")) == 1
@@ -742,7 +742,7 @@ def test_a_cancel_that_lands_while_a_refusal_is_written_is_not_overwritten(
     touch, and writes nothing: the cancel stands, and no no-capacity alert is raised for it."""
     join = materialise(session, ada, cal)
 
-    def refuse_after_a_cancel(sess, vexa, request, **kwargs):
+    def refuse_after_a_cancel(sess, provider, request, **kwargs):
         sess.rollback()  # what place_bot does on a refusal
         with sessionmaker(bind=engine)() as other:
             row = other.get(ScheduledJoin, join.id)
@@ -759,17 +759,17 @@ def test_a_cancel_that_lands_while_a_refusal_is_written_is_not_overwritten(
 def test_a_failed_send_never_overwrites_a_cancel_either(
     session, host, cal, ada, monkeypatch, engine
 ):
-    from app.vexa import VexaError
+    from app.bot_provider import BotProviderError
 
     join = materialise(session, ada, cal)
 
-    def fail_after_a_cancel(sess, vexa, request, **kwargs):
+    def fail_after_a_cancel(sess, provider, request, **kwargs):
         sess.rollback()
         with sessionmaker(bind=engine)() as other:
             row = other.get(ScheduledJoin, join.id)
             row.state, row.skip_reason = "cancelled", "rule_none"
             other.commit()
-        raise VexaError("send_bot failed")
+        raise BotProviderError("send_bot failed")
 
     monkeypatch.setattr(join_runner, "place_bot", fail_after_a_cancel)
     run(session, host, cal, at(-1))
@@ -1046,7 +1046,7 @@ def test_resend_into_a_meeting_another_bot_took_fails_the_meeting_and_sends_noth
 
 def test_the_fake_clock_runs_a_calendar_meeting_from_sync_to_completed(engine):
     """FakeGoogleCalendar -> the real sync -> the scheduler on a fake clock -> the runner ->
-    FakeVexaHost -> the meeting leaves `bot_sent`. Nothing is called by hand but the ticks."""
+    FakeBotHost -> the meeting leaves `bot_sent`. Nothing is called by hand but the ticks."""
     import base64
 
     from app import vault
@@ -1074,7 +1074,7 @@ def test_the_fake_clock_runs_a_calendar_meeting_from_sync_to_completed(engine):
         clock = FakeClock(at(-30))
         cache = AccessTokenCache(clock.now, settings=settings, transport=google.transport)
         source = GoogleSource(settings, cache=cache, transport=google.transport)
-        host = FakeVexaHost()
+        host = FakeBotHost()
         with factory() as setup:
             world = make_world(setup, "ada@example.test")
             blob, version = vault.encrypt(
@@ -1092,7 +1092,7 @@ def test_the_fake_clock_runs_a_calendar_meeting_from_sync_to_completed(engine):
             leader_conn_factory=direct_connection_factory(TEST_DATABASE_URL),
         )
         register_calendar_sync(scheduler, settings, source=source)
-        join_runner.register_join_runner(scheduler, settings, source=source, vexa=host)
+        join_runner.register_join_runner(scheduler, settings, source=source, provider=host)
         try:
             scheduler.tick_dispatch()  # takes the lock, nothing is due
             scheduler.tick_sync()  # the sync reads Google: an event, a join at 09:59
@@ -1519,7 +1519,7 @@ def test_the_scheduler_stop_grace_is_longer_than_a_tick_can_run():
     import re
     from pathlib import Path
 
-    from app.vexa import SEND_DEADLINE_SECONDS
+    from app.bot_provider import SEND_DEADLINE_SECONDS
 
     text = (Path(__file__).parent.parent / "compose.yaml").read_text()
     block = text[text.index("\n  scheduler:") :]
@@ -1540,8 +1540,8 @@ def test_the_scheduler_stop_grace_is_longer_than_a_tick_can_run():
 def test_a_live_bot_in_the_meeting_with_no_row_is_adopted_not_called_someone_elses(
     session, host, cal, ada
 ):
-    """M3: a send killed after Vexa took the bot leaves a live bot and no row. The retry used to
-    get Vexa's duplicate answer and tell the owner another note taker was there."""
+    """M3: a send killed after the provider took the bot leaves a live bot and no row. The retry
+    used to get the provider's duplicate answer and tell the owner another note taker was there."""
     from app import pipeline
 
     host.seed_live_bot("google_meet", "abc-defg-hij")
@@ -1550,8 +1550,8 @@ def test_a_live_bot_in_the_meeting_with_no_row_is_adopted_not_called_someone_els
     assert state_of(session, join) == ("joined", None)
     assert notes(session, "calendar.meeting_has_note_taker") == [] and host.stopped == []
     [meeting] = meetings(session)
-    # adopted at once and pinned to Vexa's id: not a placeholder waiting for a grace period
-    assert meeting.vexa_meeting_id == "1" and meeting.completion_reason is None
+    # adopted at once and pinned to the provider's id: not a placeholder waiting for a grace period
+    assert meeting.provider_bot_id == "1" and meeting.completion_reason is None
     assert pipeline.is_join_failure(meeting) is False
 
 
@@ -1715,11 +1715,11 @@ def test_a_live_bot_another_row_already_holds_is_never_adopted(session, host, ca
         native_id="abc-defg-hij",
         template_id=other.template.id,
         status="ready",
-        vexa_meeting_id="1",
+        provider_bot_id="1",
     )
     session.add(held)
     session.commit()
-    host.seed_live_bot("google_meet", "abc-defg-hij")  # Vexa's id 1: another row's recording
+    host.seed_live_bot("google_meet", "abc-defg-hij")  # id 1: another row's recording
     join = materialise(session, ada, cal)
     run(session, host, cal, at(-1))
     assert state_of(session, join) == ("skipped", "code_in_use")
@@ -1879,13 +1879,13 @@ def test_a_teams_event_is_joined_like_a_meet_one_when_teams_is_on(session, host,
     assert meeting.platform == "teams" and meeting.native_id.startswith("teams-")
 
 
-def test_a_teams_event_is_not_joined_when_the_provider_cannot(session, host, cal, ada):
+def test_a_teams_event_is_not_joined_when_teams_is_switched_off(session, host, cal, ada):
     from app.gcal_sync import apply_batch
 
     raw = raw_event("evt-teams", start=T0, location=f"Join: {TEAMS_LINK}")
     del raw["hangoutLink"]
     apply_batch(session, ada.conn, batch(raw), ada.user_settings, now=at(-60), settings=SETTINGS)
     session.expire_all()
-    assert list(session.scalars(select(ScheduledJoin))) == []  # Vexa: nothing is scheduled
+    assert list(session.scalars(select(ScheduledJoin))) == []  # nothing is scheduled
     run(session, host, cal, at(-1))
     assert host.bots_sent == 0

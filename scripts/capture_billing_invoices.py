@@ -63,7 +63,7 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from app.usage import email_hash  # noqa: E402
 
 Recorder = base.Recorder
@@ -792,7 +792,7 @@ def main() -> None:
     on_app_settings = settings_for(billing_enabled=True, billing_allowed_emails="*")
     apps = [create_app(on_app_settings), create_app(settings_for(billing_enabled=False))]
     for each in apps:
-        each.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+        each.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
     started = [base.start_server(each) for each in apps]
     engine = create_engine(base.SCRATCH_URL)
     try:

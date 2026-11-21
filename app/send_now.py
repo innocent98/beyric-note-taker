@@ -76,7 +76,7 @@ class Sent:
 
 def send_now(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     user: User,
     join_id: int,
     *,
@@ -88,7 +88,7 @@ def send_now(
     patience = time.monotonic() + placement.LOCK_WAIT_SECONDS
     while True:
         try:
-            return _attempt(session, vexa, user, join_id, now, settings)
+            return _attempt(session, provider, user, join_id, now, settings)
         except PlacementRefused as refused:  # `place_bot` rolled back: nothing is held
             if refused.slot_locked and time.monotonic() < patience:
                 time.sleep(placement.LOCK_POLL_SECONDS)
@@ -98,7 +98,7 @@ def send_now(
 
 def _attempt(
     session: Session,
-    vexa: BotProvider,
+    provider: BotProvider,
     user: User,
     join_id: int,
     now: datetime,
@@ -170,7 +170,7 @@ def _attempt(
     try:
         meeting = place_bot(
             session,
-            vexa,
+            provider,
             request,
             now=now,
             settings=settings,

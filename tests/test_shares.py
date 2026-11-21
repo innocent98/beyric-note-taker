@@ -27,8 +27,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     stranger,
@@ -460,7 +460,7 @@ def test_the_account_daily_cap_of_a_pilot_account_is_not_the_recipient_cap(api, 
 
 def test_deleting_the_sender_removes_their_shares(api, session, meeting, owner):
     api.post(url(meeting), body())
-    deletion.purge_user(session, owner, vexa=None, force=True)
+    deletion.purge_user(session, owner, provider=None, force=True)
     assert session.scalars(select(MeetingShare)).all() == []
     assert session.scalars(select(MeetingShareRecipient)).all() == []
 

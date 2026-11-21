@@ -6,9 +6,9 @@
 INSERT INTO app_state (id, session_epoch, worker_heartbeat_at) VALUES (1, 0, now())
   ON CONFLICT (id) DO UPDATE SET worker_heartbeat_at = now();
 
-INSERT INTO meetings (owner_user_id, url, platform, native_id, template_id, status, step, failure_reason, transcript, speaker_transcript, notes, speakers_incomplete, completion_reason, join_attempts, audio_deleted_at, created_at)
+INSERT INTO meetings (owner_user_id, url, platform, native_id, template_id, status, step, failure_reason, transcript, speaker_transcript, notes, speakers_incomplete, completion_reason, join_attempts, audio_deleted_at, created_at, bot_provider)
 SELECT (SELECT id FROM users WHERE is_admin ORDER BY id LIMIT 1),
-       v.url, v.platform, v.native_id, v.template_id, v.status, v.step, v.failure_reason, v.transcript, v.speaker_transcript, v.notes, v.speakers_incomplete, v.completion_reason, v.join_attempts, v.audio_deleted_at::timestamptz, v.created_at
+       v.url, v.platform, v.native_id, v.template_id, v.status, v.step, v.failure_reason, v.transcript, v.speaker_transcript, v.notes, v.speakers_incomplete, v.completion_reason, v.join_attempts, v.audio_deleted_at::timestamptz, v.created_at, 'skribby'
 FROM (VALUES
 ('https://meet.google.com/aaa-bbbb-ccc', 'google_meet', 'aaa-bbbb-ccc', 2, 'ready', 'done', NULL,
  'Hello everyone. We start with the beta. I can ship on Friday. Good, I take support from Monday.',

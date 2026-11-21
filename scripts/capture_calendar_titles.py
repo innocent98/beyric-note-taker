@@ -4,14 +4,14 @@
 
 The argument is any Postgres server the script may create a scratch database on. It runs the real
 migrations there, makes one calendar meeting THROUGH THE REAL JOIN RUNNER (a synthetic calendar
-event with a hostile title, the real `run_due_joins` and `place_bot`; only the Vexa host is
-`tests/fakes/vexa_host.py`'s fake), marks it ready with placeholder notes, starts the real app under
+event with a hostile title, the real `run_due_joins` and `place_bot`; only the provider host is
+`tests/fakes/bot_host.py`'s fake), marks it ready with placeholder notes, starts the real app under
 uvicorn and fetches what the screens fetch. Each exchange goes to
 `docs/fe-captures/calendar-titles/NN-name.json`, so every claim in
 `docs/fe-integration-guide-calendar-join.md` can be re-derived.
 
 What is real: the app, the guard, CSRF, the runner, the placement, the title cleaning and every
-response. What is not: Google (the event is a synthetic body, not a captured one) and Vexa.
+response. What is not: Google (the event is a synthetic body, not a captured one) and the provider.
 Cookie values and CSRF tokens are masked; the e-mail address and password are placeholders.
 """
 
@@ -60,7 +60,7 @@ from app.models import (  # noqa: E402
     User,
     UserSettings,
 )
-from tests.fakes.vexa_host import FakeVexaHost  # noqa: E402
+from tests.fakes.bot_host import FakeBotHost  # noqa: E402
 
 START = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
 # A hostile title, as an invite could carry it: a bidi override, a line break and a header, markup,
@@ -145,7 +145,7 @@ def raw_event(event_id: str, summary: str, code: str) -> dict:
 def seed(engine, settings) -> None:
     """Two calendar events for the admin account, sent to the bot by the real runner: one with a
     hostile title, one with none. Then the notes are marked ready so the exports work."""
-    host = FakeVexaHost()
+    host = FakeBotHost()
     with Session(engine) as session:
         user = session.scalars(select(User).where(User.email == ADMIN_EMAIL)).one()
         template = session.scalars(

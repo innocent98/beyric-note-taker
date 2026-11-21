@@ -681,12 +681,12 @@ def test_with_the_flag_off_each_skipped_meeting_still_has_its_own_notice(session
 
 
 @pytest.fixture
-def enforce_app(engine, fake_vexa, fake_openai):
+def enforce_app(engine, fake_bot, fake_openai):
     from sqlalchemy.orm import Session
 
     from app.db import get_session
     from app.main import create_app
-    from app.services import get_openai_client, get_vexa
+    from app.services import get_bot_provider, get_openai_client
 
     app = create_app(make_settings(hours_mode="enforce"))
 
@@ -695,7 +695,7 @@ def enforce_app(engine, fake_vexa, fake_openai):
             yield s
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_vexa] = lambda: fake_vexa
+    app.dependency_overrides[get_bot_provider] = lambda: fake_bot
     app.dependency_overrides[get_openai_client] = lambda: fake_openai
     return app
 
@@ -703,8 +703,8 @@ def enforce_app(engine, fake_vexa, fake_openai):
 from tests.test_accounts import visitor  # noqa: E402
 from tests.test_web import (  # noqa: E402,F401  (fixtures used by name)
     MEET,
+    fake_bot,
     fake_openai,
-    fake_vexa,
 )
 
 

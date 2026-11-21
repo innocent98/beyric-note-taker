@@ -28,14 +28,14 @@ from app.models import (
     UserSettings,
     WaitlistEntry,
 )
-from app.services import get_openai_client, get_vexa
+from app.services import get_bot_provider, get_openai_client
 from tests.test_api import Api, error_of
 from tests.test_signup import ATTACKER, GOOD, open_pilot
 from tests.test_signup import form as signup_form
 from tests.test_web import (  # noqa: F401
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
 )
@@ -234,7 +234,7 @@ def google():
 
 
 @pytest.fixture
-def gapp(engine, fake_vexa, fake_openai, google):
+def gapp(engine, fake_bot, fake_openai, google):
     app = create_app(make_settings(google_client_id=CLIENT_ID, google_client_secret="s3cret"))
 
     def session_override():
@@ -242,7 +242,7 @@ def gapp(engine, fake_vexa, fake_openai, google):
             yield s
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_vexa] = lambda: fake_vexa
+    app.dependency_overrides[get_bot_provider] = lambda: fake_bot
     app.dependency_overrides[get_openai_client] = lambda: fake_openai
     app.dependency_overrides[google_oauth.get_google] = lambda: google
     return app

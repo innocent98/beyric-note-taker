@@ -1,10 +1,9 @@
 """The `BotProvider` contract (task B1): the same scenarios against every provider.
 
-Each scenario runs against `FakeProvider`, `VexaProvider` and `SkribbyProvider`, the last two over
-a pretend HTTP layer (`pytest-httpx`; the Vexa bodies are the ones the Vexa tests already use, the
-Skribby bodies and error answers are the ones in Skribby's API pages and the bake-off tool), and all
-three must give the same answer. The expected results are written out by hand, so the test is not
-the fake agreeing with itself: it is each provider agreeing with the contract in
+Each scenario runs against `FakeProvider` and `SkribbyProvider`, the last over a pretend HTTP layer
+(`pytest-httpx`; the Skribby bodies and error answers are the ones in Skribby's API pages and the
+bake-off tool), and both must give the same answer. The expected results are written out by hand, so
+the test is not the fake agreeing with itself: it is each provider agreeing with the contract in
 `app/bot_provider.py`.
 
 A new provider (Recall) adds one `World` below and inherits every scenario.
@@ -17,19 +16,23 @@ import httpx
 import pytest
 
 from app.bot_provider import (
+    DEFAULT_PROVIDER,
     PROVIDER_FACTORIES,
+    RETIRED_PROVIDERS,
     BotDuplicate,
     BotMeeting,
     BotNotFound,
     BotProvider,
     BotProviderError,
     BotSendUncertain,
+    RetiredProvider,
     build_provider,
+    is_retired,
+    provider_for,
 )
-from app.config import Settings, get_settings
+from app.config import get_settings
 from app.meeting_url import UnsupportedMeetingUrl
 from app.skribby import SkribbyClient, SkribbyProvider, recording_handle
-from app.vexa import VexaProvider
 from tests.fakes.provider import SPEECH, Beat, FakeProvider, beats_for
 
 # A finished Skribby bot is looked at twice (the second asks for the speaker events the timeline
@@ -43,8 +46,6 @@ pytestmark = pytest.mark.httpx_mock(
 
 CODE = "abc-defg-hij"
 URL = f"https://meet.google.com/{CODE}"
-BASE = "http://vexa.test"
-VEXA_BOT = 5  # the id the pretend Vexa host hands out first
 SKRIBBY_BASE = "https://skribby.test/api/v1"
 SKRIBBY_FILES = "https://files.skribby.io/recording.webm"
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
@@ -59,7 +60,7 @@ def look(info: BotMeeting) -> tuple:
         info.failure_reason,
         info.segments,
         (info.recording_id, info.media_id, info.recording_status),
-        info.vexa_id,
+        info.provider_id,
     )
 
 
@@ -124,101 +125,6 @@ class FakeWorld:
         return (8, 8)  # a recording the fake never made
 
 
-class VexaWorld:
-    name = "vexa"
-    live_speech = True
-
-    def __init__(self, httpx_mock, monkeypatch) -> None:
-        monkeypatch.setenv("VEXA_BASE_URL", BASE)
-        monkeypatch.setenv("VEXA_API_KEY", "test-key")
-        monkeypatch.setenv("BOT_NAME", "Test Bot")
-        get_settings.cache_clear()
-        self.mock = httpx_mock
-        self.provider: BotProvider = VexaProvider()
-        self.next_id = VEXA_BOT
-
-    def teardown(self) -> None:
-        get_settings.cache_clear()
-
-    def _body(self, beat: Beat, bot: int) -> dict:
-        data: dict = {}
-        if beat.completion_reason:
-            data["completion_reason"] = beat.completion_reason
-        if beat.failure_reason:
-            data["reason"] = beat.failure_reason
-        if beat.lobby:
-            data["status_transition"] = [{"from": "joining", "to": "awaiting_admission"}]
-        body: dict = {
-            "id": bot,
-            "platform": "google_meet",
-            "native_meeting_id": CODE,
-            "status": beat.status,
-            "segments": list(SPEECH) if beat.speech else [],
-            "data": data,
-        }
-        if beat.recording:
-            body["recordings"] = [
-                {"id": 7, "status": "completed", "media_files": [{"id": 9, "type": "audio"}]}
-            ]
-        return body
-
-    def outcome(self, outcome: str | list[Beat]) -> None:
-        beats = beats_for(outcome) if isinstance(outcome, str) else outcome
-        bot = self.next_id
-        self.mock.add_response(method="POST", url=f"{BASE}/bots", status_code=201, json={"id": bot})
-        for beat in beats:
-            self.mock.add_response(
-                method="GET", url=f"{BASE}/transcripts/by-id/{bot}", json=self._body(beat, bot)
-            )
-            self.mock.add_response(
-                method="GET",
-                url=f"{BASE}/transcripts/google_meet/{CODE}",
-                json=self._body(beat, bot),
-            )
-        self.next_id += 1
-
-    def send_fails(self, kind: str) -> None:
-        if kind == "never_connected":
-            self.mock.add_exception(httpx.ConnectError("refused"))
-        else:  # the gateway timed out after the bot manager may have acted
-            self.mock.add_response(method="POST", url=f"{BASE}/bots", status_code=504)
-
-    def duplicate_on_second_send(self) -> None:
-        self.mock.add_response(method="POST", url=f"{BASE}/bots", status_code=201, json={"id": 5})
-        self.mock.add_response(method="POST", url=f"{BASE}/bots", status_code=409)
-
-    def unknown_meeting(self) -> None:
-        self.mock.add_response(
-            method="GET", url=f"{BASE}/transcripts/by-id/999", status_code=404, json={}
-        )
-        self.mock.add_response(
-            method="GET", url=f"{BASE}/transcripts/google_meet/{CODE}", status_code=404, json={}
-        )
-
-    def nothing_to_stop(self) -> None:
-        self.mock.add_response(
-            method="DELETE", url=f"{BASE}/bots/google_meet/{CODE}", status_code=404
-        )
-
-    def recording_gone(self) -> None:
-        self.mock.add_response(method="DELETE", url=f"{BASE}/recordings/7", status_code=404)
-
-    def ids_for(self, bot) -> tuple[int, int]:
-        return (7, 9)
-
-    def audio_ready(self) -> tuple[int, int]:
-        self.mock.add_response(
-            method="GET", url=f"{BASE}/recordings/7/media/9/raw?type=audio", content=b"audio"
-        )
-        return (7, 9)
-
-    def audio_missing(self) -> tuple[int, int]:
-        self.mock.add_response(
-            method="GET", url=f"{BASE}/recordings/7/media/9/raw?type=audio", status_code=404
-        )
-        return (7, 9)
-
-
 class StubLedger:
     """Our own `meetings` table as the Skribby provider sees it, for the contract: nothing live (the
     provider's own memory of what it sent is what the scenarios rely on) and the bots whose
@@ -235,9 +141,9 @@ class StubLedger:
 
 
 class SkribbyWorld:
-    """`SkribbyProvider` over a pretend Skribby. A beat in Vexa's words is written as the Skribby
-    bot body that must be read as that beat: the door and the knock are told by how long the bot's
-    `joining` lasted (the provider's clock is fixed at `NOW`)."""
+    """`SkribbyProvider` over a pretend Skribby. A beat in the pipeline's words is written as the
+    Skribby bot body that must be read as that beat: the door and the knock are told by how long the
+    bot's `joining` lasted (the provider's clock is fixed at `NOW`)."""
 
     name = "skribby"
     live_speech = False  # Skribby hands the transcript over once the bot has finished
@@ -389,12 +295,10 @@ class SkribbyWorld:
         return self.ids_for(self.REC_BOT)
 
 
-@pytest.fixture(params=["fake", "vexa", "skribby"])
+@pytest.fixture(params=["fake", "skribby"])
 def world(request, httpx_mock, monkeypatch):
     if request.param == "fake":
         made = FakeWorld()
-    elif request.param == "vexa":
-        made = VexaWorld(httpx_mock, monkeypatch)
     else:
         made = SkribbyWorld(httpx_mock)
     yield made
@@ -563,7 +467,6 @@ def test_a_download_that_fails_is_an_error_and_leaves_no_file(world, tmp_path):
 
 def test_every_provider_has_the_whole_interface():
     assert isinstance(FakeProvider(), BotProvider)
-    assert isinstance(VexaProvider(), BotProvider)
     client = SkribbyClient(api_key="skr-test-key", base_url=SKRIBBY_BASE)
     assert isinstance(SkribbyProvider(client, StubLedger()), BotProvider)
 
@@ -571,60 +474,82 @@ def test_every_provider_has_the_whole_interface():
 # ---- choosing the provider ----
 
 
-def test_the_default_provider_is_vexa(monkeypatch):
-    monkeypatch.delenv("BOT_PROVIDER", raising=False)
+def test_the_default_provider_is_skribby(monkeypatch):
+    monkeypatch.setenv("SKRIBBY_API_KEY", "skr-test-key")
     get_settings.cache_clear()
     try:
-        assert Settings(_env_file=None).bot_provider == "vexa"
-        assert isinstance(build_provider(), VexaProvider)
+        assert DEFAULT_PROVIDER == "skribby"
+        assert isinstance(build_provider(), SkribbyProvider)
     finally:
         get_settings.cache_clear()
 
 
-def test_an_unknown_provider_stops_startup_with_a_message_naming_the_setting_and_the_choices(
-    monkeypatch,
+@pytest.mark.parametrize("line", ["vexa", "skribby", "", "   ", "nope"])
+def test_an_old_bot_provider_line_in_the_env_is_ignored_and_does_not_stop_startup(
+    monkeypatch, line
 ):
-    monkeypatch.setenv("BOT_PROVIDER", "nope")
+    """The setting is gone: a server `.env` that still has it (any value) must still start."""
+    monkeypatch.setenv("BOT_PROVIDER", line)
     get_settings.cache_clear()
     try:
+        assert not hasattr(get_settings(), "bot_provider")
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("name", ["skribby", "Skribby", "  SKRIBBY "])
+def test_build_provider_reads_an_explicit_name_leniently(monkeypatch, name):
+    monkeypatch.setenv("SKRIBBY_API_KEY", "skr-test-key")
+    get_settings.cache_clear()
+    try:
+        assert isinstance(build_provider(name), SkribbyProvider)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_build_provider_refuses_an_unknown_name_and_a_retired_one():
+    for name in ("nope", "vexa"):
         with pytest.raises(
-            ValueError, match=r"BOT_PROVIDER.*'nope'.*must be one of: skribby, vexa"
+            ValueError, match=f"unknown bot provider '{name}'; expected one of: skribby"
         ):
-            get_settings()
-    finally:
-        get_settings.cache_clear()
+            build_provider(name)
 
 
-@pytest.mark.parametrize("blank", ["", "   "])
-def test_an_empty_bot_provider_line_means_the_default_and_does_not_stop_startup(monkeypatch, blank):
-    monkeypatch.setenv("BOT_PROVIDER", blank)
-    get_settings.cache_clear()
-    try:
-        assert get_settings().bot_provider == "vexa"
-        assert isinstance(build_provider(), VexaProvider)
-    finally:
-        get_settings.cache_clear()
-
-
-@pytest.mark.parametrize("name", ["vexa", "Vexa", "  VEXA "])
-def test_build_provider_reads_an_explicit_name_as_the_setting_does(name):
-    assert isinstance(build_provider(name), VexaProvider)
-
-
-def test_build_provider_refuses_an_unknown_name_too():
-    with pytest.raises(
-        ValueError, match="unknown bot provider 'nope'; expected one of: skribby, vexa"
-    ):
-        build_provider("nope")
-
-
-def test_the_setting_picks_the_provider_a_new_factory_registered(monkeypatch):
+def test_the_default_name_picks_the_provider_a_new_factory_registered(monkeypatch):
     fake = FakeProvider()
     monkeypatch.setitem(PROVIDER_FACTORIES, "fake", lambda: fake)
-    monkeypatch.setenv("BOT_PROVIDER", " Fake ")
-    get_settings.cache_clear()
-    try:
-        assert get_settings().bot_provider == "fake"
-        assert build_provider() is fake
-    finally:
-        get_settings.cache_clear()
+    monkeypatch.setattr("app.bot_provider.DEFAULT_PROVIDER", " Fake ")
+    assert build_provider() is fake
+
+
+# ---- a retired provider: old meetings still name it, and nothing is asked of anyone ----
+
+
+def test_a_retired_name_is_data_not_a_provider():
+    assert RETIRED_PROVIDERS == {"vexa"}
+    assert "vexa" not in PROVIDER_FACTORIES
+    assert is_retired("vexa") and is_retired(" VEXA ")
+    assert not is_retired("skribby") and not is_retired(None)
+
+
+@pytest.mark.parametrize("given", [None, FakeProvider()])
+def test_a_meeting_of_a_retired_provider_is_given_the_retired_stand_in_whatever_is_default(given):
+    provider = provider_for(given, "vexa", None)
+    assert isinstance(provider, RetiredProvider)
+    assert isinstance(provider, BotProvider)  # it has the whole interface
+
+
+def test_the_retired_stand_in_treats_the_copy_as_already_gone_and_never_sends(tmp_path):
+    gone = RetiredProvider("vexa")
+    gone.stop_bot("google_meet", CODE)  # nothing there is not an error
+    gone.delete_recording(7)  # already gone is success
+    for call in (
+        lambda: gone.get_meeting("google_meet", CODE),
+        lambda: gone.get_meeting_by_id("5"),
+        lambda: gone.download_audio(7, 9, tmp_path / "a.webm"),
+    ):
+        with pytest.raises(BotNotFound):  # the provider does not know it: nothing to wait for
+            call()
+    with pytest.raises(BotProviderError):
+        gone.send_bot(URL)  # a new bot never goes to a retired provider
+    assert not (tmp_path / "a.webm").exists()

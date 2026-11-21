@@ -3,12 +3,12 @@
     python scripts/capture_meeting_delete.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 Same set-up as `scripts/capture_template_delete.py`: real migrations, the real app under uvicorn,
-real HTTP, only Vexa and OpenAI replaced by fakes (the fake Vexa accepts `delete_recording`). Rows
-are inserted by SQL in the states the worker leaves them in, and the stored rows are saved between
-calls. Files go to `docs/fe-captures/meeting-delete/NN-name.json`.
+real HTTP, only the provider and OpenAI replaced by fakes (the fake the provider accepts
+`delete_recording`). Rows are inserted by SQL in the states the worker leaves them in, and the
+stored rows are saved between calls. Files go to `docs/fe-captures/meeting-delete/NN-name.json`.
 
-What is NOT real: Vexa and OpenAI (fakes), the worker (it never runs). The `502
-recording_delete_failed` answer comes from a fake Vexa told to fail.
+What is NOT real: the provider and OpenAI (fakes), the worker (it never runs). The `502
+recording_delete_failed` answer comes from a fake the provider told to fail.
 """
 
 import shutil
@@ -24,6 +24,7 @@ from sqlalchemy import create_engine, func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.accounts import create_user_defaults  # noqa: E402
+from app.bot_provider import BotProviderError  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import (  # noqa: E402
@@ -39,19 +40,18 @@ from app.models import (  # noqa: E402
     User,
 )
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_openai_client, get_vexa  # noqa: E402
-from app.vexa import VexaError  # noqa: E402
+from app.services import get_bot_provider, get_openai_client  # noqa: E402
 
 Recorder = base.Recorder
 
 
-class DeletingVexa(base.FakeVexa):
+class DeletingBot(base.FakeBot):
     fail = False
     deleted: list
 
     def delete_recording(self, recording_id):
         if self.fail:
-            raise VexaError("delete_recording failed: upstream detail")
+            raise BotProviderError("delete_recording failed: upstream detail")
         self.deleted = getattr(self, "deleted", []) + [recording_id]
 
 
@@ -110,14 +110,14 @@ def main() -> None:
         cookie_secure=False,
         database_url=base.scratch_url,
     )
-    vexa, openai_client = DeletingVexa(), base.FakeOpenAI()
+    provider, openai_client = DeletingBot(), base.FakeOpenAI()
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: vexa
+    app.dependency_overrides[get_bot_provider] = lambda: provider
     app.dependency_overrides[get_openai_client] = lambda: openai_client
     server, server_base = base.start_server(app)
     engine = create_engine(base.scratch_url)
     try:
-        run(server_base, engine, vexa)
+        run(server_base, engine, provider)
     finally:
         server.should_exit = True
         engine.dispose()
@@ -142,7 +142,7 @@ def make_meeting(session, owner_id, template_id, native_id, **fields) -> Meeting
     return meeting
 
 
-def run(server_base, engine, vexa) -> None:
+def run(server_base, engine, provider) -> None:
     owner_id = base.owner_id_of(engine)
     owner = Recorder(server_base)
     owner.call("session-anonymous", "GET", "/api/session", note="Read the CSRF token.")
@@ -150,7 +150,9 @@ def run(server_base, engine, vexa) -> None:
     template_id = owner.call("templates", "GET", "/api/templates").json()["templates"][0]["id"]
 
     with Session(engine) as session:
-        done = make_meeting(session, owner_id, template_id, "abc-defg-hij", vexa_recording_id=77)
+        done = make_meeting(
+            session, owner_id, template_id, "abc-defg-hij", provider_recording_id=77
+        )
         live = make_meeting(
             session,
             owner_id,
@@ -252,21 +254,21 @@ def run(server_base, engine, vexa) -> None:
         f"/api/meetings/{writing_id}",
         note="The notes are being written (`processing`): the same 409.",
     )
-    vexa.fail = True
+    provider.fail = True
     owner.call(
-        "delete-vexa-down",
+        "delete-provider-down",
         "DELETE",
         f"/api/meetings/{done_id}",
-        note="Vexa would not remove the recording: 502, and nothing was deleted.",
+        note="The provider would not remove the recording: 502, and nothing was deleted.",
     )
     note_file("rows-after-failed-delete", "Nothing changed.", counts(engine, done_id))
-    vexa.fail = False
+    provider.fail = False
     owner.call("delete", "DELETE", f"/api/meetings/{done_id}", note="Deleted: 204, no body.")
     note_file(
         "rows-after",
         "The meeting and its derived rows are gone; usage seconds and the "
-        "AI-run row stay, with no link to the meeting. Vexa was asked to delete recording "
-        f"{getattr(vexa, 'deleted', None)}.",
+        "AI-run row stay, with no link to the meeting. the provider was asked to delete recording "
+        f"{getattr(provider, 'deleted', None)}.",
         counts(engine, done_id),
     )
     owner.call("get-after", "GET", f"/api/meetings/{done_id}", note="Gone: 404 not_found.")

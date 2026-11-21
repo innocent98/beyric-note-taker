@@ -2,7 +2,7 @@
 `calendar_events` rows and `scheduled_joins` rows.
 
 Everything here runs against a real Postgres and the real `parse_event` and `will_join`; only
-Vexa is faked (for the one path that stops a bot). The event bodies are SYNTHETIC.
+The bot provider is faked (for the one path that stops a bot). The event bodies are SYNTHETIC.
 """
 
 import logging
@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import inspect, select
 
 from app import gcal_sync
+from app.bot_provider import BotProviderError
 from app.calendar_source import SyncBatch
 from app.gcal_sync import ApplyResult, apply_batch
 from app.models import (
@@ -24,7 +25,6 @@ from app.models import (
     UserSettings,
 )
 from app.pipeline import REASON_CANCELLED
-from app.vexa import VexaError
 from tests.test_web import make_settings, make_user
 
 NOW = datetime(2026, 11, 4, 8, 0, tzinfo=UTC)
@@ -107,9 +107,17 @@ def world(session) -> World:
     return make_world(session)
 
 
-def apply(session, world: World, sync_batch: SyncBatch, *, now=NOW, settings=SETTINGS, vexa=None):
+def apply(
+    session, world: World, sync_batch: SyncBatch, *, now=NOW, settings=SETTINGS, provider=None
+):
     return apply_batch(
-        session, world.conn, sync_batch, world.user_settings, now=now, settings=settings, vexa=vexa
+        session,
+        world.conn,
+        sync_batch,
+        world.user_settings,
+        now=now,
+        settings=settings,
+        provider=provider,
     )
 
 
@@ -146,14 +154,14 @@ def snapshot(session) -> list[dict]:
     return out
 
 
-class FakeVexa:
+class FakeBot:
     def __init__(self, *, fail_stop: bool = False) -> None:
         self.fail_stop = fail_stop
         self.stopped: list[tuple[str, str]] = []
 
     def stop_bot(self, platform, native_id):
         if self.fail_stop:
-            raise VexaError("down")
+            raise BotProviderError("down")
         self.stopped.append((platform, native_id))
 
 
@@ -511,12 +519,12 @@ def test_revive_clears_the_recheck_mark(session, world):
 def test_cancel_after_dispatch_while_bot_sent_calls_cancel_meeting(session, world):
     apply(session, world, batch(raw_event()))
     join, meeting = dispatched(session, world, "joined")
-    vexa = FakeVexa()
+    provider = FakeBot()
 
-    result = apply(session, world, batch(stub()), vexa=vexa)
+    result = apply(session, world, batch(stub()), provider=provider)
 
     assert result.cancelled == 1
-    assert vexa.stopped == [("google_meet", "abc-defg-hij")]
+    assert provider.stopped == [("google_meet", "abc-defg-hij")]
     session.refresh(meeting)
     session.refresh(join)
     assert (meeting.status, meeting.failure_reason) == ("failed", REASON_CANCELLED)
@@ -526,11 +534,11 @@ def test_cancel_after_dispatch_while_bot_sent_calls_cancel_meeting(session, worl
 def test_cancel_after_dispatch_leaves_a_meeting_the_pipeline_already_took(session, world):
     apply(session, world, batch(raw_event()))
     join, meeting = dispatched(session, world, "joined", bot_sent=False)
-    vexa = FakeVexa()
+    provider = FakeBot()
 
-    apply(session, world, batch(stub()), vexa=vexa)
+    apply(session, world, batch(stub()), provider=provider)
 
-    assert vexa.stopped == []
+    assert provider.stopped == []
     session.refresh(meeting)
     session.refresh(join)
     assert meeting.status == "processing" and join.state == "joined"
@@ -540,7 +548,7 @@ def test_a_bot_that_will_not_stop_leaves_the_join_joined_and_does_not_raise(sess
     apply(session, world, batch(raw_event()))
     join, meeting = dispatched(session, world, "joined")
 
-    result = apply(session, world, batch(stub()), vexa=FakeVexa(fail_stop=True))
+    result = apply(session, world, batch(stub()), provider=FakeBot(fail_stop=True))
 
     session.refresh(join)
     session.refresh(meeting)
@@ -555,12 +563,12 @@ def test_switch_off_after_dispatch_does_not_stop_a_running_bot(session, world):
     (event,) = events(session)
     event.override = False
     session.commit()
-    vexa = FakeVexa()
+    provider = FakeBot()
 
-    apply(session, world, batch(raw_event()), vexa=vexa)
+    apply(session, world, batch(raw_event()), provider=provider)
 
     session.refresh(join)
-    assert vexa.stopped == [] and join.state == "joined"
+    assert provider.stopped == [] and join.state == "joined"
 
 
 # ---- incomplete and full batches ----
@@ -624,13 +632,13 @@ def test_an_incremental_batch_never_cancels_what_it_does_not_mention(session, wo
 def test_a_missing_event_with_a_bot_in_the_call_is_left_alone(session, world):
     apply(session, world, batch(raw_event("a")))
     join, meeting = dispatched(session, world, "joined")
-    vexa = FakeVexa()
+    provider = FakeBot()
 
-    apply(session, world, batch(full=True), vexa=vexa)
+    apply(session, world, batch(full=True), provider=provider)
 
     session.refresh(join)
     session.refresh(meeting)
-    assert vexa.stopped == [] and join.state == "joined" and meeting.status == "bot_sent"
+    assert provider.stopped == [] and join.state == "joined" and meeting.status == "bot_sent"
 
 
 # ---- idempotence ----

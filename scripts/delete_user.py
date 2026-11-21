@@ -3,10 +3,10 @@
     python scripts/delete_user.py someone@example.com          # asks you to type the address
     python scripts/delete_user.py someone@example.com --yes    # no question
 
-Stops the user's running bots, deletes their recordings here and at Vexa, then their meetings,
-templates, vocabulary, settings, notifications, queued mail, tokens and waitlist row, and the user.
-The hours ledger keeps seconds and an email hash only, so signing up again does not reset the
-hours. Refuses to delete the last active admin. Run it where the app's `.env` is, for example:
+Stops the user's running bots, deletes their recordings here and at the provider, then their
+meetings, templates, vocabulary, settings, notifications, queued mail, tokens and waitlist row, and
+the user. The hours ledger keeps seconds and an email hash only, so signing up again does not reset
+the hours. Refuses to delete the last active admin. Run it where the app's `.env` is, for example:
 
     docker compose exec web python scripts/delete_user.py someone@example.com
 """
@@ -74,7 +74,8 @@ def run(argv: list[str]) -> int:
             deletion.purge_user(session, user, build_provider())
         except BotProviderError as exc:
             print(
-                f"Vexa did not answer ({type(exc).__name__}); nothing was deleted.", file=sys.stderr
+                f"The provider did not answer ({type(exc).__name__}); nothing was deleted.",
+                file=sys.stderr,
             )
             return 1
     print("Deleted.")

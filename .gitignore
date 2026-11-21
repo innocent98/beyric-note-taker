@@ -1,7 +1,6 @@
 .env
 .env.*
 .DS_Store
-spike/vexa/
 spike/captures/raw/
 .superpowers/
 

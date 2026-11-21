@@ -63,7 +63,7 @@ from app.config import Settings, get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import AiRun, Meeting, Template, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 
 
 class Recorder:
@@ -439,7 +439,7 @@ def main() -> None:
         public_base_url="https://notes.example.test",
     )
     app = create_app(settings)
-    app.dependency_overrides[get_vexa] = lambda: None
+    app.dependency_overrides[get_bot_provider] = lambda: None
     server, base = start_server(app)
     engine = create_engine(scratch_url)
     try:

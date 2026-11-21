@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app import teams
+from app.bot_provider import BotProviderError
 from app.models import (
     AiRun,
     Base,
@@ -24,7 +25,6 @@ from app.models import (
     UsageEntry,
     User,
 )
-from app.vexa import VexaError
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     anon,
     api,
@@ -36,8 +36,8 @@ from tests.test_web import (  # noqa: F401
     OTHER_EMAIL,
     anon_client,
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     stranger,
     template,
@@ -189,31 +189,31 @@ def test_an_unknown_id_is_404_and_a_visitor_is_refused(api, anon_client, session
     assert anon_client.delete("/api/meetings/1").status_code in (401, 403)
 
 
-def test_the_recording_at_vexa_is_removed_first_and_a_failure_deletes_nothing(
-    api, fake_vexa, session, template
+def test_the_recording_at_provider_is_removed_first_and_a_failure_deletes_nothing(
+    api, fake_bot, session, template
 ):
     calls = []
-    fake_vexa.delete_recording = calls.append
-    meeting = ready(session, template, vexa_recording_id=77)
+    fake_bot.delete_recording = calls.append
+    meeting = ready(session, template, provider_recording_id=77)
     assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
     assert calls == [77]
 
     def refuse(_id):
-        raise VexaError("delete_recording failed: secret detail")
+        raise BotProviderError("delete_recording failed: secret detail")
 
-    fake_vexa.delete_recording = refuse
-    other = ready(session, template, vexa_recording_id=78)
+    fake_bot.delete_recording = refuse
+    other = ready(session, template, provider_recording_id=78)
     error = error_of(api.delete(f"/api/meetings/{other.id}"), 502, "recording_delete_failed")
     assert "secret" not in error["message"]
     session.expire_all()
     assert session.get(Meeting, other.id) is not None
 
 
-def test_audio_already_deleted_is_not_asked_of_vexa_again(api, fake_vexa, session, template):
+def test_audio_already_deleted_is_not_asked_of_provider_again(api, fake_bot, session, template):
     from datetime import UTC, datetime
 
-    fake_vexa.delete_recording = lambda _id: pytest.fail("called")
-    meeting = ready(session, template, vexa_recording_id=79, audio_deleted_at=datetime.now(UTC))
+    fake_bot.delete_recording = lambda _id: pytest.fail("called")
+    meeting = ready(session, template, provider_recording_id=79, audio_deleted_at=datetime.now(UTC))
     assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
 
 
@@ -229,25 +229,25 @@ def test_the_audio_folder_goes_with_the_meeting(api, session, template, tmp_path
     assert not folder.exists()
 
 
-def test_a_cancelled_meeting_whose_recording_id_was_never_stored_is_asked_of_vexa(
-    api, fake_vexa, session, template
+def test_a_cancelled_meeting_whose_recording_id_was_never_stored_is_asked_of_provider(
+    api, fake_bot, session, template
 ):
-    """The bot was stopped and the meeting marked failed before Vexa's recording id was seen."""
+    """The bot was stopped and the meeting marked failed before the recording id was seen."""
     from types import SimpleNamespace
 
     deleted = []
-    fake_vexa.delete_recording = deleted.append
-    fake_vexa.get_meeting_by_id = lambda _id: SimpleNamespace(status="completed", recording_id=91)
-    meeting = ready(session, template, status="failed", vexa_meeting_id="55")
+    fake_bot.delete_recording = deleted.append
+    fake_bot.get_meeting_by_id = lambda _id: SimpleNamespace(status="completed", recording_id=91)
+    meeting = ready(session, template, status="failed", provider_bot_id="55")
     assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
     assert deleted == [91]
 
 
-def test_a_meeting_vexa_has_not_settled_is_not_deleted(api, fake_vexa, session, template):
+def test_a_meeting_provider_has_not_settled_is_not_deleted(api, fake_bot, session, template):
     from types import SimpleNamespace
 
-    fake_vexa.get_meeting_by_id = lambda _id: SimpleNamespace(status="active", recording_id=None)
-    meeting = ready(session, template, status="failed", vexa_meeting_id="56")
+    fake_bot.get_meeting_by_id = lambda _id: SimpleNamespace(status="active", recording_id=None)
+    meeting = ready(session, template, status="failed", provider_bot_id="56")
     error_of(api.delete(f"/api/meetings/{meeting.id}"), 502, "recording_delete_failed")
     session.expire_all()
     assert session.get(Meeting, meeting.id) is not None

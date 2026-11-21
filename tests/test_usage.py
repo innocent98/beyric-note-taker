@@ -7,12 +7,13 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 from app import audio, pipeline, usage
+from app.bot_provider import BotMeeting
 from app.config import get_settings
 from app.models import AiRun, AppState, Meeting, Notification, UsageEntry
 from tests.helpers import NO_NEW_USAGE_FIELDS
 from tests.test_accounts import visitor
 from tests.test_api import anon, api, error_of  # noqa: F401  (fixtures used by name)
-from tests.test_pipeline import DONE, NOW, RECORDED_SECONDS, FakeVexa, env, meeting, run  # noqa: F401  # noqa: F401  (fixtures used by name)
+from tests.test_pipeline import DONE, NOW, RECORDED_SECONDS, FakeBot, env, meeting, run  # noqa: F401  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
     MEET,
     OWNER_EMAIL,
@@ -20,8 +21,8 @@ from tests.test_web import (  # noqa: F401
     anon_client,
     app,
     client,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_user,
     owner,
     post,
@@ -151,7 +152,7 @@ def test_someone_elses_running_meeting_does_not_count(session, owner, template):
 # ---- the gate ----
 
 
-def test_a_meeting_is_refused_once_the_hours_are_used(api, session, owner, template, fake_vexa):
+def test_a_meeting_is_refused_once_the_hours_are_used(api, session, owner, template, fake_bot):
     entry(session, owner, 5 * HOUR)
     error = error_of(
         api.post("/api/meetings", {"url": MEET, "template_id": template.id}),
@@ -161,14 +162,14 @@ def test_a_meeting_is_refused_once_the_hours_are_used(api, session, owner, templ
     assert "5 recorded hours" in error["message"]
     assert "pilot" not in error["message"] and "hello@" not in error["message"]
     assert "reason" not in error  # the grants rule (HOURS_MODE=enforce) is what adds one
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     assert session.scalars(select(Meeting)).all() == []
 
 
-def test_a_meeting_is_allowed_just_under_the_cap(api, session, owner, template, fake_vexa):
+def test_a_meeting_is_allowed_just_under_the_cap(api, session, owner, template, fake_bot):
     entry(session, owner, 5 * HOUR - 1)
     assert api.post("/api/meetings", {"url": MEET, "template_id": template.id}).status_code == 201
-    assert fake_vexa.sent == [MEET]
+    assert fake_bot.sent == [MEET]
 
 
 def test_the_message_names_the_users_own_cap(api, session, owner, template):
@@ -190,7 +191,7 @@ def test_a_cap_that_was_removed_lets_everyone_in(api, session, owner, template):
     assert api.post("/api/meetings", {"url": MEET, "template_id": template.id}).status_code == 201
 
 
-def test_an_admin_is_not_refused(app, anon_client, session, fake_vexa):
+def test_an_admin_is_not_refused(app, anon_client, session, fake_bot):
     admin = make_user(session, "admin@example.test", admin=True)
     entry(session, admin, 500 * HOUR)
     from tests.test_web import Template
@@ -205,12 +206,12 @@ def test_an_admin_is_not_refused(app, anon_client, session, fake_vexa):
     )
 
 
-def test_the_page_form_is_refused_too(client, session, owner, template, fake_vexa):
+def test_the_page_form_is_refused_too(client, session, owner, template, fake_bot):
     entry(session, owner, 5 * HOUR)
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 403
     assert "5 recorded hours" in response.text
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
 
 
 def test_the_cap_is_checked_before_the_bot_busy_rule(api, session, owner, template):
@@ -306,7 +307,7 @@ def test_an_admin_gets_no_hours_notice(session, meeting, owner):
 
 
 def test_the_audio_step_counts_the_recording(session, meeting, owner):
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     assert meeting.status == "ready"
     assert meeting.recorded_seconds == RECORDED_SECONDS
     [row] = session.scalars(select(UsageEntry)).all()
@@ -324,11 +325,11 @@ def test_a_retry_does_not_count_the_recording_again(session, meeting, monkeypatc
         return real(*args, **kwargs)
 
     monkeypatch.setattr(pipeline, "generate_notes", fail_once)
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     assert meeting.status == "failed"  # the recording was counted, the notes were not written
     meeting.status = "processing"
     session.commit()
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     assert len(session.scalars(select(UsageEntry)).all()) == 1
 
 
@@ -337,7 +338,7 @@ def test_a_recording_with_no_speech_still_counts(session, meeting, monkeypatch):
         audio, "prepare_recording", lambda s, o: audio.Recording(pipeline_chunks(o), 120)
     )
     monkeypatch.setattr(pipeline, "transcribe_chunks", lambda *a, **k: "uh")
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     assert meeting.status == "failed"
     assert [row.seconds for row in session.scalars(select(UsageEntry))] == [120]
 
@@ -350,7 +351,7 @@ def test_a_failed_transcription_still_counts_the_recording(session, meeting, mon
         raise pipeline.TranscriptionFailed("openai down")
 
     monkeypatch.setattr(pipeline, "transcribe_chunks", refuse)
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     assert meeting.status == "failed"
     assert [row.seconds for row in session.scalars(select(UsageEntry))] == [RECORDED_SECONDS]
     assert meeting.recorded_seconds == RECORDED_SECONDS
@@ -366,7 +367,7 @@ def test_a_meeting_that_never_recorded_costs_nothing(session, meeting):
     run(
         session,
         meeting,
-        FakeVexa(__import__("app.vexa", fromlist=["x"]).VexaMeeting(status="failed")),
+        FakeBot(BotMeeting(status="failed")),
     )
     assert meeting.status == "failed"
     assert session.scalars(select(UsageEntry)).all() == []
@@ -378,7 +379,7 @@ def test_a_transcription_is_one_ledger_row_with_the_audio_seconds(session, meeti
         audio, "prepare_recording", lambda s, o: audio.Recording(pipeline_chunks(o), 125)
     )
     monkeypatch.setattr(pipeline, "transcribe_chunks", lambda *a, **k: "uh")  # no speech: billed
-    run(session, meeting, FakeVexa(DONE))
+    run(session, meeting, FakeBot(DONE))
     rows = list(session.scalars(select(AiRun).where(AiRun.kind == "transcribe")))
     assert [(r.meeting_id, r.audio_seconds, r.status, r.input_tokens) for r in rows] == [
         (meeting.id, 125, "ok", None)

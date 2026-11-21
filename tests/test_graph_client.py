@@ -956,7 +956,11 @@ def test_a_graph_calendar_syncs_into_rows_and_joins_and_a_removed_event_is_cance
     ]
     source = make_source(world, store)
     gcal_sync.sync_connection(
-        session, conn, source, now=NOW, settings=make_settings(autojoin_lead_seconds=60)
+        session,
+        conn,
+        source,
+        now=NOW,
+        settings=make_settings(autojoin_lead_seconds=60, teams_join_enabled=False),
     )
     session.expire_all()
     rows = {e.source_event_id: e for e in session.scalars(select(CalendarEvent))}
@@ -1085,9 +1089,9 @@ RUNNER_SETTINGS = make_settings(
 
 @pytest.fixture
 def host():
-    from tests.fakes.vexa_host import FakeVexaHost
+    from tests.fakes.bot_host import FakeBotHost
 
-    return FakeVexaHost()
+    return FakeBotHost()
 
 
 @pytest.fixture(autouse=True)

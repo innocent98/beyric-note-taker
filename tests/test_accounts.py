@@ -41,8 +41,8 @@ from tests.test_web import (  # noqa: F401
     anon_client,
     app,
     client,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     login_data,
     make_user,
     owner,
@@ -423,7 +423,7 @@ def test_the_pages_hide_foreign_meetings_and_templates_too(client, template, str
 
 
 def test_the_pages_refuse_regenerate_cancel_and_term_delete_on_foreign_rows(
-    client, session, template, strangers_data, fake_vexa, fake_openai
+    client, session, template, strangers_data, fake_bot, fake_openai
 ):
     """The Jinja routes are scoped by the same service calls as the API; this proves it for the
     three that act on a row (retry and template edit are above)."""
@@ -451,7 +451,7 @@ def test_the_pages_refuse_regenerate_cancel_and_term_delete_on_foreign_rows(
     assert session.get(Meeting, meeting.id).notes == notes_before
     assert session.get(Meeting, waiting.id).status == "bot_sent"
     assert session.get(VocabularyTerm, strangers_data["term"].id) is not None
-    assert getattr(fake_vexa, "stopped", []) == [] and fake_openai.chat_calls == []
+    assert getattr(fake_bot, "stopped", []) == [] and fake_openai.chat_calls == []
 
 
 def test_every_page_route_with_an_id_returns_404_for_another_users_row(
@@ -495,11 +495,11 @@ def test_every_page_route_with_an_id_returns_404_for_another_users_row(
 
 
 def test_a_meeting_cannot_be_started_with_someone_elses_template(
-    api, fake_vexa, session, strangers_data
+    api, fake_bot, session, strangers_data
 ):
     body = {"url": MEET, "template_id": strangers_data["template"].id}
     error_of(api.post("/api/meetings", body), 400, "template_required")
-    assert fake_vexa.sent == []
+    assert fake_bot.sent == []
     assert session.scalars(select(Meeting).where(Meeting.status == "bot_sent")).all() == []
 
 

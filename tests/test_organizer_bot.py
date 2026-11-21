@@ -1,7 +1,7 @@
 """The organizer's bot is preferred (billing spec 2.5, stage S12).
 
 Real Postgres, the real materialiser (`apply_batch`), the real join runner and `place_bot()`, and
-`FakeVexaHost`. The clock is injected: every run gets the `now` the test names, so "two minutes
+`FakeBotHost`. The clock is injected: every run gets the `now` the test names, so "two minutes
 later" is a number, never a sleep. Three fake accounts: ada organizes the event, ben and cleo are
 guests who hold the same event with the same link. Hours run under `HOURS_MODE=enforce`, the way
 billing runs, so "has a plan", "has hours" and "is on a trial" are real grants.
@@ -35,7 +35,7 @@ from app.models import (
 )
 from app.placement import PlacementRefused
 from app.usage import email_hash
-from tests.fakes.vexa_host import FakeVexaHost
+from tests.fakes.bot_host import FakeBotHost
 from tests.test_gcal_sync import batch, make_world
 from tests.test_join_runner import (
     StubCalendar,
@@ -83,7 +83,7 @@ def runner_has_led(engine):
 
 @pytest.fixture
 def host():
-    return FakeVexaHost()
+    return FakeBotHost()
 
 
 @pytest.fixture

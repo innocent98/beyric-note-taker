@@ -7,10 +7,11 @@
 # request that carries the secret (EDGE_SHARED_SECRET in .env, app/edge.py). It is NOT decided by
 # the peer address: Docker rewrites any container's (and the host loopback's) connection to the
 # bridge gateway, so the peer cannot tell nginx from a hostile container. uvicorn therefore runs
-# with --no-proxy-headers and never rewrites the peer itself. `front` only stops Vexa resolving the
-# name `next`; it is not a security boundary. See docs/sop/2026-11-03-edge-secret-and-login-limits.md.
-# The server is shared with other apps, so nothing here is published on a public interface: `next`,
-# `web` and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
+# with --no-proxy-headers and never rewrites the peer itself. `front` holds only `next` (at a fixed
+# address) and `web`; it is not a security boundary. See
+# docs/sop/2026-11-03-edge-secret-and-login-limits.md.
+# The server is shared with other apps, so nothing here is published on a public interface: `next`
+# and `web` are bound to 127.0.0.1.
 services:
   db:
     image: postgres:17
@@ -46,7 +47,6 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
-      VEXA_BASE_URL: http://vexa:8056
     volumes:
       - audiodata:/srv/data/audio
     restart: unless-stopped
@@ -68,12 +68,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
-      VEXA_BASE_URL: http://vexa:8056
     mem_limit: 256m
     restart: unless-stopped
     # A dispatch tick starts no row after RUN_BUDGET_SECONDS (20), and a row started just inside
     # that can still do a calendar re-check (about 20), a send (30) and a stop (30): the grace
-    # must be longer, or a kill between Vexa taking a bot and the commit leaves an orphan.
+    # must be longer, or a kill between the provider taking a bot and the commit leaves an orphan.
     stop_grace_period: 120s
     depends_on:
       db:
@@ -95,12 +94,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
-      VEXA_BASE_URL: http://vexa:8056
     ports:
       - "127.0.0.1:8021:8000"  # operator and rollback access; visitors reach FastAPI through `next`
     # The notes export (WeasyPrint, in a child process) adds about 100 MiB while it runs on top of
     # the app's own ~90 MiB (docs/spike/export-pdf-memory.md); this keeps a runaway from taking the
-    # shared server's memory. `next` has 512m and `vexa` 3g.
+    # shared server's memory. `next` has 512m.
     mem_limit: 768m
     healthcheck:
       test:
@@ -151,134 +149,10 @@ services:
       web:
         condition: service_healthy
 
-  # ---- Vexa Lite (bots). Same containers as Vexa's deploy/lite Makefile at commit 31122f9, run
-  # here instead so no port is public, no host credentials file is ever mounted, and Vexa's own
-  # database and storage get random passwords (VEXA_DB_PASSWORD, VEXA_STORAGE_SECRET in .env). ----
-  #
-  # All five Vexa services are in the `vexa` profile, so a plain `docker compose up -d` (a deploy)
-  # neither starts nor touches them: stop them and they stay stopped. Nothing outside the profile
-  # depends on them (web, worker and scheduler only call `http://vexa:8056` when BOT_PROVIDER is
-  # `vexa`, or for a meeting Vexa ran), and they depend only on each other, so one profile is enough.
-  # The volumes below are declared at the bottom and never removed by stopping. To run Vexa again:
-  #   COMPOSE_PROFILES=vexa docker compose up -d vexa-db vexa-storage vexa-storage-init vexa vexa-schema-fix
-  # or put COMPOSE_PROFILES=vexa in the server .env to have every `up` (the deploy's included) run it.
-  # `docker compose up -d vexa` alone also works: naming a service turns its profile on.
-  # See deploy/README.md "Stopping Vexa and bringing it back".
-
-  vexa-db:
-    profiles: ["vexa"]
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "idle_in_transaction_session_timeout=60000"]
-    environment:
-      POSTGRES_DB: vexa
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${VEXA_DB_PASSWORD:?set VEXA_DB_PASSWORD in .env}
-      TZ: UTC
-      PGTZ: UTC
-    volumes:
-      - vexapgdata:/var/lib/postgresql/data
-    networks: [vexainternal]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d vexa"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  vexa-storage:
-    profiles: ["vexa"]
-    image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - mkdir -p /srv/vexa-storage/data /srv/vexa-storage/iam && exec versitygw --port :9000 --health /health --iam-dir /srv/vexa-storage/iam --quiet posix /srv/vexa-storage/data
-    environment:
-      ROOT_ACCESS_KEY: vexa-access-key
-      ROOT_SECRET_KEY: ${VEXA_STORAGE_SECRET:?set VEXA_STORAGE_SECRET in .env}
-    volumes:
-      - vexastorage:/srv/vexa-storage
-    networks: [vexainternal]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  # Creates the recordings bucket; "already owned" on later runs counts as success.
-  vexa-storage-init:
-    profiles: ["vexa"]
-    image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - out=$$(versitygw admin --endpoint-url http://vexa-storage:9000 create-bucket --bucket vexa --owner vexa-access-key 2>&1) || echo "$$out" | grep -q BucketAlreadyOwnedByYou || { echo "$$out"; exit 1; }
-    environment:
-      ADMIN_ACCESS_KEY: vexa-access-key
-      ADMIN_SECRET_KEY: ${VEXA_STORAGE_SECRET}
-    networks: [vexainternal]
-    depends_on:
-      vexa-storage:
-        condition: service_healthy
-
-  vexa:
-    profiles: ["vexa"]
-    image: vexaai/vexa-lite:${VEXA_IMAGE_TAG:-v012}
-    shm_size: 2g
-    mem_limit: 3g  # a bot runs Chrome; cap it so a call cannot starve other apps on the server
-    env_file: .env.vexa
-    environment:
-      DB_HOST: vexa-db
-      DB_PORT: "5432"
-      DB_NAME: vexa
-      DB_USER: postgres
-      DB_PASSWORD: ${VEXA_DB_PASSWORD}
-      MINIO_ENDPOINT: vexa-storage:9000
-      MINIO_ACCESS_KEY: vexa-access-key
-      MINIO_SECRET_KEY: ${VEXA_STORAGE_SECRET}
-      MINIO_BUCKET: vexa
-      MINIO_SECURE: "false"
-      VEXA_PUBLIC_API_URL: http://localhost:18056
-      TERMINAL_PUBLIC_URL: http://localhost:3001
-    ports:
-      - "127.0.0.1:18056:8056"  # operator checks from the server only; the app uses vexa:8056
-    networks: [default, vexainternal]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf -o /dev/null http://127.0.0.1:8056/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 120s
-    depends_on:
-      vexa-db:
-        condition: service_healthy
-      vexa-storage-init:
-        condition: service_completed_successfully
-
-  # Widens Vexa's transcriptions.language column (see deploy/vexa-schema-fix.sh). Runs once per
-  # `up`, waits for Vexa to create the table, and does nothing when the column is already wide.
-  # Nothing depends on it, so a failure shows in `docker compose ps -a` without stopping a deploy.
-  vexa-schema-fix:
-    profiles: ["vexa"]
-    image: postgres:17-alpine
-    entrypoint: ["/bin/sh", "/vexa-schema-fix.sh"]
-    environment:
-      PGHOST: vexa-db
-      PGUSER: postgres
-      PGPASSWORD: ${VEXA_DB_PASSWORD}
-      PGDATABASE: vexa
-    volumes:
-      - ./deploy/vexa-schema-fix.sh:/vexa-schema-fix.sh:ro
-    networks: [vexainternal]
-    restart: "no"
-    depends_on:
-      vexa-db:
-        condition: service_healthy
-
-# Four networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
-# database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
-# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage;
-# `front` holds only `next` and `web` so Vexa cannot resolve `next` by name. It is NOT a security
-# boundary: Docker still lets other containers reach `next`'s published port by IP.
+# Three networks: `default` carries web, worker and scheduler and has internet access (Skribby is
+# reached over it); `appdb` (no internet) holds the app database; `front` holds only `next` and
+# `web`, with `next` at the fixed address 172.28.1.10. `front` is NOT a security boundary: Docker
+# still lets other containers reach `next`'s published port by IP.
 networks:
   default:
     ipam:
@@ -292,11 +166,7 @@ networks:
           gateway: 172.28.1.1
   appdb:
     internal: true
-  vexainternal:
-    internal: true
 
 volumes:
   dbdata:
   audiodata:
-  vexapgdata:
-  vexastorage:

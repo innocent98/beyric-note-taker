@@ -114,6 +114,6 @@ def test_the_worker_runs_the_maintenance_even_when_the_audio_cleanup_always_fail
     monkeypatch.setattr(worker, "delete_expired_audio", lambda *a, **k: 1 / 0)
     monkeypatch.setattr(maintenance, "run_hourly", lambda s, now: ran.append(now))
     caplog.set_level("WARNING")
-    worker.hourly_jobs(session, NOW, vexa=object())  # must not raise
+    worker.hourly_jobs(session, NOW, provider=object())  # must not raise
     assert ran == [NOW]
     assert "ZeroDivisionError" in " ".join(r.getMessage() for r in caplog.records)

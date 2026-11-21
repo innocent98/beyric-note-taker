@@ -15,7 +15,6 @@ from app.services import (
     Refused,
     get_bot_provider,
     get_openai_client,
-    get_vexa,  # noqa: F401  (the old name; tests import it from here)
     owned_meeting_or_404,
     parse_id,
     render_markdown,
@@ -130,11 +129,11 @@ def create_meeting(
     template_id: str = Form(""),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ):
     try:
         meeting = services.create_meeting(
-            session, vexa, user, url, parse_id(template_id), request.app.state.settings
+            session, provider, user, url, parse_id(template_id), request.app.state.settings
         )
     except Refused as exc:
         # The submitted link is not echoed back: a Zoom link carries its meeting password.
@@ -195,11 +194,11 @@ def cancel(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
-        services.cancel_meeting(session, vexa, meeting)
+        services.cancel_meeting(session, provider, meeting)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")
@@ -211,11 +210,11 @@ def end(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
-        services.end_meeting(session, vexa, meeting)
+        services.end_meeting(session, provider, meeting)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")
@@ -227,11 +226,11 @@ def retry(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_bot_provider),
+    provider=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
-        services.retry_meeting(session, meeting, vexa)
+        services.retry_meeting(session, meeting, provider)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")

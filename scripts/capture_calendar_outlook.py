@@ -35,7 +35,7 @@ from app import google_oauth, microsoft_oauth  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import CalendarConnection, CalendarEvent  # noqa: E402
-from app.services import get_vexa  # noqa: E402
+from app.services import get_bot_provider  # noqa: E402
 from tests.fakes.google import FakeGoogle  # noqa: E402
 from tests.fakes.microsoft import FakeMicrosoft  # noqa: E402
 
@@ -388,7 +388,7 @@ def main() -> None:
 
     def build(cfg):
         app = create_app(cfg)
-        app.dependency_overrides[get_vexa] = lambda: base.FakeVexa()
+        app.dependency_overrides[get_bot_provider] = lambda: base.FakeBot()
         app.dependency_overrides[google_oauth.get_google] = lambda: google.oauth
         app.dependency_overrides[microsoft_oauth.get_microsoft] = lambda: ms.oauth
         return app

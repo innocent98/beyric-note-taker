@@ -25,7 +25,7 @@ from tests.test_calendar_connect import (
 )
 
 capp, google, settings, vault_key, web = cc.capp, cc.google, cc.settings, cc.vault_key, cc.web
-fake_openai, fake_vexa, owner = tw.fake_openai, tw.fake_vexa, tw.owner
+fake_openai, fake_bot, owner = tw.fake_openai, tw.fake_bot, tw.owner
 
 
 class FakeSource:

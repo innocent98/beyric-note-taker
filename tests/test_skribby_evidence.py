@@ -15,12 +15,12 @@ from pathlib import Path
 from sqlalchemy import func, select
 
 from app import deletion, pipeline, services
+from app.bot_provider import BotMeeting
 from app.models import Meeting, SkribbySegmentEvidence
-from app.vexa import VexaMeeting
 from tests.test_pipeline import (  # noqa: F401  (fixtures used by name)
     DONE,
     NOW,
-    FakeVexa,
+    FakeBot,
     env,
     meeting,
     run,
@@ -69,7 +69,7 @@ EVIDENCE = {
 
 
 def finished(evidence=EVIDENCE):
-    return VexaMeeting(
+    return BotMeeting(
         status="completed",
         segments=DONE.segments,
         recording_id=7,
@@ -85,7 +85,7 @@ def rows(session):
 
 
 def test_the_speakers_step_keeps_what_skribby_sent_and_the_notes_are_written(session, meeting):
-    run(session, meeting, FakeVexa(finished()))
+    run(session, meeting, FakeBot(finished()))
     assert (meeting.status, meeting.step) == ("ready", "done")
     [row] = rows(session)
     assert row.meeting_id == meeting.id
@@ -96,7 +96,7 @@ def test_the_speakers_step_keeps_what_skribby_sent_and_the_notes_are_written(ses
 
 
 def test_a_provider_with_no_evidence_leaves_no_row(session, meeting):
-    run(session, meeting, FakeVexa(DONE))  # Vexa: evidence is None
+    run(session, meeting, FakeBot(DONE))  # The provider: evidence is None
     assert (meeting.status, meeting.step) == ("ready", "done")
     assert rows(session) == []
 
@@ -118,7 +118,7 @@ def test_failing_to_keep_it_never_stops_the_meeting_and_never_logs_the_words(
     broken = deepcopy(EVIDENCE)
     broken["items"][0]["text"] = {SECRET}  # cannot be written as JSON
     with caplog.at_level(logging.WARNING):
-        run(session, meeting, FakeVexa(finished(broken)))
+        run(session, meeting, FakeBot(finished(broken)))
     assert (meeting.status, meeting.step) == ("ready", "done")
     assert meeting.speaker_transcript and meeting.notes
     assert rows(session) == []
@@ -176,14 +176,14 @@ def test_deleting_a_meeting_deletes_its_evidence_and_only_its_own(session, meeti
         ]
     )
     session.commit()
-    services.delete_meeting(session, FakeVexa(DONE), session.get(Meeting, meeting.id))
+    services.delete_meeting(session, FakeBot(DONE), session.get(Meeting, meeting.id))
     assert [r.meeting_id for r in rows(session)] == [keep.id]
 
 
 def test_deleting_an_account_deletes_the_evidence_of_their_meetings(session, meeting, owner):
     session.add(SkribbySegmentEvidence(meeting_id=meeting.id, **_parts()))
     session.commit()
-    deletion.purge_user(session, owner, vexa=None, force=True)
+    deletion.purge_user(session, owner, provider=None, force=True)
     assert rows(session) == []
     assert session.scalar(select(func.count()).select_from(Meeting)) == 0
 
@@ -260,7 +260,7 @@ def timed(tag, name, start, end):
     }
 
 
-class EventsVexa(FakeVexa):
+class EventsBot(FakeBot):
     """A hosted provider that can also tell who was speaking."""
 
     def __init__(self, *polls, events=None):
@@ -268,39 +268,39 @@ class EventsVexa(FakeVexa):
         self.events = events
         self.asked = []
 
-    def get_speaker_events(self, vexa_meeting_id):
-        self.asked.append(vexa_meeting_id)
+    def get_speaker_events(self, provider_bot_id):
+        self.asked.append(provider_bot_id)
         if isinstance(self.events, Exception):
             raise self.events
         return self.events
 
 
 def test_the_speakers_step_keeps_the_events_next_to_the_transcript_evidence(session, meeting):
-    meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     sent = record(person("Ada Example", (10, 30)))
-    vexa = EventsVexa(finished(), events=sent)
-    run(session, meeting, vexa)
+    provider = EventsBot(finished(), events=sent)
+    run(session, meeting, provider)
     assert (meeting.status, meeting.step) == ("ready", "done")
     [row] = rows(session)
     assert row.events == sent and row.items == EVIDENCE["items"]
-    assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]
+    assert provider.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]
 
 
 def test_no_events_is_a_null_column_and_the_transcript_evidence_is_still_kept(session, meeting):
-    meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
-    run(session, meeting, EventsVexa(finished(), events=None))
+    run(session, meeting, EventsBot(finished(), events=None))
     [row] = rows(session)
     assert row.events is None and row.items == EVIDENCE["items"]
 
 
 def test_a_failing_events_call_never_stops_the_meeting_or_the_evidence(session, meeting, caplog):
-    meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     boom = RuntimeError("Ada Example said the budget is two million")
     with caplog.at_level(logging.WARNING):
-        run(session, meeting, EventsVexa(finished(), events=boom))
+        run(session, meeting, EventsBot(finished(), events=boom))
     assert (meeting.status, meeting.step) == ("ready", "done")
     [row] = rows(session)
     assert row.events is None and row.items == EVIDENCE["items"]
@@ -309,12 +309,12 @@ def test_a_failing_events_call_never_stops_the_meeting_or_the_evidence(session, 
 
 
 def test_events_that_cannot_be_written_cost_only_the_events(session, meeting, caplog):
-    meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     bad = record(person("Ada Example", (1, 2)))
     bad["participants"].append({"name": {"Ada Example"}})  # cannot be written as JSON
     with caplog.at_level(logging.WARNING):
-        run(session, meeting, EventsVexa(finished(), events=bad))
+        run(session, meeting, EventsBot(finished(), events=bad))
     assert (meeting.status, meeting.step) == ("ready", "done")
     [row] = rows(session)
     assert row.events is None and row.items == EVIDENCE["items"]
@@ -322,11 +322,11 @@ def test_events_that_cannot_be_written_cost_only_the_events(session, meeting, ca
 
 
 def test_a_provider_without_the_call_and_a_meeting_without_evidence_ask_nothing(session, meeting):
-    vexa = EventsVexa(DONE, events=record(person("Ada Example", (1, 2))))  # evidence is None
-    meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    provider = EventsBot(DONE, events=record(person("Ada Example", (1, 2))))  # evidence is None
+    meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
-    run(session, meeting, vexa)
-    assert vexa.asked == [] and rows(session) == []
+    run(session, meeting, provider)
+    assert provider.asked == [] and rows(session) == []
 
 
 def test_the_events_go_with_the_row_after_seven_days_and_with_the_meeting(session, meeting):
@@ -454,18 +454,18 @@ def skribby_poll(evidence=EVIDENCE):
 
 def test_skribby_mode_keeps_the_evidence_and_the_events_in_one_row(session, skribby_meeting, mode):
     mode()
-    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    skribby_meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     sent = record(person("Ada Example", (10, 30)))
-    vexa = EventsVexa(skribby_poll(), events=sent)
-    run(session, skribby_meeting, vexa)
+    provider = EventsBot(skribby_poll(), events=sent)
+    run(session, skribby_meeting, provider)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert skribby_meeting.transcript_source == "skribby"
     [row] = rows(session)
     assert row.meeting_id == skribby_meeting.id
     assert row.items == EVIDENCE["items"] and row.tags == EVIDENCE["tags"]
     assert row.by_elimination is False and row.events == sent
-    assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]  # asked once, not again later
+    assert provider.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]  # asked once, not again later
 
 
 def test_skribby_mode_logs_what_the_line_correction_did_and_keeps_its_markers(
@@ -484,7 +484,7 @@ def test_skribby_mode_logs_what_the_line_correction_did_and_keeps_its_markers(
         "refused": None,
     }
     with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
-        run(session, skribby_meeting, FakeVexa(skribby_poll(moved)))
+        run(session, skribby_meeting, FakeBot(skribby_poll(moved)))
     [row] = rows(session)
     assert row.items[1]["corrected_to"] == "Bo Example" and row.items[1]["speaker"] == "2"
     assert "corrected_to" not in row.items[0]
@@ -505,7 +505,7 @@ def test_a_refused_correction_is_logged_with_its_reason(session, skribby_meeting
         "clock_gain": 0.25,
     }
     with caplog.at_level(logging.INFO, logger=pipeline.logger.name):
-        run(session, skribby_meeting, FakeVexa(skribby_poll(refused)))
+        run(session, skribby_meeting, FakeBot(skribby_poll(refused)))
     assert "moved 0 of 2 segments (0.0 s); refused: clock_shifted" in caplog.text
     assert "clock best shift -2 s (gain 0.25)" in caplog.text
     assert SECRET not in caplog.text
@@ -515,7 +515,7 @@ def test_the_skribby_mode_row_has_the_same_seven_day_retention_as_any_other(
     session, skribby_meeting, mode
 ):
     mode()
-    run(session, skribby_meeting, FakeVexa(skribby_poll()))
+    run(session, skribby_meeting, FakeBot(skribby_poll()))
     [row] = rows(session)
     assert row.events is None  # a provider without the call: the transcript evidence alone
     row.created_at = NOW - timedelta(days=8)
@@ -529,10 +529,10 @@ def test_skribby_mode_without_evidence_leaves_no_row_and_asks_nothing(
     session, skribby_meeting, mode
 ):
     mode()
-    vexa = EventsVexa(skribby_poll(None), events=record(person("Ada Example", (1, 2))))
-    run(session, skribby_meeting, vexa)
+    provider = EventsBot(skribby_poll(None), events=record(person("Ada Example", (1, 2))))
+    run(session, skribby_meeting, provider)
     assert skribby_meeting.transcript_source == "skribby"
-    assert vexa.asked == [] and rows(session) == []
+    assert provider.asked == [] and rows(session) == []
 
 
 def test_a_failing_save_in_skribby_mode_leaves_the_meeting_finished_with_its_transcript(
@@ -542,7 +542,7 @@ def test_a_failing_save_in_skribby_mode_leaves_the_meeting_finished_with_its_tra
     broken = deepcopy(EVIDENCE)
     broken["items"][0]["text"] = {SECRET}  # cannot be written as JSON
     with caplog.at_level(logging.WARNING):
-        run(session, skribby_meeting, FakeVexa(skribby_poll(broken)))
+        run(session, skribby_meeting, FakeBot(skribby_poll(broken)))
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert skribby_meeting.transcript_source == "skribby"
     assert skribby_meeting.speaker_transcript.startswith("[Ada]: alpha")
@@ -556,11 +556,11 @@ def test_failing_events_in_skribby_mode_cost_only_the_events(
     session, skribby_meeting, mode, caplog
 ):
     mode()
-    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    skribby_meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     boom = RuntimeError("Ada Example said the budget is two million")
     with caplog.at_level(logging.WARNING):
-        run(session, skribby_meeting, EventsVexa(skribby_poll(), events=boom))
+        run(session, skribby_meeting, EventsBot(skribby_poll(), events=boom))
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     [row] = rows(session)
     assert row.events is None and row.items == EVIDENCE["items"]
@@ -572,7 +572,7 @@ def test_a_fallback_to_our_own_text_still_keeps_one_row_from_the_speakers_step(
 ):
     mode()
     too_short = replace(done([]), evidence=deepcopy(EVIDENCE))  # Skribby's text is not used
-    run(session, skribby_meeting, FakeVexa(too_short))
+    run(session, skribby_meeting, FakeBot(too_short))
     assert skribby_meeting.transcript_source == "own"
     [row] = rows(session)
     assert row.items == EVIDENCE["items"]
@@ -580,12 +580,12 @@ def test_a_fallback_to_our_own_text_still_keeps_one_row_from_the_speakers_step(
 
 def test_own_mode_is_unchanged_for_a_skribby_meeting(session, skribby_meeting):
     """The default setting: the evidence is kept by the speakers step, once, as before."""
-    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    skribby_meeting.provider_bot_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
     session.commit()
     sent = record(person("Ada Example", (10, 30)))
-    vexa = EventsVexa(finished(), events=sent)
-    run(session, skribby_meeting, vexa)
+    provider = EventsBot(finished(), events=sent)
+    run(session, skribby_meeting, provider)
     assert skribby_meeting.transcript_source == "own"
     [row] = rows(session)
     assert row.events == sent and row.items == EVIDENCE["items"]
-    assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]
+    assert provider.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]

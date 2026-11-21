@@ -27,8 +27,8 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     app,
     client,
     error_of,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     owner,
     ready,
     template,
@@ -42,7 +42,7 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     new_team,
     world,
 )
-from tests.test_multi_team_moved import NoVexa
+from tests.test_multi_team_moved import NoBot
 from tests.test_series import MONDAY, calendar_event, join_for, meeting_in
 from tests.test_web import make_user
 
@@ -418,7 +418,7 @@ def test_a_moved_meeting_stays_in_the_row_when_its_recorder_deletes_their_accoun
     x_row = standup(session, world.x.id, owner_id=world.ada.id)
     kept = put(session, template, x_row, who=world.pat, moved=world.x.id)
     private = put(session, template, x_row, who=world.pat, when=LATER)
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.expire_all()
     still = session.get(Meeting, kept.id)
     assert still is not None and still.series_id == x_row.id
@@ -439,7 +439,7 @@ def test_a_meeting_given_back_when_its_team_is_deleted_lands_in_its_recorders_pe
     teams.leave(session, world.ada, datetime.now(UTC), team_id=team_w.id)  # moved: it stays
     session.commit()
     assert meeting.series_id == w_row.id
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.expire_all()
     back = session.get(Meeting, meeting.id)
     assert back.owner_team_id is None and back.owner_user_id == world.ada.id
@@ -695,7 +695,7 @@ def test_flag_off_a_meeting_given_back_loses_its_series_as_before(
     meeting = put(session, template, w_row, who=world.ada, moved=team_w.id)
     teams.leave(session, world.ada, datetime.now(UTC), team_id=team_w.id)
     session.commit()
-    deletion.purge_user(session, session.get(User, world.pat.id), NoVexa(), force=True)
+    deletion.purge_user(session, session.get(User, world.pat.id), NoBot(), force=True)
     session.expire_all()
     assert session.get(Meeting, meeting.id).series_id is None
 

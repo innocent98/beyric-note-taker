@@ -24,7 +24,7 @@ capp, google, ms, settings, vault_key, web = (
     mc.vault_key,
     mc.web,
 )
-owner, fake_openai, fake_vexa = mc.owner, mc.fake_openai, mc.fake_vexa
+owner, fake_openai, fake_bot = mc.owner, mc.fake_openai, mc.fake_bot
 
 GOOGLE_RECONNECT = {
     "revoked": "Google access was removed. Connect again to carry on.",
@@ -91,10 +91,10 @@ def test_state_text_follows_the_connections_provider():
 
 
 def test_microsoft_enabled_is_false_until_the_flag_is_on(
-    engine, settings, ms, google, fake_vexa, fake_openai, owner
+    engine, settings, ms, google, fake_bot, fake_openai, owner
 ):
     off = settings.model_copy(update={"microsoft_calendar_enabled": False})
-    web_off = browser(mc.build_app(engine, off, ms, google, fake_vexa, fake_openai))
+    web_off = browser(mc.build_app(engine, off, ms, google, fake_bot, fake_openai))
     assert web_off.get("/api/calendar").json()["microsoft_enabled"] is False
 
 
@@ -103,11 +103,11 @@ def test_microsoft_enabled_is_true_when_the_server_has_it_on(web):
 
 
 def test_a_server_with_only_microsoft_still_answers(
-    engine, settings, ms, google, fake_vexa, fake_openai, owner
+    engine, settings, ms, google, fake_bot, fake_openai, owner
 ):
     """Google not configured, Outlook on: the Settings page can still read its state."""
     only = settings.model_copy(update={"google_client_id": "", "google_client_secret": ""})
-    app = mc.build_app(engine, only, ms, google, fake_vexa, fake_openai)
+    app = mc.build_app(engine, only, ms, google, fake_bot, fake_openai)
     from app import google_oauth
 
     app.dependency_overrides[google_oauth.get_google] = lambda: None
@@ -116,12 +116,12 @@ def test_a_server_with_only_microsoft_still_answers(
 
 
 def test_a_server_with_neither_provider_answers_404(
-    engine, settings, ms, google, fake_vexa, fake_openai, owner
+    engine, settings, ms, google, fake_bot, fake_openai, owner
 ):
     from app import google_oauth
 
     neither = settings.model_copy(update={"microsoft_calendar_enabled": False})
-    app = mc.build_app(engine, neither, ms, google, fake_vexa, fake_openai)
+    app = mc.build_app(engine, neither, ms, google, fake_bot, fake_openai)
     app.dependency_overrides[google_oauth.get_google] = lambda: None
     mc.error_of(browser(app).get("/api/calendar"), 404, "calendar_unavailable")
 
@@ -170,6 +170,9 @@ def test_a_dead_outlook_connection_says_microsoft_in_the_state_and_the_error(web
 
 
 def test_a_teams_event_is_cannot_join_while_teams_joining_is_off(web, session, owner):
+    web.client.app.state.settings.teams_join_enabled = (
+        False  # these tests are about Teams being off
+    )
     conn = add_conn(session, owner, last_sync_at=NOW)
     start = datetime.now(UTC) + timedelta(hours=2)
     session.add(

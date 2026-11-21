@@ -32,8 +32,8 @@ from tests.test_web import (  # noqa: F401
     OTHER_EMAIL,
     anon_client,
     app,
+    fake_bot,
     fake_openai,
-    fake_vexa,
     make_settings,
     make_user,
     owner,
@@ -130,8 +130,8 @@ def test_the_default_is_the_server_one_and_a_chosen_name_wins():
     assert bot_names.bot_name_for_user(settings, None, "skribby") == "Service Desk"
     assert bot_names.bot_name_for_user(settings, chosen, "skribby") == "Alex from Product"
     assert bot_names.default_name(settings, "skribby") == "Service Desk"
-    # Vexa takes no per-user name: it keeps its own, and stores none.
-    assert bot_names.bot_name_for_user(settings, chosen, "vexa") == settings.bot_name
+    # A retired provider (old rows) takes no per-user name, and stores none.
+    assert not bot_names.takes_name("vexa")
     assert bot_names.stored_name(settings, chosen, "vexa") is None
     assert bot_names.stored_name(settings, chosen, "skribby") == "Alex from Product"
 
@@ -182,10 +182,9 @@ def test_own_names_are_the_stored_name_and_the_account_name():
 
 
 def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, session, owner):
-    # Under Skribby (the provider in production) the default is SKRIBBY_BOT_NAME; under Vexa,
-    # BOT_NAME.
+    # The default is SKRIBBY_BOT_NAME.
     app.state.settings = make_settings(
-        bot_provider="skribby", skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
+        skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
     )
     assert api.get(ROUTE).json() == {
         "bot_name": None,
@@ -194,8 +193,6 @@ def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, sessi
         "bot_name_applies_when_signed_in": False,
         "meet_account_name": None,
     }
-    app.state.settings = make_settings(bot_provider="vexa")
-    assert api.get(ROUTE).json()["bot_name_default"] == make_settings().bot_name
 
 
 def test_saving_trims_stores_and_reads_back(api, session, owner):
@@ -372,18 +369,19 @@ def test_changing_the_setting_later_does_not_change_a_meeting_already_sent(sessi
     assert session.get(Meeting, meeting.id).bot_name == "First Name"
 
 
-def test_a_provider_that_takes_no_name_is_sent_none_and_stores_none(session, fake_vexa):
+def test_a_provider_that_takes_no_name_is_sent_none_and_stores_none(session, fake_bot, monkeypatch):
+    monkeypatch.setattr(bot_names, "PROVIDERS_WITH_A_NAME", ())  # a future provider with none
     user = make_user(session, bot_name="Alex from Product")
     template = make_template(session, user)
     meeting = place_bot(
         session,
-        fake_vexa,
+        fake_bot,
         request_for(user, template),
         now=datetime.now(UTC),
         settings=make_settings(),
     )
     assert meeting.bot_name is None
-    assert fake_vexa.sent  # sent without a name argument: the fake takes only the link
+    assert fake_bot.sent  # sent without a name argument: the fake takes only the link
 
 
 class NamedProvider:
@@ -418,7 +416,7 @@ class NamedProvider:
         self.next += 1
         return f"00000000-0000-0000-0000-{self.next:012d}"
 
-    def get_meeting_by_id(self, vexa_meeting_id, own_names=()):
+    def get_meeting_by_id(self, provider_bot_id, own_names=()):
         self.looked = own_names
         return SimpleNamespace(own=own_names)
 
@@ -511,13 +509,13 @@ def test_the_pipeline_passes_the_meetings_stored_name_to_a_provider_that_takes_i
     provider = NamedProvider()
     meeting = SimpleNamespace(
         bot_name="Alex from Product",
-        vexa_meeting_id="00000000-0000-0000-0000-000000000001",
+        provider_bot_id="00000000-0000-0000-0000-000000000001",
         platform="google_meet",
         native_id="abc-defg-hij",
     )
     pipeline._lookup(provider, meeting)
     assert provider.looked == ("Alex from Product",)
-    meeting.vexa_meeting_id = None
+    meeting.provider_bot_id = None
     provider.looked = ()
     pipeline._lookup(provider, meeting)
     assert provider.looked == ("Alex from Product",)
@@ -528,15 +526,15 @@ def test_the_pipeline_passes_the_meetings_stored_name_to_a_provider_that_takes_i
 
 
 def test_a_provider_without_the_option_is_never_given_it():
-    from tests.test_pipeline import FakeVexa
+    from tests.test_pipeline import FakeBot
 
     meeting = SimpleNamespace(
-        bot_name="Alex", vexa_meeting_id="7", platform="google_meet", native_id="abc"
+        bot_name="Alex", provider_bot_id="7", platform="google_meet", native_id="abc"
     )
-    # FakeVexa's lookups take no `own_names`: a call that passed it would raise a TypeError.
-    fake = FakeVexa(SimpleNamespace(status="active"))
+    # FakeBot's lookups take no `own_names`: a call that passed it would raise a TypeError.
+    fake = FakeBot(SimpleNamespace(status="active"))
     assert pipeline._lookup(fake, meeting).status == "active"
-    meeting.vexa_meeting_id = None
+    meeting.provider_bot_id = None
     assert pipeline._lookup(fake, meeting).status == "active"
 
 

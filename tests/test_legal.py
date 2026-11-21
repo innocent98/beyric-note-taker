@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 
 from app import signup
-from tests.test_web import anon_client, app, fake_openai, fake_vexa  # noqa: F401
+from tests.test_web import anon_client, app, fake_bot, fake_openai  # noqa: F401
 
 PRIVACY = "/privacy"
 TERMS = "/terms"
