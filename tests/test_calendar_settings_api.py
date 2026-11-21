@@ -479,11 +479,11 @@ def test_clearing_the_box_cancels_a_join_that_has_not_started(web, session, link
 
 def test_clearing_the_box_never_touches_a_join_whose_bot_is_in(web, session, linked):
     event = add_event(session, linked, 1, hours=-0.2, length=1, **STRANGER_INVITE)
+    # The meeting is under way, so ticking the box makes no join of its own (the person switched
+    # it on earlier and the runner sent the bot).
+    add_join(session, event, "joined")
     web.put(SETTINGS_URL, {"join_unanswered": True})
-    scheduled = join_of(session, event)
-    assert scheduled.state == "scheduled"
-    scheduled.state = "joined"  # the runner sent the bot
-    session.commit()
+    assert join_of(session, event).state == "joined"
     web.put(SETTINGS_URL, {"join_unanswered": False})
     assert join_of(session, event).state == "joined"
 
