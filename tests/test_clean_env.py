@@ -235,6 +235,7 @@ def test_keys_whose_default_is_not_a_plain_constant_are_never_removed(tmp_path):
     text = (
         REQUIRED_TEXT
         + "BOT_MAX_LOCAL=1\nTEAMS_JOIN_ENABLED=false\nBILLING_LIVE=false\nTOKEN_ENC_KEY_VERSION=1\n"
+        + "BILLING_LIVE_SINCE=\n"
         + "APP_ENV=production\nCOOKIE_SECURE=true\nHOURS_MODE=off\n"
     )
     path = write_env(tmp_path, text)
@@ -244,6 +245,7 @@ def test_keys_whose_default_is_not_a_plain_constant_are_never_removed(tmp_path):
         "BOT_MAX_LOCAL=1",  # not the default (20)
         "TEAMS_JOIN_ENABLED=false",  # not the default (true)
         "BILLING_LIVE=false",
+        "BILLING_LIVE_SINCE=",  # the cutover is written down on purpose, even when empty
         "TOKEN_ENC_KEY_VERSION=1",
         "APP_ENV=production",
         "COOKIE_SECURE=true",

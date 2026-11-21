@@ -1,0 +1,26 @@
+{
+  "note": "Cancelling it: 404 `not_found`; the provider is never asked.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/billing/payments/bn-1-e156993d8cc16c9c/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Not found."
+      }
+    }
+  }
+}

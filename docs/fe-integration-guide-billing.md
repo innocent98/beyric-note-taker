@@ -3131,3 +3131,58 @@ upgrade (404), and the two-connection lock race.
 | The real Flutterwave adapter turning HTTP 400, 404 or 422 on `verify_by_reference` into `NoRecord` (and 401, 403, 429, 5xx, a timeout staying plain errors) | tests on a scripted wire (`tests/test_billing_flutterwave.py`) |
 | What Flutterwave really answers for a hosted page nobody opened (we rely on HTTP 400, 404 or 422), and what Paystack answers for an abandoned one (we rely on `abandoned`, mapped to `pending`, `app/billing/paystack.py`) | **not verified live** |
 | the buttons and notices in the screens | vitest on the captured bodies (`web/tests/billing-cancel-payment.test.tsx`); not driven in a browser |
+
+## The go-live cutover (2026-11-21): no new field, a few rows disappear
+
+**Nothing the FE reads changed in shape.** No endpoint, field or status code was added or removed. What changed is **which rows the routes return** once the server runs live keys with `BILLING_LIVE_SINCE` set (`docs/sop/2026-11-21-go-live-closeout.md`). Every body below is copied from `docs/fe-captures/billing-cutover/` (run with `python scripts/capture_billing_cutover.py <scratch database URL>`: the real app over HTTP, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE` one hour ago, one plan paid before that moment and one pack after it).
+
+### What the person sees
+
+A payment made **before** the cutover (made with the providers' test keys) is not the person's: it is **not listed, not readable, not cancellable, and its invoice is not listed or downloadable**. It answers the same plain 404 as an unknown row:
+
+```json
+{"error": {"code": "not_found", "message": "Not found."}}
+```
+
+| Route | Before the cutover's payment | After it |
+|---|---|---|
+| `GET /api/billing/invoices` | not in `invoices` (capture 04) | listed |
+| `GET /api/billing/invoices/{number}/pdf` | 404 `not_found` (capture 05) | the PDF |
+| `GET /api/billing/payments` | not in `payments` (capture 06) | listed, with its `invoice_number` |
+| `GET /api/billing/payments/{reference}` | 404 `not_found` (capture 07) | the payment |
+| `POST /api/billing/payments/{reference}/cancel` | 404 `not_found` (capture 08) | as before |
+| `GET /api/billing/subscription` | a test-era payment is never `pending_payment` (tests only, `tests/test_billing_cutover.py`) | as before |
+
+**Traps.** (1) An empty list is a normal answer: a person whose only payments were test-era sees `{"invoices": []}` and `{"payments": []}`, so draw the empty state, not an error. (2) The 404 on `GET /payments/{reference}` already meant "no such payment, or not yours" (see the earlier note on the return page); it now also covers "made before go-live". (3) Nothing in any body says "test" or "before go-live": the person is never told a row was hidden.
+
+Capture 04, the list (trimmed to the one row):
+
+```json
+{"invoices": [{"number": "BN-2026-900002", "issued_at": "2026-11-21T12:35:59.350864Z", "currency": "USD", "subtotal_minor": 1000, "vat_rate_bp": 0, "vat_minor": 0, "total_minor": 1000, "description": "10 extra hours", "payment_reference": "bn-2-289e7484fa547fe5", "payment_status": "succeeded", "refunded_at": null}]}
+```
+
+(The number reads `BN-2026-9000NN` because the capture run keeps `BILLING_LIVE` false for the invoice numbering, as the invoice captures do; on a live server the first live invoice is `BN-<year>-000001`.)
+
+### What the administrator sees (admin only)
+
+`GET /api/admin/billing/payments` **still lists both payments**, with their invoice numbers (capture 11). The earlier payment's `refund_option` is not allowed, and says why:
+
+```json
+{"reason": "first_plan_7d", "allowed": false, "message": "This payment was made before billing went live: the provider has no record of it, so it cannot be refunded here."}
+```
+
+`POST /api/admin/billing/payments/{id}/refund` for it answers (capture 12), before any provider is called:
+
+```json
+{"error": {"code": "before_go_live", "message": "This payment was made before billing went live: the provider has no record of it, so it cannot be refunded here."}}
+```
+
+`before_go_live` is a **new 409 code** in the refund table: show its `message`, and the Refund button stays off because `refund_option.allowed` is false. The same rule changes `not_first_payment`: a person's first plan payment is now the first one made **at or after** the cutover, so a person with a test-era plan payment and a live one can have the live one refunded as their first.
+
+### Verification table (this section)
+
+| Behaviour | Verified |
+|---|---|
+| The 404 for a test-era invoice PDF, payment read and payment cancel; the lists without the earlier rows; the admin list, `refund_option` and the 409 `before_go_live` | **live over HTTP** (`docs/fe-captures/billing-cutover/` captures 04 to 08, 11, 12), provider scripted (the fake, not a real Paystack or Flutterwave) |
+| `pending_payment` skips a test-era checkout; the setting ignored while `BILLING_LIVE` is false; the first-payment rule; startup refusing a bad or future value | tests on real Postgres (`tests/test_billing_cutover.py`), not captured |
+| Anything against the real providers | **not verified**: no live key was used |

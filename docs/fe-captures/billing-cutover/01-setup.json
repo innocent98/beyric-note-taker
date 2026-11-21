@@ -1,0 +1,9 @@
+{
+  "note": "What was set up: BILLING_LIVE=true, BILLING_LIVE_SINCE one hour ago (a placeholder moment). Ada paid for a plan BEFORE it (the payment's date moved back by SQL) and for a pack AFTER it. Both payments have an invoice in the database.",
+  "content": {
+    "test_era_payment_reference": "bn-1-e156993d8cc16c9c",
+    "test_era_invoice_number": "BN-2026-900001",
+    "live_payment_reference": "bn-2-289e7484fa547fe5",
+    "live_invoice_number": "BN-2026-900002"
+  }
+}

@@ -251,7 +251,8 @@ def list_refunds(
             "description": "`already_refunded`, `payment_not_paid`, `refund_in_progress`, "
             "`not_a_double_charge`, `wrong_kind`, `not_used_for_hours`, `not_first_payment`, "
             "`window_over`, `payer_gone`, `recording_in_progress`, `hours_used`, `plan_changed`, "
-            "`no_provider_transaction`",
+            "`no_provider_transaction`, `before_go_live` (made before the `BILLING_LIVE_SINCE` "
+            "cutover: the live provider has no record of it)",
         },
     },
 )

@@ -1,0 +1,28 @@
+{
+  "note": "Asking for a refund of the earlier payment: 409 `before_go_live`, before any provider is called.",
+  "client": "root",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/billing/payments/1/refund",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "reason": "first_plan_7d"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "before_go_live",
+        "message": "This payment was made before billing went live: the provider has no record of it, so it cannot be refunded here."
+      }
+    }
+  }
+}
