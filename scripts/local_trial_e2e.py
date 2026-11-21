@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""Prove the trial and the pilot end locally, end to end, with the real processes (stage S10).
+"""Prove the trial locally, end to end, with the real processes (stage S10).
 
     python scripts/local_trial_e2e.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
@@ -13,9 +13,7 @@ features on, and checks each step, exiting non-zero on the first failure:
  2. `TRIAL_SECONDS=10800`, `HOURS_MODE=shadow`: the scheduler's sweep gives that person their
     trial; a fresh sign-up gets theirs at once, from the mailed link; the dry-run scripts run;
  3. recordings are counted while in shadow, then `HOURS_MODE=enforce`: the trial holds only what is
-    left, the 80% and 100% notices go out (bell and mail), a new meeting is refused 403;
- 4. `PAID_PLANS_OPEN_ON` set so the notice window is open now: the scheduler gives the pilot grant
-    its end and sends the one mail, once; then the end itself, with an injected clock.
+    left, the 80% and 100% notices go out (bell and mail), a new meeting is refused 403.
 
 Every HTTP exchange is saved to `docs/fe-captures/trial/NN-name.json` for the billing guide, and
 the switch-on proof commands' output to `switch-on-proof.txt`.
@@ -24,10 +22,10 @@ What is real: both processes, the migrations, the routes, the sign-up and the ma
 scheduler's jobs and its mail loop, the grants and the entitlement rule, the database rows.
 What is NOT, said in each file's note: Google sign-in (same function, covered by tests); counting
 a recording (done by calling `usage.record_usage` in this process, as the pipeline does: no bot, no
-audio); the clock (the server cannot be moved in time: the 14th day, the budget window and the
-moment the pilot hours end are proved by `tests/test_trial.py` and `tests/test_pilot_expiry.py`
-with a fake clock, and the last capture runs the pilot job in this process with an injected clock);
-the pilot account's grant is inserted by SQL in the shape migration 0049 makes.
+audio); the clock (the server cannot be moved in time: the 14th day and the budget window are
+proved by `tests/test_trial.py` with a fake clock).
+
+(The pilot-expiry step was removed together with the job: `docs/sop/2026-11-21-remove-pilot-expiry.md`.)
 """
 
 import os
@@ -36,7 +34,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # This process reads the same settings as the servers it starts (the notices it raises by counting
@@ -50,7 +47,6 @@ os.environ.update(
     SCHEDULER_SYNC_SECONDS="2",
     HOURS_MODE="off",
     TRIAL_SECONDS="",
-    PAID_PLANS_OPEN_ON="",
 )
 
 import capture_pilot_api as P  # reads sys.argv at import; sets DATABASE_URL, OWNER_* for the run  # noqa: E402
@@ -59,16 +55,16 @@ ROOT = P.ROOT
 OUT = ROOT / "docs" / "fe-captures" / "trial"
 P.OUT = OUT
 HOUR = 3600
+LAST_CAPTURE = 23  # the last capture number this script writes; higher ones are kept history
 PASSWORD = "-".join(["chosen", "local", "password", "1"])
-PEOPLE = {n: f"{n}@example.test" for n in ("gap", "ada", "paula", "quinn", "rita")}
+PEOPLE = {n: f"{n}@example.test" for n in ("gap", "ada")}
 
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import alerts, pilot_expiry, usage  # noqa: E402
+from app import usage  # noqa: E402
 from app.config import Settings  # noqa: E402
-from app.models import HourGrant, Meeting, Notification, Template, User  # noqa: E402
-from app.passwords import hash_password  # noqa: E402
+from app.models import HourGrant, Meeting, Template, User  # noqa: E402
 from app.usage import email_hash  # noqa: E402
 
 Recorder = P.Recorder
@@ -265,38 +261,17 @@ def proof(label: str, command: list[str], env: dict, sink: list[str]) -> str:
     return result.stdout
 
 
-def add_pilot(engine, who: str) -> None:
-    """A pilot account in the shape migration 0049 leaves: confirmed, 2 hours held."""
-    with Session(engine) as s:
-        user = User(
-            email=PEOPLE[who],
-            password_hash=hash_password(PASSWORD),
-            email_verified_at=datetime.now(UTC),
-        )
-        s.add(user)
-        s.flush()
-        s.add(Template(owner_user_id=user.id, name="General", instructions="Write notes."))
-        s.add(
-            HourGrant(
-                user_id=user.id,
-                email_hash=email_hash(PEOPLE[who]),
-                kind="pilot",
-                seconds=2 * HOUR,
-                starts_at=datetime.now(UTC) - timedelta(days=80),
-            )
-        )
-        s.commit()
-
-
 def main() -> None:
     if not sys.argv[1:]:
         sys.exit(__doc__)
     P.prepare_database()
+    # Delete only the captures this run recreates (01-23). 24-33 are the old pilot-end captures
+    # (the step was removed with the job); the billing guide cites them as history, so they stay.
     for old in OUT.glob("*.json"):
-        old.unlink()
+        if int(old.name.split("-", 1)[0]) <= LAST_CAPTURE:
+            old.unlink()
     OUT.mkdir(parents=True, exist_ok=True)
     engine = create_engine(P.scratch_url)
-    today = datetime.now(UTC).date()
     proofs: list[str] = []
     try:
         # ---- 1. trial off: the gap as it is today ----
@@ -439,102 +414,6 @@ def main() -> None:
         check(
             gap.http.get("/api/session").json()["usage"]["seconds_left"] == 3 * HOUR,
             "the sweep's trial holds the full 3 hours under enforce",
-        )
-        # ---- 4. the pilot end ----
-        opened = today - timedelta(
-            days=50
-        )  # the last usable day is today+10: the notice window is open
-        env = {
-            "TRIAL_SECONDS": "10800",
-            "HOURS_MODE": "enforce",
-            "PAID_PLANS_OPEN_ON": opened.isoformat(),
-        }
-        for who in ("paula", "quinn"):
-            add_pilot(engine, who)
-        proof("what the pilot job would do", ["scripts/trial_report.py"], env, proofs)
-        base = launch(env)
-        wait_for(
-            "the pilot job's mail in the scheduler's log",
-            lambda: "Your pilot hours will expire" in scheduler_log(),
-        )
-        check(
-            scheduler_log().count("Your pilot hours will expire") >= 1,
-            "the scheduler sent the pilot mail",
-        )
-        paula_grants = grants(engine, PEOPLE["paula"])
-        check(paula_grants[0]["expires_at"] is not None, "the pilot grant was given its end")
-        P.note_file(
-            "paula-pilot-grants",
-            "The pilot grant after the scheduler's job ran: it has the end (the start of the day after the last usable day, UTC).",
-            {"grants": paula_grants},
-        )
-        paula = signed_in(base, "paula")
-        n = paula.call(
-            "paula-notifications",
-            "GET",
-            "/api/notifications",
-            note="The one bell entry, kind `pilot.expiry`.",
-        )
-        check(
-            sum(1 for x in n.json()["notifications"] if x["kind"] == "pilot.expiry") == 1,
-            "exactly one pilot notice in the bell",
-        )
-        paula.call(
-            "paula-session-before-the-end",
-            "GET",
-            "/api/session",
-            note="Before the end nothing about the pilot account changes: `state` `pilot`, 2 hours.",
-        )
-        time.sleep(8)  # several more scheduler runs; the one mail must stay one
-        with Session(engine) as s:
-            sent = s.scalars(select(Notification).where(Notification.kind == "pilot.expiry")).all()
-            check(
-                len(sent) == 2,
-                "one notice per pilot person (paula and quinn), none repeated by later runs",
-            )
-        stop_all()
-        # the end itself: the job with an injected clock, the app answering on its real clock
-        end = pilot_expiry.end_of(
-            Settings(
-                _env_file=None, app_env="development", paid_plans_open_on=today - timedelta(days=62)
-            )
-        )
-        ended = Settings(
-            _env_file=None,
-            app_env="development",
-            hours_mode="enforce",
-            paid_plans_open_on=today - timedelta(days=62),
-        )
-        alerts.get_settings = lambda: ended
-        add_pilot(engine, "rita")  # nobody has mailed her yet: the job below is her first notice
-        with Session(engine) as s:
-            result = pilot_expiry.run(s, end - timedelta(days=10), ended)
-        P.note_file(
-            "rita-pilot-job-injected-clock",
-            "The pilot job run in this process with the clock ten days before an end that is already past on the app's own clock (the server cannot be moved in time): `(grants changed, people told)`.",
-            {"result": list(result), "end": end.isoformat()},
-        )
-        base = launch({"TRIAL_SECONDS": "10800", "HOURS_MODE": "enforce"})
-        rita = signed_in(base, "rita")
-        rita.call(
-            "rita-session-after-the-end",
-            "GET",
-            "/api/session",
-            note="The app's clock is now after the pilot end: the pilot hours are not in force. `state` `none`, nothing left, `can_record` false, `cap_seconds` 0.",
-        )
-        r = rita.call(
-            "rita-start-meeting-after-the-end",
-            "POST",
-            "/api/meetings",
-            body={
-                "url": "https://meet.google.com/abc-defg-hij",
-                "template_id": template_of(engine, PEOPLE["rita"]),
-            },
-            note="403 `hours_cap_reached` with `reason` `no_plan`: no grant is in force.",
-        )
-        check(
-            r.status_code == 403 and r.json()["error"]["reason"] == "no_plan",
-            "after the pilot end a new meeting is refused 403 no_plan",
         )
     finally:
         stop_all()

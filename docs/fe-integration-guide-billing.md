@@ -568,7 +568,11 @@ recorded hours are used", "You are out of recorded hours").
   capture 16 is the same person right after, 2 hours recorded in shadow, so `seconds_left` is 3600, not 10800.
   `used_seconds` 7200 of `cap_seconds` 10800.
 
-**The pilot accounts' end.** Nothing changes for them until the owner sets `PAID_PLANS_OPEN_ON`. Then, 14 days
+**The pilot accounts' end. REMOVED 2026-11-21: the job, its mail and the setting no longer exist (SOP
+`docs/sop/2026-11-21-remove-pilot-expiry.md`), so no `pilot.expiry` bell entry is created any more and no pilot
+grant ends by itself; the old `pilot` grants stay valid and readable. No endpoint shape changed. What follows (and
+trial captures 27, 28 and 32) records how it worked and is kept as history; the FE may keep its `pilot.expiry`
+link rule for any entry that already exists.** Nothing changed for them until the owner set `PAID_PLANS_OPEN_ON`. Then, 14 days
 before the end, each person with pilot hours left gets **one** bell entry and **one** mail (trial capture 27 is the
 bell entry, `mail-sink.txt` the mail the scheduler sent): kind `pilot.expiry`, title `Your pilot hours will
 expire`. The body is the exact text in the SOP (a lawyer item until the owner confirms it). Before the end

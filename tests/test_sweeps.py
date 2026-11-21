@@ -471,3 +471,36 @@ def test_register_jobs_registers_the_sweeps_whether_or_not_the_calendar_is_on(
     names = {j.name for jobs in scheduler._jobs.values() for j in jobs}
     assert {"sweep_calendar_events", "sweep_notifications"} <= names
     assert ("calendar_sync" in names) is calendar_enabled
+
+
+# ---- the pilot-expiry job is gone (2026-11-21) ----
+
+
+def _job_names(settings):
+    scheduler = Scheduler(lambda: None, lambda: None, leader_conn_factory=lambda: None)
+    sweeps.register_default_sweeps(scheduler, settings, mailer=object())
+    return {job.name for jobs in scheduler._jobs.values() for job in jobs}
+
+
+def test_the_trial_sweep_is_registered_only_when_the_trial_is_on_and_no_pilot_job_exists():
+    assert "trial_sweep" not in _job_names(make_settings())
+    assert "trial_sweep" in _job_names(make_settings(trial_seconds=3600))
+    assert "pilot_expiry" not in _job_names(make_settings(trial_seconds=3600))
+
+
+def test_old_pilot_expiry_lines_in_the_env_are_ignored_and_register_nothing(monkeypatch):
+    """The settings are gone: a server `.env` that still has them (any value, even one the old
+    check refused) must start, and no pilot job appears."""
+    monkeypatch.setenv("PAID_PLANS_OPEN_ON", "2027-02-01")
+    monkeypatch.setenv("PILOT_EXPIRY_DAYS", "60")
+    monkeypatch.setenv("PILOT_EXPIRY_NOTICE_DAYS", "99")
+    monkeypatch.setenv("PILOT_EXPIRY_MIN_NOTICE_DAYS", "")
+    settings = make_settings()
+    for name in (
+        "paid_plans_open_on",
+        "pilot_expiry_days",
+        "pilot_expiry_notice_days",
+        "pilot_expiry_min_notice_days",
+    ):
+        assert not hasattr(settings, name)
+    assert "pilot_expiry" not in _job_names(settings)

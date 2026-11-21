@@ -12,7 +12,12 @@
 - [x] Vexa removed from the repo (#252), containers and volumes gone from the server; `.env` cleaned by `scripts/clean_env.py` (#248)
 - [x] No test-mode wording anywhere a person sees (#250); VAT not charged (Beyrichq not VAT-registered), TIN empty
 - [x] Google sensitive-scope verification submitted (waiting); Microsoft publisher domain verified, Partner Center verification in progress
-- [ ] Follow-ups: remove the dead pilot-expiry job and mail; read-only live `proof` and `preflight` scripts; optional migration for the `bot_provider` default; transcript fallback review after a week; VAT add-on build only if Beyrichq registers; haven-api deploy prune (other project)
+- [ ] Follow-ups: ~~remove the dead pilot-expiry job and mail~~ (done: addendum below); read-only live `proof` and `preflight` scripts; optional migration for the `bot_provider` default; transcript fallback review after a week; VAT add-on build only if Beyrichq registers; haven-api deploy prune (other project)
+
+**Addendum 2026-11-21: pilot-expiry job removed** (branch `chore/remove-pilot-expiry`, SOP `docs/sop/2026-11-21-remove-pilot-expiry.md`, no migration, Alembic head unchanged):
+- [x] `app/pilot_expiry.py`, the `pilot_expiry` scheduler job, its mail, its four settings (`PAID_PLANS_OPEN_ON` and the three `PILOT_EXPIRY_*`; only the job read them) and `tests/test_pilot_expiry.py` removed; trial logic and old `pilot` grant rows untouched
+- [x] An old `.env` line is ignored (`extra="ignore"`); `scripts/clean_env.py` lists and drops it; `trial_report.py` and `local_trial_e2e.py` lost their pilot parts
+- [x] Notes on the trial SOP, the go-live closeout SOP and the FE billing guide's pilot paragraph; **not verified:** the server, `local_trial_e2e.py` (lint only), the full suite (CI)
 
 **Addendum 2026-11-21: join invites I haven't answered yet** (branch `feature/join-unanswered-invites`, SOP `docs/sop/2026-11-21-join-unanswered-invites.md`, migration 0055, **Alembic head now 0055**):
 - [x] Per-person checkbox "Also join invites I haven't answered yet" under the rule "All meetings with a video link" (`user_settings.join_unanswered`, off by default; shared-Google-account risk in the SOP)
