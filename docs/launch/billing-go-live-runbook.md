@@ -119,7 +119,15 @@ Expected before the closeout: counters only under a **negative** year (`-2026`),
 | Back in the app | `/billing/return` first says the payment is pending, then paid; `/billing` shows the plan Active and the hours (the trial's leftover plus 20) | same |
 | Cost to you | The refund returns the payment; **whether the provider's fee comes back is not on Paystack's refund page or Flutterwave's refund pages (NOT VERIFIED)**. Paystack's local fee is 1.5% + NGN 100 (about NGN 475 on NGN 25,000, pricing page 2026-11-21); Flutterwave's international fee is 4.8% plus 7.5% VAT on the fee (its pricing page; local cards 2%). Expect to lose the fees | |
 
-**Proof for each payment (one query, read-only, uses `q` from section 4):**
+**Proof for each payment, the primary way (one command, read-only: the database holds the transaction read only, so it cannot change anything; it prints no key, no secret and no email). Run it for each account:**
+
+```bash
+docker compose exec -T web python scripts/billing_test_purchase.py proof <the account's email> </dev/null; echo "exit $?"
+```
+
+It checks, in this order: the payment is `succeeded` with `paid_at`; exactly one live subscription, `active`, on the plan and route the payment bought; the invoice exists, its number is `BN-<year>-NNNNNN` (never `BN-T-`), `test_mode` is false and `BILLING_LIVE_SINCE` does not hide it; the grant equals the plan's hours (the trial's leftover shows on the "hours held now" line); and the webhook: it prints **`WEBHOOK PATH PROVED`** (a `billing_events` row of that provider names the payment's reference, `signature_ok` true, decided) or **`WEBHOOK PATH NOT PROVED`** (the sweeper settled it without a signed webhook: tell the lead). The last line is `PROOF: OK` and `exit 0`, or `PROOF: OK, BUT WEBHOOK PATH NOT PROVED` and `exit 2`, or `PROOF: FAILED` and `exit 1` with a `[FAIL]` line saying which check. Before the first payment, `live-check` (below, section 8) is the pre-flight.
+
+**The same proof by hand (the fallback if the script cannot run; one query, read-only, uses `q` from section 4):**
 
 ```bash
 q <<'SQL'
@@ -141,7 +149,15 @@ Why this account: the admin refund screen allows "first plan payment, within 7 d
 1. Sign in as admin → `/admin/billing` → the payment's row → **Refund** (the one case the row offers: first plan payment).
 2. The refund ends the plan, removes its hours and deletes the saved card.
 
-**Proof (one query):**
+**Proof, the primary way (one command, read-only, same guarantees as section 5):**
+
+```bash
+docker compose exec -T web python scripts/billing_test_purchase.py proof <the account's email> --refund </dev/null; echo "exit $?"
+```
+
+It prints `REFUND PROOF: OK` and `exit 0` when the refund reason is `first_plan_7d`, its status is `submitted`, the provider's refund id is present (it says "present", never the id), the refund is the whole payment, the payment is `refunded`, the subscription is `ended`, the hours it bought were ended and the saved card is gone. Anything else prints a `[FAIL]` line and `REFUND PROOF: FAILED`. (After the refund, the plain `proof` command says `status refunded (use --refund)`: that is expected.)
+
+**The same proof by hand (the fallback; one query):**
 
 ```bash
 q <<'SQL'
@@ -166,7 +182,8 @@ Paystack refund states you may meet on the dashboard: `pending`, `processing`, `
 
 | When | Check | How |
 |---|---|---|
-| **First hour** | Every webhook arrives signed and is decided | `q <<<"select provider, type, signature_ok, processed_at is not null as decided, error is not null as err from billing_events order by id desc limit 10;"` : no `signature_ok` false, no `decided` false older than 5 minutes |
+| **Any time, and first** | **All of the checks below that the database can answer, plus the live settings, in one command** (read-only; keys shown by PREFIX only; nothing secret or personal is printed) | `docker compose exec -T web python scripts/billing_test_purchase.py live-check </dev/null; echo "exit $?"` prints `PREFLIGHT OK` and `exit 0`. It checks: `BILLING_ENABLED` and `BILLING_LIVE` true; the Paystack key is `sk_live_` and the Flutterwave key is not a test key; `FLUTTERWAVE_SECRET_HASH` set; `PAYSTACK_WEBHOOK_SECRET` unset (the classic `x-paystack-signature` check) or, if set, not equal to the secret key; `BILLING_LIVE_SINCE` set and past; the seller's name, address and registration number; a USD and a naira price (it lists them); the live invoice counters (before the first payment it says `none used yet`); no webhook stored unsigned or undecided for more than 5 minutes, no payment pending more than 5 minutes, none waiting for a refund. A `[FAIL]` line names the problem |
+| **First hour** | Every webhook arrives signed and is decided | The `live-check` above; or by hand: `q <<<"select provider, type, signature_ok, processed_at is not null as decided, error is not null as err from billing_events order by id desc limit 10;"` : no `signature_ok` false, no `decided` false older than 5 minutes |
 | | No error loop in the logs | `docker compose logs worker scheduler --since 1h \| grep -i -E 'billing (due\|sweep) pass failed\|not issued\|no known outcome'` prints nothing |
 | | Admin alerts (the bell) | none of: "An invoice could not be issued", "A payment was refused by the settlement rules", "Payments have waited more than a day" |
 | | Provider dashboards | the live transactions list shows exactly your two payments |
@@ -238,7 +255,7 @@ Could not read: https://developer.flutterwave.com/docs/going-live and https://de
 | Item | Size |
 |---|---|
 | Closeout script and `BILLING_LIVE_SINCE` filter | done (PR #255) |
-| A read-only live `proof` and `preflight` for `scripts/billing_test_purchase.py` | half a day |
+| A read-only live `proof`, `proof --refund` and `live-check` for `scripts/billing_test_purchase.py` | done (PR for `feature/live-proof-script`, SOP `docs/sop/2026-11-21-live-proof-script.md`); **not yet run on the real server** |
 | Fix the stale line in `deploy/README.md:127` about a "not a tax document" test invoice | minutes |
 | Terms paid-plans section and Privacy entries for Paystack and Flutterwave (lawyer; does not block) | lawyer |
 | Handle Paystack's `refund.needs-attention` state in the app | small, after the first live refund shows how often it occurs |

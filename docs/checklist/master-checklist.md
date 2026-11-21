@@ -3,6 +3,12 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-21: read-only live proof script** (branch `feature/live-proof-script`, SOP `docs/sop/2026-11-21-live-proof-script.md`, no migration, no endpoint change):
+- [x] `scripts/billing_test_purchase.py` runs `proof EMAIL`, `proof EMAIL --refund`, `state EMAIL` and the new `live-check` against LIVE billing, each in a transaction the database holds read only (checked to be on before anything is read); `checkout` and `make-due` still refuse, also when only a live key or `BILLING_LIVE_SINCE` is present
+- [x] Live `proof`: payment `succeeded` with `paid_at`, one active subscription, invoice `BN-<year>-NNNNNN` not test-mode and not hidden by the cutover, grant equals the plan's hours, `WEBHOOK PATH PROVED` or `NOT PROVED`; `--refund` checks runbook section 6; `live-check` checks the live settings (key prefixes only), seller details, prices, counters and the inbox's health
+- [x] Runbook sections 5, 6 and 8 name the one-line command first, the SQL stays as the fallback; tests on a scratch Postgres (24 in the file)
+- [ ] **Not verified:** a run on the real server and against the first real payments (Adebayo's section 5 and 6 payments are its first run)
+
 **Addendum 2026-11-21: join invites I haven't answered yet** (branch `feature/join-unanswered-invites`, SOP `docs/sop/2026-11-21-join-unanswered-invites.md`, migration 0055, **Alembic head now 0055**):
 - [x] Per-person checkbox "Also join invites I haven't answered yet" under the rule "All meetings with a video link" (`user_settings.join_unanswered`, off by default; shared-Google-account risk in the SOP)
 - [x] `will_join` skips `not_accepted` only while the box is off; `JoinSettings.for_user` is the one constructor (sync, API, runner re-check, organiser bot, mail)
