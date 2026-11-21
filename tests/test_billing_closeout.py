@@ -349,8 +349,8 @@ def test_one_persons_failure_rolls_back_that_person_and_the_rest_go_on(
 ):
     real = script.close_person
 
-    def broken_for_ada(sess, user_id, before, now, end_pilot=False):
-        changed = real(sess, user_id, before, now, end_pilot)  # real writes, then the failure
+    def broken_for_ada(sess, user_id, *args):
+        changed = real(sess, user_id, *args)  # real writes, then the failure
         if user_id == world.ada.id:
             raise RuntimeError("boom")
         return changed
@@ -846,8 +846,8 @@ def test_one_persons_failure_under_end_pilot_leaves_their_pilot_hours(
 ):
     real = script.close_person
 
-    def broken_for_zed(sess, user_id, before, now, end_pilot=False):
-        changed = real(sess, user_id, before, now, end_pilot)
+    def broken_for_zed(sess, user_id, *args):
+        changed = real(sess, user_id, *args)
         if user_id == pilots.zed.id:
             raise RuntimeError("boom")
         return changed
