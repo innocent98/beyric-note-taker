@@ -68,7 +68,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import func, inspect, or_, select, text, update  # noqa: E402
+from sqlalchemy import event, func, inspect, or_, select, text, update  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app import entitlements  # noqa: E402
@@ -134,18 +134,24 @@ def find_user(db: Session, email: str) -> User:
 
 @contextmanager
 def read_only(db: Session) -> Iterator[None]:
-    """Everything inside runs in a transaction the DATABASE holds read only, and is rolled back at
-    the end. The setting is read back and the run stops unless it is on, so a read command can never
-    quietly become a writer."""
-    db.rollback()  # `set transaction` must be the first statement of its transaction
-    db.execute(text("set transaction read only"))
-    if db.execute(text("show transaction_read_only")).scalar_one() != "on":
-        db.rollback()
-        raise SystemExit("could not make the transaction read only: nothing was read")
+    """Everything inside runs in transactions the DATABASE holds read only, and is rolled back at
+    the end. A listener makes EVERY transaction the session begins read only (so a `commit()` inside
+    cannot open a read-write one), the setting is read back, and the run stops unless it is on, so a
+    read command can never quietly become a writer."""
+
+    def hold_read_only(_session, _transaction, connection) -> None:
+        connection.exec_driver_sql("set transaction read only")
+
+    event.listen(db, "after_begin", hold_read_only)
     try:
+        db.rollback()  # start a fresh transaction: the listener sets it read only as it begins
+        db.execute(text("set transaction read only"))
+        if db.execute(text("show transaction_read_only")).scalar_one() != "on":
+            raise SystemExit("could not make the transaction read only: nothing was read")
         yield
     finally:
         db.rollback()
+        event.remove(db, "after_begin", hold_read_only)
 
 
 def checkout(db: Session, settings: Settings, email: str, plan_code: str) -> None:
@@ -401,10 +407,10 @@ def make_due(db: Session, settings: Settings, email: str) -> None:
 # ---- live billing: the read-only proofs (runbook sections 4 to 8) -------------------------------
 
 LIVE_NUMBER = re.compile(r"BN-([0-9]{4})-([0-9]{6})")  # a positive year: the live series
-WEBHOOK_PROVED = "WEBHOOK PATH PROVED: a signed webhook reached the app and was decided"
+WEBHOOK_PROVED = "WEBHOOK PATH PROVED: a signed webhook reached the app and was accepted"
 WEBHOOK_NOT_PROVED = (
     "WEBHOOK PATH NOT PROVED: the sweeper settled it without a signed webhook "
-    "(or the webhook arrived but was not decided): tell the lead"
+    "(or its event was refused, parked or is not decided): tell the lead"
 )
 
 
@@ -414,9 +420,18 @@ class Checks:
     def __init__(self) -> None:
         self.ok = True
 
-    def __call__(self, label: str, passed: bool, detail: str = "", *, must: bool = True) -> None:
+    def __call__(
+        self,
+        label: str,
+        passed: bool,
+        detail: str = "",
+        *,
+        must: bool = True,
+        miss: str = "note",
+    ) -> None:
+        """`miss` is the mark of a check that is not passed and not a must one."""
         self.ok = self.ok and (passed or not must)
-        mark = "ok" if passed else ("FAIL" if must else "note")
+        mark = "ok" if passed else ("FAIL" if must else miss)
         print(f"  [{mark}] {label}{(': ' + detail) if detail else ''}")
 
 
@@ -447,6 +462,13 @@ def plan_payment(db: Session, user: User, settings: Settings) -> Payment | None:
     )
 
 
+def event_applied(row: BillingEvent) -> bool:
+    """True when the stored event was signed AND accepted: `settle.process` sets `processed_at` for
+    a refused event too, but then records the refusal in `error` (a parked retry has no
+    `processed_at`), so an accepted event is decided with no error."""
+    return row.signature_ok and row.processed_at is not None and row.error is None
+
+
 def signed_event(db: Session, payment: Payment, settings: Settings) -> BillingEvent | None:
     """The best `billing_events` row for this payment: a `charge_succeeded` of its provider that
     names its reference (Paystack `data.reference`, Flutterwave `data.tx_ref`; the test fake puts
@@ -468,7 +490,7 @@ def signed_event(db: Session, payment: Payment, settings: Settings) -> BillingEv
             .order_by(BillingEvent.id)
         )
     )
-    proved = [r for r in rows if r.signature_ok and r.processed_at is not None]
+    proved = [r for r in rows if event_applied(r)]
     return (proved or rows or [None])[0]
 
 
@@ -534,10 +556,11 @@ def live_proof(db: Session, settings: Settings, email: str) -> int:
         check(
             "the invoice is not test-mode", not invoice.test_mode, f"test_mode {invoice.test_mode}"
         )
+        since = cutover.since(settings)
         check(
-            "the invoice is not hidden by BILLING_LIVE_SINCE",
-            not cutover.is_test_era(payment.created_at, settings),
-            f"the payment was made after {cutover.since(settings)}",
+            "the invoice is not hidden by BILLING_LIVE_SINCE (which is set)",
+            since is not None and not cutover.is_test_era(payment.created_at, settings),
+            f"the payment was made at or after {since.isoformat()}" if since else "it is not set",
         )
         check(
             "the invoice is for what was paid, and its parts add up",
@@ -585,12 +608,12 @@ def live_proof(db: Session, settings: Settings, email: str) -> int:
     )
     check("a saved card for renewals", bool(saved), "yes" if saved else "NO", must=False)
     event = signed_event(db, payment, settings)
-    proved = event is not None and event.signature_ok and event.processed_at is not None
+    proved = event is not None and event_applied(event)
     if event is not None:
         print(
             f"  [note] webhook event {event.id} ({event.type}): signature_ok {event.signature_ok}"
             f", decided {event.processed_at is not None}"
-            + (", an error is recorded" if event.error else "")
+            + (", REFUSED or parked (an error is recorded)" if event.error else "")
         )
     print(WEBHOOK_PROVED if proved else WEBHOOK_NOT_PROVED)
     if not check.ok:
@@ -607,6 +630,10 @@ def live_refund_proof(db: Session, settings: Settings, email: str) -> int:
     """Section 6's proof after the first refund. Read-only. Returns the exit code (0 or 1)."""
     user = find_user(db, email)
     check = Checks()
+    check("BILLING_LIVE is true (this proof is for a real refund)", settings.billing_live)
+    if not settings.billing_live:
+        print("REFUND PROOF: FAILED")
+        return 1
     refund = db.scalars(
         select(Refund)
         .join(Payment, Payment.id == Refund.payment_id)
@@ -657,7 +684,7 @@ def live_refund_proof(db: Session, settings: Settings, email: str) -> int:
         .select_from(PaymentMethod)
         .where(PaymentMethod.user_id == user.id, PaymentMethod.provider == payment.provider)
     )
-    check("the saved card is deleted", not saved, must=False)
+    check("the saved card is deleted", not saved, "yes" if not saved else "STILL ON FILE")
     print("  [note] the money reaching the card is proved by the bank statement, not by the app")
     print("REFUND PROOF: OK" if check.ok else "REFUND PROOF: FAILED")
     return 0 if check.ok else 1
@@ -763,14 +790,6 @@ def live_check(db: Session, settings: Settings) -> bool:
     )
     # Section 8: the webhook inbox and the payments, from the cutover on.
     stale = now - timedelta(minutes=5)
-    unsigned = db.scalar(
-        select(func.count())
-        .select_from(BillingEvent)
-        .where(
-            BillingEvent.signature_ok.is_(False),
-            cutover.live_only(BillingEvent.received_at, settings),
-        )
-    )
     undecided = db.scalar(
         select(func.count())
         .select_from(BillingEvent)
@@ -780,11 +799,32 @@ def live_check(db: Session, settings: Settings) -> bool:
             cutover.live_only(BillingEvent.received_at, settings),
         )
     )
-    check("no stored webhook has signature_ok false", unsigned == 0, f"{unsigned} found")
     check(
-        "no webhook has waited more than 5 minutes to be decided",
+        "no stored webhook has waited more than 5 minutes to be decided",
         undecided == 0,
         f"{undecided} found",
+    )
+    accepted = db.scalar(
+        select(func.count())
+        .select_from(BillingEvent)
+        .where(
+            BillingEvent.signature_ok.is_(True),
+            BillingEvent.processed_at.is_not(None),
+            BillingEvent.error.is_(None),
+            cutover.live_only(BillingEvent.received_at, settings),
+        )
+    )
+    # A request with a bad signature is rejected BEFORE anything is stored (`app/billing/inbox.py`),
+    # so a wrong webhook secret leaves no row: this command cannot see it. Only a signed event that
+    # was stored and accepted proves the path, and `proof EMAIL` says which payment it was for.
+    check(
+        "webhook path: a signed event was stored and accepted",
+        bool(accepted),
+        f"{accepted} event(s)"
+        if accepted
+        else "NOT PROVED until a signed event row exists (a wrong secret leaves no row to see)",
+        must=False,
+        miss="NOT PROVED",
     )
     pending = db.scalar(
         select(func.count())
@@ -796,7 +836,7 @@ def live_check(db: Session, settings: Settings) -> bool:
         )
     )
     check(
-        "no payment has been pending more than 5 minutes",
+        "payments pending more than 5 minutes (reported, never a failure)",
         pending == 0,
         f"{pending} found"
         + (": an abandoned checkout, or a webhook that did not arrive" if pending else ""),
@@ -810,7 +850,7 @@ def live_check(db: Session, settings: Settings) -> bool:
             cutover.live_only(Payment.created_at, settings),
         )
     )
-    check("no payment waits for a person to refund it", unused == 0, f"{unused} found", must=False)
+    check("no payment waits for a person to refund it", unused == 0, f"{unused} found")
     return check.ok
 
 
@@ -845,6 +885,7 @@ def run(argv: list[str], settings: Settings, db: Session) -> int:
     (and so with live billing); every other command runs inside `read_only`."""
     args = build_parser().parse_args(argv)
     if args.command in WRITE_COMMANDS:
+        guard(settings, args.email)  # once here for every write command, so a new one is covered
         if args.command == "checkout":
             checkout(db, settings, args.email, args.plan)
         else:

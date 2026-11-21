@@ -503,14 +503,15 @@ def test_live_check_needs_prices_in_both_currencies_and_reports_the_inbox(
     session.query(BillingEvent).update({"processed_at": None, "received_at": half_hour_ago})
     session.commit()
     code, out = run_live(session, capsys, "live-check")
-    assert code == 1 and "[FAIL] no webhook has waited more than 5 minutes" in out
+    assert code == 1 and "[FAIL] no stored webhook has waited more than 5 minutes" in out
 
+    # a decided event with an error is a REFUSED one: it is not proof that the path works
     session.query(BillingEvent).update(
-        {"processed_at": BillingEvent.received_at, "signature_ok": False}
+        {"processed_at": BillingEvent.received_at, "error": "amount mismatch"}
     )
     session.commit()
     code, out = run_live(session, capsys, "live-check")
-    assert code == 1 and "[FAIL] no stored webhook has signature_ok false" in out
+    assert code == 0 and "[NOT PROVED] webhook path" in out  # reported, not a pass
 
     session.query(PlanPrice).filter(PlanPrice.currency == "NGN").delete()
     session.commit()
@@ -531,3 +532,113 @@ def test_state_and_the_test_mode_commands_still_run_through_the_dispatcher(
     assert code == 0 and "PROOF: OK" in out and "WEBHOOK PATH" not in out
     code, out = run_live(session, capsys, "preflight", "1", cfg=live_settings())
     assert "use live-check" in str(code)
+
+
+def test_live_check_does_not_claim_the_webhook_path_works_until_a_signed_event_was_accepted(
+    session, ada, providers, capsys, live_invoices
+):
+    """A wrong webhook secret leaves NO stored row (the inbox verifies first), so an empty inbox
+    must never read as healthy: the line says NOT PROVED, and says OK only after a real event."""
+    code, out = run_live(session, capsys, "live-check")
+    assert code == 0 and "PREFLIGHT OK" in out  # the settings are fine; the path is not proved
+    assert "[NOT PROVED] webhook path: a signed event was stored and accepted: NOT PROVED" in out
+    assert "signature_ok false" not in out  # the check that could never fail is gone
+    assert "[ok] no stored webhook has waited" in out
+
+    buy_plan(session, ada, providers.usd)  # a signed event goes through the real inbox
+    code, out = run_live(session, capsys, "live-check")
+    assert code == 0 and "[ok] webhook path: a signed event was stored and accepted: 1" in out
+    assert "NOT PROVED" not in out
+
+
+def test_a_refused_event_does_not_prove_the_webhook_path_for_a_payment(
+    session, ada, providers, capsys, live_invoices
+):
+    from app.models import BillingEvent
+
+    buy_plan(session, ada, providers.usd)
+    code, out = run_live(session, capsys, "proof", "ada@example.test")
+    assert code == 0 and "WEBHOOK PATH PROVED" in out
+
+    # `settle.process` marks a refused event decided too, with the refusal in `error`
+    session.query(BillingEvent).update({"error": "not successful at the provider"})
+    session.commit()
+    code, out = run_live(session, capsys, "proof", "ada@example.test")
+    assert code == 2 and "WEBHOOK PATH NOT PROVED" in out and "PROOF: OK, BUT" in out
+    assert "REFUSED or parked" in out
+
+
+def _refund_it(session, ada, providers):
+    from datetime import timedelta
+
+    from app.billing import refunds
+    from tests.billing_support import T0
+    from tests.test_web import make_user
+
+    admin = make_user(session, "admin@example.test", admin=True)
+    buy_plan(session, ada, providers.usd)
+    payment = session.query(script.Payment).one()
+    refunds.request(
+        session, payment.id, "first_plan_7d", admin, None, live_settings(), T0 + timedelta(days=2)
+    )
+    return payment
+
+
+def test_the_refund_proof_fails_while_the_saved_card_is_still_on_file(
+    session, ada, providers, capsys, live_invoices
+):
+    from app.models import PaymentMethod
+
+    _refund_it(session, ada, providers)
+    code, out = run_live(session, capsys, "proof", "ada@example.test", "--refund")
+    assert code == 0 and "[ok] the saved card is deleted: yes" in out
+
+    session.add(
+        PaymentMethod(user_id=ada.id, provider="flutterwave", token_enc=b"x", key_version=1)
+    )
+    session.commit()  # the card delete "failed": the card is still there
+
+    code, out = run_live(session, capsys, "proof", "ada@example.test", "--refund")
+
+    assert code == 1
+    assert "[FAIL] the saved card is deleted: STILL ON FILE" in out
+    assert "REFUND PROOF: FAILED" in out and "REFUND PROOF: OK" not in out
+
+
+def test_the_refund_proof_refuses_test_mode_data(session, ada, providers, capsys, live_invoices):
+    _refund_it(session, ada, providers)  # a complete, refunded payment, read with TEST settings
+
+    code, out = run_live(session, capsys, "proof", "ada@example.test", "--refund", cfg=settings())
+
+    assert code == 1
+    assert "[FAIL] BILLING_LIVE is true (this proof is for a real refund)" in out
+    assert "REFUND PROOF: FAILED" in out and "REFUND PROOF: OK" not in out
+
+
+def test_a_commit_inside_a_read_command_cannot_open_a_writable_transaction(session, ada):
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    session.rollback()
+    with script.read_only(session):
+        session.execute(text("select 1"))
+        session.commit()  # a helper that committed would start a NEW transaction...
+        with pytest.raises(DBAPIError, match="read-only"):  # ...which is still read only
+            session.execute(text("update users set name = 'x'"))
+        session.rollback()
+    # and it is a writer again afterwards: the listener is gone, nothing leaks into later use
+    session.execute(text("update users set name = name"))
+    session.rollback()
+
+
+def test_run_refuses_every_write_command_before_it_reaches_the_command(
+    session, ada, capsys, monkeypatch
+):
+    """`guard` runs once in `run`, so a write command that forgot its own check is still stopped."""
+    called = []
+    monkeypatch.setattr(script, "checkout", lambda *a, **k: called.append("checkout"))
+    monkeypatch.setattr(script, "make_due", lambda *a, **k: called.append("make_due"))
+    for argv in (("checkout", "ada@example.test"), ("make-due", "ada@example.test", "--yes")):
+        code, _ = run_live(session, capsys, *argv)
+        assert "test mode only" in str(code)
+    assert called == []
