@@ -3163,6 +3163,8 @@ Capture 04, the list (trimmed to the one row):
 
 (The number reads `BN-2026-9000NN` because the capture run keeps `BILLING_LIVE` false for the invoice numbering, as the invoice captures do; on a live server the first live invoice is `BN-<year>-000001`.)
 
+**What the person with an ended test plan sees.** `GET /api/billing/subscription` still returns the closed test-era subscription as the person's newest ended subscription (`subscription.status` `ended`, with its plan and period), and `state` is derived from it, so these people see **"no plan / ended"** (the screen the FE already draws for `ended`, `web/components/billing/billing-view.tsx`), not an empty first-time state, and the plans are open for them to buy again. Their hours from that plan are gone. Draw `ended` as you already do; do not treat it as an error and do not try to hide it. (Shape unchanged; not captured, because it is an existing state.)
+
 ### What the administrator sees (admin only)
 
 `GET /api/admin/billing/payments` **still lists both payments**, with their invoice numbers (capture 11). The earlier payment's `refund_option` is not allowed, and says why:
@@ -3177,7 +3179,7 @@ Capture 04, the list (trimmed to the one row):
 {"error": {"code": "before_go_live", "message": "This payment was made before billing went live: the provider has no record of it, so it cannot be refunded here."}}
 ```
 
-`before_go_live` is a **new 409 code** in the refund table: show its `message`, and the Refund button stays off because `refund_option.allowed` is false. The same rule changes `not_first_payment`: a person's first plan payment is now the first one made **at or after** the cutover, so a person with a test-era plan payment and a live one can have the live one refunded as their first.
+`before_go_live` is a **new 409 code** in the refund table, and also on `POST /api/admin/billing/refunds/{id}/resolve` (a refund of a test-era payment cannot be resolved; none should exist, because the closeout refuses to run while one is open): show its `message`, and the Refund button stays off because `refund_option.allowed` is false. The same rule changes `not_first_payment`: a person's first plan payment is now the first one made **at or after** the cutover, so a person with a test-era plan payment and a live one can have the live one refunded as their first.
 
 ### Verification table (this section)
 
