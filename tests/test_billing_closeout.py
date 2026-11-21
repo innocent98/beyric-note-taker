@@ -889,3 +889,152 @@ def test_the_country_functions_will_not_run_without_settings(session, world):
         profiles.country_change_allowed_at(session, world.ada.id, NOW)
     with pytest.raises(TypeError):
         profiles.change_country(session, world.ada, "US", now=NOW)
+
+
+# ---- --trial-for-ended-pilot (owner's option, with --end-pilot) ----
+
+
+TRIAL_CFG = dict(trial_seconds=3 * HOUR)  # the 3-hour trial, 14 days (the default `trial_days`)
+
+
+def trials_of(session, user):
+    session.expire_all()
+    return [g for g in grants(session, user) if g.kind == "trial"]
+
+
+@pytest.fixture
+def pilot_crowd(session, world, pilots):
+    """The pilots, plus an unconfirmed holder and a suspended one."""
+    pilots.unconfirmed = make_user(session, "unconf@example.test", email_verified_at=None)
+    add_grant(session, pilots.unconfirmed, "pilot")
+    pilots.suspended = make_user(session, "susp@example.test", status="suspended")
+    add_grant(session, pilots.suspended, "pilot")
+    return pilots
+
+
+def test_the_flag_gives_one_ordinary_trial_to_each_eligible_ended_pilot_person(
+    session, factory, world, pilot_crowd
+):
+    from app import trial
+
+    cfg = settings(**TRIAL_CFG)
+    ben_trials_before = len(trials_of(session, world.ben))
+
+    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)
+
+    assert code == 0 and "PROOF: OK" in out, out
+    assert "Ordinary trials given to ended-pilot people: 1" in out
+    [grant] = trials_of(session, pilot_crowd.zed)
+    # exactly what a new sign-up gets: the app's own function, length and days from the settings
+    fresh = make_user(session, "fresh@example.test")
+    ref = trial.give(session, fresh, NOW, cfg)
+    assert (grant.seconds, grant.reason) == (ref.seconds, ref.reason)
+    assert grant.seconds == 3 * HOUR and grant.starts_at == NOW
+    assert grant.expires_at == NOW + timedelta(days=14)
+    session.rollback()
+    # nobody else: an admin, the deleted person, one who already holds a trial, an unconfirmed
+    # and a suspended account
+    assert trials_of(session, pilot_crowd.root) == []
+    assert len(trials_of(session, world.ben)) == ben_trials_before  # no second trial
+    assert trials_of(session, pilot_crowd.unconfirmed) == []
+    assert trials_of(session, pilot_crowd.suspended) == []
+    assert [
+        g for g in session.scalars(select(HourGrant)) if g.user_id is None and g.kind == "trial"
+    ] == []
+    # their pilot did end, and they now hold the trial's hours
+    from app import entitlements
+
+    seen = entitlements.status(session, pilot_crowd.zed, NOW + timedelta(minutes=1))
+    assert (seen.state, seen.seconds_left) == ("trial", 3 * HOUR)
+
+
+def test_without_the_flag_an_ended_pilot_person_gets_no_trial(session, factory, world, pilots):
+    cfg = settings(**TRIAL_CFG)
+
+    code, out = run(factory, apply=True, end_pilot=True, cfg=cfg)
+
+    assert code == 0 and "Ordinary trials" not in out
+    assert trials_of(session, pilots.zed) == []
+
+
+def test_the_flag_needs_end_pilot(session, factory, world, pilots):
+    snap = snapshot(session)
+
+    for apply in (False, True):
+        code, out = run(factory, apply=apply, trial_for_ended_pilot=True, cfg=settings(**TRIAL_CFG))
+        assert code == 2 and "only valid together with --end-pilot" in out
+    assert snapshot(session) == snap
+
+
+def test_with_trial_seconds_zero_no_trial_is_given(session, factory, world, pilots):
+    code, out = run(factory, end_pilot=True, trial_for_ended_pilot=True)  # TRIAL_SECONDS default 0
+    assert code == 0 and "Trials to give: 0 (TRIAL_SECONDS is 0" in out
+
+    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True)
+
+    assert code == 0, out
+    assert trials_of(session, pilots.zed) == []
+    session.expire_all()
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW  # the pilot still ended
+
+
+def test_the_dry_run_counts_the_trials_and_changes_nothing(session, factory, world, pilot_crowd):
+    snap = snapshot(session)
+
+    code, out = run(factory, end_pilot=True, trial_for_ended_pilot=True, cfg=settings(**TRIAL_CFG))
+
+    assert code == 0 and snapshot(session) == snap
+    # zed only: the admin, the deleted person, ben (holds a trial), the unconfirmed and the
+    # suspended account are not owed one
+    assert "Trials to give to ended-pilot people: 1" in out
+    assert "bypasses the rule that a past pilot used the trial up" in out
+    assert "one-time conversion" in out
+    assert trials_of(session, pilot_crowd.zed) == []
+
+
+def test_a_second_apply_gives_no_second_trial(session, factory, world, pilots):
+    cfg = settings(**TRIAL_CFG)
+    assert run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)[0] == 0
+    once = snapshot(session)
+    assert len(trials_of(session, pilots.zed)) == 1
+
+    code, out = run(factory, apply=True, end_pilot=True, trial_for_ended_pilot=True, cfg=cfg)
+
+    assert code == 0 and "Ordinary trials given to ended-pilot people: 0" in out
+    assert len(trials_of(session, pilots.zed)) == 1 and snapshot(session) == once
+
+
+def test_a_failed_person_gets_neither_the_ended_pilot_nor_the_trial(
+    session, factory, world, pilots, monkeypatch
+):
+    from app import trial
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(trial, "give", broken)
+
+    code, out = run(
+        factory,
+        apply=True,
+        end_pilot=True,
+        trial_for_ended_pilot=True,
+        cfg=settings(**TRIAL_CFG),
+    )
+
+    assert code == 1 and "PROOF: FAILED" in out
+    session.expire_all()
+    assert session.get(HourGrant, pilots.zed_pilot.id).expires_at == NOW + timedelta(days=20)
+    assert trials_of(session, pilots.zed) == []
+
+
+def test_the_normal_trial_rule_still_refuses_a_past_pilot(session, pilots):
+    """Only the one-time conversion bypasses it: `give` without `after_pilot` is unchanged."""
+    from app import trial
+
+    session.get(HourGrant, pilots.zed_pilot.id).expires_at = NOW - timedelta(days=1)
+    session.commit()
+
+    assert trial.give(session, pilots.zed, NOW, settings(**TRIAL_CFG)) is None
+    assert trial.give(session, pilots.zed, NOW, settings(**TRIAL_CFG), after_pilot=True) is not None
+    session.rollback()
