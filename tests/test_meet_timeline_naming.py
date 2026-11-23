@@ -873,11 +873,21 @@ def test_an_over_split_person_is_named_by_meet_not_by_the_chain():
     assert got == {"name": BO, "how": "meet_timeline", "note": ""}
 
 
-def test_a_round_two_name_that_meet_agrees_with_or_does_not_contradict_stands():
-    agreed = one_tag_case(100.0, 0.0, listed=(ADA, BO))
-    assert agreed == {"name": ADA, "how": "elimination", "note": ""}
-    unclear = one_tag_case(100.0, 80.0, listed=(ADA, BO))  # Meet has no clear say (1.25x)
-    assert unclear == {"name": ADA, "how": "elimination", "note": ""}
+def test_a_round_two_name_needs_meets_positive_lead_of_one_and_a_half_times():
+    # Tag 9 lists Ada and Bo; Bo is held by tag 3, so the chain proposes Ada: Meet must lead.
+    clear = one_tag_case(100.0, 0.0, listed=(ADA, BO))
+    assert clear == {"name": ADA, "how": "elimination", "note": ""}
+    assert one_tag_case(80.0, 50.0, listed=(ADA, BO))["name"] == ADA  # 1.6x
+    close = one_tag_case(70.0, 50.0, listed=(ADA, BO))  # 1.4x: no lead, nothing is named
+    assert close["name"] == "" and close["how"] == "unknown"
+    assert one_tag_case(100.0, 80.0, listed=(ADA, BO))["name"] == ""  # 1.25x
+
+
+def test_a_lean_towards_the_held_name_below_the_naming_bar_still_refuses_the_chain_name():
+    # Bo 50 s against Ada 20 s (2.5x: under the 3.0x that would name Bo from Meet alone, but Ada
+    # has no lead and under 30 s): tag 9 must not be Ada.
+    got = one_tag_case(20.0, 50.0, listed=(ADA, BO))
+    assert got["name"] == "" and got["how"] == "unknown"
 
 
 def test_a_wrong_link_does_not_make_the_next_one_wrong_too():
@@ -1136,6 +1146,59 @@ def test_known_limit_two_people_with_one_display_name_are_one_person():
         "how": "elimination",
         "note": "",
     }  # wrong for the second Sam
+
+
+def test_the_chain_leads_by_one_and_a_half_times_on_the_failures_own_tag():
+    for c, named in ((60.0, "tag 2 is Charlie"), (59.9, "")):
+        table = {**FAIL_TABLE, "2": ([6.8, 40.0, c], 193.3)}
+        items, events = failure(table=table)
+        tags = settle(items, events)
+        assert (tags["2"]["name"] == CH) == bool(named), c
+        if named:
+            assert tags["2"]["how"] == "elimination"
+        else:
+            assert tags["2"]["how"] == "unknown"  # Bravo 40 s: too close, Unknown, as before
+
+
+def test_a_record_with_participants_but_no_speaking_events_is_no_evidence_at_all():
+    items, events = failure()
+    for person in events["participants"]:
+        person["events"] = []  # what the size cap keeps when it drops every event
+    tags = settle(items, events)
+    assert names(tags) == {"0": AL, "1": BR, "2": ""}  # round 1 only, exactly as with no events
+    assert tags["2"]["timeline"] == "no_events"
+    names_only = {"participants": [{"name": n} for n in (AL, BR, CH, BOT)]}
+    assert names(settle(items, names_only)) == {"0": AL, "1": BR, "2": ""}
+
+
+def test_events_with_no_overlap_over_the_tag_give_no_round_two_name():
+    table = {**FAIL_TABLE, "2": ([0.0, 0.0, 0.0], 193.3)}
+    items, events = failure(table=table)
+    assert names(settle(items, events)) == {"0": AL, "1": BR, "2": ""}
+
+
+def test_a_timeline_that_contradicts_a_given_name_gives_no_round_two_name():
+    # Meet puts Bravo on top of tag 0, whose own name is Alpha: the signal or clock is wrong.
+    table = {**FAIL_TABLE, "0": ([9.3, 124.3, 7.2], 250.0)}
+    items, events = failure(table=table)
+    tags = settle(items, events)
+    assert tags["2"]["name"] == "" and tags["1"]["name"] == BR  # round 1 as before
+
+
+def test_a_timeline_that_confirms_no_named_tag_gives_no_round_two_name():
+    table = {**FAIL_TABLE, "0": ([5.0, 4.0, 3.0], 250.0)}
+    items, events = failure(table=table)
+    assert settle(items, events)["2"]["name"] == ""
+
+
+def test_a_bot_whose_meet_name_is_not_known_fails_closed():
+    # The note taker shows up in Meet's list under a name nobody told us (a Google account's own
+    # name, with no SKRIBBY_ACCOUNT_NAME set): it counts as someone left over, so exclusion names
+    # nothing. Fewer names, never a wrong one. With the name known (`own`) it is excluded.
+    items, events = exclusion_case()
+    assert settle(items, events, own=("Some Other Name",))["2"]["exclusion"] == "participants"
+    assert settle(items, events, own=(BOT,))["2"]["how"] == "meet_exclusion"
+    assert settle(items, events, own=("Stored Custom Name", BOT))["2"]["how"] == "meet_exclusion"
 
 
 def test_the_report_prints_the_route_of_a_tag_the_new_rules_name():

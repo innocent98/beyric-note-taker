@@ -332,16 +332,23 @@ def _resolve_tags(
     return result
 
 
-def _vouches(reading: meet_timeline.Reading | None, tag: str, key: str) -> bool:
-    """May a name that only a chain round >= 2 produced stand on `tag`? Only with Meet's evidence:
-    the events are readable and on the transcript's clock (`reading.refused` empty) and the
-    timeline does not clearly say somebody else spoke over the tag (`meet_timeline.verdict` names
-    a different person). No events (Teams, Zoom, a failed fetch), a clock that may be off or a
-    timeline that contradicts: no. Round 1 never asks: it is what the rules did before the chain."""
-    if reading is None or reading.refused:
-        return False
-    top, _ = meet_timeline.verdict(reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0))
-    return top is None or top == key
+def _meeting_gate(reading: meet_timeline.Reading, named: dict[str, str]) -> str | None:
+    """Does Meet's timeline agree with the names already given (`named`: tag -> name key)? None
+    when at least one named tag's top speaker is that person and none has a different person
+    clearly on top; `contradicted` (the signal or the clock is wrong) or `uncorroborated` (no named
+    tag is confirmed, so nothing says the Meet names and clock are the transcript's). The same
+    gate `_name_by_timeline` applies before it names anything."""
+    agreeing = 0
+    for tag, key in named.items():
+        top, _ = meet_timeline.verdict(
+            reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0)
+        )
+        if top is None:
+            continue  # the timeline has no clear say about this tag: no vote either way
+        if top != key:
+            return "contradicted"
+        agreeing += 1
+    return None if agreeing else "uncorroborated"
 
 
 def _earlier_rules(
@@ -392,10 +399,21 @@ def _earlier_rules(
     # nothing. Each round settles at least one tag, so there are at most `len(open_tags)` rounds.
     # Round 1 is exactly what the rules did before the chain. A name from round 2 on rests on a
     # name that was itself inferred, and Skribby over-splits people (one person on two tags makes a
-    # held name that is the same person's): it stands only when Meet's timeline vouches for it
-    # (`_vouches`), and a name that fails is neither given nor held, so an error cannot run down
-    # the chain and the timeline rule may still name the tag.
+    # held name that is the same person's): it stands only on Meet's positive evidence. The
+    # timeline must be usable (readable events with a speaking interval, a checked clock) and agree
+    # with the names already given (`_meeting_gate`), and the person must lead the tag by
+    # `meet_timeline.leads`. A name that fails is neither given nor held, so an error cannot run
+    # down the chain and the timeline rule may still name the tag. No usable Meet: round 1 only.
     for round_number in range(1, len(open_tags) + 1):
+        if round_number > 1:
+            if reading is None or reading.refused:
+                break
+            named_now = {tag: next(iter(named)) for tag, named in given.items() if len(named) == 1}
+            named_now.update(
+                {tag: _same(name) for tag, name in chosen.items() if tag not in shared_tags}
+            )
+            if _meeting_gate(reading, named_now):
+                break
         proposals: dict[str, tuple[str, str, str]] = {}  # tag -> (key, name, how)
         for tag in open_tags:
             if tag in chosen:
@@ -420,21 +438,25 @@ def _earlier_rules(
                 how = "sole_candidate"  # one name on every segment, nobody else has it
             else:
                 continue
-            if round_number > 1 and not _vouches(reading, tag, key):
-                continue
             proposals[tag] = (key, name, how)
-        if not proposals:
-            break
         claims: dict[str, list[str]] = {}
-        for tag, (key, name, how) in proposals.items():
+        for tag, (key, _name, _how) in proposals.items():
             claims.setdefault(key, []).append(tag)
-            chosen[tag], chosen_how[tag] = name, how
+        progress = False
         for key, tags in claims.items():
             if len(tags) > 1 or key in shared_keys:
                 shared_keys.add(key)  # contested: nobody holds it, nobody is named by it
                 shared_tags.update(tags)
-            else:
-                holders.setdefault(key, set()).add(tags[0])
+                for tag in tags:
+                    chosen[tag], chosen_how[tag] = proposals[tag][1], proposals[tag][2]
+                progress = True
+            elif round_number == 1 or meet_timeline.leads(reading.cells.get(tags[0], {}), key):
+                tag = tags[0]
+                chosen[tag], chosen_how[tag] = proposals[tag][1], proposals[tag][2]
+                holders.setdefault(key, set()).add(tag)
+                progress = True
+        if not progress:
+            break
     result: dict[str, dict[str, str]] = {}
     for tag, named in given.items():
         if len(named) == 1:
@@ -506,28 +528,16 @@ def _name_by_timeline(
     exactly after cleaning ("Ada" is never "Ada Obi"). Several tags may take one name:
     that is how the model's over-splitting of one person is put right. Participants listed under
     one name (a rejoin) are one person."""
-    named = {tag: info for tag, info in result.items() if info["name"]}
+    named = {tag: _same(info["name"]) for tag, info in result.items() if info["name"]}
     open_tags = [tag for tag, info in result.items() if not info["name"]]
     if reading.refused:  # the events are there but cannot be used: say why on the tags
         for tag in open_tags:
             result[tag]["timeline"] = reading.refused
         return
-    agreeing = 0
-    for tag, info in named.items():
-        key, why = meet_timeline.verdict(
-            reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0)
-        )
-        if key is None:
-            continue  # the timeline has no clear say about this tag: no vote either way
-        if key == _same(info["name"]):
-            agreeing += 1
-        else:
-            for other in open_tags:
-                result[other]["timeline"] = "contradicted"
-            return
-    if not agreeing:
+    gate = _meeting_gate(reading, named)
+    if gate:
         for tag in open_tags:
-            result[tag]["timeline"] = "uncorroborated"
+            result[tag]["timeline"] = gate
         return
     for tag in open_tags:
         info = result[tag]

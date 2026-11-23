@@ -280,4 +280,4 @@ Elimination is now a chain and a second route, `how: meet_exclusion`, names the 
 participant is left over (`docs/sop/2026-11-23-speaker-name-chain.md`). What this SOP promises still holds: `MIN_RATIO`
 stays 3.0 (meeting 39's weak tags stay unnamed; its fixtures pass unchanged), the same gates (readable events, checked
 clock, at least one agreeing named tag, no contradiction) come first, and the exclusion route runs only behind them. The
-timeline rule's "the tags the other rules left unnamed" now includes fewer tags, because the chain names more of them first; a chain name that this timeline contradicts is not given, so the tag stays open and this rule can name it (an over-split person).
+timeline rule's "the tags the other rules left unnamed" now includes fewer tags, because the chain names more of them first; a chain name that this timeline does not positively support is not given, so the tag stays open and this rule can name it (an over-split person).

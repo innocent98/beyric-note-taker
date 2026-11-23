@@ -198,12 +198,16 @@ class Reading:
 
 def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
     """The timeline of `record` against the tags of `items` (dicts with `start`, `end` and a tag).
-    `refused` says why it cannot be used: `no_events` (nothing kept or not readable),
+    `refused` says why it cannot be used: `no_events` (nothing kept, not readable, or nobody has a
+    usable speaking interval),
     `clock_unplaced` (Unix times with no `recording` time to place them), `no_times` (no timed
     segment) or `clock_shifted` (a shift of up to 30 s would fit clearly better, so the Meet clock
     is not trusted at zero)."""
     spans = speaking_intervals(record, group) if record else None
-    if not spans:
+    if not spans or not any(spans.values()):
+        # Nothing kept, or participants with no usable speaking interval at all (the size cap's
+        # `events_dropped` keeps the names and empties every list; some platforms may send names
+        # only): no evidence, the same as no events.
         return Reading(refused="no_events")
     zero, _ = anchor(record, spans)
     if zero is None:
@@ -297,3 +301,15 @@ def exclusion_verdict(cells: dict[str, float], key: str, total: float) -> str:
     if mine < EXCLUSION_RATIO * rest:
         return "too_close"
     return "named"
+
+
+def leads(cells: dict[str, float], key: str) -> bool:
+    """Does Meet's timeline positively support `key` on a tag whose overlaps are `cells`? `key` was
+    lit over it for at least `MIN_SECONDS` and `EXCLUSION_RATIO` times as long as anybody else (the
+    note taker included). The check a name inferred through a chain must pass
+    (`app/skribby.py::_earlier_rules`): a lean the other way, a tie, or no overlap at all fails it."""
+    mine = cells.get(key, 0.0)
+    if mine < MIN_SECONDS:
+        return False
+    rest = max((seconds for other, seconds in cells.items() if other != key), default=0.0)
+    return mine >= EXCLUSION_RATIO * rest

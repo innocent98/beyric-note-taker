@@ -8,8 +8,8 @@ rule: no rebuilds of past meetings); meeting 43's saved result is unchanged by d
 1. **Chained elimination** (`how: elimination`, as before). `_earlier_rules` in `app/skribby.py` now runs to a fixed
    point. A name that one round gave to exactly one tag (by elimination or as a sole candidate) counts as **held** by that
    tag in the next round, so a tag whose candidates were ruled out only by *that* name is named in its turn. **A name from
-   round 2 on stands only when Meet's timeline vouches for it** (events readable, clock check passed, the timeline does not
-   clearly say someone else spoke over the tag); without that it is not given (see "Review fixes" below).
+   round 2 on stands only on Meet's positive evidence** (usable events, checked clock, the timeline agrees with the names
+   already given, and the person leads the tag by 1.5x and at least 30 s); without that it is not given (see "Review fixes").
 2. **Exclusion against Meet's participant list** (`how: meet_exclusion`, new). `_name_by_exclusion` in `app/skribby.py`,
    called at the end of `_name_by_timeline`: when exactly one tag is still unnamed and exactly one person in Meet's own
    participant list is left over, the tag is that person's, under the guards below.
@@ -39,12 +39,20 @@ Root causes (read in the code before changing it):
 
 ## How
 
-**Chain.** Round 1 is exactly what the rules did before this PR. From round 2 each proposal must pass `_vouches`
-(`app/skribby.py`): `reading` exists and `reading.refused` is empty, and `meet_timeline.verdict` does not name a *different*
-person for the tag (no clear say, or the same person, passes). A proposal that fails is neither given nor held, so an error
-cannot run down the chain, and the tag stays open for the timeline rule, which may name it (that is how an over-split
-person is repaired). With no events (Teams, Zoom, a failed fetch), the timeline switch off, or a clock that may be off, a
-round-2+ name is not given: the tag stays Unknown exactly as before. Rounds are synchronous: every tag in a round sees the same holders, so the order of the tags changes nothing.
+**Chain.** Round 1 is exactly what the rules did before this PR. A round-2+ round runs only if Meet is usable and
+agrees with the names given so far, and a proposal is committed only if Meet positively supports it:
+
+| Check (round 2 on) | Where | Why |
+|---|---|---|
+| a reading exists and is not refused: events readable, **at least one participant with a speaking interval** (`meet_timeline.read` refuses `no_events` otherwise: the size cap's `events_dropped` keeps names and empties every list), Unix times placed, clock check passed | `_earlier_rules` | participants with no events are no evidence; behave exactly as with no events (round 1 only) |
+| the meeting-level gate the timeline rule uses (`_meeting_gate`): at least one named tag's top speaker is that person, none has a different person clearly on top | `_earlier_rules`, shared with `_name_by_timeline` | if Meet contradicts a name already given, the whole timeline is distrusted, chain names included |
+| the proposed person **leads the tag** (`meet_timeline.leads`): lit at least `MIN_SECONDS` (30 s) and at least `EXCLUSION_RATIO` (1.5x) as long as anybody else, the bot included | per proposal | positive support, not just "not clearly contradicted": Bo 50 s against Ada 20 s (2.5x, under the 3.0x naming bar) must not give tag 9 to Ada |
+
+**Meeting 43 still passes:** its tag 2 is Charlie 84.6 s against Bravo 43.6 s (1.94x, over 1.5x and 30 s), tag 0 confirms
+Alpha (124.3 s against 9.3 s), no named tag is contradicted. A proposal that fails is neither given nor held, so an error
+cannot run down the chain, and the tag stays open for the timeline rule, which may name it (that is how an over-split person
+is repaired). With no events (Teams, Zoom, a failed fetch), the timeline switch off, no usable events, a clock that may be
+off, or a contradiction, a round-2+ name is not given: the tag stays Unknown exactly as before. Rounds are synchronous: every tag in a round sees the same holders, so the order of the tags changes nothing.
 A round collects each open tag's proposal (candidates minus the bot's names minus names held by *another* tag; exactly one
 left; `elimination` if something was ruled out, else the unchanged `sole_candidate` test). Proposals are then grouped by name:
 
@@ -82,10 +90,13 @@ beaten" on purpose: a wrong name is worse than "Unknown speaker".
 
 | Finding | What was wrong | Fix |
 |---|---|---|
-| HIGH: over-split person | Bo split over tag 3 (lists only Bo: `sole_candidate`) and tag 9 (lists Ada, Bo): the chain held Bo on tag 3 and named tag 9 **Ada**, although Meet clearly has Bo on it; the old code left tag 9 open and the timeline rule named it Bo. Also one wrong link made the next link wrong (tag 1 really C listing B, A; tag 2 really B listing C, B) | `_vouches` inside the loop (above). Test `test_an_over_split_person_is_named_by_meet_not_by_the_chain` restores the (Ada, Bo) case; `test_a_wrong_link_does_not_make_the_next_one_wrong_too` |
+| HIGH: over-split person (first review) | Bo split over tag 3 (lists only Bo: `sole_candidate`) and tag 9 (lists Ada, Bo): the chain held Bo on tag 3 and named tag 9 **Ada**, although Meet clearly has Bo on it; the old code left tag 9 open and the timeline rule named it Bo. Also one wrong link made the next link wrong (tag 1 really C listing B, A; tag 2 really B listing C, B) | the round-2+ checks inside the loop (above). Test `test_an_over_split_person_is_named_by_meet_not_by_the_chain` restores the (Ada, Bo) case; `test_a_wrong_link_does_not_make_the_next_one_wrong_too` |
 | MEDIUM: no margin | C 41 s beat A 40 s though A already has a tag | `EXCLUSION_RATIO` 1.5 (table above); tests at 1.4x (Unknown) and 1.6x (named) |
 | LOW-MEDIUM: quiet participants dropped | an invisible real speaker (dial-in, weak indicator) looked like "nobody", so the one visible person was "the only one left" | everyone present counts; the candidate-list exception keeps the route useful; tests for a 10 s participant, a no-events dial-in, and the exception |
 | LOW: same display name | two people with one name are one key | **not fixed, a known limit** (below) |
+| HIGH A (delta review): no usable events | a record with participants and empty `events` was not refused, all overlaps were 0 and the vouch passed, so every round-2 name was given with no Meet evidence | `read` refuses `no_events` when nobody has a speaking interval; round 2+ also needs a positive lead on the tag. Tests: events emptied, participants only (with and without an `events` key), zero overlap on the tag |
+| MEDIUM B (delta review): vouch only at the full bar | Bo 50 s against Ada 20 s still gave tag 9 Ada | the positive-lead rule and the meeting gate (above); tests at 1.4x (Unknown), 1.6x (named), 1.25x, Bo 50 / Ada 20, contradicted and uncorroborated gates |
+| LOW C (delta review): the bot's Meet name | the bot now counts as left over unless its name is in `own_names` | no code change needed: `own_names` already holds the server default (`SKRIBBY_BOT_NAME`), the Google account's own name (`SKRIBBY_ACCOUNT_NAME`), the meeting's stored `bot_name` and the `bot_name` Skribby reports (`SkribbyProvider._look`, `app/pipeline.py`). A bot whose Meet name is none of those (for example no `SKRIBBY_ACCOUNT_NAME` set) **fails closed**: it counts as someone left over, exclusion says `participants`, fewer names and never a wrong one. Test `test_a_bot_whose_meet_name_is_not_known_fails_closed`. Check the real Meet name of the bot once |
 
 ## Known limits
 
@@ -93,13 +104,14 @@ beaten" on purpose: a wrong name is worse than "Unknown speaker".
   once per visit). Telling a rejoin from a second person needs presence intervals, and the saved events only carry
   speaking, so two Sams whose speaking windows do not overlap cannot be told apart and overlap-based detection would
   mislabel a real rejoin whose entries interleave. Failing example, pinned by `test_known_limit_two_people_with_one_display_name_are_one_person`: tag 0 is the first Sam; tag 1 is the second Sam and lists Sam and Kim; Sam counts as taken, so round 1 (unchanged from before this PR) names tag 1 Kim. A round-2+ name is vouched by the timeline, which has the same merged key, so it does not help here. A real fix needs Skribby's presence data and a look at real duplicate-name meetings.
+* Other note takers and room devices that appear in Meet's list also count as someone left over unless the tag has a candidate list (fails closed).
 * A round-2+ name needs the timeline switch (`NAME_BY_MEET_TIMELINE`) on and events present; in Teams and Zoom meetings the chain stops after round 1, as the rules did before.
 
 ## What's involved
 
 | Path | Change |
 |---|---|
-| `app/skribby.py` `_earlier_rules`, `_vouches`, `_timeline_reading` | the fixed-point rounds with the Meet check from round 2; `shared_tags` / `shared_keys` replace the one-shot `claims`; the timeline is read once and handed to the chain and to `_name_by_timeline` |
+| `app/skribby.py` `_earlier_rules`, `_meeting_gate`, `_timeline_reading` | the fixed-point rounds with the Meet check from round 2; `shared_tags` / `shared_keys` replace the one-shot `claims`; the timeline is read once and handed to the chain and to `_name_by_timeline` |
 | `app/skribby.py` `_name_by_exclusion`, `_name_by_timeline` | the new route, called last |
 | `app/skribby.py` `apply_timeline` | reads the earlier rules again for tags **saved unnamed**, so a report on an old row shows what today's rules name (read-only) |
 | `app/meet_timeline.py` | `MIN_EXCLUSION_TAG_SECONDS`, `EXCLUSION_RATIO`, `unaccounted`, `exclusion_verdict` |
@@ -120,11 +132,11 @@ no rule reads them). In `tests/test_meet_timeline_naming.py`:
 | Test | Proves |
 |---|---|
 | `test_the_failure_names_the_tag_the_chain_reaches_not_unknown` | tag 2 is Charlie, `elimination` (Meet vouches: 84.6 s against 43.6 s names no one else) |
-| `test_without_meet_a_chain_name_from_round_two_is_not_given`, `test_a_clock_that_may_be_off_...` | no events, timeline off, or a shifted clock: tag 1 (round 1) is named as before, tag 2 (round 2) stays Unknown exactly as before |
+| `test_without_meet_a_chain_name_from_round_two_is_not_given`, `test_a_clock_that_may_be_off_...`, `test_a_record_with_participants_but_no_speaking_events_...`, `test_events_with_no_overlap_...`, contradicted and uncorroborated gates | no events, timeline off, a shifted clock, no usable events, no overlap, or a timeline that does not confirm the given names: tag 1 (round 1) is named as before, tag 2 (round 2) stays Unknown exactly as before |
 | `test_with_elimination_off_...` | nothing is named, `would_be` is set on tags 1 and 2 |
 | `test_the_labels_of_the_failure_carry_the_chained_name_...` | the labelled lines and the line correction see the new name; none is blank |
 | chain-of-three (both orders), 40-link chain, sole-candidate link (with events) | the fixed point, order independence, termination |
-| over-split Bo; a round-2 name Meet agrees with or does not contradict stands; wrong link does not compound | the HIGH finding |
+| over-split Bo; a round-2 name needs a 1.5x lead (1.4x Unknown, 1.6x named); Bo 50 / Ada 20; wrong link does not compound | the HIGH and MEDIUM B findings |
 | shared-claim tests (three) | a contested name is neither given nor held; a late claimant joins the claim |
 | bot / no-list / two-names tests | the existing safeguards survive the chain |
 | `test_the_failure_without_candidate_lists_names_the_last_tag_by_exclusion` | tag 2 is Charlie, `meet_exclusion`; not without events |
