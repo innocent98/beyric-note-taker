@@ -57,9 +57,10 @@ A round collects each open tag's proposal (candidates minus the bot's names minu
 left; `elimination` if something was ruled out, else the unchanged `sole_candidate` test). Proposals are then grouped by name:
 
 * one tag: committed, and the name becomes held by it for the next round;
-* several tags in the round, or a name already contested in an earlier round: **all of them get `shared_claim` and the
-  name is never held**, so a contested name rules nothing out further down (a late third claimant joins the claim, it does
-  not win it);
+* several tags in round 1: **all of them get `shared_claim` and the name is never held**, so a contested name rules
+  nothing out further down. A clash in round 2 or later is **not recorded** (those tags stay `unresolved`, as the old code
+  left them), because it is made of inferred names and a recorded `shared_claim` would stop the timeline rule from naming
+  them: Bo over-split onto tags 9 and 10, both listing Ada and Bo, are both named Bo by the timeline, as before this PR;
 * a tag with no candidate list, or with two names of its own, is untouched.
 
 Each round settles at least one tag, so the loop ends after at most as many rounds as there are open tags. The saved

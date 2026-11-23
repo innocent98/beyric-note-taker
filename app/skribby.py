@@ -445,6 +445,8 @@ def _earlier_rules(
         progress = False
         for key, tags in claims.items():
             if len(tags) > 1 or key in shared_keys:
+                if round_number > 1:
+                    continue  # a claim made of inferred names is not recorded: the tags stay open
                 shared_keys.add(key)  # contested: nobody holds it, nobody is named by it
                 shared_tags.update(tags)
                 for tag in tags:

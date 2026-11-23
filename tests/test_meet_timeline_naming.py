@@ -902,9 +902,10 @@ def test_a_wrong_link_does_not_make_the_next_one_wrong_too():
     assert tags["2"]["name"] == ""
 
 
-def test_a_late_claimant_of_a_shared_name_joins_the_claim_it_does_not_win_it():
-    # B is claimed by tags 1 and 2 in round 1. Tag 4 takes C; tag 3 (B or C) is then left with B in
-    # round 2 and B is already contested: three claimants, no name.
+def test_a_round_two_clash_is_not_recorded_so_the_timeline_can_still_name_the_tags():
+    # B is claimed by tags 1 and 2 in round 1 (recorded, as before the chain). Tag 4 takes C; tag 3
+    # (B or C) is then left with B in round 2: that claim rests on inferred names and is not
+    # recorded; tag 3 stays open (it is not named B or anything else here).
     tags = timed_chain(
         {
             "0": ("A", []),
@@ -916,7 +917,21 @@ def test_a_late_claimant_of_a_shared_name_joins_the_claim_it_does_not_win_it():
         {"0": "A", "1": None, "2": None, "4": "C", "3": None},  # Meet says nothing about 1, 2, 3
     )
     assert names(tags) == {"0": "A", "1": "", "2": "", "3": "", "4": "C"}
-    assert tags["3"]["note"] == "shared_claim" and tags["4"]["how"] == "elimination"
+    assert tags["1"]["note"] == tags["2"]["note"] == "shared_claim"  # round 1 clash: as before
+    assert tags["3"]["note"] == "unresolved" and tags["4"]["how"] == "elimination"
+
+
+def test_an_over_split_person_on_two_tags_is_named_by_meet_not_blocked_by_a_round_two_clash():
+    # Bo is split over tags 9 and 10, both list Ada and Bo. Round 2 would make both claim Ada (Bo
+    # is held by tag 3); that clash must not stop the timeline, which clearly has Bo on both.
+    table = {k: TABLE[k] for k in ("1", "3", "4")}
+    table["9"] = ([0, 100.0, 0, 0, 0, 0], 150.0)
+    table["10"] = ([0, 100.0, 0, 0, 0, 0], 150.0)
+    listed = {"9": [ADA, BO], "10": [ADA, BO], "1": [CY], "3": [BO]}
+    items, spans = layout(table, listed, extra={EVE: 100.0})
+    tags = resolve(items, events_record(spans))
+    assert tags["9"] == {"name": BO, "how": "meet_timeline", "note": ""}
+    assert tags["10"] == {"name": BO, "how": "meet_timeline", "note": ""}
 
 
 def test_two_tags_that_would_both_take_a_name_get_neither_in_a_chain_too():
