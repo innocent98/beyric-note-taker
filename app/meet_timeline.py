@@ -307,7 +307,7 @@ def leads(cells: dict[str, float], key: str) -> bool:
     """Does Meet's timeline positively support `key` on a tag whose overlaps are `cells`? `key` was
     lit over it for at least `MIN_SECONDS` and `EXCLUSION_RATIO` times as long as anybody else (the
     note taker included). The check a name inferred through a chain must pass
-    (`app/skribby.py::_earlier_rules`): a lean the other way, a tie, or no overlap at all fails it."""
+    (`app/skribby.py::_earlier_rules`): a lean the other way, a tie or no overlap fails it."""
     mine = cells.get(key, 0.0)
     if mine < MIN_SECONDS:
         return False
