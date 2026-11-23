@@ -3,6 +3,12 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-23: speaker naming chain** (branch `fix/speaker-name-chained-elimination`, SOP `docs/sop/2026-11-23-speaker-name-chain.md`, no migration, no endpoint or FE guide change):
+- [x] Chained elimination: a name given to one tag by elimination or as a sole candidate counts as held in the next round, to a fixed point; a contested name is never held (`shared_claim` stays shared)
+- [x] Exclusion route `how: meet_exclusion`: one open tag, one left-over Meet participant, 90 s tag floor, 30 s and 20% overlap, nobody else lit as long over it, behind the timeline rule's own gates; `MIN_RATIO` untouched
+- [x] `scripts/skribby_segments_report.py` prints the route; read-only, no rebuild; meeting 43's saved result is unchanged by design
+- [ ] **Not verified:** a real meeting (the fixture is meeting 43's shape with placeholder names); after deploy run the report on meeting 43's evidence
+
 **Addendum 2026-11-21, about 16:30 WAT: BILLING IS LIVE** (`main` at `7ca02a37`, Alembic head 0055 not verified on the server; SOP `docs/sop/2026-11-21-billing-go-live-executed.md`, runbook `docs/launch/billing-go-live-runbook.md`):
 - [x] Closeout of test-mode data run on the server (`--before 2026-11-21T14:45:33Z --end-pilot --trial-for-ended-pilot`: `PROOF: OK`; every billing table was empty; 4 pilot grants ended, 4 ordinary trials given)
 - [x] Live keys in `.env`, `BILLING_LIVE=true`, `BILLING_LIVE_SINCE=2026-11-21T14:45:33Z`, billing open to everyone (`BILLING_ALLOWED_EMAILS=*`), `PAYSTACK_WEBHOOK_SECRET` deleted (classic `x-paystack-signature` with the secret key), one recreate, gap check `0 | 0 | 0`, webhook routes 401, no errors in the first hour

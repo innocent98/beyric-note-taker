@@ -38,6 +38,11 @@ MIN_SHARE = 0.2
 # so one lit stretch of ten minutes means a `stopped-speaking` went missing, and what lies between
 # is not known.
 MAX_SPAN_SECONDS = 600.0
+# Naming by exclusion (`unaccounted`, `exclusion_verdict`): the fewest seconds of its own a tag must
+# cover. The tag that failed on 2026-11-23 held 193 s; a tag with under half of that (90 s, three
+# times `MIN_SECONDS`) is a few turns of somebody, and a person is not named from a few turns when
+# the only evidence is who is left over.
+MIN_EXCLUSION_TAG_SECONDS = 90.0
 # How far either way the clock fit looks (seconds), and how much better a shift must be (a share)
 # before the Meet clock is called out of step with the transcript's.
 SEARCH_SECONDS = 30
@@ -181,6 +186,7 @@ class Reading:
 
     cells: dict = field(default_factory=dict)
     totals: dict = field(default_factory=dict)  # tag -> seconds its segments cover
+    speaking: dict[str, float] = field(default_factory=dict)  # key -> seconds Meet had them lit
     shown: dict[str, str] = field(default_factory=dict)
     refused: str | None = None
 
@@ -209,7 +215,10 @@ def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
         for tag, intervals in heard.items()
     }
     totals = {tag: sum(b - a for a, b in merge(intervals)) for tag, intervals in heard.items()}
-    reading = Reading(cells=cells, totals=totals, shown={keys[n]: n for n in spans})
+    speaking = {keys[n]: sum(b - a for a, b in spans[n]) for n in spans}
+    reading = Reading(
+        cells=cells, totals=totals, shown={keys[n]: n for n in spans}, speaking=speaking
+    )
     if not clock_is_fine(*clock_fit(spans, heard)):
         reading.refused = "clock_shifted"
     return reading
@@ -243,3 +252,40 @@ def verdict(
     if top_seconds < ratio * second:
         return None, "not_clear"
     return top, "named"
+
+
+def unaccounted(
+    reading: Reading, taken: set[str], bot: set[str], min_seconds: float = MIN_SECONDS
+) -> list[str]:
+    """The participants (comparison keys) who are neither the note taker nor the name of a tag
+    already named (`taken`) and whom Meet had lit for at least `min_seconds` in the whole meeting:
+    the people a tag nobody else has could be. A participant under `min_seconds` is not counted: a
+    person who barely spoke cannot be the speaker of a tag long enough to be named
+    (`MIN_EXCLUSION_TAG_SECONDS`). Participants listed under one name are already one key."""
+    return [
+        key
+        for key, lit in reading.speaking.items()
+        if key not in taken and key not in bot and lit >= min_seconds
+    ]
+
+
+def exclusion_verdict(cells: dict[str, float], key: str, total: float) -> str:
+    """`"named"` when participant `key`, the only one left over, may be the speaker of a tag whose
+    overlaps are `cells` and whose segments cover `total` seconds, else why not: `tag_too_short`
+    (under `MIN_EXCLUSION_TAG_SECONDS`), `too_little` (`key` was lit under `MIN_SECONDS` over the
+    tag), `small_share` (under `MIN_SHARE` of the tag's seconds: the same crosstalk guard as
+    `verdict`, which also stops a tag whose real speaker has no Meet entry from being given to the
+    one person left over who talked over it) or `beaten` (somebody else, the note taker included,
+    was lit as long or longer over it: the tag is as likely that person's, an over-split, as the
+    one left over's). This needs no clear margin, unlike `verdict`: being left over is the
+    evidence, and Meet only has to point the same way."""
+    if total < MIN_EXCLUSION_TAG_SECONDS:
+        return "tag_too_short"
+    mine = cells.get(key, 0.0)
+    if mine < MIN_SECONDS:
+        return "too_little"
+    if mine < MIN_SHARE * total:
+        return "small_share"
+    if any(seconds >= mine for other, seconds in cells.items() if other != key):
+        return "beaten"
+    return "named"

@@ -273,3 +273,11 @@ not add `--force` without telling the lead. The guarded blocks, the roll back an
 * Zoom and Teams timelines have not been read; check one before trusting them.
 * Meetings already stored keep their old `speakers_incomplete`; only a rebuilt or newly processed meeting gets the new rule.
 * `speakers_incomplete` threshold 5% is one meeting's reasoning; revisit with the first notices in the field.
+
+## Update 2026-11-23: what changed around this rule
+
+Elimination is now a chain and a second route, `how: meet_exclusion`, names the last open tag when exactly one Meet
+participant is left over (`docs/sop/2026-11-23-speaker-name-chain.md`). What this SOP promises still holds: `MIN_RATIO`
+stays 3.0 (meeting 39's weak tags stay unnamed; its fixtures pass unchanged), the same gates (readable events, checked
+clock, at least one agreeing named tag, no contradiction) come first, and the exclusion route runs only behind them. The
+timeline rule's "the tags the other rules left unnamed" now includes fewer tags, because the chain names more of them first.
