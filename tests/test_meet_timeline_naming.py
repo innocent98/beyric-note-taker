@@ -751,14 +751,31 @@ def test_the_failure_names_the_tag_the_chain_reaches_not_unknown():
     assert names(tags) == {"0": AL, "1": BR, "2": CH}
     assert [tags[t]["how"] for t in ("0", "1", "2")] == ["given", "elimination", "elimination"]
     assert tags["2"] == {"name": CH, "how": "elimination", "note": ""}
-    # The chain does not need Meet at all: the same names with no events and with the timeline off.
-    assert names(settle(items, None)) == {"0": AL, "1": BR, "2": CH}
-    assert names(skribby._resolve_tags(items, (BOT,), True, events, False)) == names(tags)
 
 
-def test_with_elimination_off_the_chain_still_names_nothing_and_says_what_it_would_have():
+def test_without_meet_a_chain_name_from_round_two_is_not_given():
+    # Teams, Zoom, a failed fetch, the switch off: tag 1 (round 1) is named as before the chain,
+    # tag 2 (round 2, rests on an inferred name) stays Unknown exactly as it did.
     items, events = failure()
-    tags = settle(items, None, elimination=False)
+    for tags in (
+        settle(items, None),
+        skribby._resolve_tags(items, (BOT,), True, events, False),
+        skribby._resolve_tags(items, (BOT,), True, None, True),
+    ):
+        assert names(tags) == {"0": AL, "1": BR, "2": ""}
+        assert tags["2"] == {"name": "", "how": "unknown", "note": "unresolved"}
+
+
+def test_a_clock_that_may_be_off_also_withholds_a_round_two_name():
+    items, events = failure(shift=20.0)
+    tags = settle(items, events)
+    assert tags["2"]["name"] == "" and tags["2"]["timeline"] == "clock_shifted"
+    assert tags["1"]["name"] == BR  # round 1, as before the chain
+
+
+def test_with_elimination_off_the_chain_names_nothing_and_says_what_it_would_have():
+    items, events = failure()
+    tags = settle(items, events, elimination=False)
     assert names(tags) == {"0": AL, "1": "", "2": ""}
     assert tags["1"]["note"] == "elimination_off" and tags["1"]["would_be"] == BR
     assert tags["2"]["note"] == "elimination_off" and tags["2"]["would_be"] == CH
@@ -796,14 +813,37 @@ def chain(spec, *, own=(BOT,), segments=3):
     return skribby._resolve_tags(items, own, True)
 
 
-def test_a_chain_of_three_tags_is_named_in_either_order():
-    forward = chain(
-        {"0": ("A", []), "1": (None, ["B", "A"]), "2": (None, ["C", "B"]), "3": (None, ["D", "C"])}
+def timed_chain(spec, truth, *, own=(BOT,), events=True, shift=0.0):
+    """A meeting with times and Meet's events. `spec` maps a tag to (name it carries, candidates
+    it lists); `truth` maps a tag to the person really speaking on it (lit 100 s over its 150 s,
+    each segment cut in three so a sole candidate has enough segments)."""
+    people = sorted({p for p in truth.values() if p})  # None: nobody is lit over that tag
+    table = {t: ([100.0 if p == truth[t] else 0.0 for p in people], 150.0) for t in spec}
+    items, spans = layout(
+        table, {t: v[1] for t, v in spec.items()}, {t: v[0] for t, v in spec.items()}, people
+    )
+    cut = []
+    for item in items:
+        for n in range(3):
+            third = (item["end"] - item["start"]) / 3
+            cut.append(
+                {**item, "start": item["start"] + n * third, "end": item["start"] + (n + 1) * third}
+            )
+    record = events_record(spans, shift=shift)
+    return skribby._resolve_tags(cut, own, True, record if events else None, True)
+
+
+def test_a_chain_of_three_tags_is_named_in_either_order_when_meet_agrees():
+    truth = {"0": "A", "1": "B", "2": "C", "3": "D"}
+    forward = timed_chain(
+        {"0": ("A", []), "1": (None, ["B", "A"]), "2": (None, ["C", "B"]), "3": (None, ["D", "C"])},
+        truth,
     )
     assert names(forward) == {"0": "A", "1": "B", "2": "C", "3": "D"}
     assert [forward[t]["how"] for t in "123"] == ["elimination"] * 3
-    backward = chain(
-        {"3": (None, ["B", "A"]), "2": (None, ["C", "B"]), "1": (None, ["D", "C"]), "0": ("A", [])}
+    backward = timed_chain(
+        {"3": (None, ["B", "A"]), "2": (None, ["C", "B"]), "1": (None, ["D", "C"]), "0": ("A", [])},
+        {"0": "A", "3": "B", "2": "C", "1": "D"},
     )
     assert names(backward) == {"0": "A", "3": "B", "2": "C", "1": "D"}
 
@@ -811,15 +851,62 @@ def test_a_chain_of_three_tags_is_named_in_either_order():
 def test_a_long_chain_ends_and_names_every_link():
     spec = {"0": ("N0", [])}
     spec.update({str(i): (None, [f"N{i}", f"N{i - 1}"]) for i in range(1, 40)})
-    tags = chain(spec, segments=1)
+    tags = timed_chain(spec, {str(i): f"N{i}" for i in range(40)})
     assert names(tags) == {str(i): f"N{i}" for i in range(40)}
 
 
 def test_a_sole_candidate_name_is_held_for_the_next_round():
-    # Tag 1 lists only B on 3 segments (sole candidate); tag 2 lists C and B: B is taken.
-    tags = chain({"0": ("A", []), "1": (None, ["B"]), "2": (None, ["C", "B"])})
+    # Tag 1 lists only B on every segment (sole candidate); tag 2 lists C and B: B is taken.
+    tags = timed_chain(
+        {"0": ("A", []), "1": (None, ["B"]), "2": (None, ["C", "B"])},
+        {"0": "A", "1": "B", "2": "C"},
+    )
     assert tags["1"]["how"] == "sole_candidate" and tags["1"]["name"] == "B"
     assert tags["2"] == {"name": "C", "how": "elimination", "note": ""}
+
+
+def test_an_over_split_person_is_named_by_meet_not_by_the_chain():
+    # Bo is split over tag 3 (lists only Bo: sole candidate) and tag 9 (lists Ada and Bo). The
+    # chain would hold Bo on tag 3 and name tag 9 Ada; Meet clearly has Bo on tag 9, so the chain's
+    # name is refused and the timeline rule names it Bo.
+    got = one_tag_case(0.0, 100.0, listed=(ADA, BO))
+    assert got == {"name": BO, "how": "meet_timeline", "note": ""}
+
+
+def test_a_round_two_name_that_meet_agrees_with_or_does_not_contradict_stands():
+    agreed = one_tag_case(100.0, 0.0, listed=(ADA, BO))
+    assert agreed == {"name": ADA, "how": "elimination", "note": ""}
+    unclear = one_tag_case(100.0, 80.0, listed=(ADA, BO))  # Meet has no clear say (1.25x)
+    assert unclear == {"name": ADA, "how": "elimination", "note": ""}
+
+
+def test_a_wrong_link_does_not_make_the_next_one_wrong_too():
+    # Tag 1 is really C but lists B and A, so round 1 (as before the chain) says B. Tag 2 is really
+    # B and lists C and B: the chain would hold B on tag 1 and name tag 2 C. Meet has B on tag 2:
+    # the second error is not made (it stays Unknown, as before the chain).
+    tags = timed_chain(
+        {"0": ("A", []), "1": (None, ["B", "A"]), "2": (None, ["C", "B"])},
+        {"0": "A", "1": "C", "2": "B"},
+    )
+    assert tags["1"]["name"] == "B"  # round 1: unchanged, no new risk
+    assert tags["2"]["name"] == ""
+
+
+def test_a_late_claimant_of_a_shared_name_joins_the_claim_it_does_not_win_it():
+    # B is claimed by tags 1 and 2 in round 1. Tag 4 takes C; tag 3 (B or C) is then left with B in
+    # round 2 and B is already contested: three claimants, no name.
+    tags = timed_chain(
+        {
+            "0": ("A", []),
+            "1": (None, ["B", "A"]),
+            "2": (None, ["B", "A"]),
+            "4": (None, ["C", "A"]),
+            "3": (None, ["B", "C"]),
+        },
+        {"0": "A", "1": None, "2": None, "4": "C", "3": None},  # Meet says nothing about 1, 2, 3
+    )
+    assert names(tags) == {"0": "A", "1": "", "2": "", "3": "", "4": "C"}
+    assert tags["3"]["note"] == "shared_claim" and tags["4"]["how"] == "elimination"
 
 
 def test_two_tags_that_would_both_take_a_name_get_neither_in_a_chain_too():
@@ -834,22 +921,6 @@ def test_a_shared_claim_is_not_held_so_it_names_nothing_further_down():
         {"0": ("A", []), "1": (None, ["B", "A"]), "2": (None, ["B", "A"]), "3": (None, ["C", "B"])}
     )
     assert tags["3"] == {"name": "", "how": "unknown", "note": "unresolved"}
-
-
-def test_a_late_claimant_of_a_shared_name_joins_the_claim_it_does_not_win_it():
-    # B is claimed by tags 1 and 2 in round 1. Tag 4 takes C; tag 3 (B or C) is then left with B in
-    # round 2 and B is already contested: three claimants, no name.
-    tags = chain(
-        {
-            "0": ("A", []),
-            "1": (None, ["B", "A"]),
-            "2": (None, ["B", "A"]),
-            "4": (None, ["C", "A"]),
-            "3": (None, ["B", "C"]),
-        }
-    )
-    assert names(tags) == {"0": "A", "1": "", "2": "", "3": "", "4": "C"}
-    assert tags["3"]["note"] == "shared_claim" and tags["4"]["how"] == "elimination"
 
 
 def test_the_bot_is_not_a_chain_name_and_a_tag_with_no_list_is_untouched():
@@ -916,9 +987,29 @@ def test_two_unaccounted_participants_leave_the_tag_unknown():
     assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "participants"
 
 
-def test_a_participant_who_barely_spoke_is_not_a_second_candidate():
+def test_a_participant_who_barely_spoke_still_counts_as_someone_left_over():
+    # Delta was lit 10 s: a person Meet hardly sees is as possible a speaker as Charlie.
     items, events = exclusion_case(more={DE: 10.0})
+    tags = settle(items, events)
+    assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "participants"
+
+
+def test_a_dial_in_with_no_events_counts_as_someone_left_over():
+    items, events = exclusion_case()
+    events["participants"].append({"name": "Dial In Sample", "events": []})
+    tags = settle(items, events)
+    assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "participants"
+
+
+def test_a_participant_off_the_tags_own_candidate_list_is_ignored_for_the_count():
+    # Skribby says tag 2 is Charlie or Delta (Delta is not in the call): the dial-in and the
+    # 10 s participant are not on that list, so they do not make the answer ambiguous.
+    items, events = exclusion_case(listed={"2": [CH, DE]}, more={"Echo Sample": 10.0})
+    events["participants"].append({"name": "Dial In Sample", "events": []})
     assert settle(items, events)["2"] == {"name": CH, "how": "meet_exclusion", "note": ""}
+    # ...but two people on the list are ambiguous.
+    items, events = exclusion_case(listed={"2": [CH, "Echo Sample"]}, more={"Echo Sample": 10.0})
+    assert settle(items, events)["2"]["exclusion"] == "participants"
 
 
 def test_the_bot_is_never_the_name_exclusion_gives():
@@ -928,10 +1019,11 @@ def test_the_bot_is_never_the_name_exclusion_gives():
 
 
 def test_a_candidate_list_that_leaves_the_person_out_blocks_exclusion():
-    # Tag 2 lists Delta and Echo only (two names, unresolved): Charlie is not one of them.
+    # Tag 2 lists Delta and Echo only (two names, unresolved), and neither is in the call: Charlie,
+    # who is not on the list, is not a name Skribby allows.
     items, events = exclusion_case(listed={"2": [DE, "Echo Sample"]})
     tags = settle(items, events)
-    assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "not_on_list"
+    assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "participants"
 
 
 def test_a_clear_other_person_on_the_tag_blocks_exclusion():
@@ -1006,6 +1098,44 @@ def test_exclusion_names_only_the_one_tag_that_has_no_name_of_the_several_that_m
             item["speaker_name"] = AL if item["start"] % 2 else BR
     tags = settle(items, events)
     assert tags["2"]["note"] == "several_names" and tags["2"]["name"] == ""
+
+
+def test_the_left_over_person_needs_one_and_a_half_times_a_named_persons_seconds():
+    # Bravo has tag 1. Charlie is lit 56 s to Bravo's 40 s over tag 2 (1.4x): as likely an
+    # over-split of Bravo as Charlie's: Unknown. At 64 s (1.6x) he is named. Meeting 43's own
+    # tag was 84.6 s to 43.6 s (1.94x).
+    close = {**FAIL_TABLE, "2": ([6.8, 40.0, 56.0], 193.3)}
+    items, events = exclusion_case(table=close)
+    tags = settle(items, events)
+    assert tags["2"]["name"] == "" and tags["2"]["exclusion"] == "too_close"
+    clear = {**FAIL_TABLE, "2": ([6.8, 40.0, 64.0], 193.3)}
+    items, events = exclusion_case(table=clear)
+    assert settle(items, events)["2"] == {"name": CH, "how": "meet_exclusion", "note": ""}
+
+
+def test_the_exclusion_verdict_numbers():
+    verdict = meet_timeline.exclusion_verdict
+    assert verdict({"c": 84.6, "b": 43.6}, "c", 193.3) == "named"
+    assert verdict({"c": 60.0, "b": 40.0}, "c", 193.3) == "named"  # exactly 1.5x
+    assert verdict({"c": 59.9, "b": 40.0}, "c", 193.3) == "too_close"
+    assert verdict({"c": 40.0, "b": 40.0}, "c", 193.3) == "beaten"
+    assert verdict({"c": 100.0}, "c", 89.9) == "tag_too_short"
+    assert verdict({"c": 29.9}, "c", 193.3) == "too_little"
+    assert verdict({"c": 38.0}, "c", 200.0) == "small_share"
+
+
+def test_known_limit_two_people_with_one_display_name_are_one_person():
+    # Documents a limit, not a wish (docs/sop/2026-11-23-speaker-name-chain.md, "Known limits"):
+    # two real people both called "Sam" are one key, because the grouping that makes a rejoin one
+    # person cannot tell them apart without presence intervals. Tag 0 is the first Sam, tag 1 the
+    # second Sam, who lists Sam and Kim: the name is "taken", so elimination (round 1, exactly
+    # as before the chain) gives tag 1 to Kim.
+    tags = chain({"0": ("Sam", []), "1": (None, ["Sam", "Kim"])})
+    assert tags["1"] == {
+        "name": "Kim",
+        "how": "elimination",
+        "note": "",
+    }  # wrong for the second Sam
 
 
 def test_the_report_prints_the_route_of_a_tag_the_new_rules_name():

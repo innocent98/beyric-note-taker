@@ -322,5 +322,5 @@ Skribby's own name stops; the evidence still records `would_be`.
 ## Update 2026-11-23: elimination is a chain
 
 A name that elimination or the sole-candidate rule gave to exactly one tag now counts as held by that tag when the other
-tags are resolved, in rounds until nothing changes (`docs/sop/2026-11-23-speaker-name-chain.md`). A name two tags would
+tags are resolved, in rounds until nothing changes; a name from round 2 on is given only when Meet's timeline vouches for it (`docs/sop/2026-11-23-speaker-name-chain.md`). A name two tags would
 claim in any round goes to neither and is never held. The sole-candidate conditions in this SOP are unchanged.
