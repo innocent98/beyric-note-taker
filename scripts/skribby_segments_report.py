@@ -10,9 +10,11 @@ treat the output like the transcript: do not paste it anywhere public.
 
 How to read it: each block is one diarization tag ("speaker" in Skribby's answer). The header says
 the name the app gave the tag and why: `given` (Skribby named it on its own segments),
-`elimination` (taken from `potential_speaker_names` by ruling out the others), `sole_candidate`
+`elimination` (taken from `potential_speaker_names` by ruling out the others; a name an earlier
+tag was given by elimination counts as taken, so it can run down a chain), `sole_candidate`
 (every segment of the tag listed one and the same name, nobody else has it), both only while
-SKRIBBY_NAME_BY_ELIMINATION is on, or `unknown` (with the reason). Under it, every segment of that
+SKRIBBY_NAME_BY_ELIMINATION is on, `meet_timeline` or `meet_exclusion` (see the last section), or
+`unknown` (with the reason). Under it, every segment of that
 tag: time, the `speaker_name` Skribby put on that segment, the names it listed as possible, and
 the text. If the names Skribby gave are wrong, the fault is Skribby's; if they are right and the
 notes still credit the wrong person, it is our alignment.
@@ -24,8 +26,9 @@ absolute (Unix milliseconds, as the docs' example suggests, not proven live) and
 transcript's clock from the moment the bot's status became `recording`, which is only close to the
 recording's own start. If the two clocks look out of step the section says by how much, and
 `--offset SECONDS` re-runs it with the Meet times shifted. Without events, or with events in a
-shape it cannot read, it says so in one line. A final section says which unnamed tags the
-timeline naming rule would name, and why not for the others.
+shape it cannot read, it says so in one line. A final section says which unnamed tags today's
+naming rules would name (and by which route: `elimination`, `meet_timeline` or `meet_exclusion`),
+and why not for the others. It reads the saved evidence again and changes nothing.
 """
 
 import argparse
@@ -137,9 +140,13 @@ def naming_section(
     own_names: tuple[str, ...] = (),
     by_elimination: bool = True,
 ) -> list[str]:
-    """What the timeline naming rule (`NAME_BY_MEET_TIMELINE`, `app/skribby.py::_name_by_timeline`)
-    would do to the tags this meeting left unnamed, run on the saved tags and the saved events at
-    offset 0 (the rule never uses `--offset`: a shifted clock is a reason to name nothing)."""
+    """What today's naming rules would do to the tags this meeting left unnamed, run on the saved
+    items, tags and events at offset 0 (the rule never uses `--offset`: a shifted clock is a reason
+    to name nothing): the chained elimination, then the timeline rule (`NAME_BY_MEET_TIMELINE`,
+    `app/skribby.py::_name_by_timeline`), then exclusion against Meet's participant list
+    (`meet_exclusion`). Each tag it would name prints the route in brackets. Read-only: nothing is
+    saved, so a meeting saved before a rule existed shows what the rule would have done, and the
+    meeting itself stays as it was."""
     head = ["", "== What naming from Meet's timeline would do to the unnamed tags =="]
     if not record:
         return [*head, "  No speaker events were kept, so it would name nothing."]
@@ -158,9 +165,12 @@ def naming_section(
         if tags.get(tag, {}).get("name"):
             continue
         if after[tag].get("name"):
-            out.append(f"  tag {tag}: would be named {after[tag]['name']} [meet_timeline]")
+            out.append(f"  tag {tag}: would be named {after[tag]['name']} [{after[tag]['how']}]")
         else:
-            out.append(f"  tag {tag}: stays unknown ({after[tag].get('timeline') or 'no reason'})")
+            why = after[tag].get("timeline") or "no reason"
+            if after[tag].get("exclusion"):
+                why += f"; by exclusion: {after[tag]['exclusion']}"
+            out.append(f"  tag {tag}: stays unknown ({why})")
     return [*head, *(out or ["  Every tag already has a name."])]
 
 

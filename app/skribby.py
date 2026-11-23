@@ -318,23 +318,50 @@ def _resolve_tags(
     """For every diarization tag Skribby used: `{"name", "how", "note"}`. `how` says why the tag
     has the name it has: `given` (its own segments carry exactly one `speaker_name`),
     `elimination` or `sole_candidate` (see `_tag_names`; only when `by_elimination`),
-    `meet_timeline` (only when `by_timeline` and `events` are given: see `_name_by_timeline`) or
-    `unknown` (`name` is empty and `note` says why: `several_names`, `no_candidates`,
-    `elimination_off`, `unresolved`, `shared_claim`). With elimination off, `note` is
+    `meet_timeline` or `meet_exclusion` (only when `by_timeline` and `events` are given: see
+    `_name_by_timeline` and `_name_by_exclusion`) or `unknown` (`name` is empty and `note` says
+    why: `several_names`, `no_candidates`, `elimination_off`, `unresolved`, `shared_claim`).
+    With elimination off, `note` is
     `elimination_off` for a tag it would have named, and `would_be` holds the name it would have
     taken, so a saved record shows what the switch changed. With the timeline rule on and a tag
     left unnamed, `timeline` says why the speaking indicator did not name it."""
-    result, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination)
-    if by_timeline and events:
-        _name_by_timeline(result, value, events, bot, listed, chosen)
+    reading = _timeline_reading(value, events) if by_timeline and events else None
+    result, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination, reading)
+    if reading is not None:
+        _name_by_timeline(result, reading, bot, listed, chosen)
     return result
 
 
-def _earlier_rules(value: list[dict], own_names: tuple[str, ...], by_elimination: bool):
+def _meeting_gate(reading: meet_timeline.Reading, named: dict[str, str]) -> str | None:
+    """Does Meet's timeline agree with the names already given (`named`: tag -> name key)? None
+    when at least one named tag's top speaker is that person and none has a different person
+    clearly on top; `contradicted` (the signal or the clock is wrong) or `uncorroborated` (no named
+    tag is confirmed, so nothing says the Meet names and clock are the transcript's). The same
+    gate `_name_by_timeline` applies before it names anything."""
+    agreeing = 0
+    for tag, key in named.items():
+        top, _ = meet_timeline.verdict(
+            reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0)
+        )
+        if top is None:
+            continue  # the timeline has no clear say about this tag: no vote either way
+        if top != key:
+            return "contradicted"
+        agreeing += 1
+    return None if agreeing else "uncorroborated"
+
+
+def _earlier_rules(
+    value: list[dict],
+    own_names: tuple[str, ...],
+    by_elimination: bool,
+    reading: meet_timeline.Reading | None = None,
+):
     """Skribby's own name, elimination and the sole candidate: `(result, chosen, listed, bot)`,
     `result` as `_resolve_tags` describes it, `chosen` the name each of those rules picked for a
     tag (also for a tag left unnamed by a shared claim or by the elimination switch), `listed` each
-    tag's candidates and `bot` the bot's own names as comparison keys."""
+    tag's candidates and `bot` the bot's own names as comparison keys. `reading` is the timeline
+    (`_timeline_reading`) or None: without it only round 1 of the chain runs (see below)."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -361,40 +388,84 @@ def _earlier_rules(value: list[dict], own_names: tuple[str, ...], by_elimination
     for tag, named in given.items():
         for key in named:
             holders.setdefault(key, set()).add(tag)
-    claims: dict[str, list[str]] = {}  # candidate key -> the tags that would take it
     chosen: dict[str, str] = {}
     chosen_how: dict[str, str] = {}
-    for tag, named in given.items():
-        candidates = listed.get(tag)
-        if named or not candidates:
-            continue
-        ruled_out = [key for key in candidates if holders.get(key, set()) - {tag}]
-        left = {
-            key: name for key, name in candidates.items() if key not in bot and key not in ruled_out
-        }
-        if len(left) != 1:
-            continue
-        key, name = next(iter(left.items()))
-        if ruled_out:
-            how = "elimination"
-        elif (
-            len(candidates) == 1
-            and any(given.values())  # Skribby named a tag itself in this meeting
-            and listing[tag][key] == segments[tag] >= MIN_SOLE_CANDIDATE_SEGMENTS
-        ):
-            how = "sole_candidate"  # one name on every segment, nobody else has it
-        else:
-            continue
-        claims.setdefault(key, []).append(tag)
-        chosen[tag] = name
-        chosen_how[tag] = how
+    shared_tags: set[str] = set()  # tags whose pick is contested: they get no name
+    shared_keys: set[str] = set()  # names claimed by more than one tag: never "held"
+    open_tags = [tag for tag, named in given.items() if not named and listed.get(tag)]
+    # A chain: a name one round gave to exactly one tag is held by it in the next round, so the tag
+    # whose candidates were ruled out only by that name can be named in its turn. Rounds are
+    # synchronous (every tag in a round sees the same holders), so the order of the tags changes
+    # nothing. Each round settles at least one tag, so there are at most `len(open_tags)` rounds.
+    # Round 1 is exactly what the rules did before the chain. A name from round 2 on rests on a
+    # name that was itself inferred, and Skribby over-splits people (one person on two tags makes a
+    # held name that is the same person's): it stands only on Meet's positive evidence. The
+    # timeline must be usable (readable events with a speaking interval, a checked clock) and agree
+    # with the names already given (`_meeting_gate`), and the person must lead the tag by
+    # `meet_timeline.leads`. A name that fails is neither given nor held, so an error cannot run
+    # down the chain and the timeline rule may still name the tag. No usable Meet: round 1 only.
+    for round_number in range(1, len(open_tags) + 1):
+        if round_number > 1:
+            if reading is None or reading.refused:
+                break
+            named_now = {tag: next(iter(named)) for tag, named in given.items() if len(named) == 1}
+            named_now.update(
+                {tag: _same(name) for tag, name in chosen.items() if tag not in shared_tags}
+            )
+            if _meeting_gate(reading, named_now):
+                break
+        proposals: dict[str, tuple[str, str, str]] = {}  # tag -> (key, name, how)
+        for tag in open_tags:
+            if tag in chosen:
+                continue
+            candidates = listed[tag]
+            ruled_out = [key for key in candidates if holders.get(key, set()) - {tag}]
+            left = {
+                key: name
+                for key, name in candidates.items()
+                if key not in bot and key not in ruled_out
+            }
+            if len(left) != 1:
+                continue
+            key, name = next(iter(left.items()))
+            if ruled_out:
+                how = "elimination"
+            elif (
+                len(candidates) == 1
+                and any(given.values())  # Skribby named a tag itself in this meeting
+                and listing[tag][key] == segments[tag] >= MIN_SOLE_CANDIDATE_SEGMENTS
+            ):
+                how = "sole_candidate"  # one name on every segment, nobody else has it
+            else:
+                continue
+            proposals[tag] = (key, name, how)
+        claims: dict[str, list[str]] = {}
+        for tag, (key, _name, _how) in proposals.items():
+            claims.setdefault(key, []).append(tag)
+        progress = False
+        for key, tags in claims.items():
+            if len(tags) > 1 or key in shared_keys:
+                if round_number > 1:
+                    continue  # a claim made of inferred names is not recorded: the tags stay open
+                shared_keys.add(key)  # contested: nobody holds it, nobody is named by it
+                shared_tags.update(tags)
+                for tag in tags:
+                    chosen[tag], chosen_how[tag] = proposals[tag][1], proposals[tag][2]
+                progress = True
+            elif round_number == 1 or meet_timeline.leads(reading.cells.get(tags[0], {}), key):
+                tag = tags[0]
+                chosen[tag], chosen_how[tag] = proposals[tag][1], proposals[tag][2]
+                holders.setdefault(key, set()).add(tag)
+                progress = True
+        if not progress:
+            break
     result: dict[str, dict[str, str]] = {}
     for tag, named in given.items():
         if len(named) == 1:
             result[tag] = {"name": next(iter(named.values())), "how": "given", "note": ""}
         elif named:
             result[tag] = {"name": "", "how": "unknown", "note": "several_names"}
-        elif tag in chosen and len(claims[_same(chosen[tag])]) > 1:
+        elif tag in shared_tags:
             result[tag] = {"name": "", "how": "unknown", "note": "shared_claim"}
         elif tag in chosen and by_elimination:
             result[tag] = {"name": chosen[tag], "how": chosen_how[tag], "note": ""}
@@ -419,10 +490,24 @@ def _earlier_rules(value: list[dict], own_names: tuple[str, ...], by_elimination
 _TIMELINE_MAY_NAME = ("unresolved", "shared_claim", "no_candidates", "elimination_off")
 
 
+def _timeline_reading(value: list[dict], events: dict | None) -> meet_timeline.Reading:
+    """Meet's speaking timeline read against the tags of the transcript items `value`
+    (`meet_timeline.read`; names grouped and compared as everywhere in this module)."""
+
+    def group(name: str) -> tuple[str, str]:
+        shown = _clean_name(name)
+        return (_same(shown) if shown else ""), shown
+
+    items = [
+        {"tag": _tag(item.get("speaker")), "start": item.get("start"), "end": item.get("end")}
+        for item in value
+    ]
+    return meet_timeline.read(items, events, group, tag_of=lambda item: item["tag"])
+
+
 def _name_by_timeline(
     result: dict[str, dict[str, str]],
-    value: list[dict],
-    events: dict | None,
+    reading: meet_timeline.Reading,
     bot: set[str],
     listed: dict[str, dict[str, str] | None],
     chosen: dict[str, str],
@@ -445,38 +530,16 @@ def _name_by_timeline(
     exactly after cleaning ("Ada" is never "Ada Obi"). Several tags may take one name:
     that is how the model's over-splitting of one person is put right. Participants listed under
     one name (a rejoin) are one person."""
-
-    def group(name: str) -> tuple[str, str]:
-        shown = _clean_name(name)
-        return (_same(shown) if shown else ""), shown
-
-    items = [
-        {"tag": _tag(item.get("speaker")), "start": item.get("start"), "end": item.get("end")}
-        for item in value
-    ]
-    reading = meet_timeline.read(items, events, group, tag_of=lambda item: item["tag"])
-    named = {tag: info for tag, info in result.items() if info["name"]}
+    named = {tag: _same(info["name"]) for tag, info in result.items() if info["name"]}
     open_tags = [tag for tag, info in result.items() if not info["name"]]
     if reading.refused:  # the events are there but cannot be used: say why on the tags
         for tag in open_tags:
             result[tag]["timeline"] = reading.refused
         return
-    agreeing = 0
-    for tag, info in named.items():
-        key, why = meet_timeline.verdict(
-            reading.cells.get(tag, {}), set(), reading.totals.get(tag, 0.0)
-        )
-        if key is None:
-            continue  # the timeline has no clear say about this tag: no vote either way
-        if key == _same(info["name"]):
-            agreeing += 1
-        else:
-            for other in open_tags:
-                result[other]["timeline"] = "contradicted"
-            return
-    if not agreeing:
+    gate = _meeting_gate(reading, named)
+    if gate:
         for tag in open_tags:
-            result[tag]["timeline"] = "uncorroborated"
+            result[tag]["timeline"] = gate
         return
     for tag in open_tags:
         info = result[tag]
@@ -495,6 +558,72 @@ def _name_by_timeline(
             info["timeline"] = "disagrees"
             continue
         result[tag] = {"name": reading.shown[key], "how": "meet_timeline", "note": ""}
+    _name_by_exclusion(result, reading, bot, listed, chosen)
+
+
+def _name_by_exclusion(
+    result: dict[str, dict[str, str]],
+    reading: meet_timeline.Reading,
+    bot: set[str],
+    listed: dict[str, dict[str, str] | None],
+    chosen: dict[str, str],
+) -> None:
+    """The last route (`how` = `meet_exclusion`; docs/sop/2026-11-23-speaker-name-chain.md): when
+    after every other rule exactly ONE tag is unnamed and exactly ONE person in Meet's own
+    participant list is left over, the tag is that person's. Called by `_name_by_timeline` once its
+    own gates have passed (the events are readable, the clock is checked, a named tag agrees with
+    the timeline and none is contradicted), so those hold here too. Changes `result` in place;
+    a lone open tag it does not name gets an `exclusion` key saying why. All of these must hold:
+
+    * one open tag only (with two, which of the two is which is a guess), and it is one the other
+      rules left for lack of an answer (`_TIMELINE_MAY_NAME`; never a tag with two names of its
+      own);
+    * one participant left over: anyone in Meet's participant list who is not the note taker and
+      not the name of a named tag counts, however little they were lit (a dial-in or a weak
+      indicator looks exactly like that, and is a possible speaker too); a rejoin is one person.
+      The one exception: when the tag has a candidate list, left-over participants who are not on
+      it are ignored (Skribby says the speaker is one of those);
+    * the left-over person is on that list when there is one (a list too long to read counts as no
+      way to check: refused) and is the name the earlier rules had picked for the tag when they
+      picked one they could not give;
+    * the tag covers `MIN_EXCLUSION_TAG_SECONDS`, the person was lit over it for `MIN_SECONDS` and
+      `MIN_SHARE`, and `EXCLUSION_RATIO` times as long as anybody else, the note taker included
+      (`meet_timeline.exclusion_verdict`). That is far under the timeline rule's `MIN_RATIO`:
+      being the only one left over is the evidence, Meet need only clearly not point at someone
+      else."""
+    open_tags = [tag for tag, info in result.items() if not info["name"]]
+    if not open_tags:
+        return
+    if len(open_tags) > 1:
+        return  # no key: with several open tags the route is not in play, the tags say why already
+    tag = open_tags[0]
+    info = result[tag]
+    if info["note"] not in _TIMELINE_MAY_NAME:
+        info["exclusion"] = "not_eligible"
+        return
+    taken = {_same(other["name"]) for other in result.values() if other["name"]}
+    candidates = listed.get(tag)
+    if tag in listed and candidates is None:
+        info["exclusion"] = "not_on_list"  # too long a list to read: no way to check
+        return
+    left = meet_timeline.unaccounted(reading, taken, bot, set(candidates) if candidates else None)
+    if len(left) != 1:
+        info["exclusion"] = "participants"
+        return
+    key = left[0]
+    if candidates and key not in candidates:
+        info["exclusion"] = "not_on_list"
+        return
+    if tag in chosen and _same(chosen[tag]) != key:
+        info["exclusion"] = "disagrees"
+        return
+    why = meet_timeline.exclusion_verdict(
+        reading.cells.get(tag, {}), key, reading.totals.get(tag, 0.0)
+    )
+    if why != "named":
+        info["exclusion"] = why
+        return
+    result[tag] = {"name": reading.shown[key], "how": "meet_exclusion", "note": ""}
 
 
 def apply_timeline(
@@ -513,8 +642,14 @@ def apply_timeline(
     result = {tag: dict(info) for tag, info in tags.items()}
     if not events:
         return result
-    _, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination)
-    _name_by_timeline(result, value, events, bot, listed, chosen)
+    reading = _timeline_reading(value, events)
+    earlier, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination, reading)
+    # A tag saved unnamed is read again by today's earlier rules: a meeting saved before the chain
+    # (2026-11-23) shows what it would name now. A tag that was named keeps what was saved.
+    for tag, info in earlier.items():
+        if not result.get(tag, {}).get("name"):
+            result[tag] = dict(info)
+    _name_by_timeline(result, reading, bot, listed, chosen)
     return result
 
 
@@ -533,8 +668,9 @@ def _tag_names(
     Only when `by_elimination` is true (the setting `SKRIBBY_NAME_BY_ELIMINATION`, read when None;
     off by default because it can name a tag after someone who is not in the call): a tag with no
     name of its own is named by elimination, its candidates minus the bot's own names, minus every
-    name another tag already has, and only when at least one candidate was dropped for being
-    another tag's and exactly one is left. The one exception, `sole_candidate`: a tag whose
+    name another tag already has (a name an earlier round gave a tag counts: a chain), and only
+    when at least one candidate was dropped for being another tag's and exactly one is left. The
+    one exception, `sole_candidate`: a tag whose
     segments list one and the same name and nothing else (every segment lists it, at least
     `MIN_SOLE_CANDIDATE_SEGMENTS` segments), a name no other tag has and the bot does not go by,
     in a meeting where at least one tag carries a name of its own (proof that Skribby's naming

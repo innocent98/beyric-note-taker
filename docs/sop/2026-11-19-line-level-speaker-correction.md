@@ -228,3 +228,10 @@ ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker py
 * Outcome counts per meeting are not queryable after the evidence expires (7 days); the log line is the record. Add a
   column only if that proves too thin.
 * The report's `--saved-names` flag exists to reproduce the earlier numbers; delete it when nobody needs them.
+
+## Update 2026-11-23: more tags arrive named
+
+`_resolve_tags` now also names tags by a chained elimination and by exclusion against Meet's participant list
+(`docs/sop/2026-11-23-speaker-name-chain.md`). The correction is unchanged: it receives the same `resolved` mapping, so a
+tag named by either route is a name "already in the meeting" for `resolve_label` like any other, and every invariant above
+(exactly one person lit, a line only moves to an exact existing name, exact no-op without events) holds as written.

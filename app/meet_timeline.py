@@ -38,6 +38,17 @@ MIN_SHARE = 0.2
 # so one lit stretch of ten minutes means a `stopped-speaking` went missing, and what lies between
 # is not known.
 MAX_SPAN_SECONDS = 600.0
+# Naming by exclusion (`unaccounted`, `exclusion_verdict`): the fewest seconds of its own a tag must
+# cover. The tag that failed on 2026-11-23 held 193 s; a tag with under half of that (90 s, three
+# times `MIN_SECONDS`) is a few turns of somebody, and a person is not named from a few turns when
+# the only evidence is who is left over.
+MIN_EXCLUSION_TAG_SECONDS = 90.0
+# ...and the left-over person must have been lit over it this many times as long as anybody else
+# (the note taker included). The 2026-11-23 tag: 84.6 s against 43.6 s, 1.94x. 1.5x asks for a
+# clear lead over a person who already has a tag, without the 3.0x of `MIN_RATIO`, which is the
+# line for naming a tag from Meet alone and which would have refused that meeting. Chosen from
+# that one case and the over-split signature (near ties), not measured further.
+EXCLUSION_RATIO = 1.5
 # How far either way the clock fit looks (seconds), and how much better a shift must be (a share)
 # before the Meet clock is called out of step with the transcript's.
 SEARCH_SECONDS = 30
@@ -187,12 +198,16 @@ class Reading:
 
 def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
     """The timeline of `record` against the tags of `items` (dicts with `start`, `end` and a tag).
-    `refused` says why it cannot be used: `no_events` (nothing kept or not readable),
+    `refused` says why it cannot be used: `no_events` (nothing kept, not readable, or nobody has a
+    usable speaking interval),
     `clock_unplaced` (Unix times with no `recording` time to place them), `no_times` (no timed
     segment) or `clock_shifted` (a shift of up to 30 s would fit clearly better, so the Meet clock
     is not trusted at zero)."""
     spans = speaking_intervals(record, group) if record else None
-    if not spans:
+    if not spans or not any(spans.values()):
+        # Nothing kept, or participants with no usable speaking interval at all (the size cap's
+        # `events_dropped` keeps the names and empties every list; some platforms may send names
+        # only): no evidence, the same as no events.
         return Reading(refused="no_events")
     zero, _ = anchor(record, spans)
     if zero is None:
@@ -243,3 +258,58 @@ def verdict(
     if top_seconds < ratio * second:
         return None, "not_clear"
     return top, "named"
+
+
+def unaccounted(
+    reading: Reading, taken: set[str], bot: set[str], only: set[str] | None = None
+) -> list[str]:
+    """The participants (comparison keys) who are neither the note taker nor the name of a tag
+    already named (`taken`): the people a tag nobody else has could be. **Everyone in Meet's
+    participant list counts**, however little they were lit or whether they have events at all: a
+    dial-in or a person the indicator rarely lights is exactly the speaker Meet cannot see, and
+    leaving them out would let the one person who is visible look like the only one left. `only`,
+    when given, limits the count to those keys (a tag's own candidate list: Skribby says the
+    speaker is one of them). Participants listed under one name are already one key."""
+    return [
+        key
+        for key in reading.shown
+        if key not in taken and key not in bot and (only is None or key in only)
+    ]
+
+
+def exclusion_verdict(cells: dict[str, float], key: str, total: float) -> str:
+    """`"named"` when participant `key`, the only one left over, may be the speaker of a tag whose
+    overlaps are `cells` and whose segments cover `total` seconds, else why not: `tag_too_short`
+    (under `MIN_EXCLUSION_TAG_SECONDS`), `too_little` (`key` was lit under `MIN_SECONDS` over the
+    tag), `small_share` (under `MIN_SHARE` of the tag's seconds: the same crosstalk guard as
+    `verdict`, which also stops a tag whose real speaker has no Meet entry from being given to the
+    one person left over who talked over it), `beaten` (somebody else, the note taker included,
+    was lit as long or longer over it) or `too_close` (the best of the others was lit over it for
+    more than `key` / `EXCLUSION_RATIO`: a tag lit about as much over someone who already has a
+    tag is as likely that person's, an over-split, as the one left over's). The ratio is far under
+    `MIN_RATIO`: being left over is the evidence, Meet only has to point clearly the same way."""
+    if total < MIN_EXCLUSION_TAG_SECONDS:
+        return "tag_too_short"
+    mine = cells.get(key, 0.0)
+    if mine < MIN_SECONDS:
+        return "too_little"
+    if mine < MIN_SHARE * total:
+        return "small_share"
+    rest = max((seconds for other, seconds in cells.items() if other != key), default=0.0)
+    if rest >= mine:
+        return "beaten"
+    if mine < EXCLUSION_RATIO * rest:
+        return "too_close"
+    return "named"
+
+
+def leads(cells: dict[str, float], key: str) -> bool:
+    """Does Meet's timeline positively support `key` on a tag whose overlaps are `cells`? `key` was
+    lit over it for at least `MIN_SECONDS` and `EXCLUSION_RATIO` times as long as anybody else (the
+    note taker included). The check a name inferred through a chain must pass
+    (`app/skribby.py::_earlier_rules`): a lean the other way, a tie or no overlap fails it."""
+    mine = cells.get(key, 0.0)
+    if mine < MIN_SECONDS:
+        return False
+    rest = max((seconds for other, seconds in cells.items() if other != key), default=0.0)
+    return mine >= EXCLUSION_RATIO * rest

@@ -318,3 +318,9 @@ Skribby's own name stops; the evidence still records `would_be`.
 * `MIN_SOLE_CANDIDATE_SEGMENTS = 3` has no data behind it (three back-channel segments would be named); consider a minimum of words or seconds once a second real case exists.
 * If a sole candidate is ever wrong, the next step is to require it to be on the call's participant list, which
   Skribby's `participants` carry (the saved events already hold them, so the report script could print "is on Meet's participant list: yes/no" for `sole_candidate` tags with no rule change); not done here (no live evidence it is needed).
+
+## Update 2026-11-23: elimination is a chain
+
+A name that elimination or the sole-candidate rule gave to exactly one tag now counts as held by that tag when the other
+tags are resolved, in rounds until nothing changes; a name from round 2 on is given only on Meet's positive evidence (usable events, agreeing with the names given, the person leading the tag 1.5x) (`docs/sop/2026-11-23-speaker-name-chain.md`). A name two tags would
+claim in any round goes to neither and is never held. The sole-candidate conditions in this SOP are unchanged.
