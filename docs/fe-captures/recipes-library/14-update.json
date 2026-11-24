@@ -1,0 +1,43 @@
+{
+  "note": "Edit: only the fields sent change. Whether a recipe is personal or the team's never changes.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/recipes/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Monthly note",
+      "uses_brief": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "key": null,
+      "pack": null,
+      "source": "personal",
+      "name": "Monthly note",
+      "instruction": "Write a short note of what was said. Use only the meeting.",
+      "output_type": "document",
+      "options": {
+        "who": {
+          "label": "Client",
+          "kind": "text",
+          "choices": [],
+          "default": null
+        }
+      },
+      "scope": "one",
+      "uses_brief": false,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.202822Z"
+    }
+  }
+}

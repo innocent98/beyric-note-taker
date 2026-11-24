@@ -41,22 +41,26 @@ A status report over a sprint or a client briefing before the next call needs th
 | `web/lib/api/client.ts`, `web/lib/api/types.ts`, `web/lib/api/schema.d.ts` | `api.recipes.resolvePicker`, `/api/recipes/picker/resolve` made team-scoped in `isTeamScoped`, type names, regenerated schema |
 | `docs/openapi.json` | regenerated with `PYTHONPATH=. python scripts/export_openapi.py` (without `PYTHONPATH=.` the script imports the main checkout's `app` and drops the recipes routes) |
 | `scripts/capture_recipes_cross_meeting.py`, `docs/fe-captures/recipes-cross-meeting/`, `docs/fe-integration-guide-recipes-cross-meeting.md` | live captures (30 exchanges) and the guide |
-| Tests | `tests/test_recipe_picker.py` (23), `tests/test_api_recipe_picker.py` (15), `tests/test_recipe_cross_meeting.py` (5), `web/tests/meeting-picker.test.tsx` (12), a line in `web/tests/team-header.test.ts` |
+| `web/components/app/make-dialog.tsx` | The picker is mounted in the `scope = "many"` slot (unless a different one is given through `renderMeetingPicker`, which now also receives the dialog's `team` and an `onChange(ids, picker)`); the draft request sends `picker` with `meeting_ids`; Make waits (disabled) until the picker has at least one meeting; the picker follows the team chosen in the dialog |
+| `web/lib/api/client.ts` | `resolvePicker` sits inside the library's `api.recipes` object (the library branch added `api.recipes` too) |
+| Tests | `tests/test_recipe_picker.py` (23), `tests/test_api_recipe_picker.py` (15), `tests/test_recipe_cross_meeting.py` (5), `tests/test_recipe_starters_cross_meeting.py` (5: the real `status_report`, `client_briefing` and `revision_plan` through the picker and the worker), `web/tests/meeting-picker.test.tsx` (12), four new cases in `web/tests/make-dialog.test.tsx` (the picker mounts only for `many` recipes, Make waits for a choice and sends `picker`, none for a one-meeting recipe, the picker follows the dialog's team; S3's fallback-text test was replaced), a line in `web/tests/team-header.test.ts` |
 
 ## Verification
 
 - Locally (bounded; scratch Postgres `recipes-cross-pg`, removed afterwards): the three picker test files, `test_api_recipes.py` and `test_recipe_jobs.py` (84 tests, all pass; the last two because `service.py` was touched), the route tests in `test_api.py` (`-k "openapi or route"`), `ruff check` and `ruff format --check` clean; web: `meeting-picker`, `team-header`, `guards`, `api-client` tests, `tsc --noEmit` and `eslint` on the touched files clean. **The full suite, shards and e2e were left to CI.**
 - Mutation checks: reverting the unreadable count to `NOT can_read` fails the left-out tests (found that way); making the worker send a full transcript when one meeting is left fails `test_one_meeting_left_after_the_others_are_unreadable_is_still_not_a_full_transcript`.
 - Live over real HTTP against the real app and worker with a **fake model**: 30 exchanges in `docs/fe-captures/recipes-cross-meeting/`. The script also fails if the words of the private meetings appear in any saved response (they do not), and records what the prompt contained (no transcript, no line numbers, nothing of the unreadable meetings).
-- **Not verified:** the real starters (the three cross-meeting recipes' real instructions are in S3's `library.py`, PR #267); the real model's choice of sources; the picker in a browser and inside the Make dialog (not mounted yet).
+- After #267 merged: one test per real starter (`status_report`, `client_briefing`, `revision_plan`) proves it resolves the picker's output, is built from notes, decisions, tasks and questions with no transcript and nothing of an unreadable meeting, and that its sources are `meeting`, `decision` and `task` with a `meeting_id`.
+- **Not verified:** the real model's choice of sources; the picker in a real browser, inside the Make dialog (vitest only, API mocked).
 
 ## Operate / roll back
 
-No migration, no setting, no worker change. Nothing is user-visible until the Make dialog mounts the component (S3's dialog; waits for #267) and the integration branch ships. Roll back by reverting the PR: the picker route and the `picker` field go away (the FE must then not send `picker`) and drafts lose only the left-out sentence; `left_out_count` itself stays, as S1 built it.
+No migration, no setting, no worker change. Nothing is user-visible until the integration branch ships; the Make dialog already mounts the picker. Roll back by reverting the PR: the picker route and the `picker` field go away (the FE must then not send `picker`) and drafts lose only the left-out sentence; `left_out_count` itself stays, as S1 built it.
 
 ## Follow-ups
 
-- After #267 merges: one test per real starter (status report, client briefing, revision plan) producing blocks with `meeting`, `decision` and `task` sources, and mount `MeetingPicker` in `make-dialog.tsx` for `scope: "many"` recipes (send `meetingIds` as `meeting_ids`, `picker` as `picker`); then look at it in a browser at 390 and 1280 px.
+- Look at the picker in the Make dialog in a real browser at 390 and 1280 px.
 - Sprint rule (tasks planned into it plus meetings held on its days) is a call to confirm.
 - A hand-picked list reads the 50 newest meetings (`GET /api/meetings?limit=50`); a person with older meetings picks them through the other ways. A search box would fix it; not built.
 - `left_out_count` on a draft also counts a meeting that was not ready at request time (S1's rule), which is why the sentence says "or they are not ready".
+- The Make dialog starts from a meeting page, so the first meeting is not pre-ticked in the picker: the person chooses the set. Spec 5.2 draws a Make page for cross-meeting recipes; that page is not built, the dialog serves both.

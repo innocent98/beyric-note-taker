@@ -1,0 +1,33 @@
+{
+  "note": "An admin may; `updated_by` is the last person to save.",
+  "client": "bea",
+  "request": {
+    "method": "PUT",
+    "path": "/api/briefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Acme Design. Audits from 400 USD. Retainers from 1,200 USD a month. Pay within 14 days. Prices exclude VAT."
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "team": {
+        "id": 2,
+        "name": "My team",
+        "is_personal": false,
+        "can_manage": true
+      },
+      "text": "Acme Design. Audits from 400 USD. Retainers from 1,200 USD a month. Pay within 14 days. Prices exclude VAT.",
+      "max_chars": 12000,
+      "updated_at": "2026-11-24T14:20:27.420728Z",
+      "updated_by": "Bea Admin"
+    }
+  }
+}

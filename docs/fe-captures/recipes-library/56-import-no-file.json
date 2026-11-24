@@ -1,0 +1,27 @@
+{
+  "note": "No multipart `file` field: 422 `file_missing`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "file": "x"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "file_missing",
+        "message": "Send the file as a multipart form field named `file`."
+      }
+    }
+  }
+}

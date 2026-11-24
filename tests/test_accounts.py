@@ -20,6 +20,7 @@ from app.models import (
     Notification,
     OpenQuestion,
     Project,
+    Recipe,
     ReviewItem,
     ScheduledJoin,
     Series,
@@ -623,6 +624,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     sprint = Sprint(
         team_id=project.team_id, number=1, start_date=date(2026, 11, 2), end_date=date(2026, 11, 6)
     )
+    recipe = Recipe(owner_user_id=owner.id, name="Mine", instruction="Write it.")
     draft = Document(
         owner_user_id=owner.id,
         title="d",
@@ -632,6 +634,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     )
     session.add_all(
         [
+            recipe,
             term,
             note,
             decision,
@@ -711,6 +714,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "project_id": project.id,
         "milestone_id": milestone.id,
         "sprint_id": sprint.id,
+        "recipe_id": recipe.id,
         "document_id": draft.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
@@ -751,6 +755,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
                 "blocks": [{"type": "paragraph", "text": "x", "sources": []}]
             },
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
+            "/api/recipes/{recipe_id}": {"name": "x"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
         if method == "DELETE":
@@ -774,6 +779,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     assert session.get(SeriesIgnored, personal_mark.id) is not None
     # the stranger's DELETE of the owner's template was refused, not carried out
     assert session.get(Template, template.id).deleted_at is None
+    # and their PUT and DELETE of the owner's recipe changed nothing
+    kept_recipe = session.get(Recipe, recipe.id)
+    assert kept_recipe.name == "Mine" and kept_recipe.archived_at is None
     # and their PATCH and DELETE of the owner's draft changed nothing
     kept = session.get(Document, draft.id)
     assert kept is not None and kept.edited is False and kept.blocks[0]["text"] == "x"

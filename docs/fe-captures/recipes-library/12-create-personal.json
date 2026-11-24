@@ -1,0 +1,50 @@
+{
+  "note": "Save a personal recipe: 201 and the row. `source: \"personal\"`, `key: null`, `pack: null`, `uses_brief` and `scope` take their defaults (`true`, `one`).",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Weekly note",
+      "instruction": "Write a short note of what was said. Use only the meeting.",
+      "output_type": "document",
+      "options": {
+        "who": {
+          "label": "Client",
+          "kind": "text"
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "key": null,
+      "pack": null,
+      "source": "personal",
+      "name": "Weekly note",
+      "instruction": "Write a short note of what was said. Use only the meeting.",
+      "output_type": "document",
+      "options": {
+        "who": {
+          "label": "Client",
+          "kind": "text",
+          "choices": [],
+          "default": null
+        }
+      },
+      "scope": "one",
+      "uses_brief": true,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.174012Z"
+    }
+  }
+}

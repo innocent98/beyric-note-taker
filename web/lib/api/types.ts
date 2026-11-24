@@ -148,3 +148,13 @@ export type AskScope = Schemas["ScopeOut"];
 export type PickerSpec = Schemas["PickerSpec"];
 export type PickerPreview = Schemas["PickerPreview"];
 export type PickedMeeting = Schemas["PickedMeeting"];
+// Meeting recipes: the recipe library, the team brief and the brief file import
+// (docs/fe-integration-guide-recipes-library.md).
+export type Recipe = Schemas["RecipeOut"];
+export type RecipeList = Schemas["RecipeList"];
+export type RecipeInput = Schemas["RecipeIn"];
+export type RecipeChanges = Schemas["RecipePatch"];
+export type RecipeOption = Schemas["OptionDef"];
+export type RecipeTeam = Schemas["RecipeTeam"];
+export type Brief = Schemas["BriefOut"];
+export type BriefImported = Schemas["BriefImported"];

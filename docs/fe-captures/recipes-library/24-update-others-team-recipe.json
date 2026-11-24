@@ -1,0 +1,27 @@
+{
+  "note": "A recipe of a team the caller is not on: 404 `not_found`.",
+  "client": "eve",
+  "request": {
+    "method": "PUT",
+    "path": "/api/recipes/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "x"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recipe."
+      }
+    }
+  }
+}

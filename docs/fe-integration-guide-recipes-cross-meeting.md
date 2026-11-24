@@ -6,7 +6,7 @@ What the **Make** dialog needs to let a person build a cross-meeting draft (Stat
 
 - **The model.** A fake stood in for the OpenAI client. It cites the meeting, decision and task ids it finds in the prompt. A real model's wording will differ; the shape of every response body will not.
 - **The three cross-meeting starters.** `app/recipes/library.py` is slice S3's (PR #267, not merged when this was captured). The capture registered a stand-in `status_report` (scope `many`) and `follow_up_email` (scope `one`). The real `status_report`, `client_briefing` and `revision_plan` keys are S3's.
-- **The screen.** `web/components/app/meeting-picker.tsx` is tested with the API mocked (bodies shaped like the captures). It was **not looked at in a browser** and is **not mounted** in the Make dialog yet: the dialog is S3's, and mounting waits for #267.
+- **The screen.** `web/components/app/meeting-picker.tsx`, mounted in the Make dialog (`make-dialog.tsx`) for recipes whose `scope` is `many`, is tested with the API mocked (bodies shaped like the captures). It was **not looked at in a browser**.
 - **`plan_inactive` (403) and `recipe_limit` (429)** on the draft request are the draft guide's, not re-run here.
 
 ## What it is, in your terms
@@ -615,7 +615,7 @@ The preview is a single request per complete choice; there is nothing to poll. A
 | The prompt has no transcript, no line markers, nothing of unreadable meetings | **Verified live** (27, a check of the actual prompt the worker sent) and by tests (`tests/test_recipe_cross_meeting.py`) |
 | The sprint rule (tasks planned into it plus meetings held on its days) | **Verified live** (10) and by `tests/test_recipe_picker.py` |
 | Time-zone handling of `day` | Verified live with `tz` only (11); a **stored** time zone is covered by the Meetings list's tests, not re-run here |
-| The real starters (status report, client briefing, revision plan) | **Not run**: a stand-in recipe; one test per real starter is added after PR #267 merges |
-| The picker screen in a browser, inside the Make dialog | **Not done**: vitest only, API mocked; mounting waits for #267 |
+| The real starters (status report, client briefing, revision plan) | **Tested, not captured live**: the captures use a stand-in recipe; `tests/test_recipe_starters_cross_meeting.py` runs each real starter through the picker and the worker with a fake model |
+| The picker screen in a browser, inside the Make dialog | **Not done**: vitest only, API mocked (`web/tests/make-dialog.test.tsx`, `web/tests/meeting-picker.test.tsx`) |
 | `plan_inactive`, `recipe_limit` | Not re-run here; see the draft guide |
 
