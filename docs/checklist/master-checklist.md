@@ -3,13 +3,11 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
-**Addendum 2026-11-24: export formats, Tasks CSV and Meetings search** (branch `feature/export-formats-and-meeting-search`, SOP `docs/sop/2026-11-24-export-formats-and-meeting-search.md`, **no migration**, Alembic head unchanged; gap analysis rows 6 and 8):
-- [x] `GET /api/meetings/{id}/export?format=md|txt` (notes, `transcript=true`, `language` en/fr/es, same 404/409 rules); built in the request, never through the child renderer, so never `export_busy`; Markdown and Plain text rows in the Download menu
-- [x] `GET /api/tasks/export?format=csv`: the active team's board through `tasks.visible` (the Tasks list's own scoping), eight columns, UTF-8 with BOM, CSV-injection quote on `= + - @ tab CR`; **Export CSV** button on the Tasks screen (lead-designed)
-- [x] `GET /api/meetings?q=` (title, notes and transcript, prefix stems, all words, 2 to 100 characters else 422 `invalid_query`) and a search box on the Meetings list with the term in the address; shared helpers in `app/meeting_search.py`, Ask Beyric uses them unchanged
-- [x] Live captures (`docs/fe-captures/export-formats-and-search/`), FE guides (export section 8, owner-app 5.1b, tasks pointer), `docs/openapi.json` regenerated
-- [ ] **Search is slow when few meetings match** (about 0.9 s at 300 meetings, 13 s at 4,000; about 3 ms per readable meeting); Adebayo approved a GIN expression index as its own PR after #260 (migration 0056) merges; the exact expression and the query change it needs are in the SOP, NOT added here
-- [ ] **Not verified:** the files in Excel, Sheets, Notion, Obsidian; a real team's data; the server
+**Addendum 2026-11-24: meeting search index** (branch `feature/meeting-search-index`, stacked on PR 261, SOP `docs/sop/2026-11-24-meeting-search-index.md`, **migration 0057, Alembic head now 0057**):
+- [x] `meeting_search_text()` (IMMUTABLE SQL function) and GIN index `ix_meetings_search_text` built CONCURRENTLY; Ask Beyric's `candidates()` and the list's `q` search call the one function; the list's query is split (`id IN title OR id IN full text`) so the index is usable
+- [x] Proven with EXPLAIN (ANALYZE) of the SQL both readers really send, and by a test on every run; rare-word search at 4,000 meetings: list 22,620 ms to 11 ms, Ask 20,468 ms to 17 ms; accents folded in the stored text and the title ("équipe" finds "equipe" and the reverse), subqueries scoped to the readable set
+- [ ] **Common words stay slow** (18 to 44 s on the unkind synthetic data; the list's common-word search is slower than in 261's one-`OR` shape); a stored generated `tsvector` column measured under 230 ms in every case, costs a table rewrite and 2x table size, is recommended as the next PR (0058), NOT built without Adebayo's yes
+- [ ] **Not verified:** the real server's build time and the deploy script path
 
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
 - [x] Per-person checkbox "Skip one-on-one meetings" under the rule box (`user_settings.skip_one_on_ones`, off by default); skips an event with exactly two people INVITED (count, not attendance), under `all` and `organizer`; 0 (solo) and 1 are not skipped
@@ -17,6 +15,14 @@
 - [x] `PUT /api/calendar/settings` takes `skip_one_on_ones`; a change re-runs the stored events (joins cancelled or revived, running bots untouched, switches kept); a skipped one-on-one is a cancelled join: never on "Not recorded", no Send now
 - [x] Wording made true (`rule_text`, the card's rule sentences); the checkbox and texts are lead-designed (listed in the SOP); looked at in a real browser at 1280 and 390 px
 - [x] Tests, live captures (`docs/fe-captures/skip-one-on-ones/`), FE guide section 3c; **not verified:** a real Google calendar, Outlook live (documented shape only), the server
+
+**Addendum 2026-11-24: export formats, Tasks CSV and Meetings search** (branch `feature/export-formats-and-meeting-search`, SOP `docs/sop/2026-11-24-export-formats-and-meeting-search.md`, **no migration**, Alembic head unchanged; gap analysis rows 6 and 8):
+- [x] `GET /api/meetings/{id}/export?format=md|txt` (notes, `transcript=true`, `language` en/fr/es, same 404/409 rules); built in the request, never through the child renderer, so never `export_busy`; Markdown and Plain text rows in the Download menu
+- [x] `GET /api/tasks/export?format=csv`: the active team's board through `tasks.visible` (the Tasks list's own scoping), eight columns, UTF-8 with BOM, CSV-injection quote on `= + - @ tab CR`; **Export CSV** button on the Tasks screen (lead-designed)
+- [x] `GET /api/meetings?q=` (title, notes and transcript, prefix stems, all words, 2 to 100 characters else 422 `invalid_query`) and a search box on the Meetings list with the term in the address; shared helpers in `app/meeting_search.py`, Ask Beyric uses them unchanged
+- [x] Live captures (`docs/fe-captures/export-formats-and-search/`), FE guides (export section 8, owner-app 5.1b, tasks pointer), `docs/openapi.json` regenerated
+- [x] Search speed: selective searches are fixed by the index (addendum above, migration 0057); common words stay slow, a stored `tsvector` column is proposed there
+- [ ] **Not verified:** the files in Excel, Sheets, Notion, Obsidian; a real team's data; the server
 
 **Addendum 2026-11-23: speaker naming chain** (branch `fix/speaker-name-chained-elimination`, SOP `docs/sop/2026-11-23-speaker-name-chain.md`, no migration, no endpoint or FE guide change):
 - [x] Chained elimination: a name given to one tag by elimination or as a sole candidate counts as held in the next round, to a fixed point; a name from round 2 on stands only on Meet's positive evidence (usable events, clock check, agrees with the given names, the person leads the tag 1.5x and 30 s), else Unknown as before; a contested name is never held (`shared_claim` stays shared)

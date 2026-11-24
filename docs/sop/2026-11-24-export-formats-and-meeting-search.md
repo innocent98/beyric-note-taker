@@ -88,21 +88,7 @@ Without the index the split shape is no better (15 to 29 s). The index only pays
 
 ## Follow-ups
 
-- **Search speed.** Adebayo approved a GIN index as its own PR **after #260 (migration 0056) merges**. What it must be, from the measurements above:
-  1. A wrapper function, because `concat_ws` is only STABLE and an index needs IMMUTABLE:
-     ```sql
-     CREATE FUNCTION meeting_search_text(notes text, speaker_transcript text, transcript text)
-     RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-       SELECT to_tsvector('simple', coalesce(notes, '') || ' ' ||
-              coalesce(nullif(speaker_transcript, ''), transcript, ''))
-     $$;
-     CREATE INDEX CONCURRENTLY ix_meetings_search_text ON meetings
-       USING gin (meeting_search_text(notes, speaker_transcript, transcript));
-     ```
-     This is the exact expression `scripts/time_meeting_search.py` indexed (13 MB for 4,000 meetings). Same text as `meeting_search.document()` today (`concat_ws` skips a null note; `||` with `coalesce` does the same).
-  2. `meeting_search.document()` becomes `func.meeting_search_text(Meeting.notes, Meeting.speaker_transcript, Meeting.transcript)`. Ask Beyric's `candidates()` already calls `document()`, so **Ask uses the same expression and the index with no change of its own** (its `ts_rank` still reads each matching row's text, so Ask gains on the filter, not on the ranking).
-  3. `keyword_clause` must put the title match and the full-text match in **separate subqueries** (`id IN (title matches) OR id IN (full-text matches)`), or the title `ILIKE` in the same `OR` makes Postgres scan every row and ignore the index (measured above).
-  4. Not measured, worth trying in that PR: a stored generated `tsvector` column (same wrapper) with the GIN index on it, so a recheck or a sequential scan reads a column instead of rebuilding the vector; it adds a table rewrite to the migration. The index PR should re-run `scripts/time_meeting_search.py` and decide between the two on its numbers.
+- **Search speed.** Done in `docs/sop/2026-11-24-meeting-search-index.md` (migration 0057, an index for both readers) with its measured limits and a stored-column proposal. The exact index expression and the query change it needs are there.
 - The words the app adds to a translated file (`## Transcript`, the footer) are English in all four formats; translating them is a small separate change.
 - The Tasks CSV is the whole team board, not the screen's filtered view (decision above). Past 10,000 tasks it keeps the newest and says nothing.
 - The Markdown file has no front-matter and no task list; a "Tasks from this meeting" section is an obvious later addition.
