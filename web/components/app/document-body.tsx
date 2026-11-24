@@ -1,5 +1,6 @@
 "use client";
 
+import { BoardView } from "@/components/app/board-view";
 import { DocumentEditor } from "@/components/app/document-editor";
 import { Marked, SourceChips } from "@/components/app/document-parts";
 import type { DocumentBlock, DocumentDraft, DocumentItem } from "@/lib/api/types";
@@ -71,20 +72,28 @@ function ReadBlock({ block, flagged, available }: { block: DocumentBlock; flagge
 }
 
 // What the document page shows under its header, by output type. A document, an email and a table are
-// blocks, read here or edited in `DocumentEditor`. A board is not drawn yet: its own view mounts at the
-// `board` case (slice S6) and nothing renders until then.
+// blocks, read here or edited in `DocumentEditor`. A board is its own screen (`BoardView`, slice S6): it
+// edits in place through PATCH /api/documents/{id}/board, so the page's block editor never opens for it.
+// `canEdit` is false for a reader of a shared board (only its creator changes it); `onSaved` takes the
+// whole draft each change answers and `onStale` asks the page to fetch it again.
 export function DocumentBody({
   doc,
   blocks,
   editing,
   onBlocks,
+  canEdit = true,
+  onSaved = () => {},
+  onStale = () => {},
 }: {
   doc: DocumentDraft;
   blocks: DocumentBlock[];
   editing: boolean;
   onBlocks: (next: DocumentBlock[]) => void;
+  canEdit?: boolean;
+  onSaved?: (next: DocumentDraft) => void;
+  onStale?: () => void | Promise<void>;
 }) {
-  if (doc.output_type === "board") return null;
+  if (doc.output_type === "board") return <BoardView doc={doc} canEdit={canEdit} onSaved={onSaved} onStale={onStale} />;
   if (editing) return <DocumentEditor blocks={blocks} onChange={onBlocks} available={doc.sources_available} />;
   const flags = doc.checks.flags;
   return (
