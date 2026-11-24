@@ -38,7 +38,6 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     QUINN,
     ZED,
     ids_of,
-    multi_team_on,
     new_team,
     world,
 )
@@ -116,13 +115,10 @@ def mark_fresh(session, *rows) -> None:
 # ---- the flag ----
 
 
-def test_the_flag_is_off_by_default_and_needs_multi_team_too(monkeypatch):
+def test_the_flag_is_off_by_default(monkeypatch):
     assert Settings(_env_file=None).series_follow_meetings is False
     monkeypatch.undo()
     monkeypatch.setattr(series_rules, "get_settings", lambda: Settings(series_follow_meetings=True))
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert series_rules.follow_enabled() is False
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: True)
     assert series_rules.follow_enabled() is True
     monkeypatch.setattr(
         series_rules, "get_settings", lambda: Settings(series_follow_meetings=False)

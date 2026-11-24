@@ -36,7 +36,6 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     QUINN,
     ZED,
     ids_of,
-    multi_team_on,
     new_team,
     world,
 )
@@ -259,11 +258,6 @@ def test_nobody_but_the_recorder_moves_a_not_yet_moved_meeting(app, session, wor
 def test_only_a_ready_meeting_can_be_moved(app, session, world, template):
     waiting = ready(session, template, status="bot_sent", step="waiting")
     error_of(move(sign_in(app, ADA), waiting, world.x), 409, "meeting_not_ready")
-
-
-def test_moving_is_refused_while_the_switch_is_off(app, session, world, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    error_of(move(sign_in(app, ADA), world.private, world.x), 409, "multi_team_disabled")
 
 
 def test_a_moved_meeting_cannot_be_shared_or_unshared(app, session, world):
@@ -565,20 +559,3 @@ def test_a_meetings_tasks_are_filed_by_owner_then_share_then_home(session, world
     other = new_team(session, world.ada, "Other")
     moved(session, world.in_x, other)
     assert teams.team_for_meeting(session, world.in_x).id == other.id  # owned beats shared
-
-
-def test_with_the_switch_off_a_private_meetings_tasks_go_to_the_recorders_default_team(
-    session, world, monkeypatch
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    default = teams.team_of(session, world.ada.id)
-    assert default.id == world.x.id  # Ada's one ordinary team, as today
-    assert teams.team_for_meeting(session, world.private).id == default.id
-
-
-def test_with_the_switch_off_re_homing_does_nothing(app, session, world, monkeypatch):
-    task = add_task(session, world.x, world.in_x, title="Ship it")
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert sign_in(app, ADA).delete(f"/api/meetings/{world.in_x.id}/share").status_code == 200
-    session.expire_all()
-    assert session.get(Task, task.id).team_id == world.x.id  # the old rule: it stays

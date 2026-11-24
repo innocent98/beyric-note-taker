@@ -151,6 +151,7 @@ def _attempt(
         # adopted instead of answering that someone else's note taker is there.
         adopt_orphan=True,
         expected_seconds=int((join.ends_at - join.starts_at).total_seconds()),
+        workspace_team_id=join.team_id,
     )
     row_id = join.id
 

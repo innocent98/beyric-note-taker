@@ -27,7 +27,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import add_task
-from tests.test_multi_team_leaks import PAT, QUINN, ZED, multi_team_on, new_team, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, QUINN, ZED, new_team, world  # noqa: F401
 from tests.test_series import meeting_in
 from tests.test_team_visibility import sign_in
 
@@ -127,15 +127,6 @@ def test_an_empty_team_name_is_refused(app, session, world):
     )
 
 
-def test_creating_a_team_is_refused_while_the_switch_is_off(app, session, world, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    error_of(
-        call(sign_in(app, PAT), "POST", "/api/teams", body={"name": "Nope"}),
-        409,
-        "multi_team_disabled",
-    )
-
-
 # ---- an explicit team per request ----
 
 
@@ -143,7 +134,7 @@ def test_the_team_route_reads_the_team_named_and_the_default_without_one(app, se
     pat = sign_in(app, PAT)
     assert get(pat, "/api/team", world.x).json()["name"] == "X"
     assert get(pat, "/api/team", world.y).json()["name"] == "Y"
-    default = get(pat, "/api/team").json()  # two ordinary teams: the personal one
+    default = get(pat, "/api/team").json()  # no header: the personal workspace
     assert default["is_personal"] is True and default["name"] == "My team"
 
 
@@ -215,16 +206,23 @@ def test_a_task_made_with_a_team_header_belongs_to_that_team_only(app, session, 
     assert all(t["id"] != task.id for t in get(ada, "/api/tasks").json()["tasks"])
 
 
-def test_the_old_frontend_with_one_team_and_no_header_is_unchanged(app, session, world):
-    ada = sign_in(app, ADA)  # owns X, her only ordinary team: the default
-    assert get(ada, "/api/team").json()["name"] == "X"
+def test_a_request_with_no_header_acts_on_the_personal_workspace_even_with_one_team(
+    app, session, world
+):
+    """Workspaces design, section 7: no header is the personal workspace, never the one ordinary
+    team a person happens to be in (the web always names its workspace)."""
+    ada = sign_in(app, ADA)  # owns X, her only ordinary team
+    personal = teams.personal_team(session, world.ada.id)
+    assert get(ada, "/api/team").json()["name"] == "My team"
     assert get(ada, "/api/team/members").status_code == 200
     made = call(ada, "POST", "/api/tasks", body={"title": "Old client task"})
     assert made.status_code == 201
-    assert session.get(Task, made.json()["id"]).team_id == world.x.id
+    assert session.get(Task, made.json()["id"]).team_id == personal.id
     created = call(ada, "POST", "/api/series", body={"title": "Standup"})
     assert created.status_code == 201
-    assert session.get(Series, created.json()["id"]).team_id == world.x.id
+    assert session.get(Series, created.json()["id"]).team_id == personal.id
+    named = call(ada, "POST", "/api/tasks", world.x, {"title": "Named client task"})
+    assert session.get(Task, named.json()["id"]).team_id == world.x.id
 
 
 # ---- series: by their own team, listed and created per team ----

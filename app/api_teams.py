@@ -72,11 +72,7 @@ def list_teams(
     session.commit()
     return TeamList(
         teams=_summaries(session, user),
-        can_create_more=(
-            max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user))
-            if teams.multi_team_enabled()
-            else 0
-        ),
+        can_create_more=max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user)),
     )
 
 
@@ -85,7 +81,7 @@ def list_teams(
     status_code=201,
     tags=["team"],
     responses={
-        409: {"model": ErrorResponse, "description": "`multi_team_disabled`, `team_limit`"},
+        409: {"model": ErrorResponse, "description": "`team_limit`"},
         422: {"model": ErrorResponse, "description": "`invalid_name`"},
     },
 )
@@ -95,10 +91,7 @@ def create_team(
     user: User = Depends(auth.current_user),
 ) -> TeamSummary:
     """Make a team the caller owns. At most three teams per account besides the personal one (409
-    `team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused
-    then), 422 `invalid_name` for an empty name."""
-    if not teams.multi_team_enabled():
-        raise Refused(409, "multi_team_disabled", "Creating a team is not available yet.")
+    `team_limit`), 422 `invalid_name` for an empty name."""
     name = titles.clean_title(body.name, 100)
     if not name:
         raise Refused(422, "invalid_name", "Give the team a name.")

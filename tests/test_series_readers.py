@@ -53,7 +53,6 @@ from tests.test_ask import model, post  # noqa: F401  (model: a fixture used by 
 from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     PAT,
     QUINN,
-    multi_team_on,
     world,
 )
 from tests.test_multi_team_moved import NoBot

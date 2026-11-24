@@ -40,7 +40,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import add_task
-from tests.test_multi_team_leaks import PAT, QUINN, multi_team_on, new_team, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F401
 from tests.test_multi_team_moved import ADA, DEE, NoBot, dee, move  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_workspace import GOOD, NOTES, FakeChat

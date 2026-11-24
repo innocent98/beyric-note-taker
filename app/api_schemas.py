@@ -96,6 +96,23 @@ class BadgesOut(BaseModel):
     tasks_new: int
 
 
+class WorkspaceRef(BaseModel):
+    """A workspace (a team) as the switcher and the toast name it."""
+
+    id: int
+    name: str
+    # The person's own personal space (a workspace of one).
+    is_personal: bool
+    # `team` or `class`: `class` only changes the wording (Class, Students, Lecturer).
+    kind: str
+
+
+class OtherWorkspace(WorkspaceRef):
+    # Unread notifications in this workspace: the switcher shows a dot when it is above zero, so
+    # nothing in another workspace is missed.
+    unread_notifications: int
+
+
 class SessionState(BaseModel):
     authenticated: bool
     csrf_token: str
@@ -104,11 +121,17 @@ class SessionState(BaseModel):
     usage: UsageOut | None
     # Notifications the user has not read yet: the number on the bell.
     unread_notifications: int | None
-    # Counts for the sidebar.
+    # Counts for the sidebar, for the ACTIVE workspace: the `X-Team-Id` header, else the person's
+    # personal workspace (a team the caller is not in quietly gives the personal one).
     badges: BadgesOut | None
-    # `MULTI_TEAM_ENABLED`: whether this server lets a person belong to several teams. The frontend
-    # draws the team switcher, the teams list and the Move action only when it is true. A server
-    # setting, not a person's: the same answer logged in or out.
+    # The workspace the counts above are about; null while logged out.
+    active_workspace: WorkspaceRef | None
+    # Every other workspace the person is in, with its unread notification count; null while
+    # logged out.
+    other_workspaces: list[OtherWorkspace] | None
+    # Always true since the multi-team switch was removed (workspaces design, section 7): every
+    # server lets a person belong to several teams. Kept so an older frontend keeps drawing the
+    # team switcher; a new one need not read it.
     multi_team: bool
 
 
@@ -266,6 +289,12 @@ class MoveRequest(BaseModel):
 
 
 class MeetingDetail(MeetingSummary):
+    # The workspace this meeting lives in (workspaces design, 12.2). The page may be opened from
+    # any workspace (a link, an email, a notification): the web switches to this one and says so.
+    # `workspace` is null only when the reader is not a member of that team (it is not theirs to
+    # name).
+    workspace_team_id: int
+    workspace: WorkspaceRef | None = None
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
     # The note taker's Google address, when the page may tell the owner to add it to the event's
@@ -297,8 +326,7 @@ class MeetingDetail(MeetingSummary):
     team: TeamRef | None = None
     owned_by_team: bool = False
     # The recorder of a finished, private or shared meeting may move it to a team they belong to
-    # (only while the switch is on, `MULTI_TEAM_ENABLED`); the team's owners and admins may move a
-    # team's meeting back to its recorder.
+    # the team's owners and admins may move a team's meeting back to its recorder.
     can_move: bool = False
     can_move_back: bool = False
     join_attempts: int

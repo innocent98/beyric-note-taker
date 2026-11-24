@@ -21,11 +21,6 @@ from tests.test_web import make_settings, make_user
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 
 
-@pytest.fixture
-def flag_on(monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: True)
-
-
 def person(session, email) -> object:
     user = make_user(session, email)
     teams.ensure_personal_team(session, user)
@@ -63,82 +58,10 @@ def put_task(session, team, title="Task", **fields) -> Task:
     return task
 
 
-# ---- the switch ----
+# ---- joining: a second membership ----
 
 
-def test_the_switch_is_off_by_default():
-    assert make_settings().multi_team_enabled is False
-    assert teams.multi_team_enabled() is False
-
-
-# ---- flag off: today's behaviour, exactly ----
-
-
-def test_off_a_person_on_a_team_with_others_cannot_join_another(session, owner):
-    ada, bola, chi = (
-        owner,
-        person(session, "bola@example.test"),
-        person(session, "chi@example.test"),
-    )
-    first = ordinary_team(session, ada, bola)
-    second = ordinary_team(session, chi)
-    with pytest.raises(teams.TeamChangeRefused) as caught:
-        teams.join(session, bola, second.id, "member", None, NOW)
-    assert (caught.value.status, caught.value.code) == (409, "already_on_team")
-    assert first.id in team_ids(session, bola) and second.id not in team_ids(session, bola)
-
-
-def test_off_a_solo_ordinary_team_is_dissolved_into_the_team_joined_and_the_personal_team_stays(
-    session, owner
-):
-    chi, bola = person(session, "chi@example.test"), person(session, "bola@example.test")
-    solo = ordinary_team(session, bola)  # her own team of one: the one she lives in today
-    put_task(session, solo, "Mine")
-    target = ordinary_team(session, chi)
-    teams.join(session, bola, target.id, "member", None, NOW)
-    session.commit()
-    assert session.get(Team, solo.id) is None
-    assert session.scalars(select(Task.team_id)).all() == [target.id]  # the task moved
-    assert target.id in team_ids(session, bola)
-    assert teams.personal_team(session, bola.id) is not None  # the personal one is not touched
-
-
-def test_off_a_person_with_only_a_personal_team_dissolves_it_as_today(session, owner):
-    chi, bola = person(session, "chi@example.test"), person(session, "bola@example.test")
-    personal = teams.personal_team(session, bola.id)
-    put_task(session, personal, "Mine")
-    target = ordinary_team(session, chi)
-    teams.join(session, bola, target.id, "member", None, NOW)
-    session.commit()
-    assert session.get(Team, personal.id) is None
-    assert team_ids(session, bola) == [target.id]
-    assert session.scalars(select(Task.team_id)).all() == [target.id]
-
-
-def test_off_joining_a_personal_team_makes_it_an_ordinary_team_and_changes_nothing_else(
-    session, owner
-):
-    """Today a person invites people into their team of one: that must keep working, and the team
-    count must not move (the owner's new personal team is made later, when something needs it)."""
-    ada, bola = person(session, "ada@example.test"), person(session, "bola@example.test")
-    ada_personal = teams.personal_team(session, ada.id)
-    before = session.scalar(select(func.count()).select_from(Team))
-    teams.join(session, bola, ada_personal.id, "member", None, NOW)
-    session.commit()
-    session.refresh(ada_personal)
-    assert ada_personal.is_personal is False
-    assert session.scalar(select(func.count()).select_from(Team)) == before - 1  # Bola's own went
-    assert teams.personal_team(session, ada.id) is None
-    assert teams.team_of(session, ada.id).id == ada_personal.id  # still lands on the team she runs
-    assert teams.team_of(session, bola.id).id == ada_personal.id
-    assert teams.ensure_personal_team(session, ada).is_personal  # made when something needs it
-    assert teams.team_of(session, ada.id).id == ada_personal.id  # and she still lands on her team
-
-
-# ---- flag on: a second membership ----
-
-
-def test_on_joining_adds_a_membership_and_dissolves_nothing(session, owner, flag_on):
+def test_joining_adds_a_membership_and_dissolves_nothing(session, owner):
     chi, bola = person(session, "chi@example.test"), person(session, "bola@example.test")
     mine = ordinary_team(session, bola, name="Mine")
     personal = teams.personal_team(session, bola.id)
@@ -155,7 +78,7 @@ def test_on_joining_adds_a_membership_and_dissolves_nothing(session, owner, flag
     }  # nothing was moved
 
 
-def test_on_a_person_on_a_team_with_others_may_join_another(session, owner, flag_on):
+def test_a_person_on_a_team_with_others_may_join_another(session, owner):
     ada, bola, chi = (
         owner,
         person(session, "bola@example.test"),
@@ -168,7 +91,7 @@ def test_on_a_person_on_a_team_with_others_may_join_another(session, owner, flag
     assert second.id in team_ids(session, bola)
 
 
-def test_on_joining_the_same_team_twice_keeps_one_membership(session, owner, flag_on):
+def test_joining_the_same_team_twice_keeps_one_membership(session, owner):
     chi, bola = person(session, "chi@example.test"), person(session, "bola@example.test")
     target = ordinary_team(session, chi)
     first = teams.join(session, bola, target.id, "member", None, NOW)
@@ -183,7 +106,7 @@ def test_on_joining_the_same_team_twice_keeps_one_membership(session, owner, fla
     )
 
 
-def test_on_a_person_with_no_personal_team_gets_one_when_they_join(session, owner, flag_on):
+def test_a_person_with_no_personal_team_gets_one_when_they_join(session, owner):
     """A flag-off join dissolved it; the switch being turned on mends that."""
     chi, bola = person(session, "chi@example.test"), make_user(session, "bola@example.test")
     target = ordinary_team(session, chi)
@@ -192,7 +115,7 @@ def test_on_a_person_with_no_personal_team_gets_one_when_they_join(session, owne
     assert teams.personal_team(session, bola.id) is not None
 
 
-def test_on_nobody_joins_a_personal_team(session, owner, flag_on):
+def test_nobody_joins_a_personal_team(session, owner):
     ada, bola = person(session, "ada@example.test"), person(session, "bola@example.test")
     personal = teams.personal_team(session, ada.id)
     with pytest.raises(teams.TeamChangeRefused) as caught:
@@ -201,7 +124,7 @@ def test_on_nobody_joins_a_personal_team(session, owner, flag_on):
     assert team_ids(session, bola) == [teams.personal_team(session, bola.id).id]
 
 
-def test_on_nobody_is_invited_into_a_personal_team(session, owner, flag_on):
+def test_nobody_is_invited_into_a_personal_team(session, owner):
     ada = person(session, "ada@example.test")
     personal = teams.personal_team(session, ada.id)
     with pytest.raises(Refused) as caught:
@@ -220,31 +143,10 @@ def test_on_nobody_is_invited_into_a_personal_team(session, owner, flag_on):
     assert session.scalar(select(func.count()).select_from(TeamInvite)) == 0
 
 
-def test_off_inviting_from_a_team_of_one_still_works(session, owner):
-    ada = person(session, "ada@example.test")
-    personal = teams.personal_team(session, ada.id)
-    result = team_invites.create(
-        session,
-        make_settings(),
-        personal.id,
-        ada,
-        email="bola@example.test",
-        name=None,
-        role="member",
-        now=NOW,
-        has_room=True,
-    )
-    assert result.status == "sent"
-
-
 # ---- leaving and being removed ----
 
 
-@pytest.mark.parametrize("on", [False, True])
-def test_leaving_creates_no_team_of_one_for_someone_who_has_a_personal_team(
-    session, owner, monkeypatch, on
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: on)
+def test_leaving_creates_no_team_of_one_for_someone_who_has_a_personal_team(session, owner):
     ada, bola = person(session, "ada@example.test"), person(session, "bola@example.test")
     joint = ordinary_team(session, ada, bola)
     before = session.scalar(select(func.count()).select_from(Team))
@@ -280,9 +182,7 @@ def test_leaving_mends_a_person_who_has_no_personal_team(session, owner):
     assert team_ids(session, bola) == [back.id] and joint.id not in team_ids(session, bola)
 
 
-def test_leaving_one_of_two_ordinary_teams_leaves_the_other_and_the_personal_team(
-    session, owner, flag_on
-):
+def test_leaving_one_of_two_ordinary_teams_leaves_the_other_and_the_personal_team(session, owner):
     ada, chi, bola = (
         person(session, "ada@example.test"),
         person(session, "chi@example.test"),

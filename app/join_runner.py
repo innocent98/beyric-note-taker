@@ -636,6 +636,7 @@ def _place(
         title=event.title if event else None,
         adopt_orphan=True,
         expected_seconds=int((join.ends_at - join.starts_at).total_seconds()),
+        workspace_team_id=join.team_id,  # born in the connection's workspace
     )
     join_id, user_id = join.id, join.user_id
 

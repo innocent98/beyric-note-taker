@@ -34,7 +34,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import add_task
-from tests.test_multi_team_leaks import PAT, multi_team_on, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, world  # noqa: F401
 from tests.test_team_visibility import sign_in
 
 ADA = "owner@example.test"
@@ -114,18 +114,12 @@ def test_the_three_lists_of_a_person_in_two_teams_do_not_overlap_or_lose_anythin
     )
 
 
-def test_no_header_means_the_default_team_while_the_switch_is_on(app, cast):
-    # Pat has two ordinary teams: the personal one is the default.
+def test_no_header_means_the_personal_workspace(app, cast):
+    # Pat's personal workspace holds the one meeting nobody has.
     assert meeting_ids(sign_in(app, PAT)) == [cast.p_private.id]
-    # Ada has exactly one ordinary team, X: it is the default.
-    assert meeting_ids(sign_in(app, ADA)) == sorted([cast.in_x.id, cast.p_in_x.id])
-
-
-def test_with_the_switch_off_the_list_is_what_it_always_was(app, cast, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert meeting_ids(sign_in(app, PAT)) == sorted(
-        [cast.p_private.id, cast.p_in_x.id, cast.p_moved_y.id, cast.in_x.id, cast.q_in_y.id]
-    )
+    # Ada has exactly one ordinary team, X, and still: no header is her personal workspace, never
+    # "everything she may read" and never the team she happens to be in.
+    assert meeting_ids(sign_in(app, ADA)) == [cast.private.id]
 
 
 def test_a_team_the_caller_is_not_in_is_404_and_a_team_never_widens_the_read(app, cast):
@@ -288,11 +282,6 @@ def test_a_stale_team_does_not_break_the_session(app, cast):
     assert response.json()["badges"]["review_open"] == 1  # the personal default's
 
 
-def test_the_badges_with_the_switch_off_count_everything_as_before(app, cast, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert badges(sign_in(app, PAT))["review_open"] == 3
-
-
 def test_a_logged_out_session_with_a_header_is_still_a_plain_session(anon_client):
     body = anon_client.get("/api/session", headers={"X-Team-Id": "1"}).json()
     assert body["authenticated"] is False and body["badges"] is None
@@ -330,8 +319,3 @@ def test_the_personal_team_keeps_its_fixed_name(app, cast):
     # The other settings of the personal team still change (the switch is not about a name).
     ok = patch_team(pat, cast.personal_pat, {"share_new_meetings": False})
     assert ok.status_code == 200, ok.text
-
-
-def test_with_the_switch_off_a_team_of_one_still_renames_as_it_always_did(app, cast, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert patch_team(sign_in(app, PAT), cast.personal_pat, {"name": "Renamed"}).status_code == 200

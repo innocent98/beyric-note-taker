@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.orm import Session
 
-from app import titles
+from app import birth_workspace, titles
 from app.models import Meeting, Team, TeamMember, User
 
 MANAGER_ROLES = ("owner", "admin")
@@ -97,34 +97,41 @@ def visible_meetings(user: User) -> Select[tuple[Meeting]]:
 
 @dataclass(frozen=True)
 class ActiveTeam:
-    """The team a LIST is about (the `X-Team-Id` header, else the person's default team): its id and
-    whether it is the caller's own personal team. Made by `team_admin.active_team`."""
+    """The workspace a LIST is about (the `X-Team-Id` header, else the person's personal
+    workspace): its id and whether it is the caller's own personal team. Made by
+    `team_admin.active_team`."""
 
     id: int
     personal: bool
 
 
-def active_team_clause(user: User, active: ActiveTeam) -> ColumnElement[bool]:
-    """Which meetings belong on the active team's list: for an ordinary team, those shared to it or
-    owned by (moved to) it, whoever recorded them; for the caller's personal team, only those they
-    recorded that no team has (neither shared nor moved). It only NARROWS a list: always combine it
-    with the read rule (`readable_in`), never use it alone."""
-    if active.personal:
-        return and_(
-            Meeting.owner_user_id == user.id,
-            Meeting.shared_team_id.is_(None),
-            Meeting.owner_team_id.is_(None),
-        )
-    return in_team_clause(active.id)
+def in_workspace(user: User, team: ActiveTeam | Team) -> ColumnElement[bool]:
+    """The one `where` condition for "the caller may read this meeting AND it lives in this
+    workspace" (workspaces design, sections 3 and 12.1). `team` is the active workspace (a `Team`
+    or the `ActiveTeam` of a list). The workspace is the meeting's CONTAINER (`workspace_team_id`);
+    who may read it is still `can_read_clause`: the header only narrows, it never widens, so a
+    teammate's unshared meeting in the team's workspace is not listed for anyone but its recorder.
+    Meetings, search, Ask, decisions, review items, tasks' meetings and every count and badge
+    filter through this one function: a count equals its list, and nothing of another workspace is
+    ever on screen."""
+    return and_(can_read_clause(user), Meeting.workspace_team_id == team.id)
 
 
-def readable_in(user: User, active: ActiveTeam | None) -> ColumnElement[bool]:
-    """The `where` condition for "the caller may read this meeting AND it is on the active team's
-    list" (`active` None: every meeting they may read, as before). Meetings, decisions, review
-    items and the sidebar counts all filter through this one function: a count equals its list."""
-    if active is None:
-        return can_read_clause(user)
-    return and_(can_read_clause(user), active_team_clause(user, active))
+def active_or_personal(session: Session, user: User, active: ActiveTeam | None) -> ActiveTeam:
+    """The workspace a service-level list narrows by. A route passes the `ActiveTeam` it got from
+    `team_admin.active_team`; a caller that names none (an old page, a script) gets the caller's
+    personal workspace, never "everything the caller may read"."""
+    if active is not None:
+        return active
+    return ActiveTeam(
+        id=birth_workspace.personal_team_id(session.connection(), user.id), personal=True
+    )
+
+
+def readable_in(user: User, active: ActiveTeam) -> ColumnElement[bool]:
+    """`in_workspace` for the `ActiveTeam` a list was given. There is no `None` any more: every
+    list is about one workspace (call `active_or_personal` first when you may have none)."""
+    return in_workspace(user, active)
 
 
 def owns(session: Session, user: User, meeting: Meeting) -> bool:

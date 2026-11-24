@@ -11,13 +11,17 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import ask, auth, services
+from app import ask, auth, services, teams, visibility, workspace_context
 from app.api_schemas import ErrorResponse
 from app.db import get_session
-from app.models import User
+from app.models import Team, User
 from app.services import Refused
 
 router = APIRouter()
+
+
+def _active(workspace: Team, user: User) -> visibility.ActiveTeam:
+    return visibility.ActiveTeam(id=workspace.id, personal=teams.is_personal_of(workspace, user.id))
 
 
 class AskIn(BaseModel):
@@ -66,11 +70,14 @@ class ScopeOut(BaseModel):
 
 @router.get("/ask/scope", tags=["ask"])
 def ask_scope(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> ScopeOut:
-    """What a question searches: the ready meetings the caller may read, their decisions and
-    tasks, and the question chips. No model call."""
-    found = ask.scope(session, user)
+    """What a question searches: the ready meetings of the active workspace (the `X-Team-Id`
+    header, else the personal workspace) the caller may read, their decisions and tasks, and the
+    question chips. No model call."""
+    found = ask.scope(session, user, workspace=_active(workspace, user))
     return ScopeOut(
         meetings=found.meetings,
         decisions=found.decisions,
@@ -103,15 +110,19 @@ def ask_scope(
 def ask_question(
     body: AskIn,
     request: Request,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     client=Depends(services.get_openai_client),
 ) -> AskOut:
     """Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
-    tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found."""
+    tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.
+    Only the active workspace is searched (the `X-Team-Id` header, else the personal workspace)."""
     if not request.app.state.public_limits.ask_rate.hit(f"user:{user.id}"):
         raise Refused(429, "ask_rate", "Slow down a little and try again in a minute.")
-    result = ask.answer(session, user, body.question, client=client)
+    result = ask.answer(
+        session, user, body.question, client=client, workspace=_active(workspace, user)
+    )
     return AskOut(
         kind=result.kind,
         lead=result.lead,

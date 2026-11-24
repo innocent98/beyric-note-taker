@@ -53,11 +53,6 @@ from tests.test_web import make_user
 PAT, QUINN, ZED = "pat@example.test", "quinn@example.test", "zed@example.test"
 
 
-@pytest.fixture(autouse=True)
-def multi_team_on(monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: True)
-
-
 def new_team(session, boss, name, *members) -> Team:
     """An ordinary (not personal) team: `boss` owns it, `members` are plain members."""
     team = Team(owner_user_id=boss.id, name=name, is_personal=False)

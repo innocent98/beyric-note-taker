@@ -41,7 +41,14 @@ from app.extraction import normalise
 from app.models import AiRun, Decision, Meeting, Task, User, UserSettings
 from app.notes import NONE_NOTED, UNKNOWN_SPEAKER
 from app.services import Refused
-from app.visibility import can_read_clause, former_or_name, is_shared, visible_meetings
+from app.visibility import (
+    ActiveTeam,
+    active_or_personal,
+    can_read_clause,
+    former_or_name,
+    in_workspace,
+    is_shared,
+)
 from app.words import WORD_CAP as _WORD_CAP
 from app.words import stem as _stem
 from app.words import stems as _stems
@@ -460,11 +467,20 @@ def _summarise(question: str, no_words: bool, rng: DateRange | None) -> bool:
 
 
 def candidates(
-    session: Session, user: User, stems: list[str], rng: DateRange | None, zone, summarise: bool
+    session: Session,
+    user: User,
+    stems: list[str],
+    rng: DateRange | None,
+    zone,
+    summarise: bool,
+    workspace: ActiveTeam | None = None,
 ) -> tuple[list[Meeting], set[int]]:
     """The meetings to read, most relevant first (at most 12), and those whose notes go in whole.
-    Only ready meetings the caller may read."""
-    base = visible_meetings(user).where(Meeting.status == "ready")
+    Only ready meetings the caller may read AND that live in the active workspace (the readability
+    rule decides who may read; the workspace only narrows which readable meetings are searched, so
+    an answer in one workspace never draws on another's)."""
+    workspace = active_or_personal(session, user, workspace)
+    base = select(Meeting).where(in_workspace(user, workspace), Meeting.status == "ready")
     if rng is not None:
         start, end = _utc_bounds(rng, zone)
         base = base.where(Meeting.created_at >= start, Meeting.created_at < end)
@@ -501,12 +517,18 @@ def candidates(
 
 
 def retrieve(
-    session: Session, user: User, question: str, rng: DateRange | None, zone
+    session: Session,
+    user: User,
+    question: str,
+    rng: DateRange | None,
+    zone,
+    workspace: ActiveTeam | None = None,
 ) -> tuple[list[Passage], dict[int, Meeting]]:
-    """The passages (at most 12, best first, each already cut) and the meetings they come from."""
+    """The passages (at most 12, best first, each already cut) and the meetings they come from,
+    all from the active workspace."""
     stems = _stems(strip_dates(question))[:_WORD_CAP]
     summarise = _summarise(question, not stems, rng)
-    meetings, whole = candidates(session, user, stems, rng, zone, summarise)
+    meetings, whole = candidates(session, user, stems, rng, zone, summarise, workspace)
     if not meetings:
         return [], {}
     ids = [m.id for m in meetings]
@@ -586,20 +608,25 @@ class _Cites:
 _STATUS_WORDS = {"todo": "to do", "doing": "in progress", "done": "done"}
 
 
-def _task_query(user: User, rng: DateRange | None):
-    """The person's own confirmed tasks that the tasks path lists: open ones, or, with a date
-    phrase, those assigned in that period in any status. A suggested task waits for its accept and
-    is not listed anywhere."""
+def _task_query(user: User, rng: DateRange | None, workspace: ActiveTeam):
+    """The person's own confirmed tasks of the active workspace that the tasks path lists: open
+    ones, or, with a date phrase, those assigned in that period in any status. A suggested task
+    waits for its accept and is not listed anywhere."""
     query = select(Task).where(
-        task_rules.visible(user), task_rules.confirmed(), Task.assignee_user_id == user.id
+        task_rules.visible(user),
+        task_rules.confirmed(),
+        Task.assignee_user_id == user.id,
+        Task.team_id == workspace.id,
     )
     if rng is None:
         return query.where(Task.status != "done")
     return query.where(Task.assigned_on >= rng.start, Task.assigned_on < rng.end)
 
 
-def _task_answer(session: Session, user: User, rng: DateRange | None, zone) -> Answer:
-    query = _task_query(user, rng)
+def _task_answer(
+    session: Session, user: User, rng: DateRange | None, zone, workspace: ActiveTeam
+) -> Answer:
+    query = _task_query(user, rng, workspace)
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = list(
         session.scalars(
@@ -836,13 +863,21 @@ def _zone_of(session: Session, user: User):
 
 
 def answer(
-    session: Session, user: User, question: str, *, now: datetime | None = None, client=None
+    session: Session,
+    user: User,
+    question: str,
+    *,
+    now: datetime | None = None,
+    client=None,
+    workspace: ActiveTeam | None = None,
 ) -> Answer:
     """Answer one question. Raises `Refused` 422 `question_invalid`, 403 `plan_inactive` (feature
     gate; the free "my tasks" answer is gated too, so Ask is one switch), 429 `ask_limit` or 502
     `ask_failed`. Commits when a model call was made (its ledger row); nothing about the question
-    is kept."""
+    is kept. `workspace` is the active workspace (none given: the caller's personal one): only its
+    meetings, decisions and tasks are searched."""
     now = now or datetime.now(UTC)
+    workspace = active_or_personal(session, user, workspace)
     question = question.strip()
     if not question or len(question) > MAX_QUESTION_CHARS:
         raise Refused(422, "question_invalid", QUESTION_INVALID)
@@ -851,8 +886,8 @@ def answer(
     today = now.astimezone(zone).date()
     rng = date_hint(question, today)
     if is_task_question(question):
-        return _task_answer(session, user, rng, zone)
-    passages, meetings = retrieve(session, user, question, rng, zone)
+        return _task_answer(session, user, rng, zone, workspace)
+    passages, meetings = retrieve(session, user, question, rng, zone, workspace)
     if not passages:
         return Answer("none", NOTHING_FOUND)
     settings = get_settings()
@@ -929,12 +964,15 @@ def _own_names(user: User) -> set[str]:
     return names
 
 
-def frequent_speakers(session: Session, user: User, limit: int = 3) -> list[str]:
-    """The speakers named most often in the last 10 ready meetings the person may read, other than
-    the person themself, most frequent first."""
+def frequent_speakers(
+    session: Session, user: User, limit: int = 3, workspace: ActiveTeam | None = None
+) -> list[str]:
+    """The speakers named most often in the last 10 ready meetings of the active workspace the
+    person may read, other than the person themself, most frequent first."""
+    workspace = active_or_personal(session, user, workspace)
     recent = session.scalars(
-        visible_meetings(user)
-        .where(Meeting.status == "ready")
+        select(Meeting)
+        .where(in_workspace(user, workspace), Meeting.status == "ready")
         .order_by(Meeting.created_at.desc(), Meeting.id.desc())
         .limit(10)
     )
@@ -956,18 +994,26 @@ CHIP_TRIES = 6  # meetings tried per chip before giving up on it
 CHIP_NAMES = 3
 
 
-def _finds(session: Session, user: User, chip: str, today: date, zone, meeting_id: int | None):
+def _finds(
+    session: Session,
+    user: User,
+    chip: str,
+    today: date,
+    zone,
+    meeting_id: int | None,
+    workspace: ActiveTeam,
+):
     """Whether the question would be searched (not the tasks path, not "nothing") and, when a
     meeting is named, read from that meeting: the chip's own guarantee, tested by running the
     retrieval the real question would run."""
     if is_task_question(chip):
         return False
     rng = date_hint(chip, today)
-    passages, _ = retrieve(session, user, chip, rng, zone)
+    passages, _ = retrieve(session, user, chip, rng, zone, workspace)
     return any(p.meeting_id == meeting_id for p in passages) if meeting_id else bool(passages)
 
 
-def _day_chip(session, user, meetings, template, today, zone) -> str | None:
+def _day_chip(session, user, meetings, template, today, zone, workspace) -> str | None:
     """`template` with the day of the first of `meetings` that it finds, written as the date
     parser reads it, or None. No meeting title ever goes into a chip."""
     for meeting in meetings[:CHIP_TRIES]:
@@ -976,22 +1022,25 @@ def _day_chip(session, user, meetings, template, today, zone) -> str | None:
         rng = date_hint(chip, today)
         if rng is None or (rng.start, rng.end) != (day, day + timedelta(days=1)):
             continue  # a day the parser would read as another one (more than a year back)
-        if _finds(session, user, chip, today, zone, meeting.id):
+        if _finds(session, user, chip, today, zone, meeting.id, workspace):
             return chip
     return None
 
 
-def suggestions(session: Session, user: User, now: datetime) -> list[str]:
+def suggestions(
+    session: Session, user: User, now: datetime, workspace: ActiveTeam | None = None
+) -> list[str]:
     """The chips under the question box, at most 5, built from the person's own readable data with
     no model call, each shown only when it is guaranteed to be answerable; none without a ready
     meeting. In order: summarise a day, what was decided on a day, what I committed to (last
     week, else this week), my open tasks, what a frequent speaker said."""
+    workspace = active_or_personal(session, user, workspace)
     zone = _zone_of(session, user)
     today = now.astimezone(zone).date()
     recent = list(
         session.scalars(
-            visible_meetings(user)
-            .where(Meeting.status == "ready")
+            select(Meeting)
+            .where(in_workspace(user, workspace), Meeting.status == "ready")
             .order_by(Meeting.created_at.desc(), Meeting.id.desc())
             .limit(CHIP_SCAN)
         )
@@ -1000,7 +1049,9 @@ def suggestions(session: Session, user: User, now: datetime) -> list[str]:
         return []
     chips: list[str | None] = []
     with_notes = [m for m in recent if (m.notes or "").strip()]
-    chips.append(_day_chip(session, user, with_notes, "Summarise the meeting on {}", today, zone))
+    chips.append(
+        _day_chip(session, user, with_notes, "Summarise the meeting on {}", today, zone, workspace)
+    )
     decided = set(
         session.scalars(
             select(Decision.meeting_id)
@@ -1009,11 +1060,15 @@ def suggestions(session: Session, user: User, now: datetime) -> list[str]:
         )
     )
     with_decisions = [m for m in recent if m.id in decided]
-    chips.append(_day_chip(session, user, with_decisions, "What did we decide on {}?", today, zone))
+    chips.append(
+        _day_chip(
+            session, user, with_decisions, "What did we decide on {}?", today, zone, workspace
+        )
+    )
     for window in ("last week", "this week"):
         chip = f"What did I commit to {window}?"
         rng = date_hint(chip, today)
-        mine = _task_query(user, rng).where(Task.meeting_id.is_not(None))
+        mine = _task_query(user, rng, workspace).where(Task.meeting_id.is_not(None))
         if (
             rng
             and is_task_question(chip)
@@ -1021,12 +1076,14 @@ def suggestions(session: Session, user: User, now: datetime) -> list[str]:
         ):
             chips.append(chip)
             break
-    open_tasks = _task_query(user, None)
+    open_tasks = _task_query(user, None, workspace)
     if session.scalar(select(func.count()).select_from(open_tasks.subquery())):
         chips.append("What are my open tasks?")
-    for name in frequent_speakers(session, user, CHIP_NAMES):
+    for name in frequent_speakers(session, user, CHIP_NAMES, workspace):
         chip = f"What did {name} say?"
-        if date_hint(chip, today) is None and _finds(session, user, chip, today, zone, None):
+        if date_hint(chip, today) is None and _finds(
+            session, user, chip, today, zone, None, workspace
+        ):
             chips.append(chip)
             break
     return [c for c in chips if c]
@@ -1040,10 +1097,14 @@ class Scope:
     suggestions: list[str]
 
 
-def scope(session: Session, user: User, now: datetime | None = None) -> Scope:
-    """What a question searches, by the one visibility rule: ready meetings the person may read,
-    their unhidden decisions, and the tasks of them the person may see."""
-    ready = select(Meeting.id).where(can_read_clause(user), Meeting.status == "ready")
+def scope(
+    session: Session, user: User, now: datetime | None = None, workspace: ActiveTeam | None = None
+) -> Scope:
+    """What a question searches, by the one visibility rule inside the active workspace: ready
+    meetings the person may read, their unhidden decisions, and the tasks of them the person may
+    see."""
+    workspace = active_or_personal(session, user, workspace)
+    ready = select(Meeting.id).where(in_workspace(user, workspace), Meeting.status == "ready")
     meetings = session.scalar(select(func.count()).select_from(ready.subquery())) or 0
     decisions = (
         session.scalar(
@@ -1061,5 +1122,5 @@ def scope(session: Session, user: User, now: datetime | None = None) -> Scope:
         )
         or 0
     )
-    chips = suggestions(session, user, now or datetime.now(UTC)) if meetings else []
+    chips = suggestions(session, user, now or datetime.now(UTC), workspace) if meetings else []
     return Scope(meetings, decisions, visible_tasks, chips)

@@ -180,10 +180,9 @@ def create(
     """Invite one (already normalised) address. `has_room` is the pilot's answer, asked by the
     caller before this and once per address. 409 `pilot_full` for someone who needs a place when
     there is none; 409 `invite_limit` over the team's caps; 409 `personal_team` for a personal team
-    while `MULTI_TEAM_ENABLED` is on (nobody is invited into a personal space; with it off, a team
-    of one grows into a team as before: `teams.join`). In the caller's transaction."""
+    (nobody is invited into a personal space). In the caller's transaction."""
     team = session.get(Team, team_id)
-    if team is not None and team.is_personal and teams.multi_team_enabled():
+    if team is not None and team.is_personal:
         raise Refused(
             409,
             "personal_team",

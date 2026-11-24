@@ -15,42 +15,23 @@ says so; routes commit.
 """
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import Header
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import tasks, teams, titles, visibility
+from app import tasks, teams, titles, visibility, workspace_context
 from app.extraction import normalise
 from app.models import Task, Team, TeamInvite, TeamMember, User
-from app.services import MAX_ID, Refused
+from app.services import Refused
 
 MANAGER_ROLES = teams.MANAGER_ROLES
 MAX_ALIASES, MAX_ALIAS_CHARS = tasks.MAX_ALIASES, tasks.MAX_ALIAS_CHARS
 FORBIDDEN_MESSAGE = "Only an owner or admin of the team can do that."
 
 
-TEAM_HEADER = "X-Team-Id"
-
-
-def requested_team(
-    x_team_id: Annotated[
-        int | None,
-        Header(
-            alias=TEAM_HEADER,
-            ge=1,
-            le=MAX_ID,
-            description="The team this request is about. Omitted: the caller's default team "
-            "(their only team other than the personal one, else the personal one). A team the "
-            "caller is not in is 404 `not_found`.",
-        ),
-    ] = None,
-) -> int | None:
-    """The explicit team of a team-implicit route (multi-team design 6.7): the `X-Team-Id` header,
-    per request. Nothing is kept on the server between requests, so two browser tabs on two teams
-    never fight over a "current team". Pass the result to `my_membership`."""
-    return x_team_id
+TEAM_HEADER = workspace_context.TEAM_HEADER
+# The `X-Team-Id` header of a route (workspaces design, section 7): see `workspace_context`.
+requested_team = workspace_context.requested_team
 
 
 def forbidden(message: str = FORBIDDEN_MESSAGE) -> Refused:
@@ -62,39 +43,35 @@ def not_found() -> Refused:
 
 
 def my_membership(session: Session, user: User, team_id: int | None = None) -> TeamMember:
-    """The caller's membership of `team_id`, or naming none, of their default team (their only
-    ordinary team, else their personal one: `teams.default_membership`), made if the account
-    somehow has none (every account has a team). Naming a team the caller is not in is a 404, as
-    for any team that is not theirs."""
-    member = teams.membership(session, user.id, team_id)
-    if member is None and team_id is None:
-        teams.ensure_team(session, user)
-        member = teams.membership(session, user.id)
-    if member is None:
+    """The caller's membership of the active workspace: `team_id` (the `X-Team-Id` header), else
+    their personal workspace. Naming a team the caller is not in is a 404, as for any team that is
+    not theirs (`workspace_context.require`)."""
+    team = workspace_context.require(session, user, team_id)
+    member = teams.membership(session, user.id, team.id)
+    if member is None:  # a personal team the account lost its row in: every account has one
         raise Refused(404, "not_found", "No such team.")
     return member
 
 
-def active_team(session: Session, user: User, team_id: int | None) -> visibility.ActiveTeam | None:
-    """The team a LIST (meetings, decisions, review, the sidebar counts) is about: the named team
-    (404 `No such team.` when the caller is not in it), else their default team while
-    `MULTI_TEAM_ENABLED` is on. With the switch off and no team named: None, no narrowing, the list
-    is what it always was. The result goes to `visibility.readable_in`."""
-    if team_id is None and not teams.multi_team_enabled():
-        return None
-    member = my_membership(session, user, team_id)
-    team = session.get(Team, member.team_id)
+def active_team(session: Session, user: User, team_id: int | None) -> visibility.ActiveTeam:
+    """The workspace a LIST (meetings, decisions, review, the sidebar counts) is about: the named
+    team (404 `No such team.` when the caller is not in it), else their personal workspace. Never
+    None: every list narrows. The result goes to `visibility.readable_in` / `in_workspace`."""
+    team = workspace_context.require(session, user, team_id)
     return visibility.ActiveTeam(id=team.id, personal=teams.is_personal_of(team, user.id))
 
 
 def active_team_or_default(
     session: Session, user: User, team_id: int | None
-) -> visibility.ActiveTeam | None:
-    """`active_team`, but a team the caller is not in is quietly the default team instead of a 404:
-    for `GET /api/session`, which every page reads first and must never fail over a stale team (the
-    page itself answers a stale `?team=`)."""
-    if team_id is not None and teams.membership(session, user.id, team_id) is None:
-        team_id = None
+) -> visibility.ActiveTeam:
+    """`active_team` for `GET /api/session`, the first call of every page, which must never fail
+    over a stale team (the page itself answers a stale `?team=`): a team the caller is not in, or
+    none named, gives the workspace the web OPENS on, their default one (`teams.default_membership`:
+    their only team, else their personal one), not a 404. Every other route that names no team acts
+    on the personal workspace (`workspace_context.require`)."""
+    if team_id is None or teams.membership(session, user.id, team_id) is None:
+        default = teams.default_membership(session, user.id)
+        team_id = default.team_id if default is not None else None
     return active_team(session, user, team_id)
 
 

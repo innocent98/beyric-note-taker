@@ -472,9 +472,11 @@ def list_meetings(
     active: visibility.ActiveTeam | None = None,
 ) -> list[Meeting]:
     """Newest first, through the same visibility rule as every other read, narrowed to the active
-    team's list when `active` is given (`visibility.readable_in`). `created_from`
+    workspace's list (`visibility.readable_in`; none given: the caller's personal workspace, never
+    everything they may read). `created_from`
     (inclusive) and `created_before` (exclusive) are instants on `created_at`, the timestamp the
     list and its day headings use; `day_range_utc` makes them from two calendar days."""
+    active = visibility.active_or_personal(session, user, active)
     query = select(Meeting).where(visibility.readable_in(user, active))
     query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
@@ -624,9 +626,14 @@ def create_meeting(
     template_id: int | None,
     settings: Settings,
     title: str | None = None,
+    workspace_team_id: int | None = None,
 ) -> Meeting:
+    """Send a bot to a pasted link. `workspace_team_id` is the active workspace the route checked
+    the caller belongs to; none: their personal workspace."""
     try:
-        return _create_meeting(session, provider, user, url.strip(), template_id, settings, title)
+        return _create_meeting(
+            session, provider, user, url.strip(), template_id, settings, title, workspace_team_id
+        )
     except Refused:
         session.rollback()  # also releases the advisory lock
         raise
@@ -640,6 +647,7 @@ def _create_meeting(
     template_id: int | None,
     settings: Settings,
     title: str | None = None,
+    workspace_team_id: int | None = None,
 ) -> Meeting:
     # The submitted link is never echoed back: a Zoom link carries its meeting password.
     try:
@@ -670,6 +678,7 @@ def _create_meeting(
         template_id=template.id,
         source="manual",
         title=title,  # cleaned when stored (`titles.event_title`); blank = the fallback name
+        workspace_team_id=workspace_team_id,
     )
     try:
         return placement.place_bot(
