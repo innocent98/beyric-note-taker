@@ -510,6 +510,11 @@ class UserSettings(Base):
     # organisation. Off by default: every user's bot shares one Google account, so a stranger's
     # invite must not send it anywhere until the person says so.
     join_unanswered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # Under any rule: do not join an event with exactly two people invited (the person and one
+    # other). Off by default, so nothing changes for anyone until they tick it.
+    skip_one_on_ones: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
     calendar_template_id: Mapped[int | None] = mapped_column(
         ForeignKey("templates.id", ondelete="SET NULL")
     )

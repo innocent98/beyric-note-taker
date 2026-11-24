@@ -174,6 +174,17 @@ export function unansweredError(file: string): { status: number; code: string; m
   return { status: response.status, ...response.body.error };
 }
 
+// A capture from "Skip one-on-one meetings" (docs/fe-captures/skip-one-on-ones/<file>,
+// `python scripts/capture_skip_one_on_ones.py`): the body of the response, or the error it carried.
+export function skipBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/skip-one-on-ones", file))).response.body as T;
+}
+
+export function skipError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/skip-one-on-ones", file)));
+  return { status: response.status, ...response.body.error };
+}
+
 // A capture from the calendar write routes (docs/fe-captures/calendar-settings/<file>): the body of
 // the response, or the error it carried.
 export function settingsBody<T>(file: string): T {

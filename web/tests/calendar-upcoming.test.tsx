@@ -6,7 +6,7 @@ import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { ApiError } from "@/lib/api/client";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
 import type { CalendarEvent, CalendarState } from "@/lib/api/types";
-import { calendarBody, settingsBody, settingsError, unansweredBody } from "./helpers";
+import { calendarBody, settingsBody, settingsError, skipBody, unansweredBody } from "./helpers";
 
 const mocks = vi.hoisted(() => ({ override: vi.fn(), get: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { calendar: { override: mocks.override, get: mocks.get } } }));
@@ -90,6 +90,53 @@ describe("the reason is visible text", () => {
     const row = rowOf(boxOff, "Partnership idea");
     await userEvent.click(within(row).getByRole("switch"));
     await waitFor(() => expect(within(row).queryByText(WAITING)).toBeNull());
+  });
+});
+
+// LEAD-DESIGNED (2026-11-24): a meeting skipped by "Skip one-on-one meetings" is an Off row like the
+// others: the server's reason is the visible line, and the person's own switch still turns it on.
+// The bodies are the ones captured from the running app (docs/fe-captures/skip-one-on-ones/).
+describe("a skipped one-on-one", () => {
+  const SKIPPED = "Skipped because only two people are invited. Settings can join these too.";
+  const skipOn = skipBody<CalendarState>("07-settings-skip-on.json");
+  const skipOff = skipBody<CalendarState>("05-state-default.json");
+  const AT = new Date("2026-11-24T12:05:00Z");
+  const rowOf = (state: CalendarState, title: string) => {
+    render(<CalendarBand state={state} timeZone="UTC" now={AT} />);
+    return rows().find((row) => within(row).queryByText(title) !== null) as HTMLElement;
+  };
+
+  it("shows Off with the server's reason as the visible line, and the header names the exception", () => {
+    const row = rowOf(skipOn, "1:1 with Sam");
+    expect(within(row).getByText("Off")).toBeTruthy();
+    const reason = within(row).getByText(SKIPPED);
+    expect(reason.closest("p")?.className).toBe("meta-line");
+    expect(within(row).getByRole("switch").getAttribute("aria-describedby")).toBe(reason.id);
+    expect(screen.getByText(skipOn.rule_text)).toBeTruthy();
+  });
+
+  it("leaves meetings with no, one and three people invited as Will join", () => {
+    render(<CalendarBand state={skipOn} timeZone="UTC" now={AT} />);
+    for (const title of ["Design review", "Just me on the list", "Focus block (no invite list)"]) {
+      const row = rows().find((r) => within(r).queryByText(title) !== null) as HTMLElement;
+      expect(within(row).getByText("Will join")).toBeTruthy();
+      expect(within(row).queryByText(SKIPPED)).toBeNull();
+    }
+  });
+
+  it("is Will join again once the box is cleared", () => {
+    const row = rowOf(skipOff, "1:1 with Sam");
+    expect(within(row).getByText("Will join")).toBeTruthy();
+    expect(within(row).queryByText(SKIPPED)).toBeNull();
+  });
+
+  it("is switched on by hand, and the reason line goes", async () => {
+    const off = skipOn.upcoming.find((e) => e.title === "1:1 with Sam") as CalendarEvent;
+    mocks.override.mockResolvedValue({ ...off, will_join: true, will_join_text: "Will join", reason_text: null });
+    const row = rowOf(skipOn, "1:1 with Sam");
+    await userEvent.click(within(row).getByRole("switch"));
+    await waitFor(() => expect(within(row).queryByText(SKIPPED)).toBeNull());
+    expect(mocks.override).toHaveBeenCalledWith(off.id, true);
   });
 });
 

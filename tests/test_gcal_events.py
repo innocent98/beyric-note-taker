@@ -408,3 +408,28 @@ def test_attendee_count_is_a_number_and_addresses_are_dropped():
 def test_a_malformed_event_raises_a_named_error(raw):
     with pytest.raises(EventParseError):
         parse_event(raw)
+
+
+def test_a_google_one_on_one_counts_two_with_the_owner_in_it_and_is_skipped_when_ticked():
+    """`skip_one_on_ones`: Google's list has everyone, the owner included, so two means one other
+    person. No list is a solo event (0) and a list of only the owner is 1: neither is skipped."""
+    from app.gcal_rules import JoinSettings, will_join
+
+    me = {"email": "me@example.test", "self": True, "responseStatus": "accepted"}
+    them = {"email": "them@example.test", "responseStatus": "accepted"}
+    third = {"email": "third@example.test", "responseStatus": "accepted"}
+    now = datetime(2026, 11, 4, 8, 0, tzinfo=UTC)
+    ticked = JoinSettings(rule="all", teams_join_enabled=False, skip_one_on_ones=True)
+    cases = [
+        ([me, them], 2, "one_on_one"),
+        ([me], 1, "ok"),
+        ([me, them, third], 3, "ok"),
+        (None, 0, "ok"),
+    ]
+    for attendees, count, reason in cases:
+        fields = {"hangoutLink": MEET, "organizer": {"email": "me@example.test", "self": True}}
+        if attendees is not None:
+            fields["attendees"] = attendees
+        parsed = parse_event(event(**fields))
+        assert parsed.attendee_count == count
+        assert will_join(parsed, None, ticked, now=now).reason == reason

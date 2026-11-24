@@ -1,0 +1,37 @@
+{
+  "note": "The switch the other way: a three-person meeting switched off is `Off`, reason `You switched this meeting off`, whatever the box says.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/3/override",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Design review",
+      "starts_at": "2026-11-24T18:01:00+01:00",
+      "ends_at": "2026-11-24T18:31:00+01:00",
+      "platform": "google_meet",
+      "platform_label": "Google Meet",
+      "attendee_count": 3,
+      "will_join": false,
+      "will_join_text": "Off",
+      "reason_text": "You switched this meeting off",
+      "join_id": 3,
+      "can_send_now": false,
+      "not_recorded_text": null
+    }
+  }
+}

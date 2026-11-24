@@ -835,7 +835,7 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\", with the exception named while\n`join_unanswered` is false). `join_unanswered` is the person's tick on \"Also join invites I\nhaven't answered yet\" (false until they tick it): under `all`, an invite they have not\nanswered from outside their organisation joins only when it is true. It is stored whatever the\nrule, and does nothing under `organizer` or `none`: show the box disabled there.\n`calendar_template_id` is the person's own template chosen for calendar meetings, null for the\ndefault (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\", with the exception named while\n`join_unanswered` is false). `join_unanswered` is the person's tick on \"Also join invites I\nhaven't answered yet\" (false until they tick it): under `all`, an invite they have not\nanswered from outside their organisation joins only when it is true. It is stored whatever the\nrule, and does nothing under `organizer` or `none`: show the box disabled there.\n`skip_one_on_ones` is the person's tick on \"Skip one-on-one meetings\" (false until they tick\nit): when true, an event with exactly two people invited (the person and one other) is not\njoined, under `all` or `organizer`. The count is people invited, not who attends. It is stored\nwhatever the rule, and does nothing under `none`: show the box disabled there.\n`calendar_template_id` is the person's own template chosen for calendar meetings, null for the\ndefault (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
           "account_email": {
             "anyOf": [
@@ -948,6 +948,10 @@
             "title": "Rule Text",
             "type": "string"
           },
+          "skip_one_on_ones": {
+            "title": "Skip One On Ones",
+            "type": "boolean"
+          },
           "state": {
             "enum": [
               "not_connected",
@@ -981,6 +985,7 @@
           "rule",
           "rule_text",
           "join_unanswered",
+          "skip_one_on_ones",
           "calendar_template_id",
           "auto_join_paused",
           "auto_join_paused_text",
@@ -4512,7 +4517,7 @@
       },
       "SettingsIn": {
         "additionalProperties": false,
-        "description": "What to change; a field that is left out stays as it is. `rule` is `all` (every event with\na video link), `organizer` (only meetings the person organises) or `none` (only the meetings\nthey switch on). Changing it also clears their per-meeting switches on events that have not\nstarted, and re-decides every event from the new rule. `calendar_template_id` is one of the\nperson's own templates, or null for the default; it also reaches the meetings already planned\nthat have not sent a bot. `join_unanswered` is the box \"Also join invites I haven't answered\nyet\" (a real true or false; never null). Changing it re-decides every stored event, like a\nrule change, but keeps the person's per-meeting switches. At least one field is needed.",
+        "description": "What to change; a field that is left out stays as it is. `rule` is `all` (every event with\na video link), `organizer` (only meetings the person organises) or `none` (only the meetings\nthey switch on). Changing it also clears their per-meeting switches on events that have not\nstarted, and re-decides every event from the new rule. `calendar_template_id` is one of the\nperson's own templates, or null for the default; it also reaches the meetings already planned\nthat have not sent a bot. `join_unanswered` is the box \"Also join invites I haven't answered\nyet\" (a real true or false; never null). Changing it re-decides every stored event, like a\nrule change, but keeps the person's per-meeting switches. `skip_one_on_ones` is the box \"Skip\none-on-one meetings\" (a real true or false; never null) and is handled the same way. At least\none field is needed.",
         "properties": {
           "calendar_template_id": {
             "anyOf": [
@@ -4551,6 +4556,17 @@
               }
             ],
             "title": "Rule"
+          },
+          "skip_one_on_ones": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip One On Ones"
           }
         },
         "title": "SettingsIn",
@@ -8177,7 +8193,7 @@
     },
     "/api/calendar/settings": {
       "put": {
-        "description": "Change the auto-join rule, the box \"Also join invites I haven't answered yet\" and/or the\ntemplate for calendar meetings (CSRF header needed); a field left out stays as it is. Answers\nwith the whole state, as `GET /api/calendar` does, so the page can redraw from it. A changed\n`rule` clears the person's per-meeting switches on events that have not started; a changed\n`rule` or `join_unanswered` then decides every stored event again: joins it now forbids are\ncancelled and joins it now allows are made or revived (the same rules the sync applies;\nnothing is fetched from Google and no bot is sent here; a join whose bot is in is never\ntouched). Choosing a value that is already set changes nothing. 404 `not_found` for a\ntemplate that is not the caller's own, 404 `calendar_unavailable` while the calendar features\nare off.",
+        "description": "Change the auto-join rule, the boxes \"Also join invites I haven't answered yet\" and \"Skip\none-on-one meetings\", and/or the template for calendar meetings (CSRF header needed); a field\nleft out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so the\npage can redraw from it. A changed `rule` clears the person's per-meeting switches on events\nthat have not started; a changed `rule`, `join_unanswered` or `skip_one_on_ones` then decides\nevery stored event again: joins it now forbids are cancelled and joins it now allows are made\nor revived (the same rules the sync applies; nothing is fetched from Google and no bot is\nsent here; a join whose bot is in is never touched). Choosing a value that is already set\nchanges nothing. 404 `not_found` for a template that is not the caller's own, 404\n`calendar_unavailable` while the calendar features are off.",
         "operationId": "calendar_settings",
         "requestBody": {
           "content": {

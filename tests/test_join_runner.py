@@ -707,6 +707,46 @@ def test_an_unanswered_stranger_invite_is_sent_when_the_box_is_ticked(session, h
     assert host.bots_sent == 1 and state_of(session, join) == ("joined", None)
 
 
+def test_a_two_person_meeting_is_stopped_at_run_time_when_the_skip_was_ticked_after_planning(
+    session, host, cal, ada
+):
+    """The runner judges the join again with the stored settings, so a join planned before the
+    person ticked "Skip one-on-one meetings" does not send the bot."""
+    join = materialise(session, ada, cal)
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    assert event.attendee_count == 2
+    ada.user_settings.skip_one_on_ones = True
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 0 and state_of(session, join) == ("cancelled", "one_on_one")
+
+
+def test_a_two_person_meeting_the_person_switched_on_is_sent_even_with_the_skip_ticked(
+    session, host, cal, ada
+):
+    join = materialise(session, ada, cal)
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    event.override = True
+    ada.user_settings.skip_one_on_ones = True
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 1 and state_of(session, join) == ("joined", None)
+
+
+def test_a_bigger_meeting_is_sent_with_the_skip_ticked(session, host, cal, ada):
+    # The runner re-reads the event from the calendar before it sends, so the third guest is in
+    # the calendar's copy, not only in the stored row.
+    third = {"email": "third@example.test", "responseStatus": "accepted"}
+    people = raw_event()["attendees"] + [third]
+    join = materialise(session, ada, cal, attendees=people)
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    assert event.attendee_count == 3
+    ada.user_settings.skip_one_on_ones = True
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 1 and state_of(session, join) == ("joined", None)
+
+
 def test_the_rule_organiser_only_stops_a_meeting_the_owner_does_not_organise(
     session, host, cal, ada
 ):

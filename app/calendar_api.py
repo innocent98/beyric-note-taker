@@ -146,6 +146,10 @@ class CalendarOut(BaseModel):
     haven't answered yet" (false until they tick it): under `all`, an invite they have not
     answered from outside their organisation joins only when it is true. It is stored whatever the
     rule, and does nothing under `organizer` or `none`: show the box disabled there.
+    `skip_one_on_ones` is the person's tick on "Skip one-on-one meetings" (false until they tick
+    it): when true, an event with exactly two people invited (the person and one other) is not
+    joined, under `all` or `organizer`. The count is people invited, not who attends. It is stored
+    whatever the rule, and does nothing under `none`: show the box disabled there.
     `calendar_template_id` is the person's own template chosen for calendar meetings, null for the
     default (their first, oldest, template).
     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
@@ -170,6 +174,7 @@ class CalendarOut(BaseModel):
     rule: Literal["all", "organizer", "none"]
     rule_text: str
     join_unanswered: bool
+    skip_one_on_ones: bool
     calendar_template_id: int | None
     auto_join_paused: bool
     auto_join_paused_text: str | None
@@ -186,23 +191,29 @@ class SettingsIn(BaseModel):
     person's own templates, or null for the default; it also reaches the meetings already planned
     that have not sent a bot. `join_unanswered` is the box "Also join invites I haven't answered
     yet" (a real true or false; never null). Changing it re-decides every stored event, like a
-    rule change, but keeps the person's per-meeting switches. At least one field is needed."""
+    rule change, but keeps the person's per-meeting switches. `skip_one_on_ones` is the box "Skip
+    one-on-one meetings" (a real true or false; never null) and is handled the same way. At least
+    one field is needed."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     rule: Literal["all", "organizer", "none"] | None = None
     calendar_template_id: int | None = None
     join_unanswered: bool | None = None
+    skip_one_on_ones: bool | None = None
 
     @model_validator(mode="after")
     def _something_to_change(self):
         # `null` is a real value only for the template (it means the default one).
         sent_null = any(
             name in self.model_fields_set and getattr(self, name) is None
-            for name in ("rule", "join_unanswered")
+            for name in ("rule", "join_unanswered", "skip_one_on_ones")
         )
         if not self.model_fields_set or sent_null:
-            raise ValueError("send at least one of rule, join_unanswered or calendar_template_id")
+            raise ValueError(
+                "send at least one of rule, join_unanswered, skip_one_on_ones "
+                "or calendar_template_id"
+            )
         return self
 
 
@@ -508,6 +519,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     prefs = session.get(UserSettings, user.id)
     rule = prefs.auto_join_rule if prefs else "all"
     join_unanswered = prefs.join_unanswered if prefs else False
+    skip_one_on_ones = prefs.skip_one_on_ones if prefs else False
     template_id = prefs.calendar_template_id if prefs else None
     # Paused when the scheduler (the process that sends the bots) has recorded that auto-join is
     # off. Read from the database only: `web` keeps the environment it was started with, and a
@@ -526,8 +538,9 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
             last_sync_at=None,
             last_error=None,
             rule=rule,
-            rule_text=calendar_text.rule_text(rule, join_unanswered),
+            rule_text=calendar_text.rule_text(rule, join_unanswered, skip_one_on_ones),
             join_unanswered=join_unanswered,
+            skip_one_on_ones=skip_one_on_ones,
             calendar_template_id=template_id,
             auto_join_paused=paused,
             auto_join_paused_text=paused_text,
@@ -545,8 +558,9 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         last_sync_at=conn.last_sync_at,
         last_error=calendar_text.error_text(conn.last_error, conn.provider),
         rule=rule,
-        rule_text=calendar_text.rule_text(rule, join_unanswered),
+        rule_text=calendar_text.rule_text(rule, join_unanswered, skip_one_on_ones),
         join_unanswered=join_unanswered,
+        skip_one_on_ones=skip_one_on_ones,
         calendar_template_id=template_id,
         auto_join_paused=paused,
         auto_join_paused_text=paused_text,
@@ -580,33 +594,40 @@ def calendar_settings(
     user: User = Depends(auth.current_user),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> CalendarOut:
-    """Change the auto-join rule, the box "Also join invites I haven't answered yet" and/or the
-    template for calendar meetings (CSRF header needed); a field left out stays as it is. Answers
-    with the whole state, as `GET /api/calendar` does, so the page can redraw from it. A changed
-    `rule` clears the person's per-meeting switches on events that have not started; a changed
-    `rule` or `join_unanswered` then decides every stored event again: joins it now forbids are
-    cancelled and joins it now allows are made or revived (the same rules the sync applies;
-    nothing is fetched from Google and no bot is sent here; a join whose bot is in is never
-    touched). Choosing a value that is already set changes nothing. 404 `not_found` for a
-    template that is not the caller's own, 404 `calendar_unavailable` while the calendar features
-    are off."""
+    """Change the auto-join rule, the boxes "Also join invites I haven't answered yet" and "Skip
+    one-on-one meetings", and/or the template for calendar meetings (CSRF header needed); a field
+    left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so the
+    page can redraw from it. A changed `rule` clears the person's per-meeting switches on events
+    that have not started; a changed `rule`, `join_unanswered` or `skip_one_on_ones` then decides
+    every stored event again: joins it now forbids are cancelled and joins it now allows are made
+    or revived (the same rules the sync applies; nothing is fetched from Google and no bot is
+    sent here; a join whose bot is in is never touched). Choosing a value that is already set
+    changes nothing. 404 `not_found` for a template that is not the caller's own, 404
+    `calendar_unavailable` while the calendar features are off."""
     _calendar_on(request, google)
     set_template = "calendar_template_id" in body.model_fields_set
     if set_template and body.calendar_template_id is not None:
         services.template_or_404(session, user, body.calendar_template_id)
     prefs = session.get(UserSettings, user.id)
     if prefs is None:
-        prefs = UserSettings(user_id=user.id, auto_join_rule="all", join_unanswered=False)
+        prefs = UserSettings(
+            user_id=user.id, auto_join_rule="all", join_unanswered=False, skip_one_on_ones=False
+        )
         session.add(prefs)
     now = _now()
     rule_changed = body.rule is not None and body.rule != prefs.auto_join_rule
     unanswered_changed = (
         body.join_unanswered is not None and body.join_unanswered != prefs.join_unanswered
     )
+    skip_changed = (
+        body.skip_one_on_ones is not None and body.skip_one_on_ones != prefs.skip_one_on_ones
+    )
     if body.rule is not None:
         prefs.auto_join_rule = body.rule
     if body.join_unanswered is not None:
         prefs.join_unanswered = body.join_unanswered
+    if body.skip_one_on_ones is not None:
+        prefs.skip_one_on_ones = body.skip_one_on_ones
     if set_template:
         prefs.calendar_template_id = body.calendar_template_id
         gcal_sync.set_join_template(session, user.id, body.calendar_template_id, commit=False)
@@ -617,7 +638,7 @@ def calendar_settings(
             .where(CalendarEvent.user_id == user.id, CalendarEvent.starts_at > now)
             .values(override=None)
         )
-    if (rule_changed or unanswered_changed) and conn is not None:
+    if (rule_changed or unanswered_changed or skip_changed) and conn is not None:
         events = session.scalars(
             select(CalendarEvent).where(
                 CalendarEvent.connection_id == conn.id,

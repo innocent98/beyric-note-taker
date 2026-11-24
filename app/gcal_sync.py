@@ -67,7 +67,10 @@ MAX_PER_RUN = 50
 ERROR_LIMIT = 300
 # What a user without a settings row gets (sign-up creates one, so this is a safety net).
 DEFAULT_USER_SETTINGS = SimpleNamespace(
-    auto_join_rule="all", calendar_template_id=None, join_unanswered=False
+    auto_join_rule="all",
+    calendar_template_id=None,
+    join_unanswered=False,
+    skip_one_on_ones=False,
 )
 
 # The bot keeps trying to get in until this long after the start (spec 7.6).
@@ -178,8 +181,8 @@ def apply_batch(
     provider: BotProvider | None = None,
 ) -> ApplyResult:
     """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule`,
-    `join_unanswered` and `calendar_template_id`. `provider` is only needed (and only built when
-    absent) to stop a bot whose event was cancelled."""
+    `join_unanswered`, `skip_one_on_ones` and `calendar_template_id`. `provider` is only needed
+    (and only built when absent) to stop a bot whose event was cancelled."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     settings = settings or get_settings()
