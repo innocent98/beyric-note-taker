@@ -1,0 +1,29 @@
+{
+  "note": "A reader may not edit: 403 `team_forbidden`.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/1/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "b9ed480a17efee24",
+      "line": 1,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only the owner of this meeting can edit its transcript."
+      }
+    }
+  }
+}

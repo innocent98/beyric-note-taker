@@ -2042,6 +2042,11 @@
             "title": "Can Delete",
             "type": "boolean"
           },
+          "can_edit_transcript": {
+            "default": false,
+            "title": "Can Edit Transcript",
+            "type": "boolean"
+          },
           "can_end": {
             "title": "Can End",
             "type": "boolean"
@@ -2171,6 +2176,11 @@
               }
             ],
             "title": "Notes Html"
+          },
+          "notes_outdated": {
+            "default": false,
+            "title": "Notes Outdated",
+            "type": "boolean"
           },
           "open_questions": {
             "default": [],
@@ -2369,6 +2379,45 @@
               }
             ],
             "title": "Transcript"
+          },
+          "transcript_edited": {
+            "default": false,
+            "title": "Transcript Edited",
+            "type": "boolean"
+          },
+          "transcript_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Edited At"
+          },
+          "transcript_edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Edited By"
+          },
+          "transcript_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Version"
           },
           "translations": {
             "items": {
@@ -4933,6 +4982,35 @@
         "title": "SlackOut",
         "type": "object"
       },
+      "SpeakerRename": {
+        "additionalProperties": false,
+        "description": "Every line labelled exactly `from` becomes `to`. When `to` is already a speaker of the\nmeeting the two become one: that needs `merge: true` (else 409 `speaker_exists`).",
+        "properties": {
+          "from": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "From",
+            "type": "string"
+          },
+          "merge": {
+            "default": false,
+            "title": "Merge",
+            "type": "boolean"
+          },
+          "to": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "SpeakerRename",
+        "type": "object"
+      },
       "SprintClosed": {
         "properties": {
           "closed": {
@@ -6355,6 +6433,86 @@
           "meetings"
         ],
         "title": "TopicOut",
+        "type": "object"
+      },
+      "TranscriptEdit": {
+        "additionalProperties": false,
+        "description": "One edit of the transcript. `version` is the `transcript_version` of the page the person\nedited from (409 `transcript_changed` when the transcript has changed since). Send exactly one\nof: `rename`; or `line` (the 1-based row of the page) with `text`, `speaker` or both.",
+        "properties": {
+          "line": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "rename": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerRename"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "TranscriptEdit",
+        "type": "object"
+      },
+      "TranscriptRestore": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "TranscriptRestore",
         "type": "object"
       },
       "TranslationBrief": {
@@ -11495,6 +11653,192 @@
         "summary": "Extract Tasks",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/transcript": {
+      "patch": {
+        "description": "Edit the transcript of a `ready` meeting: rename a speaker everywhere (`rename`), or change\none line's words and/or speaker (`line`, the 1-based row of the page, with `text` and/or\n`speaker`). The number and order of lines never change. The original is kept once, before the\nfirst edit (`POST .../transcript/restore` puts it back). Nothing is rewritten: the response has\n`notes_outdated: true` until the owner rewrites the notes. Who may: whoever may delete the\nmeeting (its recorder; a team's owner and admins); 403 `team_forbidden` for a reader, 404 when\nthe caller cannot read it. 409 `not_ready`, `transcript_changed` (the `version` is old),\n`speaker_exists` (renaming into an existing speaker needs `merge: true`), `meeting_busy`; 422\n`no_speakers`, `speaker_not_found`, `invalid_name`, `empty_text`, `no_change`,\n`line_out_of_range`, `invalid_edit`.",
+        "operationId": "edit_transcript",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`: the caller can read the meeting but may not change it"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Edit Transcript",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/transcript/restore": {
+      "post": {
+        "description": "Put back the transcript as it was before the first edit and forget the edits. 409\n`nothing_to_restore` when it was never edited; the other refusals are those of the edit.",
+        "operationId": "restore_transcript",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptRestore"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Restore Transcript",
+        "tags": [
+          "meetings"
         ]
       }
     },

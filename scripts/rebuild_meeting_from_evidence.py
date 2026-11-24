@@ -181,6 +181,13 @@ def _check_state(meeting: Meeting) -> None:
             f"meeting {meeting.id} is not finished (its status is {meeting.status}): it is being "
             "recorded or processed, or it failed. Wait until it says ready."
         )
+    if meeting.transcript_original is not None:
+        raise Refused(
+            f"SKIPPED meeting {meeting.id}: a person edited its transcript in the app "
+            f"({meeting.transcript_edited_at:%Y-%m-%d %H:%M} UTC). Rebuilding would overwrite "
+            "their edits. In the app, press Restore original on the meeting first if the "
+            "rebuild is what is wanted."
+        )
     if meeting.extraction_status == "running":
         raise Refused(
             f"the lists of meeting {meeting.id} (tasks, decisions) are being read right now. "

@@ -709,6 +709,9 @@ def regenerate_notes(
             502, "notes_failed", "The notes could not be written. The old notes were kept."
         ) from None
     meeting.notes = notes
+    # Written from the words the page shows now: an edited transcript makes these notes current
+    # (`transcript_edit.notes_outdated`).
+    meeting.notes_from_edited_transcript = meeting.transcript_original is not None
     meeting.template_id = template.id
     ai_runs.record_usage(
         session,

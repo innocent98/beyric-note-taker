@@ -50,7 +50,7 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
   not_failed: "This meeting can't be retried.",
 };
 
-type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | "share" | "move" | null;
+type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | "share" | "move" | "transcript" | null;
 
 
 // While the notes are being read for decisions and review items, ask again every 5 seconds for up to
@@ -116,6 +116,10 @@ export function MeetingView({
   );
   const busyRef = useRef<Busy>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  // The transcript editor (lead-designed): edit mode, the last edit's refusal, and the Restore ask.
+  const [editingTranscript, setEditingTranscript] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [confirmingRestore, setConfirmingRestore] = useState(false);
   const [shares, setShares] = useState<Share[]>(initialShares);
   const [toast, flashToast] = useToast(2600);
   const highlightLine = initialTab === "transcript" && initial.transcript ? (initialLine ?? null) : null;
@@ -208,6 +212,27 @@ export function MeetingView({
     setBusy(null);
   }
 
+  // One transcript edit or the restore. Its refusal is shown in the transcript, beside the form that
+  // asked for it. A 409 (the transcript changed under us, the meeting moved on) reads the meeting
+  // again, which brings the new `transcript_version` for the next try.
+  async function editTranscript(call: () => Promise<Meeting>): Promise<boolean> {
+    if (busyRef.current !== null) return false;
+    busyRef.current = "transcript";
+    setBusy("transcript");
+    setEditError(null);
+    let saved = false;
+    try {
+      setMeeting(await call());
+      saved = true;
+    } catch (caught) {
+      setEditError(errorMessage(caught));
+      if (caught instanceof ApiError && caught.status === 409) void refetch();
+    }
+    busyRef.current = null;
+    setBusy(null);
+    return saved;
+  }
+
   // Delete (lead-designed, not in the designer's file): 204 goes to the list with a toast. A 404 means
   // it is already gone (a second tab, a double click), which is the same outcome. 409 and 502 show
   // their own words and keep the page.
@@ -245,6 +270,12 @@ export function MeetingView({
   // The words on the page: the translation's when one is shown, else the original's.
   const shownNotes = translation.translated?.notes ?? m.notes;
   const shownTranscript = translation.translated?.transcript ?? null;
+  // Edit controls: the one who may change the meeting, the original-language transcript, and a
+  // transcript that has speaker names (a plain one has no lines to tell apart).
+  const version = m.transcript_version ?? null;
+  const canEditTranscript =
+    Boolean(m.can_edit_transcript) && version !== null && !translation.translated && parseTranscript(m.transcript ?? "").some((l) => l.speaker !== null);
+  const editorOpen = canEditTranscript && editingTranscript;
   const duration = durationLabel(m.duration_seconds, working);
   // Everyone a share was (or is being) mailed to, by name or address, once each. Not the ones whose
   // mail did not go.
@@ -333,6 +364,27 @@ export function MeetingView({
         <Alert kind="notice">The note taker left the meeting early or was removed. The notes may be incomplete.</Alert>
       ) : null}
 
+      {m.status === "ready" && m.notes_outdated ? (
+        <Alert kind="notice">
+          {m.can_regenerate ? (
+            <>
+              The transcript was edited after these notes were written. Rewrite notes to update them. Nothing was rewritten for you:
+              tasks, decisions and translations still come from the earlier text.{" "}
+              <button
+                type="button"
+                className="det-link det-link-quiet"
+                disabled={busy !== null}
+                onClick={() => void act("rewrite", () => api.meetings.regenerate(m.id, Number(rewriteId)))}
+              >
+                {busy === "rewrite" ? "Rewriting notes..." : "Rewrite notes"}
+              </button>
+            </>
+          ) : (
+            "The transcript was edited after these notes were written, so they may not match it."
+          )}
+        </Alert>
+      ) : null}
+
       {m.status === "ready" ? (
         <>
         {m.suggest_recurring && m.can_make_recurring && !m.series ? <RecurringHint meetingId={m.id} onDone={() => void refetch()} /> : null}
@@ -356,7 +408,87 @@ export function MeetingView({
             <TranslationBanner view={translation} />
             {tab === "transcript" && m.transcript ? (
               <div role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript" lang={translation.shown}>
-                <TranscriptPanel text={shownTranscript ?? m.transcript} incomplete={m.speakers_incomplete} highlight={highlightLine} />
+                {m.transcript_edited || canEditTranscript ? (
+                  <div className="transcript-edited">
+                    <p className="side-sub">
+                      {m.transcript_edited ? (
+                        <>
+                          Edited by {m.transcript_edited_by ?? "a teammate"}
+                          {m.transcript_edited_at ? (
+                            <>
+                              {" "}
+                              on <LocalTime iso={m.transcript_edited_at} />
+                            </>
+                          ) : null}
+                          .{" "}
+                          {m.can_edit_transcript && !confirmingRestore ? (
+                            <button type="button" className="det-link det-link-quiet" disabled={busy !== null} onClick={() => setConfirmingRestore(true)}>
+                              Restore original
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </p>
+                    {canEditTranscript ? (
+                      <Button
+                        kind="secondary"
+                        size="sm"
+                        type="button"
+                        aria-pressed={editingTranscript}
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setEditError(null);
+                          setEditingTranscript((on) => !on);
+                        }}
+                      >
+                        <Icon name="pencil" size={14} />
+                        {editingTranscript ? "Done editing" : "Edit transcript"}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {m.transcript_edited ? (
+                  <>
+                    {m.can_edit_transcript && confirmingRestore ? (
+                      <div className="meeting-delete-ask" role="group" aria-label="Restore the original transcript?">
+                        <p>
+                          <strong>Restore the original transcript?</strong> Every speaker name and line you changed goes back to
+                          what it was. The notes are not changed.
+                        </p>
+                        <div className="dec-ask-actions">
+                          <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => setConfirmingRestore(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={busy !== null || version === null}
+                            onClick={() =>
+                              void editTranscript(() => api.meetings.restoreTranscript(m.id, version ?? "")).then((saved) => {
+                                if (saved) setConfirmingRestore(false);
+                              })
+                            }
+                          >
+                            {busy === "transcript" ? "Restoring..." : "Restore original"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                {!editorOpen && editError ? <Alert kind="error">{editError}</Alert> : null}
+                <TranscriptPanel text={shownTranscript ?? m.transcript} incomplete={m.speakers_incomplete} highlight={highlightLine}
+                  editor={
+                    editorOpen && version !== null
+                      ? {
+                          busy: busy !== null,
+                          error: editError,
+                          rename: (from, to, merge) => editTranscript(() => api.meetings.editTranscript(m.id, { version, rename: { from, to, merge } })),
+                          editLine: (line, change) => editTranscript(() => api.meetings.editTranscript(m.id, { version, line, ...change })),
+                        }
+                      : undefined
+                  }
+                />
               </div>
             ) : (
               <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" lang={translation.shown}>

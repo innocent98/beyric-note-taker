@@ -1,0 +1,29 @@
+{
+  "note": "While the notes are being written: 409 `not_ready`.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/4/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "0000000000000000",
+      "line": 1,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The transcript can be edited once the meeting is ready."
+      }
+    }
+  }
+}

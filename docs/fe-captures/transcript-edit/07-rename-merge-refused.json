@@ -1,0 +1,31 @@
+{
+  "note": "Renaming into a name already in the meeting would merge them: 409 `speaker_exists`.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/1/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "0af88909193ce209",
+      "rename": {
+        "from": "Daniel Example",
+        "to": "Ben Sample"
+      }
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "speaker_exists",
+        "message": "Ben Sample is already a speaker in this meeting. Renaming would merge the two."
+      }
+    }
+  }
+}

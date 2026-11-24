@@ -140,20 +140,28 @@ MAX_NAME_CHARS = 80
 _NAME_BAD_CHARS = re.compile(r"[\[\]:<>]")
 
 
+def clean_name(value: object) -> str:
+    """A display name made safe for a `[Name]:` label: label syntax (brackets, colon, angle
+    brackets), control characters and line breaks dropped, whitespace collapsed, at most
+    `MAX_NAME_CHARS`. Empty when nothing is left."""
+    name = "".join(
+        " " if c.isspace() or unicodedata.category(c) in ("Cc", "Zl", "Zp") else c
+        for c in str(value or "")
+        if unicodedata.category(c) != "Cf"
+    )
+    name = _NAME_BAD_CHARS.sub("", name)
+    return " ".join(name.split())[:MAX_NAME_CHARS].strip()
+
+
 def _speaker(segment: dict) -> str:
     """The cleaned display name used as the label everywhere (prompt and `_strip_labels`).
 
     Participants choose their own names, so drop label syntax (brackets, colon, angle brackets)
-    and control characters, collapse whitespace, and cap the length.
+    and control characters, collapse whitespace, and cap the length (`clean_name`). The transcript
+    editor cleans a typed name the same way, so a person can no more break the format than a
+    participant can.
     """
-    name = "".join(
-        " " if c.isspace() or unicodedata.category(c) in ("Cc", "Zl", "Zp") else c
-        for c in str(segment.get("speaker") or "")
-        if unicodedata.category(c) != "Cf"
-    )
-    name = _NAME_BAD_CHARS.sub("", name)
-    name = " ".join(name.split())[:MAX_NAME_CHARS].strip()
-    return name or UNKNOWN_SPEAKER
+    return clean_name(segment.get("speaker")) or UNKNOWN_SPEAKER
 
 
 def _clean_segments(segments: list[dict]) -> list[tuple[str, str]]:
