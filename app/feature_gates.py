@@ -11,6 +11,8 @@ inside the function that makes the model call, never only in a route, so every w
   Spanish).
 - `rewrite`: `services.regenerate_notes`, before the model call. Reached by
   `POST /api/meetings/{id}/regenerate` and by the legacy page route.
+- `make`: `recipes.service.request_draft`, before anything is written or counted. Reached by
+  `POST /api/documents`. The worker is not gated: a queued draft was allowed when it was asked for.
 
 Not gated, on purpose (spec 2.3): reading, search, export, tasks, decisions, an existing
 translation, a retry of a failed meeting, and Review's "add the corrected spelling" (no model).
@@ -39,6 +41,7 @@ _WORDS = {
     entitlements.ASK: "Asking Beyric",
     entitlements.TRANSLATE: "Translating notes",
     entitlements.REWRITE: "Rewriting notes",
+    entitlements.MAKE: "Making documents",
 }
 
 

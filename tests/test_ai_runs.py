@@ -91,3 +91,28 @@ def test_kind_and_status_are_checked(session, meeting):
     session.add(AiRun(meeting_id=meeting.id, kind="bogus", model="m", status="ok"))
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_a_recipe_run_is_a_ledger_kind_with_its_own_prompt_version(session, meeting):
+    run = ai_runs.record(session, meeting.id, "recipe", "gpt-6-luna", input_tokens=4000)
+    session.commit()
+    assert session.get(AiRun, run.id).kind == "recipe"
+    assert run.prompt_version == ai_runs.RECIPE_PROMPT_VERSION == "recipe-v1"
+    assert run.prompt_version not in {
+        ai_runs.ASK_PROMPT_VERSION,
+        ai_runs.NOTES_PROMPT_VERSION,
+        ai_runs.TRANSLATE_PROMPT_VERSION,
+    }
+    # `ai_runs.kind` is a String(16): the new kind must fit.
+    assert len("recipe") <= 16
+
+
+def test_the_recipe_settings_have_their_documented_defaults(monkeypatch):
+    for name in ("RECIPE_MODEL", "RECIPE_DAILY_LIMIT", "BRIEF_MAX_CHARS"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.recipe_model == "gpt-6-luna"
+    assert settings.recipe_daily_limit == 20
+    assert settings.brief_max_chars == 12000
+    assert settings.draft_max_blocks > 0
+    assert settings.import_max_bytes > 0 and settings.import_max_pages > 0

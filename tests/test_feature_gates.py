@@ -254,6 +254,12 @@ def test_a_state_nobody_listed_is_closed():
     assert entitlements.state_allows("none", unlimited=True) is True
 
 
+def test_making_documents_is_a_gate_with_its_own_words():
+    assert entitlements.MAKE == "make" and entitlements.MAKE in entitlements.FEATURES
+    message = feature_gates.plan_inactive_message(entitlements.MAKE)
+    assert message.startswith("Making documents needs an active plan or trial.")
+
+
 def test_the_refusal_says_nothing_about_a_pilot_or_an_address():
     for feature in GATES:
         text = feature_gates.plan_inactive_message(feature).lower()
