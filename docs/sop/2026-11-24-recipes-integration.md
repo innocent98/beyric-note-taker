@@ -105,7 +105,7 @@ Edited in `web/components/legal/privacy-content.tsx` and `terms-content.tsx` **a
 
 Total for the 18 drafts: about 0.008 USD (estimate). Ledger: one `recipe` row per draft, status `ok`, the tokens above (`ledger_status` in `results.json`). Raw results: `docs/fe-captures/recipes/live-pass/results.json`.
 
-**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). run it with `--real` (see "Run the live pass on a REAL model" below).
+**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). Run it with `--real` (see "Run the live pass on a REAL model" below).
 
 ## Run the live pass on a REAL model (Adebayo: one command, spend-capped)
 
