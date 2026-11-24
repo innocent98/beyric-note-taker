@@ -6,6 +6,7 @@ built one at a time per server process by the notes export's child process, and 
 meanwhile answers 503 `export_busy`, as the notes export does.
 """
 
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -21,6 +22,9 @@ from app.notes_document import content_disposition
 from app.recipes import exporters
 
 router = APIRouter()
+
+BUSY_RETRIES = 8  # waits of BUSY_PAUSE seconds for the renderer before answering 503
+BUSY_PAUSE = 0.4
 
 _FILE_TYPES = {
     exporters._TYPES["md"]: {"schema": {"type": "string"}},
@@ -77,7 +81,18 @@ def export_document(
     doc = readable_document_or_404(session, user, document_id)
     try:
         # Reads the blocks before the session is closed: the Word and PDF build can take seconds.
-        content, media_type, filename = _build(session, doc, format, table)
+        # The renderer builds one file at a time and a build takes well under a second, so a
+        # second request waits its turn for a few seconds instead of failing at once (measured:
+        # two exports started together made one of them a 503 every time).
+        _release(session, doc, format)
+        for attempt in range(BUSY_RETRIES + 1):
+            try:
+                content, media_type, filename = exporters.export(doc, format, table=table)
+                break
+            except export.ExportBusy:
+                if attempt == BUSY_RETRIES:
+                    raise
+                time.sleep(BUSY_PAUSE)
     except export.ExportBusy:
         return _error(
             503,
@@ -100,8 +115,7 @@ def export_document(
     )
 
 
-def _build(session: Session, doc: Document, fmt: str, table: int):
+def _release(session: Session, doc: Document, fmt: str) -> None:
     if fmt in ("docx", "pdf") and doc.status == "ready":
         session.expunge(doc)  # nothing else is read: hand the connection back before the render
         session.close()
-    return exporters.export(doc, fmt, table=table)
