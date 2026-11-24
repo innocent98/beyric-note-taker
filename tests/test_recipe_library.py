@@ -357,3 +357,21 @@ def test_only_a_team_recipe_made_on_the_active_team_goes_to_that_team(
     made = call(ada, "POST", "/api/recipes", mine(visibility="team"), world.x).json()
     row = session.get(Recipe, made["id"])
     assert row.team_id == world.x.id and row.owner_user_id == world.ada.id
+
+
+def test_the_engine_resolves_every_starter_and_a_copy_of_one(api, session, owner):
+    """`service.resolve_recipe` (slice S1) reads `library.STARTERS`: all eighteen resolve with the
+    scope and output type the list shows, and a copy resolves by its row id."""
+    from app import teams
+    from app.recipes import service
+
+    team = teams.ensure_team(session, owner)
+    session.commit()  # the app's own connection must see the team
+    for s in library.STARTERS:
+        got = service.resolve_recipe(session, owner, s.key, team.id)
+        assert got.key == s.key and got.recipe_id is None
+        assert (got.scope, got.uses_brief) == (s.scope, s.uses_brief)
+        assert got.spec.output_type == s.output_type and got.spec.instruction == s.instruction
+    copy = api.post("/api/recipes", {"key": "proposal", "name": "Ours"}).json()
+    got = service.resolve_recipe(session, owner, copy["id"], team.id)
+    assert got.recipe_id == copy["id"] and got.key == "proposal" and got.spec.name == "Ours"
