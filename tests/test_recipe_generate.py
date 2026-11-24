@@ -8,6 +8,7 @@ import re
 from datetime import date
 from types import SimpleNamespace
 
+import httpx
 import openai
 import pytest
 
@@ -310,7 +311,7 @@ def test_a_meeting_with_nothing_to_read_is_left_out_but_others_still_work(
 
 def test_a_transport_error_is_tried_once_more_and_other_errors_are_not(session, owner, meeting):  # noqa: F811
     context = context_of(session, owner, [meeting])
-    request = SimpleNamespace(method="POST", url="https://x")  # what openai's error wants
+    request = httpx.Request("POST", "https://x")  # what openai's error wants
     flaky = FakeModel(
         lambda kw, n: openai.APIConnectionError(request=request) if n == 1 else reply([para("Hi")])
     )

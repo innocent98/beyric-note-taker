@@ -7,6 +7,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
+import httpx
 import openai
 import pytest
 from sqlalchemy import func, select, text
@@ -485,7 +486,7 @@ def test_a_transport_error_is_tried_once_more_and_then_the_answer_is_kept(
     api, session, template, model
 ):
     meeting(session, template)
-    boom = openai.APIConnectionError(request=SimpleNamespace())
+    boom = openai.APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1"))
     model.reply = lambda ids, n: boom if n == 1 else FakeAsk.first_passage(ids, n)
     assert post(api, "pricing").json()["kind"] == "answer"
     assert len(model.calls) == 2
@@ -494,7 +495,7 @@ def test_a_transport_error_is_tried_once_more_and_then_the_answer_is_kept(
 
 def test_two_transport_errors_fail_the_question(api, session, template, model):
     meeting(session, template)
-    boom = openai.APIConnectionError(request=SimpleNamespace())
+    boom = openai.APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1"))
     model.reply = lambda ids, n: boom
     error_of(post(api, "pricing"), 502, "ask_failed")
     assert len(model.calls) == 2 and [r.status for r in runs(session)] == ["failed"]
