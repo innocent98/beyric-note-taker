@@ -1015,6 +1015,18 @@
 /* The suggested billing country: one confirmable line (components/billing/billing-country.tsx). */
 .bill-suggest { display: flex; flex-direction: column; gap: var(--space-2); padding: 14px 16px; border: 1px solid var(--teal-line); border-radius: 9px; background: var(--teal-wash); }
 .bill-suggest .pl-row-sub { margin: 0; }
+.mp { display: flex; flex-direction: column; gap: var(--space-4); }
+.mp-dates { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.mp-pick { display: flex; flex-direction: column; gap: var(--space-2); max-height: 240px; margin: 0; padding: 0; border: 0; overflow-y: auto; }
+.mp-result { display: flex; flex-direction: column; gap: var(--space-3); }
+.mp-note { margin: 0; color: var(--text-2); font-size: var(--text-sm); }
+.mp-count { margin: 0; color: var(--ink-2); font-size: var(--text-sm); font-weight: 600; }
+.mp-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.mp-item { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: 10px var(--space-4); border-bottom: 1px solid var(--border-soft); font-size: var(--text-sm); }
+.mp-item:last-child { border-bottom: 0; }
+.mp-title { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+.mp-day { flex: none; color: var(--text-3); font-size: var(--text-xs); }
+@media (max-width: 480px) { .mp-dates { grid-template-columns: 1fr; } }
 
 /* Meeting recipes: the Make dialog, the Recipes page and the brief editor. LEAD-DESIGNED (the designer's files
    draw none of it); existing tokens and the Templates and Share screens' parts only. */

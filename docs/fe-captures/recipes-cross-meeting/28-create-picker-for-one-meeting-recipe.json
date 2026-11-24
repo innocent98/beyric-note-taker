@@ -1,0 +1,33 @@
+{
+  "note": "A `picker` with a recipe that reads one meeting: 422 `meetings_invalid`.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        1
+      ],
+      "picker": {
+        "series_id": 1
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "meetings_invalid",
+        "message": "This recipe uses one meeting, not a choice."
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "note": "A series with 14 meetings: the 12 newest are returned (`Stand-up 14` first) and `capped` is true: tell the person the oldest were cut.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 2
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 19,
+          "title": "Stand-up 14",
+          "day": "2026-12-05"
+        },
+        {
+          "id": 18,
+          "title": "Stand-up 13",
+          "day": "2026-12-04"
+        },
+        {
+          "id": 17,
+          "title": "Stand-up 12",
+          "day": "2026-12-03"
+        },
+        {
+          "id": 16,
+          "title": "Stand-up 11",
+          "day": "2026-12-02"
+        },
+        {
+          "id": 15,
+          "title": "Stand-up 10",
+          "day": "2026-12-01"
+        },
+        {
+          "id": 14,
+          "title": "Stand-up 09",
+          "day": "2026-11-30"
+        },
+        {
+          "id": 13,
+          "title": "Stand-up 08",
+          "day": "2026-11-29"
+        },
+        {
+          "id": 12,
+          "title": "Stand-up 07",
+          "day": "2026-11-28"
+        },
+        {
+          "id": 11,
+          "title": "Stand-up 06",
+          "day": "2026-11-27"
+        },
+        {
+          "id": 10,
+          "title": "Stand-up 05",
+          "day": "2026-11-26"
+        },
+        {
+          "id": 9,
+          "title": "Stand-up 04",
+          "day": "2026-11-25"
+        },
+        {
+          "id": 8,
+          "title": "Stand-up 03",
+          "day": "2026-11-24"
+        }
+      ],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": true,
+      "max_meetings": 12
+    }
+  }
+}

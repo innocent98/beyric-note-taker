@@ -1,0 +1,42 @@
+{
+  "note": "A date range, both days included, in the person's stored time zone, else the `tz` sent (the browser's). `day` in the answer is the day in that zone. Only meetings of the active team's list that Daniel may read; a date range never counts hidden meetings (`left_out_count` is 0).",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2026-11-02",
+      "to_day": "2026-11-09",
+      "tz": "Africa/Lagos"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 2,
+          "title": "Planning",
+          "day": "2026-11-09"
+        },
+        {
+          "id": 1,
+          "title": "Kick-off",
+          "day": "2026-11-02"
+        }
+      ],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

@@ -1593,6 +1593,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recipes/picker/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Meetings
+         * @description Preview the meetings a cross-meeting recipe would read for this choice: those the caller may
+         *     read, ready, newest first, at most 12. Send the returned ids as `meeting_ids` of
+         *     `POST /api/documents`, together with this body as `picker`, so the draft keeps the
+         *     `left_out_count`.
+         */
+        post: operations["resolve_meetings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recipes/{recipe_id}": {
         parameters: {
             query?: never;
@@ -3482,6 +3505,7 @@ export interface components {
             options?: {
                 [key: string]: string | number | boolean;
             };
+            picker?: components["schemas"]["PickerSpec"] | null;
             /** Recipe Id */
             recipe_id?: number | null;
             /** Recipe Key */
@@ -3517,6 +3541,12 @@ export interface components {
             id: number;
             /** Left Out Count */
             left_out_count: number;
+            /**
+             * Left Out Message
+             * @description A plain sentence for `left_out_count` ("2 meetings were left out because ..."); null for
+             *     none. It never names a meeting.
+             */
+            readonly left_out_message: string | null;
             /** Meeting Ids */
             meeting_ids: number[];
             /** Options */
@@ -4268,6 +4298,54 @@ export interface components {
             name: string;
             /** User Id */
             user_id: number;
+        };
+        /** PickedMeeting */
+        PickedMeeting: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+        };
+        /** PickerPreview */
+        PickerPreview: {
+            /** Capped */
+            capped: boolean;
+            /** Left Out Count */
+            left_out_count: number;
+            /** Left Out Message */
+            left_out_message: string | null;
+            /** Max Meetings */
+            max_meetings: number;
+            /** Meetings */
+            meetings: components["schemas"]["PickedMeeting"][];
+        };
+        /**
+         * PickerSpec
+         * @description Which meetings to use. Exactly one of: `series_id` (a recurring meeting), `project_id`,
+         *     `sprint_id`, a date range (`from_day` and/or `to_day`, `YYYY-MM-DD`, both days included, in the
+         *     caller's time zone) or `meeting_ids` (hand-picked). At most 12 are used, newest first; a meeting
+         *     the caller cannot read is left out and counted.
+         */
+        PickerSpec: {
+            /** From Day */
+            from_day?: string | null;
+            /** Meeting Ids */
+            meeting_ids?: number[] | null;
+            /** Project Id */
+            project_id?: number | null;
+            /** Series Id */
+            series_id?: number | null;
+            /** Sprint Id */
+            sprint_id?: number | null;
+            /** To Day */
+            to_day?: string | null;
+            /** Tz */
+            tz?: string | null;
         };
         /** PilotOut */
         PilotOut: {
@@ -10940,6 +11018,69 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_meetings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickerSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickerPreview"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such team, recurring meeting, project or sprint for the caller */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `validation_error` (name exactly one way of choosing), `invalid_date_range`, `invalid_time_zone` */
             422: {
                 headers: {
                     [name: string]: unknown;

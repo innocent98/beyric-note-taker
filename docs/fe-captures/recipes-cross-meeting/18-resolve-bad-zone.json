@@ -1,0 +1,28 @@
+{
+  "note": "A time zone the server does not know: 422 `invalid_time_zone`.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2026-11-01",
+      "tz": "Mars/Phobos"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_time_zone",
+        "message": "That time zone is not known. Write a name such as Africa/Lagos or America/New_York."
+      }
+    }
+  }
+}

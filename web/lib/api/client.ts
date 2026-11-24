@@ -49,6 +49,8 @@ import type {
   RemovedList,
   BroughtBack,
   Pilot,
+  PickerPreview,
+  PickerSpec,
   Project,
   ProjectChanges,
   ProjectList,
@@ -184,6 +186,8 @@ export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
 // review item is about that one thing, never about a team.
 export function isTeamScoped(path: string, method = "GET"): boolean {
   const p = path.split("?", 1)[0];
+  // The meeting picker's preview is a read sent as a POST: it asks about the active team's series, projects and sprints.
+  if (p === "/api/recipes/picker/resolve") return true;
   if (/^\/api\/team\/invites\/(preview|accept)$/.test(p)) return false;
   if (/^\/api\/(meetings|decisions|review|session)$/.test(p)) return method === "GET";
   // Asking for a draft names whose brief and team recipes it reads: the tab's team (a read of a draft is not).
@@ -446,6 +450,13 @@ export function createApi(options: ApiOptions = {}) {
         request<Recipe>("POST", "/api/recipes", { body, write: true, team }),
       update: (id: number, body: RecipeChanges) => request<Recipe>("PUT", `/api/recipes/${id}`, { body, write: true }),
       archive: (id: number) => request<void>("DELETE", `/api/recipes/${id}`, { write: true }),
+      // Cross-meeting recipes. `resolvePicker` previews the meetings a choice means (a recurring meeting,
+      // a project, a sprint, a date range or hand-picked ids): at most 12, newest first, and how many
+      // were left out because the caller cannot read them (never named). Send its ids as `meeting_ids`
+      // and the same spec as `picker` when making the draft. 404 for a series, project or sprint that
+      // is not the caller's; 422 `invalid_date_range`.
+      resolvePicker: (body: PickerSpec, team?: number | null) =>
+        request<PickerPreview>("POST", "/api/recipes/picker/resolve", { body, write: true, team }),
     },
     brief: {
       get: (team?: number | null) => request<Brief>("GET", "/api/briefs", { team }),

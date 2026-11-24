@@ -1,0 +1,44 @@
+{
+  "note": "A recurring meeting. The series has 5 ready meetings; Daniel can read 3 (the other 2 are Ada's private ones). The answer lists the 3, newest first, with title and `day`, and says `left_out_count: 2` with a sentence to show. The two left-out meetings are not named and their ids are not in the answer. `max_meetings` is 12 and `capped` is false.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 3,
+          "title": "Review",
+          "day": "2026-11-16"
+        },
+        {
+          "id": 2,
+          "title": "Planning",
+          "day": "2026-11-09"
+        },
+        {
+          "id": 1,
+          "title": "Kick-off",
+          "day": "2026-11-02"
+        }
+      ],
+      "left_out_count": 2,
+      "left_out_message": "2 meetings were left out because you cannot read them or they are not ready.",
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

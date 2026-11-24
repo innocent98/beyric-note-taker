@@ -1,0 +1,12 @@
+{
+  "note": "What the model was sent for that draft (checked by the script, not the whole prompt): per meeting the notes, decisions, tasks and open questions; no transcript and no line numbers; nothing of the two meetings Daniel cannot read.",
+  "content": {
+    "meetings_in_prompt": 3,
+    "transcript_text_in_prompt": false,
+    "line_markers_in_prompt": false,
+    "has_decisions": true,
+    "has_tasks": true,
+    "has_open_questions": true,
+    "private_words_in_prompt": false
+  }
+}

@@ -2,15 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { MeetingPicker } from "@/components/app/meeting-picker";
 import { GateText } from "@/components/billing/gate-text";
 import { Alert, AppLink, Button, Field, Icon, SelectField } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import type { Brief, Recipe, RecipeList, TeamSummary } from "@/lib/api/types";
+import type { Brief, PickerSpec, Recipe, RecipeList, TeamSummary } from "@/lib/api/types";
 import { defaultOptions, groupRecipes, optionsToSend, recipeErrorMessage, recipeRef } from "@/lib/recipes";
 
-// What a place for the meeting picker is handed: the meetings chosen so far (this one to begin with) and
-// the way to change them. Slice S5 mounts its picker through `renderMeetingPicker`.
-export type MeetingPickerProps = { meetingIds: number[]; onChange: (ids: number[]) => void };
+// What a place for the meeting picker is handed: the meetings chosen so far (this one to begin with), the
+// way to change them (`picker` is the choice behind the ids, sent with the draft so it can say how many
+// meetings were left out) and the team in use. The dialog mounts `MeetingPicker` there unless a different
+// one is given through `renderMeetingPicker`.
+export type MeetingPickerProps = {
+  meetingIds: number[];
+  onChange: (ids: number[], picker?: PickerSpec | null) => void;
+  team: number | null;
+};
 
 const OUTPUT_LABEL: Record<Recipe["output_type"], string> = { document: "Document", email: "Email", table: "Table", board: "Board" };
 
@@ -22,8 +29,9 @@ function valueOf(recipe: Recipe): string {
 // designer's files draw nothing of recipes). Pick a recipe (General and School starters, the team's own,
 // the person's own), fill its choices, see whose brief the draft will use and switch the team, then Make
 // draft: the draft is asked for (202) and the draft page opens, which polls while it is written.
-// A recipe that needs several meetings (`scope` `many`) gets a marked place for the meeting picker; with
-// none given it explains that this meeting alone is used. A recipe for one meeting always uses the page's.
+// A recipe that needs several meetings (`scope` `many`) gets the meeting picker (slice S5: a recurring
+// meeting, a project, a sprint, a date range or meetings picked by hand; at most 12; the ones the person
+// cannot read are left out and counted); Make waits for a choice. A recipe for one meeting always uses the page's.
 export function MakeDialog({
   open,
   meetingId,
@@ -50,7 +58,7 @@ export function MakeDialog({
   // switched to starts clean on this meeting alone.
   const [entered, setEntered] = useState<Record<string, Record<string, string>>>({});
   const [useBrief, setUseBrief] = useState(true);
-  const [chosen, setChosen] = useState<{ recipe: string | null; ids: number[] }>({ recipe: null, ids: [] });
+  const [chosen, setChosen] = useState<{ recipe: string | null; ids: number[]; picker: PickerSpec | null }>({ recipe: null, ids: [], picker: null });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const asking = useRef(false);
@@ -65,7 +73,7 @@ export function MakeDialog({
       setPicked(null);
       setUseBrief(true);
       setEntered({});
-      setChosen({ recipe: null, ids: [] });
+      setChosen({ recipe: null, ids: [], picker: null });
       setBusy(false);
       setError(null);
       asking.current = false;
@@ -117,7 +125,7 @@ export function MakeDialog({
     if (picked !== null) setEntered((all) => ({ ...all, [picked]: change(values) }));
   };
   const meetingIds = chosen.recipe === picked ? chosen.ids : [meetingId];
-  const setMeetingIds = (ids: number[]) => setChosen({ recipe: picked, ids });
+  const setMeetingIds = (ids: number[], picker: PickerSpec | null = null) => setChosen({ recipe: picked, ids, picker });
 
   const many = recipe?.scope === "many";
   const groups = list ? groupRecipes(list.recipes) : null;
@@ -135,6 +143,7 @@ export function MakeDialog({
           meeting_ids: many ? meetingIds : [meetingId],
           options: optionsToSend(values),
           use_brief: useBrief && recipe.uses_brief,
+          ...(many && chosen.recipe === picked && chosen.picker ? { picker: chosen.picker } : {}),
         },
         teamId ?? undefined,
       );
@@ -272,9 +281,9 @@ export function MakeDialog({
             {many ? (
               <section className="mk-slot" aria-label="Meetings">
                 {renderMeetingPicker ? (
-                  renderMeetingPicker({ meetingIds, onChange: setMeetingIds })
+                  renderMeetingPicker({ meetingIds, onChange: setMeetingIds, team: teamId })
                 ) : (
-                  <p className="field-hint">This recipe is made from several meetings. Right now it uses this one.</p>
+                  <MeetingPicker id="mk-picker" team={teamId} onChange={(found) => setMeetingIds(found.meetingIds, found.picker)} />
                 )}
               </section>
             ) : null}
@@ -311,7 +320,7 @@ export function MakeDialog({
               <Button kind="secondary" size="md" type="button" onClick={onClose}>
                 Cancel
               </Button>
-              <Button size="md" type="button" disabled={busy || !recipe} onClick={() => void submit()}>
+              <Button size="md" type="button" disabled={busy || !recipe || (many && meetingIds.length === 0)} onClick={() => void submit()}>
                 {busy ? "Making..." : "Make draft"}
               </Button>
             </div>
