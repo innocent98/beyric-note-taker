@@ -1,11 +1,11 @@
 # ruff: noqa: F811
 """Generating a board (`generate.generate_blocks` for the output type `board`): columns of cards,
-sources checked like every other draft, blanks and the number audit applied. A stand-in recipe is
-used: the real `board` starter's wording is slice S3's."""
+sources checked like every other draft, blanks and the number audit applied. The recipe is the real
+`board` starter of slice S3 (`app/recipes/library.py`)."""
 
 import pytest
 
-from app.recipes import audit
+from app.recipes import audit, library
 from app.recipes import blocks as blocks_mod
 from app.recipes import generate as g
 from tests.test_recipe_generate import (  # noqa: F401  (fixtures used by name)
@@ -20,12 +20,10 @@ from tests.test_recipe_generate import (  # noqa: F401  (fixtures used by name)
     template,
 )
 
-BOARD = g.RecipeSpec(
-    name="Board",
-    instruction="Group the decisions, action items, open questions and key points by theme.",
-    output_type="board",
-    key="board",
-)
+# The real starter of slice S3 (`app/recipes/library.py`): its instruction text is what the model
+# is given for a board.
+STARTER = library.starter_by_key("board")
+BOARD = g.spec_of(STARTER)
 
 
 def card(text, kind="note", owner_name=None, sources=()):
@@ -56,8 +54,31 @@ def test_the_model_is_told_to_make_a_board_of_columns_and_cards(session, owner, 
     g.generate_blocks(BOARD, context_of(session, owner, [meeting]), {}, client=model)
     system, user = system_and_user(model.calls[0])
     assert "Output type: board." in user and "only `column` blocks" in user
+    assert STARTER.instruction in user  # the real starter's own words, outside any fence
     assert "Group the decisions, action items, open questions and key points" in user
     assert "column (a board column with cards)" in system
+
+
+def test_the_real_board_starter_is_a_board_that_reads_one_meeting(session, owner, meeting):
+    assert (STARTER.output_type, STARTER.scope, STARTER.uses_brief) == ("board", "one", False)
+    assert BOARD.output_type == "board" and BOARD.key == "board"
+    # what its instruction asks for is what the engine can make: three to six themes of cards with
+    # a kind, an owner and a source line
+    result = make(
+        session,
+        owner,
+        meeting,
+        [
+            column(
+                "Pricing", [card("Fee is 50,000 naira", "decision", None, [line(meeting.id, 2)])]
+            ),
+            column("Plan", [card("Send the plan", "action", "Ada", [line(meeting.id, 3)])]),
+            column("Open", [card("When do we start?", "question")]),
+        ],
+    )
+    assert [c.title for c in result.blocks] == ["Pricing", "Plan", "Open"]
+    assert [c.cards[0].kind for c in result.blocks] == ["decision", "action", "question"]
+    assert result.blocks[1].cards[0].owner == "Ada" and result.blocks[0].cards[0].sources
 
 
 def test_a_board_comes_back_as_columns_with_cards_owner_and_kind(session, owner, meeting):

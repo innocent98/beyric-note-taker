@@ -12,7 +12,7 @@ Adebayo wanted "something similar to the whiteboard, not live, that everybody wi
 |---|---|---|
 | What a board is | An ordinary draft with `output_type: "board"` whose blocks are `column`s of `card`s (the engine's blocks, no new table) | Polling, discard, the audit, sharing and exports are the draft engine's, so none was rebuilt |
 | Making one | The model call is the engine's. `generate.generate_blocks` calls `board.shape` for the output type `board`: only columns are kept (a heading or paragraph the model adds is dropped), at most 12, and a reply with no card in any column **fails the draft as `structure`** | A board must never half-show. Two lines were added to `app/recipes/generate.py` (a lazy import and the call): the only edit to a sibling slice's file |
-| The recipe's words | **Not here**: `board`'s instruction text is S3's (`app/recipes/library.py`). Tests use a stand-in recipe | S3 must keep it asking for "columns by theme from the decisions, action items, open questions and key points, with the owner and a source"; the engine already says "only `column` blocks" in its board output guide |
+| The recipe's words | S3's `board` starter (`app/recipes/library.py`): "group the decisions, action items, open questions and key points into between three and six themes, one column per theme ... each card ... with its owner ... and the line it came from". Tests and captures use that real starter with a fake model | It matches what the engine shapes (columns of cards with kind, owner, sources; at most 12 columns); `test_the_real_board_starter_is_a_board_that_reads_one_meeting` pins it |
 | One operation per call | `move_card`, `rename_column`, `add_column`, `add_card`, `edit_card`, `delete_card`, `recolour` (the plan's list) plus **`delete_column`** | Without it a column made by mistake could never be removed. The last column cannot be deleted |
 | Numbers | `column` = place of a column; `card` = place counting **through the columns** from 0 (the plan's `card: i`); `index` = place in the target column **after** the moved card has left | One unambiguous integer per card, as the plan's interface has it. `lib/board.ts` computes them, so the drag and the menu send identical calls (a test proves it) |
 | Recolour | `recolour {card, kind}` gives the card another kind; colour is a function of kind (teal decision, amber action, blue question, grey note) | The spec says "recolour by type"; there is no free colour |
@@ -70,7 +70,7 @@ No migration, no setting, no new dependency, no server job. Revert the PR; draft
 ## Follow-ups (for the lead and the other slices)
 
 1. ~~Mount `BoardView`~~ done (see top). `canEdit` is still `true` on the page: slice S4 passes false for a reader of a shared board.
-2. **S3's `board` recipe** must tell the model to group the decisions, action items, open questions and key points into themes as `column` blocks, owner and sources on every card; the engine already shapes and validates the reply.
+2. ~~S3's `board` recipe~~ checked against the real starter (see the table above).
 3. ~~S2's exporter~~ done: `exporters.export` builds a board's render model with `board.to_notes_document`.
 4. **Conflicts to expect:** `web/lib/api/client.ts` and `web/lib/api/schema.d.ts` / `docs/openapi.json` (regenerate after merging); `app/api.py` (one import, one line).
 5. `app/api_recipe_board.py` imports `_out` from `app/api_recipes.py`; if S4 changes `_out`'s signature (a reader), this call follows it.

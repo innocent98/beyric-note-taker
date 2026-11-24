@@ -1,7 +1,7 @@
 # ruff: noqa: F811
 """`PATCH /api/documents/{id}/board` (`app/api_recipe_board.py`): one operation per call, strict
-bodies, only the creator edits, refused while writing, a stale screen is a 409. A stand-in `board`
-starter and a fake model: the real starter's wording is slice S3's."""
+bodies, only the creator edits, refused while writing, a stale screen is a 409. The real `board`
+starter (`app/recipes/library.py`) and a fake model."""
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import Document, DocumentShare
+from app.recipes import library
 from app.recipes import service as svc
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     Api,
@@ -37,14 +38,7 @@ TRANSCRIPT = (
     "[Daniel]: We want onboarding for 50,000 naira, starting 2026-12-01.\n"
     "[Ada]: Agreed. I will send the plan by Friday."
 )
-BOARD = SimpleNamespace(
-    key="board",
-    name="Board",
-    instruction="Group the meeting by theme.",
-    output_type="board",
-    scope="one",
-    uses_brief=True,
-)
+BOARD = library.starter_by_key("board")  # the real starter (slice S3), not a stand-in
 EMAIL = SimpleNamespace(
     key="follow_up_email",
     name="Follow-up email",

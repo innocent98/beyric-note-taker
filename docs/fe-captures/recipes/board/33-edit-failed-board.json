@@ -9,7 +9,7 @@
       "Cookie": "session=<cookie>"
     },
     "body": {
-      "revision": "2026-11-24T14:47:45.353757Z",
+      "revision": "2026-11-24T19:28:09.637608Z",
       "op": "delete_card",
       "card": 0
     }

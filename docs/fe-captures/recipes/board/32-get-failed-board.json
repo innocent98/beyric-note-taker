@@ -25,8 +25,8 @@
       "meeting_ids": [
         1
       ],
-      "created_at": "2026-11-24T14:47:45.238616Z",
-      "updated_at": "2026-11-24T14:47:45.353757Z",
+      "created_at": "2026-11-24T19:28:09.494676Z",
+      "updated_at": "2026-11-24T19:28:09.637608Z",
       "blocks": [],
       "checks": {
         "blanks": [],
@@ -36,7 +36,11 @@
       "sources_available": true,
       "left_out_count": 0,
       "failure_code": "structure",
-      "failure_message": "The writing service sent back something unusable. Try again."
+      "failure_message": "The writing service sent back something unusable. Try again.",
+      "options": {
+        "try": "empty"
+      },
+      "use_brief": false
     }
   }
 }

@@ -19,8 +19,6 @@ What is NOT real, and is labelled where it matters:
 * **The model.** `FakeModel` stands in for the OpenAI client (no key, no network). It returns the
   strict-JSON shape `app/recipes/generate.py` asks for, citing real line numbers it is shown; a real
   model's wording and its grouping into themes will differ, the shape of every body will not.
-* **The `board` starter.** `app/recipes/library.py` is slice S3's; the script registers a stand-in
-  with the same key.
 * **PDF and Word of a board** go through slice S2's export route, which is not on this branch: the
   render model (`board.to_notes_document`) is shown being built and rendered, not fetched over HTTP.
 * **Not run live:** a teammate the board was shared with (slice S4); shape from
@@ -81,17 +79,10 @@ from app.models import AppState, Meeting, Template, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
 from app.recipes import blocks as blocks_mod  # noqa: E402
 from app.recipes import board as board_mod  # noqa: E402
-from app.recipes import generate  # noqa: E402
+from app.recipes import generate, library  # noqa: E402
 from app.recipes import service as recipe_service  # noqa: E402
 
-BOARD = SimpleNamespace(
-    key="board",
-    name="Board",
-    instruction="Group the decisions, action items, open questions and key points of the meeting by theme, as columns of cards.",
-    output_type="board",
-    scope="one",
-    uses_brief=True,
-)
+BOARD = library.starter_by_key("board")  # the real starter (app/recipes/library.py)
 EMAIL = SimpleNamespace(
     key="follow_up_email",
     name="Follow-up email",
