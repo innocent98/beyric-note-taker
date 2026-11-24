@@ -246,14 +246,52 @@ def _column(title, cards):
 # What each document is made of: (heading, shape). The model is told these in the real
 # instruction; here they stand for "the model followed it".
 LAYOUT = {
-    "proposal": [("Background", "p"), ("What we heard", "b"), ("Proposed solution", "p"), ("Scope and deliverables", "b"), ("Timeline", "t:Phase|When"), ("Investment", "t:Item|Price"), ("Terms and assumptions", "p"), ("Next steps", "b")],  # fmt: skip
-    "requirements": [("Goals", "b"), ("Users", "p"), ("Requirements", "t:Requirement|Priority|Owner"), ("Open questions", "b"), ("Out of scope", "p"), ("Risks", "b"), ("Acceptance", "p")],  # fmt: skip
+    "proposal": [
+        ("Background", "p"),
+        ("What we heard", "b"),
+        ("Proposed solution", "p"),
+        ("Scope and deliverables", "b"),
+        ("Timeline", "t:Phase|When"),
+        ("Investment", "t:Item|Price"),
+        ("Terms and assumptions", "p"),
+        ("Next steps", "b"),
+    ],  # fmt: skip
+    "requirements": [
+        ("Goals", "b"),
+        ("Users", "p"),
+        ("Requirements", "t:Requirement|Priority|Owner"),
+        ("Open questions", "b"),
+        ("Out of scope", "p"),
+        ("Risks", "b"),
+        ("Acceptance", "p"),
+    ],  # fmt: skip
     "marketing_post": [("Post", "p")],
-    "decision_memo": [("Context", "p"), ("Options discussed", "b"), ("Decision", "p"), ("Consequences", "b"), ("Follow-ups", "b")],  # fmt: skip
+    "decision_memo": [
+        ("Context", "p"),
+        ("Options discussed", "b"),
+        ("Decision", "p"),
+        ("Consequences", "b"),
+        ("Follow-ups", "b"),
+    ],  # fmt: skip
     "sop": [("Purpose", "p"), ("Steps", "b"), ("Checks", "b")],
-    "status_report": [("Progress", "b"), ("Decisions", "b"), ("Blockers", "b"), ("Next", "t:Task|Owner|Due")],  # fmt: skip
-    "client_briefing": [("History", "b"), ("What was promised", "b"), ("Open items", "b"), ("Questions for the next call", "b")],  # fmt: skip
-    "study_guide": [("Key ideas", "b"), ("Definitions", "b"), ("Worked example", "p"), ("What to revise", "b")],  # fmt: skip
+    "status_report": [
+        ("Progress", "b"),
+        ("Decisions", "b"),
+        ("Blockers", "b"),
+        ("Next", "t:Task|Owner|Due"),
+    ],  # fmt: skip
+    "client_briefing": [
+        ("History", "b"),
+        ("What was promised", "b"),
+        ("Open items", "b"),
+        ("Questions for the next call", "b"),
+    ],  # fmt: skip
+    "study_guide": [
+        ("Key ideas", "b"),
+        ("Definitions", "b"),
+        ("Worked example", "p"),
+        ("What to revise", "b"),
+    ],  # fmt: skip
     "practice_quiz": [("Questions", "b"), ("Answers", "b")],
     "revision_plan": [("Topics", "b"), ("Plan", "t:Day|Topic")],
     "class_faq": [("Questions and answers", "b"), ("Still open", "b")],
@@ -301,7 +339,9 @@ class LiveModel:
         def many(i):
             if tasks and i % 2:
                 t = tasks[i % len(tasks)]
-                return f"{t[1]} ({t[2]})", [_src("task", meetings[i % len(meetings)], ref=int(t[0]))]
+                return f"{t[1]} ({t[2]})", [
+                    _src("task", meetings[i % len(meetings)], ref=int(t[0]))
+                ]
             if decisions:
                 d = decisions[i % len(decisions)]
                 return d[1], [_src("decision", meetings[i % len(meetings)], ref=int(d[0]))]
@@ -313,16 +353,27 @@ class LiveModel:
         blocks: list[dict] = []
         title = starter.name
         if otype == "email":
-            other = next((w for _, w, _ in lines if w != lines[0][1]), "there") if lines else "there"
+            other = (
+                next((w for _, w, _ in lines if w != lines[0][1]), "there") if lines else "there"
+            )
             first = other.split()[0]
-            blocks = [_para(f"Subject: Thanks for today, next steps"), _para(f"Hi {first},"), _para("Thank you for your time today. Here is a short recap of what we covered.", cite(0)), _bullets([point(2), point(5), point(8)])]  # fmt: skip
+            blocks = [_para("Subject: Thanks for today, next steps"), _para(f"Hi {first},"), _para("Thank you for your time today. Here is a short recap of what we covered.", cite(0)), _bullets([point(2), point(5), point(8)])]  # fmt: skip
             blocks.append(_para("Next step: " + ("as agreed above." if has_date else "[need: date of the next step]")))  # fmt: skip
             blocks.append(_para("Kind regards"))
         elif otype == "board":
             blocks = [
                 _column("What we decided", [(said(i), "decision", None, cite(i)) for i in (1, 6)]),
-                _column("Who does what", [(said(i), "action", lines[i % len(lines)][1], cite(i)) for i in (10, 12)]),  # fmt: skip
-                _column("Still open", [(said(14), "question", None, cite(14)), ("Confirm the date: [need: date]", "question", None, [])]),  # fmt: skip
+                _column(
+                    "Who does what",
+                    [(said(i), "action", lines[i % len(lines)][1], cite(i)) for i in (10, 12)],
+                ),  # fmt: skip
+                _column(
+                    "Still open",
+                    [
+                        (said(14), "question", None, cite(14)),
+                        ("Confirm the date: [need: date]", "question", None, []),
+                    ],
+                ),  # fmt: skip
                 _column("Parked", []),
             ]
         elif otype == "table" or key in TABLES:
@@ -449,7 +500,9 @@ def seed(engine) -> dict:
             earlier.append(m.id)
         for k in range(1, 3):
             m = meeting(f"Biology 101 week {k}", f"[Dr Mensah]: Week {k}.", f"## Summary\nWeek {k}: cell structure and enzymes.\n", k, series=course.id)  # fmt: skip
-            extras(m, [f"Enzymes are covered in week {k}."], [(f"Read chapter {k}", "Students")], [])
+            extras(
+                m, [f"Enzymes are covered in week {k}."], [(f"Read chapter {k}", "Students")], []
+            )
             earlier.append(m.id)
         private = meeting("Board strategy call, private", "[Ada Lovelace]: The acquisition of Orion for 9 million dollars stays between us.", "## Summary\nPrivate call about a possible acquisition.\n", 11, shared=False)  # fmt: skip
         ids.update(sales=sales.id, sprint=sprint.id, lecture=lecture.id, earlier=earlier, private=private.id)  # fmt: skip
@@ -490,7 +543,11 @@ class Client:
         self.csrf = got.json()["csrf_token"]
 
     def call(self, method, path, body=None, headers=None):
-        h = {"X-CSRF-Token": self.csrf, **(headers or {})} if method != "GET" else dict(headers or {})
+        h = (
+            {"X-CSRF-Token": self.csrf, **(headers or {})}
+            if method != "GET"
+            else dict(headers or {})
+        )
         return self.http.request(method, path, json=body, headers=h)
 
 
@@ -505,7 +562,11 @@ def wait_ready(c: Client, doc_id: int) -> dict:
 
 def one_meeting_for(key: str, ids: dict) -> int:
     school = library.starter_by_key(key).pack == "school"
-    if key in ("requirements", "sop", "decision_memo", "action_tracker") or key == "board" and False:
+    if (
+        key in ("requirements", "sop", "decision_memo", "action_tracker")
+        or key == "board"
+        and False
+    ):
         return ids["sprint"]
     return ids["lecture"] if school else ids["sales"]
 
@@ -516,7 +577,11 @@ def run_pass(base: str, engine, ids: dict) -> list[dict]:
     for starter in library.STARTERS:
         started = time.time()
         if starter.scope == "many":
-            meetings = ids["earlier"][:3] if starter.pack == "general" else [ids["lecture"]] + ids["earlier"][3:]
+            meetings = (
+                ids["earlier"][:3]
+                if starter.pack == "general"
+                else [ids["lecture"]] + ids["earlier"][3:]
+            )
             if starter.key == "revision_plan":
                 body = {"meeting_ids": meetings, "options": {}}
             else:
@@ -605,7 +670,10 @@ def cmd_load() -> None:
             ("alone", [("table-pdf", made, "pdf")]),
             ("alone-docx", [("table-docx", made, "docx")]),
             ("alone-board-pdf", [("board-pdf", board, "pdf")]),
-            ("two-at-once-table-and-board-pdf", [("table-pdf", made, "pdf"), ("board-pdf", board, "pdf")]),
+            (
+                "two-at-once-table-and-board-pdf",
+                [("table-pdf", made, "pdf"), ("board-pdf", board, "pdf")],
+            ),
             ("two-at-once-same-pdf", [("table-pdf", made, "pdf"), ("table-pdf", made, "pdf")]),
             ("two-at-once-docx", [("table-docx", made, "docx"), ("board-docx", board, "docx")]),
         ):
