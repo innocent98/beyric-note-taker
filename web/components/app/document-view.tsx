@@ -244,9 +244,9 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
         </div>
       ) : null}
 
-      {doc.status === "failed" && !gone ? (
+      {doc.status !== "ready" && !gone ? (
         <div className="doc-actions">
-          {canRegenerate ? (
+          {doc.status === "failed" && canRegenerate ? (
             <Button size="sm" type="button" disabled={busy !== null} onClick={() => void regenerate()}>
               <Icon name="rewrite" size={14} />
               Regenerate

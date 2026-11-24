@@ -49,12 +49,13 @@ export function sourcesOf(block: DocumentBlock): DocumentSource[] {
 // ---- blanks ----
 
 const BLANK = /\[need:[^\]]*\]/g;
+const WORD = /[\p{L}\p{N}]/u;
 
 export type Run = { text: string; kind: "plain" | "blank" | "check" };
 
 // The text split so a blank (`[need: ...]`) and a figure the server flagged can be drawn marked, in
 // order. `flagged` are the texts of `checks.flags` for this block ("120,000 naira"); every place one
-// occurs is marked "check", and a flag inside a blank stays a blank.
+// stands alone is marked "check", and a flag inside a blank stays a blank.
 export function highlightRuns(text: string, flagged: string[] = []): Run[] {
   const marks: { start: number; end: number; kind: "blank" | "check" }[] = [];
   for (const match of text.matchAll(BLANK)) {
@@ -62,6 +63,10 @@ export function highlightRuns(text: string, flagged: string[] = []): Run[] {
   }
   for (const figure of new Set(flagged.filter(Boolean))) {
     for (let at = text.indexOf(figure); at !== -1; at = text.indexOf(figure, at + figure.length)) {
+      // Only where it stands alone: the "2" of "week 2" is the figure, the "2" of "2026" or "v2" is not.
+      const before = text[at - 1];
+      const after = text[at + figure.length];
+      if ((before !== undefined && WORD.test(before)) || (after !== undefined && WORD.test(after))) continue;
       marks.push({ start: at, end: at + figure.length, kind: "check" });
     }
   }

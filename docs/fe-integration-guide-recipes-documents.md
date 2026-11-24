@@ -1,6 +1,6 @@
 # FE integration guide: downloading a recipe draft (export route)
 
-The contract for `GET /api/documents/{id}/export`, the download behind Copy-adjacent actions on a draft (Word, PDF, Markdown, CSV, Excel). The draft API itself (make, poll, edit, discard) is in `docs/fe-integration-guide-recipes.md`; this file covers exports only and will gain the document-screen notes when slice S2's web part (T9) lands.
+The contract for `GET /api/documents/{id}/export`, the download behind Copy-adjacent actions on a draft (Word, PDF, Markdown, CSV, Excel). The draft API itself (make, poll, edit, discard) is in `docs/fe-integration-guide-recipes.md`. This file covers exports, and (the last section) how the document screen at `/documents/{id}` uses the draft API.
 
 **Where every body below comes from:** `scripts/capture_recipe_exports.py` drove the real app over HTTP on a scratch database and saved each exchange to `docs/fe-captures/recipes/exports/NN-name.json` (verbatim). Placeholder people only. **Not real:** the drafts were inserted straight into the database (the capture was made before PR 265 merged), so the draft ids (`1`, `2`...) are the scratch database's; the blocks are the stored shape. Statuses 500, 503 and 504 were **not run live** (see the table at the end).
 
@@ -70,6 +70,20 @@ All use the project shape `{"error": {"code", "message"}}`.
 - **The id is the draft's id, in the path**, never a meeting id.
 - **Binary bodies:** read the response as a blob. Do not read a CSV through `response.text()` and re-encode it; the byte order mark is what makes Excel read the naira sign right.
 
+## The document screen (`/documents/{id}`, web `components/app/document-view.tsx`)
+
+How the screen uses the draft API, with the traps it hit. Bodies are in `docs/fe-captures/recipes/` (the draft API's, by the engine's script) and `docs/fe-captures/recipes/exports/24-the-draft.json` (a draft with two tables; `GET /api/documents/1`).
+
+- **Poll while `status` is `writing`**, every 2 seconds (`DOCUMENT_POLL_MS`), until `ready` or `failed`; keep asking through a lost connection; a 404 while polling means the draft was discarded elsewhere (capture `41-get-after-delete.json`).
+- **`options` and `use_brief` are on the draft** (added in this slice; capture 24 shows `"options": {}, "use_brief": true`). They are what the person chose in the Make dialog, so **Regenerate** can send the same `POST /api/documents` body: `recipe_key` (or `recipe_id` when `recipe_key` is null), `meeting_ids`, `options`, `use_brief`. The engine's captures `07` to `25` predate these two fields and do not show them; the web tests add `options: {}, use_brief: true` to those fixtures (`tests/helpers.ts`, `recipesBody`). Regenerate is not offered when `meeting_ids` is empty or both recipe fields are null (the recipe row was deleted).
+- **`POST /api/documents` carries `X-Team-Id`** (the browser sends the tab's team; `isTeamScoped` answers true for that one call), because the team decides whose brief and recipes are used.
+- **Save sends EVERY block** with `PATCH /api/documents/{id}` and the title only if it changed (capture `15-patch.json`). The editor never touches `sources`: a block keeps what it had, a new block sends `"sources": []`; the server drops any source a draft did not already have (capture 15: the `line 3` the draft did not cite is dropped).
+- **A 422 `blocks_invalid` has a message written for the person** (`Those blocks cannot be saved. Check the tables and try again.`, capture `16-patch-bad-table.json`), unlike other 422s whose text is for developers. `errorMessage()` hides 422 text, so the save handler shows this one explicitly. A table row must have as many cells as the table has columns: the editor keeps rows and columns in step.
+- **Checks are by block position.** `checks.blanks[].block_index` and `checks.flags[].block_index` index the SAVED `blocks`. The read view marks flagged figures from them; the editor does not (its working copy shifts positions) and marks only `[need: ...]`. After a save the answer carries fresh checks (capture 15: the wrong figure was corrected and its flag is gone, the blank remains).
+- **`stale`, `sources_available`, `left_out_count`** (captures `21`, `23`): "older than the meeting", "no longer available to you" (chips say "not available" and link nowhere), "N meetings were left out".
+- **A figure flag is the exact text of the figure** (`"120,000 naira"`, `"1"`). The screen marks it only where it stands alone, so a flag of `2` marks the `2` of "week 2" and not the `2` of "2026". **Trap:** capture 24 flags the `1` and `2` of "Week 1" and "Week 2" and the `5%` of "-5%": the audit counts those as figures. The screen shows what the server says.
+- **Copy** is the plain text of the blocks, equal to `GET .../export?format=txt` (a test holds the two equal against capture 07). **Open in mail app** is a `mailto:` of at most 1,800 characters with the subject and body; longer, and it copies instead.
+
 ## Verification table
 
 | Behaviour | Verified |
@@ -84,4 +98,6 @@ All use the project shape `{"error": {"code", "message"}}`.
 | edited blocks are exported | live (15) |
 | 401, 404, 409 (`not_ready`, `no_table`), 422 | live (05, 10, 16 to 23) |
 | 503, 504, 500 | **not run live**: unit tests with the renderer replaced (`tests/test_recipe_exports.py`) |
+| the draft's `options` and `use_brief` | live (capture 24; the engine's older captures predate them) |
+| the screen's behaviour (polling, editing, marks, Copy, mail, Download, Regenerate, Discard) | unit tests fed the captured bodies; the read view, the editor and the writing state were also looked at in a real browser; **Regenerate against a real worker and a real file download in the browser: not run live** |
 | an export of a draft shared by a teammate | **not built**: slice S4 widens who may read (`document_or_404`); today only the owner can export |

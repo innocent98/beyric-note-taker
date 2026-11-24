@@ -78,6 +78,15 @@ describe("a draft being written", () => {
     expect(mocks.get.mock.calls.length).toBe(calls); // it stops asking once it is ready
   });
 
+  it("can be discarded while it is still being written, but not regenerated or copied", async () => {
+    mocks.remove.mockResolvedValue(undefined);
+    show(writing());
+    expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
+    await userEvent.click(action("Discard"));
+    await userEvent.click(action("Discard draft"));
+    expect(mocks.remove).toHaveBeenCalledWith(writing().id);
+  });
+
   it("keeps asking through a lost connection and says when the draft was discarded elsewhere", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mocks.get.mockRejectedValueOnce(new TypeError("offline")).mockRejectedValue(new ApiError(404, "not_found", "No such document."));

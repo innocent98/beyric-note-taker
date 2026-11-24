@@ -1034,7 +1034,7 @@ a.doc-chip:hover { background: var(--surface-hover); color: var(--text); text-de
 .doc-chip-off { color: var(--text-faint); }
 .doc-table-wrap { overflow-x: auto; }
 .doc-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-.doc-table th, .doc-table td { padding: 8px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.doc-table th, .doc-table td { min-width: 96px; padding: 8px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: break-word; }
 .doc-table th { background: var(--surface-soft); font-weight: 600; }
 .doc-table-edit th, .doc-table-edit td { min-width: 140px; }
 .doc-editor { display: flex; flex-direction: column; gap: var(--space-3); }

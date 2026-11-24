@@ -73,6 +73,15 @@ describe("blanks and flagged figures", () => {
     expect(runs.map((r) => r.kind)).toEqual(["check", "plain", "check", "plain", "blank"]);
   });
 
+  it("marks a figure only where it stands alone, not inside a longer number or a word", () => {
+    const runs = highlightRuns("Due 2026-12-01, week 2, 12 items, v2", ["2"]);
+    expect(runs.filter((r) => r.kind === "check")).toHaveLength(1);
+    expect(runs.find((r) => r.kind === "check")?.text).toBe("2");
+    const text = runs.map((r) => r.text).join("");
+    expect(text).toBe("Due 2026-12-01, week 2, 12 items, v2");
+    expect(runs[runs.findIndex((r) => r.kind === "check") - 1].text.endsWith("week ")).toBe(true);
+  });
+
   it("counts the blanks of the blocks on screen", () => {
     expect(countBlanks(email().blocks)).toBe(1);
     expect(countBlanks(proposal().blocks)).toBe(2);
