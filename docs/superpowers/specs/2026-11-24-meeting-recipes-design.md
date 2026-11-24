@@ -21,7 +21,7 @@
 ## 2. Goals, non-goals, anti-goals
 
 **Goals (all in the one release)**
-1. From one finished meeting, or from several, a good first draft of the document a team needs, from **ten starter recipes** (5.3), including the sales follow-up email and the proposal.
+1. From one finished meeting, or from several, a good first draft of the document a team needs, from **eighteen starter recipes** (5.3: ten general and an eight-recipe school pack in 5.3a), including the sales follow-up email and the proposal.
 2. **Teams write their own recipes**, personal or shared with the team, so no department is forced into our shapes. The starters use the same mechanism.
 3. **Grounded by default:** parts of a draft show the lines or meetings they came from; facts that neither the meeting nor the team's brief supports become visible blanks, never guesses; a code check flags figures that appear in neither (5.4).
 4. **Real documents:** formatted text **and real tables**. Edit in place. Export: copy, Word, PDF, Markdown, CSV and Excel (tables), PNG and PDF (boards), and "Open in your mail app" for emails.
@@ -36,6 +36,7 @@
 - No live co-editing or real-time whiteboard (his words: "we don't advise live whiteboard").
 - (File import was a non-goal in the approved draft; Adebayo asked why, and it is now IN scope: goal 9. It was only a time-saving boundary of mine, not a necessity.)
 - No CRM sync (the CRM question to pilot users is still parked).
+- **Not a learning-management system:** no enrolment, grading, gradebook or assignment scheduling. School use (2026-11-24, his words: "we are not building a learning management") is the same engine with study recipes (5.3a) and, in the workspaces design, a class workspace where a lecturer owns it and students join as members.
 - Ask Beyric's behaviour does not change.
 - No new plan or price: generation is gated like Ask. Whether it is later metered or priced is a billing decision.
 
@@ -74,7 +75,7 @@
 
 ### 5.1 Concepts
 
-- **Recipe:** a name, an instruction, an output type (`document`, `email`, `table`, `board`), options (tone, audience, length), a scope (one meeting or several), and which brief it reads. Personal or team-owned. Ten starters ship; teams copy and edit them or write new ones.
+- **Recipe:** a name, an instruction, an output type (`document`, `email`, `table`, `board`), options (tone, audience, length), a scope (one meeting or several), and which brief it reads. Personal or team-owned. Eighteen starters ship in two packs, General and School; teams copy and edit them or write new ones.
 - **Brief:** a team's own reference text the model may use besides the meeting (services, price list, terms, house style, a past proposal pasted in). One free-text brief per team; the personal team has its own.
 - **Draft:** the generated, editable result, attached to a meeting (or, for cross-meeting recipes, to the set it was made from) and one creator. Many drafts per meeting.
 - **Board:** a draft of output type `board` (5.3c).
@@ -110,7 +111,7 @@ Open: [need: start date]                  ⚠ 1 blank to fill, 1 figure to check
 - **Figures** in the draft that appear in neither the transcript, the notes nor the brief are marked "check this" (5.4).
 - The person edits in place (paragraphs, lists, tables), regenerates (a **new** draft), or discards.
 
-### 5.3 The starter recipes (ten)
+### 5.3 The starter recipes (ten general; the school pack is 5.3a)
 
 | Recipe | Scope | Output | What it does |
 |---|---|---|---|
@@ -126,6 +127,23 @@ Open: [need: start date]                  ⚠ 1 blank to fill, 1 figure to check
 | **Client briefing** | several | document | Before the next call with the same client: history, what was promised, open items and questions, from earlier meetings |
 
 (My call on the list, from his examples: follow-up, proposal, requirements, marketing, round-up. The builder may drop or merge a starter that tests show is weak, and must tell Adebayo, but must not ship a weak one silently.)
+
+### 5.3a School pack (eight recipes, same engine, added 2026-11-24)
+
+Adebayo: students and lecturers should be able to use Beyric; the question is "what do they need to do after the class". These are the post-class actions, as recipes in a **School** pack beside the General pack. Each is grounded in the class recording and its source lines like any other draft; where the lecturer did not say something (an answer, a due date) the draft shows a blank, never a guess, and the number audit covers dates and marks.
+
+| Recipe | For | Scope | Output | What it makes |
+|---|---|---|---|---|
+| **Study guide** | student | 1 class | document | Key ideas, definitions, worked examples, what to revise, in the order taught |
+| **Flashcards** | student | 1 class | table | Front and back, exportable to CSV and Excel for import into a flashcard app |
+| **Practice quiz** | student, lecturer | 1 class | document | Mixed questions with answers; every answer links to where the class said it; an answer the class never gave is a blank |
+| **Key terms glossary** | student | 1 class | table | Term, meaning as the lecturer gave it, example |
+| **Assignments and deadlines** | student | 1 class | table | Task, due date, notes, from what the lecturer said; a missing date is a blank; dates are audited |
+| **Revision plan** | student | several classes (a course) | document with a table | Topics across the chosen classes, what to revise first, a day-by-day plan up to a date the student enters |
+| **Class recap for students** | lecturer | 1 class | email | What was covered, key points, homework, next class, ready to send from the lecturer's own mail |
+| **Class FAQ** | lecturer | 1 class or several | document | Questions students asked and the answers given in class, plus open ones with a blank |
+
+(My call on the list from his message; the builder tunes prompts, and must tell Adebayo about any recipe that tests show is weak.) "Revision plan" is cross-meeting (S5). Class workspaces, free student membership and the consent banner are in the workspaces design, not here.
 
 ### 5.3b Cross-meeting inputs
 
@@ -176,7 +194,7 @@ Nothing here reaches users before the whole list works. The slices are built on 
 |---|---|---|
 | S1 Engine | Storage, queue and worker, gate and cap, structured generation with line sources, blanks, the number audit | none |
 | S2 Documents | Document view and editor (paragraphs, lists, tables), regenerate, discard, all exports (Copy, mail app, Word, PDF, Markdown, CSV, Excel), table support in the renderers | S1 |
-| S3 Recipes | The ten starters (one-meeting ones), the team brief and its editor, file import into the brief (goal 9), custom recipes, the recipe library and "My recipes" | S1 (parallel with S2) |
+| S3 Recipes | The eighteen starters (the one-meeting ones; the cross-meeting ones are S5), the team brief and its editor, file import into the brief (goal 9), custom recipes, the recipe library and "My recipes" | S1 (parallel with S2) |
 | S4 Sharing | Share a draft read-only with the team, recipe sharing and edit rights, permission tests | S2, S3 |
 | S5 Cross-meeting | Meeting picker, Status report, Client briefing, cross-meeting sources | S1 (parallel with S4) |
 | S6 Board | Board generation, drag-and-edit view, PNG and PDF export | S2 |
@@ -201,7 +219,7 @@ Table and column names and sizes, the exact JSON schema and prompt wording per r
 
 **His direction, recorded:** one complete release, no placeholder first phase; tables, team sharing, custom recipes, the other starters, cross-meeting recipes and the board are all in scope.
 
-**My calls that stand (he can overrule):** approach B; structured blocks with sources; blanks over guesses; the number audit and its rules (5.4); drafts private until shared, read-only to the team, sharing never grants access to the meetings; team brief edited by owners and admins and chosen as the active team's; regenerate makes a new draft, discard deletes; the daily cap and what counts; the `make` gate inside every plan; the ten starters; the board as a non-live editable picture; "Open in your mail app" instead of a Gmail draft; the privacy sentence is a non-blocking follow-up.
+**My calls that stand (he can overrule):** approach B; structured blocks with sources; blanks over guesses; the number audit and its rules (5.4); drafts private until shared, read-only to the team, sharing never grants access to the meetings; team brief edited by owners and admins and chosen as the active team's; regenerate makes a new draft, discard deletes; the daily cap and what counts; the `make` gate inside every plan; the eighteen starters; the board as a non-live editable picture; "Open in your mail app" instead of a Gmail draft; the privacy sentence is a non-blocking follow-up.
 
 **Still his (needed before the build can finish, not before it starts):**
 Nothing. His decisions after approval, 2026-11-24: the release is **not** gated on the real-meeting rating (he onboards users after release); **file import is in** (goal 9); the build runs aggressively with up to four sessions. **One boundary remains by necessity:** Beyric never sends an email or creates a Gmail draft itself, because that needs Google's sensitive Gmail scope and a verification review (the calendar verification is still open); "Copy" and "Open in your mail app" cover the hand-off.

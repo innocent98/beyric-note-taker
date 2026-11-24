@@ -105,9 +105,9 @@ Failure modes the spec implies that no single task owns; each has a pinning test
 ## Slice S3: Recipes, brief, import (after T1; parallel with S2)
 
 ### Task 10: Starters and the recipe library
-**Files:** Create `app/recipes/library.py` (the ten starters as constants: key, name, instruction, output_type, options, scope), `app/api_recipe_library.py`, `tests/test_recipe_library.py`.
+**Files:** Create `app/recipes/library.py` (the eighteen starters as constants: key, pack in ("general","school"), name, instruction, output_type, options, scope), `app/api_recipe_library.py`, `tests/test_recipe_library.py`.
 **Interfaces:** `GET /api/recipes` (starters + personal + active team's), `POST /api/recipes`, `PUT /api/recipes/{id}`, `DELETE /api/recipes/{id}` (archive). Team recipes: owners and admins only (reuse `app/team_admin.py` checks, never a second rule); members read and use.
-- [ ] Tests: ten starters present with the keys `follow_up_email, proposal, requirements, marketing_post, decision_memo, sop, action_tracker, board, status_report, client_briefing`; a member cannot create or edit a team recipe (404 or 403 per project convention for team roles: follow `team_admin`); a personal recipe is invisible to others; archived recipes are not listed; a copy of a starter is editable.
+- [ ] Tests: eighteen starters present, ten in pack `general` (keys `follow_up_email, proposal, requirements, marketing_post, decision_memo, sop, action_tracker, board, status_report, client_briefing`) and eight in pack `school` (`study_guide, flashcards, practice_quiz, glossary, assignments, revision_plan, class_recap, class_faq`); a school recipe with no stated due date or answer produces a `[need: ...]` blank, not a guess; a member cannot create or edit a team recipe (404 or 403 per project convention for team roles: follow `team_admin`); a personal recipe is invisible to others; archived recipes are not listed; a copy of a starter is editable.
 - [ ] Implement the prompts (blanks over guesses, grounded, per the spec 5.3 table); run: PASS. Commit.
 
 ### Task 11: Team brief and file import
@@ -118,7 +118,7 @@ Failure modes the spec implies that no single task owns; each has a pinning test
 
 ### Task 12: Make dialog, library and brief screens
 **Files:** Create `web/components/app/make-dialog.tsx`, `web/app/recipes/page.tsx`, `web/components/app/recipe-editor.tsx`, `web/components/app/brief-editor.tsx`, tests; Modify `web/components/app/meeting-view.tsx` (button in the `trailing` slot of the header actions), `web/components/app/shell-nav.tsx`.
-- [ ] Tests: dialog lists starters and "My recipes", shows the active team's brief with a switch, submits and navigates to the draft; options (tone, recipient) sent; 403 `plan_inactive` and 429 `recipe_limit` messages; the recipe editor saves a personal recipe; a member sees team recipes read-only; the brief editor imports a file then lets the person edit before saving.
+- [ ] Tests: dialog lists starters grouped by pack (General, School) and "My recipes", shows the active team's brief with a switch, submits and navigates to the draft; options (tone, recipient) sent; 403 `plan_inactive` and 429 `recipe_limit` messages; the recipe editor saves a personal recipe; a member sees team recipes read-only; the brief editor imports a file then lets the person edit before saving.
 - [ ] Implement; run: PASS; browser check at 390 and 1280 px. Commit.
 
 ---
@@ -143,7 +143,7 @@ Failure modes the spec implies that no single task owns; each has a pinning test
 ### Task 15: Picker and context
 **Files:** Create `app/recipes/picker.py`, `tests/test_recipe_picker.py`; Modify `app/recipes/generate.py`, `app/api_recipes.py`, `web/components/app/make-dialog.tsx`.
 **Interfaces:** `resolve_meetings(session, user, spec: PickerSpec) -> Resolved(meetings, left_out_count)` where `PickerSpec` is one of `series_id`, `project_id`, `sprint_id`, `from/to` dates, or `meeting_ids`; at most 12 (newest first); only meetings the caller can read (`visible_meetings`); `left_out_count` is stored on the draft and shown.
-- [ ] Tests: caps at 12; unreadable meetings left out and counted; project, sprint and series resolve through the existing scopes in `app/api_projects.py`, `app/api_sprints.py`, `app/series.py` (read them for the real helpers); status report and client briefing recipes produce blocks with `meeting`, `decision` and `task` sources.
+- [ ] Tests: caps at 12; unreadable meetings left out and counted; project, sprint and series resolve through the existing scopes in `app/api_projects.py`, `app/api_sprints.py`, `app/series.py` (read them for the real helpers); status report, client briefing and revision plan recipes produce blocks with `meeting`, `decision` and `task` sources.
 - [ ] Implement; run: PASS; FE picker tests. Commit.
 
 ---
