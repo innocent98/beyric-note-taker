@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import { AppLink } from "@/components/ui";
 import type { DocumentSource } from "@/lib/api/types";
-import { highlightRuns, isHiddenSource, sourceHint, sourceHref, sourceLabel } from "@/lib/documents";
+import { highlightRuns, sourceHint, sourceHref, sourceLabel } from "@/lib/documents";
 
 // The text of a draft with its blanks (`[need: ...]`) and, when `flagged` names them, the figures the
 // server could not find in the meeting marked "check this".
@@ -34,20 +34,22 @@ export function Marked({ text, flagged = [] }: { text: string; flagged?: string[
 // edited block keeps its sources, so the words stay "drafted from".
 export function SourceChips({ sources, available }: { sources: DocumentSource[]; available: boolean }) {
   if (sources.length === 0) return null;
-  const off = <span className="doc-chip doc-chip-off">not available</span>;
-  const shown = available ? sources : [];
-  const closed = !available || shown.some(isHiddenSource);
+  const links = available
+    ? sources.flatMap((source) => {
+        const href = sourceHref(source);
+        return href === null ? [] : [{ source, href }];
+      })
+    : [];
+  const closed = !available || links.length < sources.length;
   return (
     <p className="doc-sources">
       <span>Drafted from</span>
-      {shown
-        .filter((source) => !isHiddenSource(source))
-        .map((source, i) => (
-          <AppLink key={i} className="doc-chip" href={sourceHref(source) ?? "#"} title={sourceHint(source)}>
-            {sourceLabel(source)}
-          </AppLink>
-        ))}
-      {closed ? off : null}
+      {links.map(({ source, href }, i) => (
+        <AppLink key={i} className="doc-chip" href={href} title={sourceHint(source)}>
+          {sourceLabel(source)}
+        </AppLink>
+      ))}
+      {closed ? <span className="doc-chip doc-chip-off">not available</span> : null}
     </p>
   );
 }

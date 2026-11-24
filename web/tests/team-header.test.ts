@@ -68,6 +68,12 @@ describe("which calls carry the team", () => {
     expect(isTeamScoped("/api/documents/5/export", "GET")).toBe(false);
   });
 
+  it("shares a draft with the tab's team, and stops sharing, lists and reads drafts in none", () => {
+    expect(isTeamScoped("/api/documents/5/share", "POST")).toBe(true);
+    expect(isTeamScoped("/api/documents/5/share", "DELETE")).toBe(false);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(false);
+  });
+
   it.each([
     "/api/teams",
     "/api/team/invites/preview",

@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api/client";
 import type { DocumentBlock, DocumentDraft, DocumentItem, DocumentSource } from "@/lib/api/types";
 
 // Helpers behind the document screen (components/app/document-view.tsx, document-editor.tsx): what a
@@ -226,3 +227,26 @@ export function moveBy<T>(list: T[], from: number, step: -1 | 1): T[] {
 
 // Blocks the editor can show. A board's columns have their own screen (the board view).
 export const isEditable = (block: DocumentBlock): boolean => block.type !== "column";
+
+// ---- the Documents list ----
+
+// How many drafts one page of the Documents list asks for; a full page means there may be more.
+export const DOCUMENT_PAGE = 20;
+
+export const OUTPUT_NAME: Record<DocumentDraft["output_type"], string> = { document: "Document", email: "Email", table: "Table", board: "Board" };
+export const STATUS_NAME: Record<DocumentDraft["status"], string> = { writing: "Writing", ready: "Ready", failed: "Failed" };
+
+// ---- sharing ----
+
+// The team names a draft is shared with, as a line ("Shared with Sales, Support"); null when it is not shared.
+export function sharedWithPhrase(shared: DocumentDraft["shared_with"]): string | null {
+  const names = (shared ?? []).map((t) => t.name);
+  return names.length > 0 ? `Shared with ${names.join(", ")}` : null;
+}
+
+// What the share dialog says when sharing or stopping failed: the server's own sentence for the two
+// refusals written for the person (`not_ready`, `personal_team`), a plain generic line for anything else.
+export function shareErrorMessage(error: unknown, action: "share" | "unshare"): string {
+  if (error instanceof ApiError && (error.code === "personal_team" || error.code === "not_ready")) return error.message;
+  return action === "share" ? "We could not share this draft. Try again." : "We could not stop sharing this draft. Try again.";
+}

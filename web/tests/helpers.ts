@@ -296,7 +296,8 @@ export function recipesLibraryBody<T>(file: string): T {
 // `scripts/capture_recipes.py`; the export route's are in docs/fe-captures/recipes/exports/): the
 // whole exchange, or the response body. The engine's captures were made before the draft carried
 // `options` and `use_brief` (the Make dialog's choices, so Regenerate can repeat them), which the API
-// now always sends: a draft made with no options reads as `{}` and the brief on.
+// now always sends: a draft made with no options reads as `{}` and the brief on. They were also made before
+// sharing: a draft read back as its creator has `access` "owner", `can_edit` true, no `owner_name` and no teams.
 export function recipesCapture(file: string): { request: { method: string; path: string; body: unknown }; response: { status: number; body: unknown } } {
   return JSON.parse(read(join(REPO, "docs/fe-captures/recipes", file)));
 }
@@ -304,6 +305,9 @@ export function recipesBody<T>(file: string): T {
   const body = recipesCapture(file).response.body;
   if (body && typeof body === "object" && "blocks" in body && !("options" in body)) {
     Object.assign(body, { options: {}, use_brief: true });
+  }
+  if (body && typeof body === "object" && "blocks" in body && !("can_edit" in body)) {
+    Object.assign(body, { access: "owner", can_edit: true, owner_name: null, shared_with: [] });
   }
   return body as T;
 }

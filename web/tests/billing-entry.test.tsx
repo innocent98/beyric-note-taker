@@ -202,7 +202,7 @@ describe("the owner shell", () => {
     expect(configure.contains(link)).toBe(true);
     expect(link.getAttribute("aria-current")).toBe("page");
     const labels = [...configure.querySelectorAll("a")].map((a) => a.textContent);
-    expect(labels).toEqual(["Templates", "Recipes", "Vocabulary", "Settings", "Billing"]);
+    expect(labels).toEqual(["Templates", "Recipes", "Documents", "Vocabulary", "Settings", "Billing"]);
     const card = await screen.findByRole("link", { name: /20 hours left/ });
     expect(card.nextElementSibling?.className).toContain("sidebar-user");
   });
@@ -218,7 +218,7 @@ describe("the owner shell", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
     const labels = [...screen.getByRole("navigation", { name: "Configure" }).querySelectorAll("a")].map((a) => a.textContent);
-    expect(labels).toEqual(["Templates", "Recipes", "Vocabulary", "Settings"]);
+    expect(labels).toEqual(["Templates", "Recipes", "Documents", "Vocabulary", "Settings"]);
   });
 });
 
