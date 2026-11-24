@@ -351,3 +351,25 @@ def test_two_edits_at_once_cannot_both_win(api, session, template):
     assert api.call("PATCH", url(doc_id), one).status_code == 200
     error_of(api.call("PATCH", url(doc_id), two), 409, "stale_board")
     assert session.scalar(select(Document.edited).where(Document.id == doc_id)) is True
+
+
+def test_a_board_exports_to_pdf_and_word_through_the_documents_export_route(api, session, template):
+    """S2's export route, the renderer every draft uses: a board is a section per column with its
+    cards as bullets, each with its kind and owner."""
+    import io
+
+    from docx import Document as Docx
+
+    _, doc_id = make_board(api, session, template)
+    pdf = api.get(f"/api/documents/{doc_id}/export?format=pdf")
+    assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
+    docx = api.get(f"/api/documents/{doc_id}/export?format=docx")
+    assert docx.status_code == 200
+    text = "\n".join(p.text for p in Docx(io.BytesIO(docx.content)).paragraphs)
+    assert "Pricing" in text and "Decision: Onboarding is 50,000 naira" in text
+    assert "Action: Send the plan (Ada)" in text
+    assert api.get(f"/api/documents/{doc_id}/export?format=csv").status_code == 409  # no table
+    # and the export uses the board as it was last edited
+    edit(api, doc_id, op="rename_column", column=0, title="Costs")
+    again = api.get(f"/api/documents/{doc_id}/export?format=docx")
+    assert "Costs" in "\n".join(p.text for p in Docx(io.BytesIO(again.content)).paragraphs)

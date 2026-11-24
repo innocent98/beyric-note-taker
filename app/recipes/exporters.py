@@ -15,6 +15,7 @@ as strings, so openpyxl never turns one into a formula either.
 import csv
 import io
 import re
+from datetime import UTC, datetime
 from typing import Literal
 
 from app import export as renderer
@@ -133,6 +134,16 @@ def export(document: Document, fmt: str, *, table: int = 0) -> tuple[bytes, str,
             raise _no_table()
         data = _csv(tables[table][1]) if fmt == "csv" else _xlsx(tables)
     else:
-        data = renderer.build_file(build_document_from_blocks(document), fmt)
+        if (
+            document.output_type == "board"
+        ):  # columns as sections, each card with its kind and owner
+            from app.recipes import board
+
+            model = board.to_notes_document(
+                document.title, blocks, when=document.created_at or datetime.now(UTC)
+            )
+        else:
+            model = build_document_from_blocks(document)
+        data = renderer.build_file(model, fmt)
         return data, renderer.FORMATS[fmt][0], name
     return data, _TYPES[fmt], name
