@@ -46,6 +46,8 @@ describe("which calls carry the team", () => {
     "/api/decisions?status=approved",
     "/api/review?state=checked",
     "/api/session",
+    // The meeting picker's preview is a POST that asks about the active team.
+    "/api/recipes/picker/resolve",
   ])("%s is team-scoped", (path) => {
     expect(isTeamScoped(path)).toBe(true);
   });

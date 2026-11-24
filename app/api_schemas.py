@@ -6,9 +6,10 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.recipes.blocks import Block
+from app.recipes.picker_spec import PickerSpec, left_out_sentence
 
 
 def _utc(value: datetime) -> datetime:
@@ -1408,6 +1409,12 @@ class DocumentIn(BaseModel):
     )
     options: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=10)
     use_brief: bool = True
+    # For a recipe that reads several meetings: the choice the person made in the meeting picker
+    # (`POST /api/recipes/picker/resolve`). The server resolves it again only to count the chosen
+    # meetings the caller cannot read, so the draft can say so (`left_out_count`); it never widens
+    # what is read: only `meeting_ids` the caller can read are used. Refused (422
+    # `meetings_invalid`) for a recipe that uses one meeting.
+    picker: PickerSpec | None = None
 
 
 class DocumentPatch(BaseModel):
@@ -1464,6 +1471,13 @@ class DocumentOut(DocumentBrief):
     # Only when status is "failed": a short code and a plain sentence to show.
     failure_code: str | None
     failure_message: str | None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def left_out_message(self) -> str | None:
+        """A plain sentence for `left_out_count` ("2 meetings were left out because ..."); null for
+        none. It never names a meeting."""
+        return left_out_sentence(self.left_out_count)
 
 
 class DocumentList(BaseModel):
