@@ -1,9 +1,9 @@
 # ruff: noqa: F811
 """The three real cross-meeting starters of `app/recipes/library.py` (status report, client
-briefing, revision plan), through the picker and the worker with a fake model (plan T15, spec 5.3b): each
-resolves the picker's output, is made from each meeting's notes, decisions, tasks and open questions
-and no full transcript, and its sources link to the meetings. The stand-in recipe tests are in
-`tests/test_recipe_cross_meeting.py`."""
+briefing, revision plan), through the picker and the worker with a fake model (plan T15, spec
+5.3b): each resolves the picker's output, is made from each meeting's notes, decisions, tasks and
+open questions and no full transcript, and its sources link to the meetings. The stand-in recipe
+tests are in `tests/test_recipe_cross_meeting.py`."""
 
 from datetime import UTC, datetime
 
