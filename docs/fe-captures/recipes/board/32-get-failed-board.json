@@ -1,0 +1,42 @@
+{
+  "note": "A model reply with no card in any column is not a board: the draft fails as `structure` and is never half shown. Editing it is 409 `not_ready` (see the edit-while-writing capture for `writing`).",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/5",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 5,
+      "title": "Board",
+      "output_type": "board",
+      "recipe_key": "board",
+      "recipe_id": null,
+      "status": "failed",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T14:47:45.238616Z",
+      "updated_at": "2026-11-24T14:47:45.353757Z",
+      "blocks": [],
+      "checks": {
+        "blanks": [],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": "structure",
+      "failure_message": "The writing service sent back something unusable. Try again."
+    }
+  }
+}

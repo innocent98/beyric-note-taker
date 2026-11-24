@@ -1,0 +1,30 @@
+{
+  "note": "A name that is nothing once made plain: 422 `title_empty`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T14:47:44.159359Z",
+      "op": "rename_column",
+      "column": 0,
+      "title": "<i>  </i>"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "title_empty",
+        "message": "Give the column a name."
+      }
+    }
+  }
+}

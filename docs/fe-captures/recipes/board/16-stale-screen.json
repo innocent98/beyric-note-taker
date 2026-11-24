@@ -1,0 +1,29 @@
+{
+  "note": "A screen that is out of date: the `revision` is the `updated_at` from before the edits above. 409 `stale_board`; nothing changes. The page reloads the draft and starts again.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T14:47:41.721572Z",
+      "op": "delete_card",
+      "card": 0
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "stale_board",
+        "message": "The board changed since you opened it. It has been reloaded."
+      }
+    }
+  }
+}

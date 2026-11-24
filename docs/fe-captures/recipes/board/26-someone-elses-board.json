@@ -1,0 +1,29 @@
+{
+  "note": "Another person's board: 404 `not_found`, never 403. Only the creator edits, and that stays true once the board is shared with a team (slice S4; not run live here).",
+  "client": "eve",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T14:47:44.159359Z",
+      "op": "delete_card",
+      "card": 0
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "note": "A card with no text: 422 `card_empty`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T14:47:44.159359Z",
+      "op": "add_card",
+      "column": 0,
+      "text": "   "
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "card_empty",
+        "message": "A card needs some text."
+      }
+    }
+  }
+}
