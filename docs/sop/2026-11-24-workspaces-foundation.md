@@ -16,7 +16,7 @@ A team was only a partial workspace: meetings listed per team but Ask, notificat
 | Cutover (spec 8, 12.1) | Backfill: workspace = `owner_team_id`, else `shared_team_id`, else the recorder's personal team (made when missing). **`shared_team_id` and `owner_team_id` are never touched**; the rehearsal test asserts identical visibility columns and row counts. |
 | Filing rule kept true everywhere | A meeting shared to or owned by a team is filed in that team: a model attribute event (`app/models.py`, `_file_in_team`) does it on every writer, plus explicit writers in `app/meeting_teams.py` (share, move, move back to the recorder's personal workspace), `app/teams.py` (leave: the leaver's unmoved meetings go to their personal workspace; the share default uses the meeting's workspace), `app/deletion.py` (given back to the recorder's personal workspace). Unshare ("keep private") leaves the meeting in the team's workspace, readable by its recorder only. |
 | Insert-time defaults | `app/birth_workspace.py`: column defaults give every row a workspace even from paths that do not know it (meeting: owning team, else shared team, else personal; notification: its meeting's workspace, else personal; template and vocabulary: the owner's personal workspace; calendar connection and join: the connection's / the person's default workspace). Explicit values win. |
-| No header | **Personal workspace** on every data route (`app/workspace_context.py` `require`/`current`). **One exception:** `GET /api/session`, the first call of every page, with no header (or a team the caller is not in) answers the person's *default* workspace (`teams.default_membership`: only team, else personal; the same as `is_default` in `GET /api/teams`), so the web keeps opening where a person sees their meetings today. Flag for the lead. |
+| No header | The person's **default workspace** on every route, `GET /api/session` included (`app/workspace_context.py` `require`/`current`; `teams.default_membership`: only team, else only ordinary team, else personal; the same as `is_default` in `GET /api/teams`). Never "everything". Chosen over strictly-personal so pilot users keep landing where they see their meetings today; the web always names its workspace. One-line revert in `workspace_context.require` and `visibility.active_or_default`. A team the caller is not in is 404 on data routes and quietly the default on `GET /api/session` (the first call of every page). |
 | Detail by id | Authorises by readability only; returns `workspace_team_id` and `workspace` (`id`, `name`, `is_personal`, `kind`; null when the reader is not a member of that team) so the web can switch with a toast. |
 | Session | `active_workspace`, and `other_workspaces` with `unread_notifications` each (the switcher dot). `multi_team` stays in the response as a constant `true` for the older web. |
 | Notifications | `notifications.team_id`; the bell, its count and "read all" are per workspace; hours and account notices (no meeting) are in the personal workspace. |
@@ -46,8 +46,13 @@ Scratch Postgres 16 (Docker, removed afterwards), only named files, never the fu
 
 ## Operate / roll back
 
+- **`MULTI_TEAM_ENABLED`:** `scripts/clean_env.py` removes `MULTI_TEAM_ENABLED=true` from the server `.env`. Rolling the code back to a version that reads the flag therefore needs the line put back first (`MULTI_TEAM_ENABLED=true`), or every team feature switches off.
+
 Deploy: normal; the migration is long and `deploy.sh` backs up first. Roll back: `alembic downgrade` to the previous head drops the columns and table; per-workspace preferences are lost. Nothing deploys before the whole release.
 
 ## Follow-ups
+
+- `notifications.team_id` keeps its BIRTH workspace after a share, a move or a leave (accepted for now).
+- A person who leaves a team keeps recording into it through a calendar connection filed there until W3 disconnects the connection on leave (accepted until W3).
 
 W2 (templates, vocabulary, settings), W3 (calendar, arbitration), W4 (limits, lifecycle, gate), W5 (integration). Old `scripts/capture_*` still reference the removed flag. The web (PR B) must send `X-Team-Id` on every non-personal route and switch on `workspace_team_id`.

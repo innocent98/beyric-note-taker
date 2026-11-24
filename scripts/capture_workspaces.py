@@ -7,7 +7,7 @@ app under uvicorn on a free local port, httpx for every call, every exchange sav
 `docs/fe-captures/workspaces/NN-name.json`.
 
 Shows what the web builds against (docs/fe-integration-guide-workspaces.md): the active workspace
-comes from `X-Team-Id` (no header is the personal workspace), the lists, Ask, notifications and the
+comes from `X-Team-Id` (no header is the person's default workspace: their only team, else their personal one), the lists, Ask, notifications and the
 sidebar badges follow it, `GET /api/session` names the active workspace and the unread count of each
 other one, and a meeting opened by id from another workspace answers with its own workspace so the
 web can switch. The cast (placeholders): Ada owns team X ("Platform team"); Pat is in X and in Y
@@ -311,7 +311,12 @@ def run(base: str, seeded: dict, engine) -> None:
             "the rest with their unread count (the switcher's dot); `badges` and "
             "`unread_notifications` count the active one only.",
         )
-    pat.call("session-no-header", "GET", "/api/session", note="No header: the personal workspace.")
+    pat.call(
+        "session-no-header",
+        "GET",
+        "/api/session",
+        note="No header: the default workspace (Pat is in two teams: the personal one).",
+    )
     quinn.call(
         "session-stale-team",
         "GET",
@@ -325,7 +330,10 @@ def run(base: str, seeded: dict, engine) -> None:
     for name, team in workspaces:
         pat.call(f"meetings-{name}", "GET", "/api/meetings", team=team)
     pat.call(
-        "meetings-no-header", "GET", "/api/meetings", note="No header: the personal workspace."
+        "meetings-no-header",
+        "GET",
+        "/api/meetings",
+        note="No header: the default workspace (Pat is in two teams: the personal one).",
     )
     pat.call(
         "meetings-team-not-mine",

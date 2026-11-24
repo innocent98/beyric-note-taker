@@ -63,8 +63,13 @@ def _present_decisions(
 ) -> list[DecisionOut]:
     """The API shape of decisions the caller may read, with what they link to: only the tasks the
     caller may see (never a suggested one), only the decisions they may read, and where the quote
-    was said in the transcript the meeting page shows. A few queries for the whole page."""
+    was said in the transcript the meeting page shows. A few queries for the whole page.
+
+    Everything linked stays in the decision's own workspace: a task or another decision of a
+    different workspace is never named here, whatever the caller may read (a title from workspace
+    A must not show while they are in B)."""
     ids = [decision.id for decision, _ in rows]
+    workspace_of = {decision.id: meeting.workspace_team_id for decision, meeting in rows}
     related: dict[int, list[DecisionTaskRef]] = {i: [] for i in ids}
     if ids:
         linked = session.execute(
@@ -74,30 +79,35 @@ def _present_decisions(
             .order_by(DecisionTask.decision_id, Task.position, Task.id)
         )
         for decision_id, task in linked:
+            if task.team_id != workspace_of[decision_id]:
+                continue
             related[decision_id].append(
                 DecisionTaskRef(id=task.id, title=task.title, status=task.status)
             )
     named = {d.replaced_by_id for d, _ in rows if d.replaced_by_id}
-    readable = (
-        {
-            d.id: d
-            for d in session.scalars(
-                select(Decision)
-                .join(Meeting)
-                .where(
-                    Decision.hidden_at.is_(None),
-                    can_read_clause(user),
-                    (Decision.id.in_(named)) | (Decision.replaced_by_id.in_(ids)),
-                )
-                .order_by(Decision.meeting_id.desc(), Decision.position)
+    readable: dict[int, Decision] = {}
+    other_workspace: dict[int, int] = {}
+    if ids:
+        for d, workspace_id in session.execute(
+            select(Decision, Meeting.workspace_team_id)
+            .join(Meeting)
+            .where(
+                Decision.hidden_at.is_(None),
+                can_read_clause(user),
+                Meeting.workspace_team_id.in_(set(workspace_of.values())),
+                (Decision.id.in_(named)) | (Decision.replaced_by_id.in_(ids)),
             )
-        }
-        if ids
-        else {}
-    )
+            .order_by(Decision.meeting_id.desc(), Decision.position)
+        ):
+            readable[d.id] = d
+            other_workspace[d.id] = workspace_id
     replaces: dict[int, list[DecisionRef]] = {i: [] for i in ids}
     for other in readable.values():
-        if other.replaced_by_id in replaces and other.status == "replaced":
+        if (
+            other.replaced_by_id in replaces
+            and other.status == "replaced"
+            and other_workspace[other.id] == workspace_of[other.replaced_by_id]
+        ):
             replaces[other.replaced_by_id].append(DecisionRef(id=other.id, text=other.text))
     indexes: dict[int, TranscriptIndex] = {}
     out = []
@@ -110,6 +120,8 @@ def _present_decisions(
                 )
             said = indexes[meeting.id].locate(decision.quote)
         target = readable.get(decision.replaced_by_id) if decision.replaced_by_id else None
+        if target is not None and other_workspace[target.id] != meeting.workspace_team_id:
+            target = None
         out.append(
             DecisionOut(
                 id=decision.id,

@@ -510,12 +510,14 @@ def test_sharing_and_unsharing_re_home_the_extracted_tasks_without_exposing_them
 
     assert ada.delete(f"/api/meetings/{meeting.id}/share").status_code == 200
     session.expire_all()
-    assert session.get(Task, task.id).team_id == personal.id
+    # "keep private": the meeting stays filed in X, so its tasks stay in X's team, unexposed
+    assert session.get(Task, task.id).team_id == world.x.id
     assert pat.get("/api/tasks").json()["tasks"] == []
     error_of(pat.get(f"/api/tasks/{task.id}"), 404, "not_found")
 
 
 def test_re_homing_clears_the_old_teams_sprint_project_and_assignee(app, session, world):
+    """A move back to the recorder (the team changes) clears what belonged to the old team."""
     from app.models import Project
 
     personal = teams.personal_team(session, world.ada.id)
@@ -526,7 +528,9 @@ def test_re_homing_clears_the_old_teams_sprint_project_and_assignee(app, session
     task = add_task(
         session, world.x, meeting, title="Ship it", assignee=world.pat, project_id=project.id
     )
-    assert sign_in(app, ADA).delete(f"/api/meetings/{meeting.id}/share").status_code == 200
+    ada = sign_in(app, ADA)
+    assert ada.post(f"/api/meetings/{meeting.id}/move", {"team_id": world.x.id}).status_code == 200
+    assert ada.post(f"/api/meetings/{meeting.id}/move-back").status_code == 200  # owns X
     session.expire_all()
     row = session.get(Task, task.id)
     assert row.team_id == personal.id and row.project_id is None

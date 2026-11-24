@@ -92,16 +92,22 @@ def upgrade() -> None:
     op.execute("update plans set max_owned_teams = 10 where code = 'plan_50h'")
     # plan_100h (Scale) stays null: unlimited.
 
-    # ---- a personal team for everyone who needs one (a flag-off join once dissolved some). Only
-    # for people who can still sign in, or who own something that must point at a workspace.
+    # ---- a personal team for everyone who needs one (a flag-off join once dissolved some): every
+    # person who can still sign in, and every account (a `deleted` one waiting for its purge, a
+    # hollow row that still owns kept meetings, someone with no membership) that owns any row
+    # that must now point at a workspace.
     op.execute(
         """
         insert into teams (owner_user_id, is_personal)
         select u.id, true from users u
         where not exists (select 1 from teams t where t.owner_user_id = u.id and t.is_personal)
           and (u.status <> 'deleted'
-               or exists (select 1 from meetings m where m.owner_user_id = u.id)
-               or exists (select 1 from templates tp where tp.owner_user_id = u.id))
+               or exists (select 1 from meetings x where x.owner_user_id = u.id)
+               or exists (select 1 from templates x where x.owner_user_id = u.id)
+               or exists (select 1 from vocabulary_terms x where x.owner_user_id = u.id)
+               or exists (select 1 from notifications x where x.user_id = u.id)
+               or exists (select 1 from calendar_connections x where x.user_id = u.id)
+               or exists (select 1 from scheduled_joins x where x.user_id = u.id))
         """
     )
     op.execute(

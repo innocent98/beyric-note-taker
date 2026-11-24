@@ -187,25 +187,27 @@ def scope_team_of(
     session: Session, meeting: Meeting, *, personal_is_private: bool = True
 ) -> int | None:
     """The ordinary team a meeting belongs to for a recurring meeting's row ("scope"): the team that
-    owns it, else the team it is shared to; None for a private meeting, which is its recorder's
-    personal scope (docs/superpowers/specs/2026-11-14-series-follow-meetings.md section 3). A
-    meeting "shared" to its recorder's OWN personal team (migration 0043 made every solo team of
-    one personal, and `apply_share_default` still shares to the default team) is private: nobody
-    else is in that team. `personal_is_private=False` is the flag-off reading, the raw columns, as
-    before. `series_scope_clause` is the same rule as a query: change them together."""
+    owns it, else the team it is shared to, else the team's workspace it was recorded into (a
+    private meeting kept in a team's workspace stays in that team's scope); None for a meeting
+    filed in its recorder's own personal workspace, which is their personal scope
+    (docs/superpowers/specs/2026-11-14-series-follow-meetings.md section 3). A meeting "shared" to
+    its recorder's OWN personal team is private: nobody else is in that team.
+    `personal_is_private=False` is the flag-off reading, the raw columns, as before.
+    `series_scope_clause` is the same rule as a query: change them together."""
     if meeting.owner_team_id is not None:
         return meeting.owner_team_id
     shared = meeting.shared_team_id
-    if shared is None or not personal_is_private:
+    if not personal_is_private:
         return shared
+    home = shared if shared is not None else meeting.workspace_team_id
     own_personal = session.scalar(
         select(Team.id).where(
-            Team.id == shared,
+            Team.id == home,
             Team.is_personal.is_(True),
             Team.owner_user_id == meeting.owner_user_id,
         )
     )
-    return None if own_personal is not None else shared
+    return None if own_personal is not None else home
 
 
 def series_scope_clause(team: Team) -> ColumnElement[bool]:
@@ -213,14 +215,16 @@ def series_scope_clause(team: Team) -> ColumnElement[bool]:
     owned by it. A personal team: those its owner recorded that no other team has (not shared to
     another team, not moved; one shared to this personal team itself is private). Narrows only:
     always combine with `can_read_clause` for a reader. A series row of this team may hold exactly
-    these meetings, and no others."""
+    these meetings, and no others. A private meeting filed in a team's workspace (workspaces
+    design) is in that team's scope, not in its recorder's personal one."""
     if team.is_personal:
         return and_(
             Meeting.owner_user_id == team.owner_user_id,
             or_(Meeting.shared_team_id.is_(None), Meeting.shared_team_id == team.id),
             Meeting.owner_team_id.is_(None),
+            Meeting.workspace_team_id == team.id,
         )
-    return in_team_clause(team.id)
+    return or_(in_team_clause(team.id), Meeting.workspace_team_id == team.id)
 
 
 def is_shared(meeting: Meeting) -> bool:

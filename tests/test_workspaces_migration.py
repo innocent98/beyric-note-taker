@@ -154,6 +154,38 @@ def seed(engine):
             text("update meetings set series_id = null"),  # the column exists and stays untouched
         )
 
+        # The awkward accounts: Fay is deleted and waiting for its purge, with a template, a term, a
+        # notification and a connection; Gus is a hollow row that still owns a meeting moved to X
+        # (his template is taken out of use); Hal left a team and keeps an unshared meeting; Ivy
+        # has no team at all (no personal team, no membership) and a private meeting.
+        fay = user(conn, "fay@example.test", status="deleted")
+        gus = user(conn, "gus@example.test", status="deleted")
+        hal = user(conn, "hal@example.test")
+        ivy = user(conn, "ivy@example.test")
+        ids.update(fay=fay, gus=gus, hal=hal, ivy=ivy)
+        ids["ph"] = team(conn, hal, "Hal", personal=True)
+        template(conn, fay, "General")
+        conn.execute(
+            text("insert into vocabulary_terms (owner_user_id, term) values (:u, 'Beyric')"),
+            {"u": fay},
+        )
+        ids["n_fay"] = one(
+            conn,
+            "insert into notifications (user_id, kind, title, dedupe_key) "
+            "values (:u, 'k', 't', 'n-fay') returning id",
+            u=fay,
+        )
+        one(
+            conn,
+            "insert into calendar_connections (user_id, provider) values (:u, 'google') "
+            "returning id",
+            u=fay,
+        )
+        gus_old = template(conn, gus, "General", deleted=True)
+        ids["m_gus"] = meeting(conn, gus, "ggg-1", gus_old, owned=ids["x"])
+        ids["m_hal"] = meeting(conn, hal, "hhh-1", template(conn, hal, "General"))
+        ids["m_ivy"] = meeting(conn, ivy, "iii-1", template(conn, ivy, "General"))
+
         # Calendar connections: Ada's goes to X (her one ordinary team), Cy's stays personal (two
         # ordinary teams), Dee's is personal, Eve's goes to X (her only membership).
         for key, uid in (("ada", ada), ("cy", cy), ("dee", dee), ("eve", eve)):
@@ -254,8 +286,8 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         # ---- nothing lost, nothing re-shared
         assert after == before
         assert visibility_columns(conn) == visible_before
-        # the only new membership is the owner of the personal team made for Eve
-        assert one(conn, "select count(*) from team_members") == members_before + 1
+        # the only new memberships are the owners of the personal teams made for Eve, Fay, Gus, Ivy
+        assert one(conn, "select count(*) from team_members") == members_before + 4
 
         # ---- meetings: owner team, else shared team, else the recorder's personal team
         ws = dict(conn.execute(text("select id, workspace_team_id from meetings")).all())
@@ -273,6 +305,34 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         assert ws[ids["m_eve"]] == eve_personal
         assert ws[ids["m_own_personal"]] == ids["pa"]
         assert ws[ids["m_cy_y"]] == ids["y"]
+        # the awkward accounts: a personal team for each that owns a row needing a workspace
+        for key in ("fay", "gus", "ivy"):
+            assert (
+                one(
+                    conn,
+                    "select count(*) from teams where owner_user_id = :u and is_personal",
+                    u=ids[key],
+                )
+                == 1
+            ), key
+        assert ws[ids["m_gus"]] == ids["x"]  # kept by the team, whose recorder is a hollow row
+        assert ws[ids["m_hal"]] == ids["ph"]
+        ivy_personal = one(
+            conn, "select id from teams where owner_user_id = :u and is_personal", u=ids["ivy"]
+        )
+        assert ws[ids["m_ivy"]] == ivy_personal
+        fay_personal = one(
+            conn, "select id from teams where owner_user_id = :u and is_personal", u=ids["fay"]
+        )
+        assert one(conn, "select team_id from notifications where id = :i", i=ids["n_fay"]) == (
+            fay_personal
+        )
+        assert (
+            one(conn, "select team_id from calendar_connections where user_id = :u", u=ids["fay"])
+            == fay_personal
+        )
+        assert one(conn, "select count(*) from vocabulary_terms where team_id is null") == 0
+        assert one(conn, "select count(*) from scheduled_joins where team_id is null") == 0
         col = {c["name"]: c for c in inspect(engine).get_columns("meetings")}["workspace_team_id"]
         assert col["nullable"] is False
 

@@ -34,7 +34,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_api_tasks import add_task, team  # noqa: F401
 from tests.test_export import RICH_NOTES, Template_for
-from tests.test_multi_team_leaks import PAT, multi_team_on, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, world  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_web import add_meeting, stranger  # noqa: F401
 

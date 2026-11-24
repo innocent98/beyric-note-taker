@@ -159,7 +159,9 @@ def test_an_unshare_during_the_model_call_files_nothing_in_the_old_team(app, ses
     run_like_the_worker(session, meeting_id, FakeChat([GOOD], on_call=unshared_meanwhile))
     session.expire_all()
     found = session.scalars(select(Task).where(Task.meeting_id == meeting_id)).all()
-    assert found and {t.team_id for t in found} == {home.id}
+    # unsharing keeps the meeting filed in X ("keep private"): its tasks stay in X's team
+    assert found and {t.team_id for t in found} == {world.x.id}
+    assert home.id != world.x.id
 
 
 def test_no_milestone_or_post_goes_to_a_team_that_can_no_longer_read_the_meeting(

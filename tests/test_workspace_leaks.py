@@ -8,7 +8,7 @@ person who belongs to three workspaces (the personal one, X and Y), each full of
 own marker, and must:
 
 * with the header of one workspace, show that workspace's marker and neither of the others';
-* with no header, behave as the personal workspace;
+* with no header, behave as the person's default workspace (`teams.default_membership`);
 * answer 404 `not_found` for a team the caller is not in.
 
 Cast (from `tests/test_multi_team_leaks.py`): Ada owns X, Quinn owns Y, Pat is in both and has a
@@ -23,7 +23,10 @@ import pytest
 
 from app import services, teams
 from app.models import (
+    CalendarConnection,
+    CalendarEvent,
     Decision,
+    DecisionTask,
     Integration,
     Meeting,
     Milestone,
@@ -31,7 +34,8 @@ from app.models import (
     Project,
     ReviewItem,
     Series,
-    Sprint,
+    SeriesIgnored,
+    Task,
     Team,
     TeamMember,
 )
@@ -57,11 +61,11 @@ from tests.test_team_visibility import sign_in
 ADA = "owner@example.test"
 MARKS = {"p": "DATA_P", "x": "DATA_X", "y": "DATA_Y"}
 NOTES = "## Summary\nA talk about {m} pricing.\n\n## Decisions\n- Decide {m}.\n"
-TRANSCRIPT = "[Pat]: We spoke about {m} pricing.\n[Ada]: Yes, {m} pricing."
+TRANSCRIPT = "[{m} Person]: We spoke about {m} pricing.\n[Ada]: Yes, {m} pricing."
 
 # ---- the classification of every GET route -------------------------------------------------
 
-# Returns data of the ACTIVE workspace: narrowed by `X-Team-Id` (else the personal workspace).
+# Returns data of the ACTIVE workspace: narrowed by `X-Team-Id` (else the default workspace).
 WORKSPACE_DATA = {
     "/api/meetings",
     "/api/decisions",
@@ -169,6 +173,9 @@ def cast(session, template, world) -> Cast:
     for key, team in c.team.items():  # team names carry a TEAM_ marker, apart from the DATA_ ones
         team.name = f"TEAM_{key.upper()}"
     c.meetings = {}
+    connection = CalendarConnection(user_id=c.pat.id, team_id=c.team["p"].id)
+    session.add(connection)
+    session.flush()
     for key, team in c.team.items():
         mark = MARKS[key]
         fields = {
@@ -228,13 +235,20 @@ def cast(session, template, world) -> Cast:
                 confirmed_at=datetime(2026, 11, 2, tzinfo=UTC),
             )
         )
+        # a removed recurring meeting per workspace, named by Pat's own calendar event
         session.add(
-            Sprint(
-                team_id=team.id,
-                number=1,
-                start_date=date(2026, 11, 2),
-                end_date=date(2026, 11, 6),
+            CalendarEvent(
+                user_id=c.pat.id,
+                connection_id=connection.id,
+                source_event_id=f"ev-{key}",
+                recurring_event_id=f"rid-{key}",
+                title=f"{mark} weekly sync",
+                starts_at=datetime(2026, 11, 20, 9, 0, tzinfo=UTC),
+                ends_at=datetime(2026, 11, 20, 10, 0, tzinfo=UTC),
             )
+        )
+        session.add(
+            SeriesIgnored(team_id=team.id, calendar_recurring_id=f"rid-{key}", created_by=c.pat.id)
         )
         session.add(Series(team_id=team.id, owner_user_id=c.pat.id, title=f"{mark} weekly"))
         add_task(session, team, title=f"{mark} task", assignee=c.pat)
@@ -292,7 +306,7 @@ def test_every_workspace_data_route_honours_the_header(app, session, cast):
             for other in "pxy":
                 if other != key and path in ("/api/team", "/api/team/members"):
                     assert f"TEAM_{other.upper()}" not in response.text, (path, key)
-        # no header: the personal workspace
+        # no header: the default workspace (Pat is in two teams, so it is the personal one)
         bare = get(pat, path)
         assert bare.status_code == 200, (path, bare.text)
         assert leaks(bare.text, "p") == [], f"{path} with no header leaks"
@@ -356,7 +370,7 @@ def test_the_session_counts_the_active_workspace_and_lists_unread_per_other_one(
     # ... which for someone in exactly one team is that team, as it has always been
     ada = sign_in(app, ADA)
     assert get(ada, "/api/session").json()["active_workspace"]["id"] == cast.x.id
-    # a team the caller is not in quietly gives the personal workspace (every page reads this first)
+    # a team the caller is not in quietly gives the default workspace (every page reads this first)
     stale = get(pat, "/api/session", cast.z).json()
     assert stale["active_workspace"]["is_personal"] is True
     assert cast.z.id not in {w["id"] for w in stale["other_workspaces"]}
@@ -480,3 +494,87 @@ def test_the_marker_helper_reports_a_leak():
     """The helper itself: a response that names another workspace's marker is reported."""
     assert leaks("... DATA_X ... DATA_P ...", "p") == ["DATA_X"]
     assert leaks("nothing", "x") == []
+
+
+# ---- the gaps the first review found ----
+
+
+def test_the_removed_recurring_list_shows_only_the_workspaces_marks(app, session, cast):
+    pat = sign_in(app, PAT)
+    for key, team in cast.team.items():
+        text = get(pat, "/api/series/removed", team).text
+        assert f"{MARKS[key]} weekly sync" in text, key
+        assert leaks(text, key) == [], key
+
+
+def test_the_sprint_boards_count_only_the_workspaces_tasks(app, session, cast):
+    pat = sign_in(app, PAT)
+    planned = {"p": 1, "x": 2, "y": 3}
+    for key, team in cast.team.items():
+        current = get(pat, "/api/sprints", team).json()["sprints"]
+        sprint_id = next(row["id"] for row in current if row["state"] == "current")
+        for n in range(planned[key]):
+            add_task(session, team, title=f"{MARKS[key]} planned {n}", sprint_id=sprint_id)
+    for key, team in cast.team.items():
+        rows = get(pat, "/api/sprints", team).json()["sprints"]
+        totals = [row["tasks_total"] for row in rows if row["state"] == "current"]
+        assert totals == [planned[key]], (key, totals)
+
+
+def test_the_ask_chips_are_built_from_the_active_workspace_only(app, session, cast):
+    pat = sign_in(app, PAT)
+    for key, team in cast.team.items():
+        chips = get(pat, "/api/ask/scope", team).json()["suggestions"]
+        assert chips, key
+        assert leaks(" ".join(chips), key) == [], f"a chip of {key} names another workspace"
+        assert any(MARKS[key] in chip for chip in chips), (key, chips)
+
+
+def test_the_meetings_search_stays_in_the_active_workspace(app, session, cast):
+    pat = sign_in(app, PAT)
+    for key, team in cast.team.items():
+        text = get(pat, "/api/meetings", team, q="pricing").text
+        assert MARKS[key] in text, key
+        assert leaks(text, key) == [], f"search in {key} leaks"
+    assert get(pat, "/api/meetings", cast.z, q="pricing").status_code == 404
+
+
+def test_a_person_in_exactly_one_team_gets_that_team_without_a_header(app, session, cast):
+    """Ada is in X and her own personal workspace only: no header is her default, X."""
+    ada = sign_in(app, ADA)
+    for path in sorted(WORKSPACE_DATA - {"/api/integrations/linear", "/api/integrations/slack"}):
+        bare = get(ada, path)
+        assert bare.status_code == 200, (path, bare.text)
+        assert leaks(bare.text, "x") == [], f"{path} with no header leaks to Ada"
+        explicit = get(ada, path, cast.x)
+        same = (
+            bare.json() == explicit.json()
+            if "json" in bare.headers["content-type"]
+            else bare.text == explicit.text
+        )
+        assert same, f"{path}: no header is not Ada's one team"
+    error_of(get(ada, "/api/meetings", cast.y), 404, "not_found")
+
+
+def test_decision_links_never_name_another_workspaces_titles(app, session, cast):
+    """A decision in X replaced by a decision in Y, and linked to a task of Y: Pat reads both
+    meetings, but while in X neither title shows (design: a title from another workspace never
+    shows)."""
+    from sqlalchemy import select
+
+    d_x = session.scalars(select(Decision).where(Decision.fingerprint == "d-x")).one()
+    d_y = session.scalars(select(Decision).where(Decision.fingerprint == "d-y")).one()
+    d_x.status, d_x.replaced_by_id = "replaced", d_y.id
+    task_y = session.scalars(
+        select(Task).where(Task.team_id == cast.y.id, Task.title == "DATA_Y task")
+    ).one()
+    session.add(DecisionTask(decision_id=d_x.id, task_id=task_y.id))
+    session.commit()
+    pat = sign_in(app, PAT)
+    in_x = get(pat, "/api/decisions", cast.x)
+    assert in_x.status_code == 200
+    assert "DATA_Y" not in in_x.text, "a decision of X names something of Y"
+    [shown] = [d for g in in_x.json()["groups"] for d in g["decisions"] if d["id"] == d_x.id]
+    assert shown["replaced_by"] is None and shown["related_tasks"] == []
+    in_y = get(pat, "/api/decisions", cast.y)
+    assert "Decide DATA_Y" in in_y.text and "DATA_X" not in in_y.text

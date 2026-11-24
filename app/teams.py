@@ -8,7 +8,7 @@ The rules that make that safe live here, in one place:
 * `default_membership` / `team_of` is the rule for "the team a person is most likely in": the
   caller's single ordinary team if they have exactly one, else their personal team. The shell
   preselects it; the calendar cutover filed each connection there. A ROUTE names its workspace with
-  `X-Team-Id`, else the personal one (`app/workspace_context.py`).
+  `X-Team-Id`, else the person's default workspace (`app/workspace_context.py`).
 * A person may belong to any number of teams: joining adds a membership and dissolves nothing (the
   multi-team switch is gone; it was on in production already).
 """
@@ -116,9 +116,10 @@ def ensure_team(session: Session, user: User) -> Team:
 
 def team_for_meeting(session: Session, meeting: Meeting) -> Team:
     """The team a meeting's extracted tasks belong to (spec 6.6): the team that owns it, else the
-    team it is shared to, else its recorder's personal team. In the caller's transaction (it may
-    make a personal team)."""
-    for team_id in (meeting.owner_team_id, meeting.shared_team_id):
+    team it is shared to, else the workspace it was recorded into (a private meeting in a team's
+    workspace, or one a calendar join filed there), else its recorder's personal team. In the
+    caller's transaction (it may make a personal team)."""
+    for team_id in (meeting.owner_team_id, meeting.shared_team_id, meeting.workspace_team_id):
         if team_id is not None:
             team = session.get(Team, team_id)
             if team is not None:
@@ -450,11 +451,21 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
     meeting page.
 
     A person who chose one team for their new meetings (`auto_share_team`, at most one) is shared
-    to THAT team, whatever their role in it: it is their own choice for their own meetings."""
+    to THAT team, whatever their role in it: it is their own choice for their own meetings. It
+    applies only to a meeting recorded into that team's workspace or into the person's own personal
+    workspace (sharing is what files it in the team); a meeting recorded into another team's
+    workspace (a class, say) is never published to a different team by it, and its own workspace's
+    default decides."""
     recorder = session.get(User, meeting.owner_user_id)
     chosen = auto_share_team(session, recorder) if recorder is not None else None
-    if chosen is not None:
-        meeting.shared_team_id = meeting.workspace_team_id = chosen  # shared = filed in that team
+    workspace = session.get(Team, meeting.workspace_team_id)
+    in_own_personal = (
+        workspace is not None and workspace.is_personal and workspace.owner_user_id == recorder.id
+        if recorder is not None
+        else False
+    )
+    if chosen is not None and (chosen == meeting.workspace_team_id or in_own_personal):
+        meeting.shared_team_id = chosen  # sharing files it in that team's workspace (models.py)
         return
     # The meeting's own workspace, not the person's default team: a member records into any
     # workspace they belong to (workspaces design, D3).
@@ -463,7 +474,7 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
         return
     team = session.get(Team, member.team_id)
     if team is not None and team.share_new_meetings and not team.is_personal:
-        meeting.shared_team_id = meeting.workspace_team_id = team.id
+        meeting.shared_team_id = team.id
 
 
 def owns_team_with_others(session: Session, user_id: int) -> bool:
