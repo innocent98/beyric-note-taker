@@ -1,0 +1,36 @@
+{
+  "note": "A member can still write a personal recipe (here with only the two required fields): `output_type` defaults to `document`.",
+  "client": "cal",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Cal's own",
+      "instruction": "Thank them in two lines."
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 5,
+      "key": null,
+      "pack": null,
+      "source": "personal",
+      "name": "Cal's own",
+      "instruction": "Thank them in two lines.",
+      "output_type": "document",
+      "options": {},
+      "scope": "one",
+      "uses_brief": true,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.256109Z"
+    }
+  }
+}

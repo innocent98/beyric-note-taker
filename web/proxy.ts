@@ -53,6 +53,7 @@ export const config = {
     "/review",
     "/share",
     "/templates",
+    "/recipes",
     "/vocabulary",
     "/settings",
     "/billing",

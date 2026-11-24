@@ -11,6 +11,7 @@ import { OpenQuestions } from "@/components/app/open-questions";
 import { RecurringHint } from "@/components/app/recurring-hint";
 import { SeriesPicker } from "@/components/app/series-picker";
 import { MeetingTeamCard, teamActionMessage } from "@/components/app/meeting-team-card";
+import { MakeDialog } from "@/components/app/make-dialog";
 import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
@@ -116,6 +117,7 @@ export function MeetingView({
   );
   const busyRef = useRef<Busy>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [makeOpen, setMakeOpen] = useState(false);
   const [shares, setShares] = useState<Share[]>(initialShares);
   const [toast, flashToast] = useToast(2600);
   const highlightLine = initialTab === "transcript" && initial.transcript ? (initialLine ?? null) : null;
@@ -288,11 +290,21 @@ export function MeetingView({
             language={translation.shown}
             onNotReady={() => void refetch()}
             trailing={
-              m.status === "ready" && m.notes && m.can_share ? (
-                <Button size="md" type="button" onClick={() => setShareOpen(true)}>
-                  <Icon name="send" size={15} />
-                  Share notes
-                </Button>
+              m.status === "ready" && m.notes ? (
+                <>
+                  {/* LEAD-DESIGNED (meeting recipes; the designer's files draw none of it): anyone who can read
+                      the meeting may make a document from it. */}
+                  <Button kind="secondary" size="md" type="button" onClick={() => setMakeOpen(true)}>
+                    <Icon name="plus" size={15} />
+                    Make…
+                  </Button>
+                  {m.can_share ? (
+                    <Button size="md" type="button" onClick={() => setShareOpen(true)}>
+                      <Icon name="send" size={15} />
+                      Share notes
+                    </Button>
+                  ) : null}
+                </>
               ) : null
             }
           />
@@ -635,6 +647,9 @@ export function MeetingView({
             void api.meetings.shares.list(initial.id).then(setShares, () => {});
           }}
         />
+      ) : null}
+      {m.status === "ready" && m.notes ? (
+        <MakeDialog open={makeOpen} meetingId={m.id} title={m.title} onClose={() => setMakeOpen(false)} />
       ) : null}
       <Toast message={toast} />
       <Dialog id="series-dialog" title="Add to recurring meeting">

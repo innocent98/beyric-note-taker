@@ -1,0 +1,30 @@
+{
+  "note": "Another team has its own brief: empty here, never Ada's.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/briefs",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "team": {
+        "id": 5,
+        "name": "My team",
+        "is_personal": true,
+        "can_manage": true
+      },
+      "text": "",
+      "max_chars": 12000,
+      "updated_at": null,
+      "updated_by": null
+    }
+  }
+}

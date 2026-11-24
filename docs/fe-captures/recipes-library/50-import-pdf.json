@@ -1,0 +1,31 @@
+{
+  "note": "A PDF: the text of every page in order, and `pages` is the page count.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "brief.pdf",
+        "bytes": 862,
+        "content_type": "application/pdf"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "text": "Services and prices\n\nTerms and notes",
+      "truncated": false,
+      "pages": 2
+    }
+  }
+}

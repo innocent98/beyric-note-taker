@@ -1,0 +1,27 @@
+{
+  "note": "No `X-CSRF-Token`: 403 `csrf_rejected`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "x",
+      "instruction": "x"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

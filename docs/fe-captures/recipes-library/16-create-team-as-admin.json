@@ -1,0 +1,37 @@
+{
+  "note": "An admin may write team recipes too.",
+  "client": "bea",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Admin recipe",
+      "instruction": "Summarise for the client.",
+      "visibility": "team"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 4,
+      "key": null,
+      "pack": null,
+      "source": "team",
+      "name": "Admin recipe",
+      "instruction": "Summarise for the client.",
+      "output_type": "document",
+      "options": {},
+      "scope": "one",
+      "uses_brief": true,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.216431Z"
+    }
+  }
+}

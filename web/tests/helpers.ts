@@ -282,6 +282,16 @@ export function teamsBody<T>(file: string): T {
   return teamsCapture(file).response.body as T;
 }
 
+// A capture from the running API for the recipe library, the team brief and the brief import
+// (docs/fe-captures/recipes-library/<file>, `python scripts/capture_recipes_library.py`): the whole
+// exchange, or its response body.
+export function recipesLibraryCapture(file: string): { request: { method: string; path: string; body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/recipes-library", file)));
+}
+export function recipesLibraryBody<T>(file: string): T {
+  return recipesLibraryCapture(file).response.body as T;
+}
+
 // A capture from the running API for recipe drafts (docs/fe-captures/recipes/<file>, made by
 // `scripts/capture_recipes.py`; the export route's are in docs/fe-captures/recipes/exports/): the
 // whole exchange, or the response body. The engine's captures were made before the draft carried
