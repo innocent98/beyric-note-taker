@@ -1,0 +1,24 @@
+{
+  "note": "No login: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=md",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "7b226572",
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

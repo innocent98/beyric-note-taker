@@ -76,6 +76,8 @@ def _out(session: Session, user: User, doc: Document) -> DocumentOut:
         left_out_count=doc.left_out_count,
         failure_code=doc.failure_code if failed else None,
         failure_message=service.failure_message(doc.failure_code) if failed else None,
+        options=doc.options or {},
+        use_brief=doc.use_brief,
     )
 
 
