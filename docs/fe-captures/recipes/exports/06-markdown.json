@@ -1,0 +1,22 @@
+{
+  "note": "Markdown. A table is a pipe table; the text is escaped for Markdown (`\\[need: ...\\]`, `\\*`...). The body is the file.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=md",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/markdown; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.md\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.md",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "23205072",
+    "body": "# Proposal for Acme Ltd\n\nOnboarding for Acme's support team, as we discussed.\n\n## Timeline\n\n| Phase | When | Owner |\n| --- | --- | --- |\n| Setup | Week 1 | Ada |\n| Training | Week 2 | \\[need: trainer\\] |\n\n## Investment\n\n| Item | Price | Note |\n| --- | --- | --- |\n| Onboarding | ₦50,000 | Paid, monthly |\n| Add-on, \"priority\" support | =1+1 | \\-5% for 12 months |\n\n- Start date: \\[need: start date\\]"
+  }
+}

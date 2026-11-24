@@ -1,0 +1,22 @@
+{
+  "note": "Plain text: bullets as `- `, a table as lines joined by ` | `, nothing escaped. What Copy and Open-in-mail-app use.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=txt",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.txt\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.txt",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "50726f70",
+    "body": "Proposal for Acme Ltd\n\nOnboarding for Acme's support team, as we discussed.\n\nTimeline\n\nPhase | When | Owner\nSetup | Week 1 | Ada\nTraining | Week 2 | [need: trainer]\n\nInvestment\n\nItem | Price | Note\nOnboarding | ₦50,000 | Paid, monthly\nAdd-on, \"priority\" support | =1+1 | -5% for 12 months\n\n- Start date: [need: start date]"
+  }
+}

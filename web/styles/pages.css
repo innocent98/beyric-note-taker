@@ -1015,3 +1015,35 @@
 /* The suggested billing country: one confirmable line (components/billing/billing-country.tsx). */
 .bill-suggest { display: flex; flex-direction: column; gap: var(--space-2); padding: 14px 16px; border: 1px solid var(--teal-line); border-radius: 9px; background: var(--teal-wash); }
 .bill-suggest .pl-row-sub { margin: 0; }
+
+/* ---- Recipe drafts (components/app/document-view.tsx, document-body.tsx, document-editor.tsx) ---- */
+.doc-bar { display: flex; flex-direction: column; gap: var(--space-3); }
+.doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.doc-checks { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.doc-card { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.doc-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.doc-h2 { margin: var(--space-3) 0 0; font-size: var(--text-lg); font-weight: 650; }
+.doc-h3 { margin: var(--space-2) 0 0; font-size: var(--text-md); font-weight: 650; }
+.doc-p { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doc-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: var(--space-2); line-height: 1.6; overflow-wrap: anywhere; }
+.doc-blank { padding: 0 3px; border-radius: var(--radius-xs); background: var(--warning-tint); color: var(--warning); }
+.doc-check { padding: 0 2px; border-radius: var(--radius-xs); background: var(--warning-wash); text-decoration: underline dotted var(--warning-icon); text-underline-offset: 3px; }
+.doc-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--text-3); font-size: var(--text-xs); }
+.doc-chip { padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-2); text-decoration: none; }
+a.doc-chip:hover { background: var(--surface-hover); color: var(--text); text-decoration: none; }
+.doc-chip-off { color: var(--text-faint); }
+.doc-table-wrap { overflow-x: auto; }
+.doc-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.doc-table th, .doc-table td { min-width: 96px; padding: 8px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: break-word; }
+.doc-table th { background: var(--surface-soft); font-weight: 600; }
+.doc-table-edit th, .doc-table-edit td { min-width: 140px; }
+.doc-editor { display: flex; flex-direction: column; gap: var(--space-3); }
+.doc-edit-block { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.doc-edit-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.doc-edit-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.doc-edit-items { display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-edit-row { display: flex; align-items: center; gap: var(--space-2); }
+.doc-edit-row .input { flex: 1 1 auto; min-width: 0; }
+.doc-level { flex: none; width: auto; }
+.doc-add { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dl-tile-file { background: var(--surface-soft); color: var(--text-2); }

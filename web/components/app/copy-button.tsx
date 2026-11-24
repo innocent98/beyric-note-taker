@@ -28,8 +28,9 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-// `onFailed` runs when the browser would not copy, so a caller can fall back (select the text).
-export function CopyButton({ text, label, onFailed }: { text: string; label: string; onFailed?: () => void }) {
+// `onFailed` runs when the browser would not copy, so a caller can fall back (select the text); `onCopied`
+// runs when it did (the document screen warns about blanks still to fill).
+export function CopyButton({ text, label, onFailed, onCopied }: { text: string; label: string; onFailed?: () => void; onCopied?: () => void }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -37,7 +38,8 @@ export function CopyButton({ text, label, onFailed }: { text: string; label: str
   async function copy() {
     const copied = await copyText(text);
     setState(copied ? "done" : "failed");
-    if (!copied) onFailed?.();
+    if (copied) onCopied?.();
+    else onFailed?.();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setState("idle"), 2000);
   }
