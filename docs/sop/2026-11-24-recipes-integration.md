@@ -105,7 +105,31 @@ Edited in `web/components/legal/privacy-content.tsx` and `terms-content.tsx` **a
 
 Total for the 18 drafts: about 0.008 USD (estimate). Ledger: one `recipe` row per draft, status `ok`, the tokens above (`ledger_status` in `results.json`). Raw results: `docs/fe-captures/recipes/live-pass/results.json`.
 
-**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). `scripts/recipes_live.py` is not the tool for that (it always uses the stand-in): set `OPENAI_API_KEY` in the local `.env` and make each starter through the app on Adebayo's own meetings.
+**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). run it with `--real` (see "Run the live pass on a REAL model" below).
+
+## Run the live pass on a REAL model (Adebayo: one command, spend-capped)
+
+`scripts/recipes_live.py pass ... --real` runs the same eighteen starters and the board on the **real OpenAI client** and the configured `RECIPE_MODEL` (default `gpt-6-luna`), on the same synthetic meetings and placeholder people. The default (no `--real`) stays the stand-in and needs no key. Run it from the repo root with the project's virtualenv active:
+
+```bash
+docker run -d --name recipes-live-pg -e POSTGRES_PASSWORD=pw -p 55640:5432 postgres:16
+```
+
+Wait a few seconds for Postgres, then (put your spend-capped TEST key in place of `sk-...`; it exists for this one command only):
+
+```bash
+OPENAI_API_KEY=sk-... RECIPE_LIVE_MAX_USD=3 PYTHONPATH=. python scripts/recipes_live.py pass postgresql+psycopg://postgres:pw@localhost:55640/postgres --real
+```
+
+Afterwards remove the database container:
+
+```bash
+docker rm -f recipes-live-pg
+```
+
+**Send back `docs/fe-captures/recipes/live-pass-real/results.json`** (the folder is git-ignored; `--out DIR` chooses another). It holds, per recipe: real input and output tokens from the response, wall time, the cost estimate, the blanks and audit flags, how many source references the model sent that did not survive the checks (`sources_dropped`, 0 means every id was valid), the finish reason and the first 300 characters of the draft. A one-screen table is printed at the end and saved as `summary.txt`.
+
+Safety, all pinned by `tests/test_recipes_live_real.py` (no key needed): the key is read **only** from the environment and the script refuses to start without it (before any database or server is touched); it is never printed, logged, written to a file or sent anywhere but the OpenAI client, and any echoed text is masked; the run **stops calling the model once the estimated cost reaches `RECIPE_LIVE_MAX_USD`** (default 3), counted from each response's real token usage at the prices in `scripts/ai_cost_report.py`; a model with no price there is not guessed (the run says so and stops after `RECIPE_LIVE_MAX_DRAFTS` drafts, default 5). The estimate is checked before each draft, so the last draft can overshoot the cap by one draft's cost. Expect a few minutes and, at the current price, a few US cents. The seeded meetings are short, so this measures the model's behaviour (valid JSON, blanks instead of guesses, sources, figures) more than the cost of a one-hour meeting. Tested end to end against a local fake endpoint (`OPENAI_BASE_URL`), **not against OpenAI itself**.
 
 ## Export load (one-at-a-time renderer)
 
