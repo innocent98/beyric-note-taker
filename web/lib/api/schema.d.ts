@@ -605,8 +605,11 @@ export interface paths {
         };
         /**
          * List Documents
-         * @description The caller's own drafts, newest first; with `meeting_id`, only those made from that meeting
-         *     (cross-meeting drafts included). For the next page pass the smallest `id` as `before_id`.
+         * @description Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts
+         *     teammates shared with a team the caller is in now (never their own; an unshared one, or one of
+         *     a team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts
+         *     made from that meeting (cross-meeting drafts included; a shared draft only when the caller may
+         *     read that meeting). For the next page pass the smallest `id` as `before_id`.
          */
         get: operations["list_documents"];
         put?: never;
@@ -637,7 +640,10 @@ export interface paths {
          * Get Document
          * @description A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.
          *     `checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.
-         *     404 for another person's draft.
+         *     The creator reads it whole. A teammate reading a draft shared with their team (`access:
+         *     "shared"`) gets the text with every source of a meeting they cannot read replaced by
+         *     `{"kind": "hidden"}`, and `can_edit: false`. 404 for anyone else's draft, and for a shared one
+         *     once it is unshared or the reader has left the team.
          */
         get: operations["get_document"];
         put?: never;
@@ -706,6 +712,34 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share Document
+         * @description Share the draft, read-only, with the active team (`X-Team-Id`, else the caller's default
+         *     team): every current member can then open it, and see its text, but not the meetings it was
+         *     drafted from (a source they cannot read shows as hidden). Only the creator may; asking twice
+         *     changes nothing. Leaving the team, or `DELETE .../share`, ends the access at once.
+         */
+        post: operations["share_document"];
+        /**
+         * Unshare Document
+         * @description Stop sharing the draft with every team. Takes effect at once; asking again changes nothing.
+         *     Only the creator may.
+         */
+        delete: operations["unshare_document"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3539,6 +3573,12 @@ export interface components {
         /** DocumentBrief */
         DocumentBrief: {
             /**
+             * Access
+             * @default owner
+             * @enum {string}
+             */
+            access: "owner" | "shared";
+            /**
              * Created At
              * Format: date-time
              */
@@ -3554,10 +3594,14 @@ export interface components {
              * @enum {string}
              */
             output_type: "document" | "email" | "table" | "board";
+            /** Owner Name */
+            owner_name?: string | null;
             /** Recipe Id */
             recipe_id: number | null;
             /** Recipe Key */
             recipe_key: string | null;
+            /** Shared With */
+            shared_with?: components["schemas"]["SharedTeam"][];
             /**
              * Status
              * @enum {string}
@@ -3609,8 +3653,19 @@ export interface components {
         };
         /** DocumentOut */
         DocumentOut: {
+            /**
+             * Access
+             * @default owner
+             * @enum {string}
+             */
+            access: "owner" | "shared";
             /** Blocks */
             blocks: (components["schemas"]["Heading"] | components["schemas"]["Paragraph"] | components["schemas"]["Bullets"] | components["schemas"]["Table"] | components["schemas"]["Column"])[];
+            /**
+             * Can Edit
+             * @default true
+             */
+            can_edit: boolean;
             checks: components["schemas"]["DocumentChecks"];
             /**
              * Created At
@@ -3644,10 +3699,14 @@ export interface components {
              * @enum {string}
              */
             output_type: "document" | "email" | "table" | "board";
+            /** Owner Name */
+            owner_name?: string | null;
             /** Recipe Id */
             recipe_id: number | null;
             /** Recipe Key */
             recipe_key: string | null;
+            /** Shared With */
+            shared_with?: components["schemas"]["SharedTeam"][];
             /** Sources Available */
             sources_available: boolean;
             /** Stale */
@@ -5145,6 +5204,13 @@ export interface components {
             /** Team Id */
             team_id?: number | null;
         };
+        /** SharedTeam */
+        SharedTeam: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
         /** SignUp */
         SignUp: {
             /**
@@ -5184,18 +5250,20 @@ export interface components {
         /**
          * Source
          * @description Where a piece of text was drafted from. `quote` is the first words of the line, so a line
-         *     that moved can be found again (`ask._quote_row`); `ref` is a decision or task id.
+         *     that moved can be found again (`ask._quote_row`); `ref` is a decision or task id. `hidden` is
+         *     never stored and never written by the model: `recipes.visibility.redact` puts it in the place
+         *     of a source the reader of a shared draft may not open (nothing else is set on it).
          */
         Source: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "line" | "meeting" | "decision" | "task";
+            kind: "line" | "meeting" | "decision" | "task" | "hidden";
             /** Line */
             line?: number | null;
             /** Meeting Id */
-            meeting_id: number;
+            meeting_id?: number | null;
             /** Quote */
             quote?: string | null;
             /** Ref */
@@ -7461,6 +7529,8 @@ export interface operations {
         parameters: {
             query?: {
                 meeting_id?: number | null;
+                mine?: boolean | null;
+                shared?: boolean | null;
                 before_id?: number | null;
                 limit?: number;
             };
@@ -7937,6 +8007,132 @@ export interface operations {
             };
             /** @description `export_timeout`: it took too long */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    share_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: only a finished draft can be shared; `personal_team`: the active team is the caller's own space, which has no one to share with */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unshare_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

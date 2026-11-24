@@ -7,10 +7,18 @@ import type { DocumentBlock, DocumentDraft, DocumentItem, DocumentSource } from 
 
 // ---- sources ----
 
+// A source the reader may not open: `hidden` (a shared draft's source in a meeting the reader cannot read),
+// or one with no meeting to open.
+export function isHiddenSource(source: DocumentSource): boolean {
+  return source.kind === "hidden" || source.meeting_id == null;
+}
+
 // A line source opens the transcript at that row (`?tab=transcript&line=N`, the mechanism Ask Beyric
 // uses); the meeting page shows the plain transcript when the row does not exist, so a line that moved
-// degrades to the meeting. A meeting, decision or task source opens the meeting.
-export function sourceHref(source: DocumentSource): string {
+// degrades to the meeting. A meeting, decision or task source opens the meeting. null for a hidden source:
+// it links nowhere.
+export function sourceHref(source: DocumentSource): string | null {
+  if (isHiddenSource(source)) return null;
   const base = `/meetings/${source.meeting_id}`;
   if (source.kind === "line" && source.line != null && source.line >= 1) return `${base}?tab=transcript&line=${source.line}`;
   return base;
@@ -44,6 +52,26 @@ export function sourcesOf(block: DocumentBlock): DocumentSource[] {
   else if (block.type === "table") block.rows.forEach((row) => row.forEach((cell) => add(cell.sources)));
   else if (block.type === "column") block.cards.forEach((card) => add(card.sources));
   return found;
+}
+
+// The blocks as the editor sends them back: no `hidden` source (a reader's placeholder, never a real
+// source) goes to the server; every other source is kept as it came.
+export function withoutHiddenSources(blocks: DocumentBlock[]): DocumentBlock[] {
+  const keep = (sources: DocumentSource[] | undefined) => sources?.filter((s) => s.kind !== "hidden");
+  return blocks.map((block): DocumentBlock => {
+    switch (block.type) {
+      case "paragraph":
+        return block.sources ? { ...block, sources: keep(block.sources) } : block;
+      case "bullets":
+        return { ...block, items: block.items.map((i) => (i.sources ? { ...i, sources: keep(i.sources) } : i)) };
+      case "table":
+        return { ...block, rows: block.rows.map((row) => row.map((c) => (c.sources ? { ...c, sources: keep(c.sources) } : c))) };
+      case "column":
+        return { ...block, cards: block.cards.map((c) => (c.sources ? { ...c, sources: keep(c.sources) } : c)) };
+      default:
+        return block;
+    }
+  });
 }
 
 // ---- blanks ----

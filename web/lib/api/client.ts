@@ -12,6 +12,7 @@ import type {
   Decision,
   DecisionChanges,
   DocumentDraft,
+  DocumentList,
   DocumentExportFormat,
   DocumentRequest,
   DecisionList,
@@ -193,6 +194,8 @@ export function isTeamScoped(path: string, method = "GET"): boolean {
   if (/^\/api\/(meetings|decisions|review|session)$/.test(p)) return method === "GET";
   // Asking for a draft names whose brief and team recipes it reads: the tab's team (a read of a draft is not).
   if (p === "/api/documents") return method === "POST";
+  // Sharing a draft names the team it is shared with: the tab's team (stopping the share is about the draft).
+  if (/^\/api\/documents\/\d+\/share$/.test(p)) return method === "POST";
   return (
     /^\/api\/team(\/|$)/.test(p) ||
     /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
@@ -481,6 +484,23 @@ export function createApi(options: ApiOptions = {}) {
       edit: (id: number, body: { blocks: DocumentDraft["blocks"]; title?: string }) =>
         request<DocumentDraft>("PATCH", `/api/documents/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/documents/${id}`, { write: true }),
+      // The drafts, newest first: `mine` (the default), `shared` (teammates' drafts shared with a team the
+      // person is in), `meetingId` (made from that meeting); `beforeId` is the smallest id of the page before.
+      list: (query: { mine?: boolean; shared?: boolean; meetingId?: number; beforeId?: number; limit?: number } = {}) =>
+        request<DocumentList>("GET", "/api/documents", {
+          query: {
+            mine: query.mine === undefined ? undefined : String(query.mine),
+            shared: query.shared === undefined ? undefined : String(query.shared),
+            meeting_id: query.meetingId,
+            before_id: query.beforeId,
+            limit: query.limit,
+          },
+        }),
+      // Read-only sharing with `team` (the tab's team when not given): 200 with the draft; 409 `not_ready`,
+      // 409 `personal_team`. `unshare` stops it for every team (204).
+      share: (id: number, team?: number | null) =>
+        request<DocumentDraft>("POST", `/api/documents/${id}/share`, { write: true, team }),
+      unshare: (id: number) => request<void>("DELETE", `/api/documents/${id}/share`, { write: true }),
       export: (id: number, format: DocumentExportFormat, table = 0) =>
         download(`/api/documents/${id}/export`, { format, table }),
     },
