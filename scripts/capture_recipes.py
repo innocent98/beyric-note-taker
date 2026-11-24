@@ -347,7 +347,7 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
     with Session(engine) as session:
         session.execute(text("delete from meetings where id = :m"), {"m": ids["doomed"]})
         session.commit()
-    ada.call("get-meeting-deleted", "GET", f"/api/documents/{doomed}", note="The only meeting it was made from was deleted: the draft stays, `meeting_ids` is empty and `sources_available` is false (show the source links as \"open the meeting\" is not possible). The server removes single-meeting drafts when their meeting is deleted in the integration slice S7; until then this is the state.")  # fmt: skip
+    ada.call("get-meeting-deleted", "GET", f"/api/documents/{doomed}", note="The only meeting it was made from was deleted: the draft stays, `meeting_ids` is empty and `sources_available` is false (the source links cannot be opened: show them as not available). `checks.flags` is now worked out against nothing, so EVERY figure is flagged, including 50,000 naira and 2026-12-01 which the meeting did say: when `sources_available` is false, do not present the flags as findings. (Slice S7 deletes single-meeting drafts with their meeting; a cross-meeting draft keeps living like this.)")  # fmt: skip
 
     # failures and refusals
     model.mode = "garbage"

@@ -1,0 +1,30 @@
+{
+  "note": "No such recipe: 404 `not_found`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "no_such_recipe",
+      "meeting_ids": [
+        1
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recipe."
+      }
+    }
+  }
+}

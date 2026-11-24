@@ -1,0 +1,33 @@
+{
+  "note": "The day's limit (6 in this capture, 20 by default) reached: 429 `recipe_limit`. Every attempt that reached the model counts, failed ones and regenerations included. A refused request counts for nothing. Show the message; it clears itself a day after the oldest attempt.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        3
+      ],
+      "options": {
+        "n": 99
+      }
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "recipe_limit",
+        "message": "You have made 6 documents today. Try again tomorrow."
+      }
+    }
+  }
+}
