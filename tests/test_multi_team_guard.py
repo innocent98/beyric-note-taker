@@ -45,6 +45,7 @@ from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F40
 from tests.test_series import meeting_in
 from tests.test_team_visibility import sign_in
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 SLACK = "https://hooks.slack.com/services/T000/B000/placeholder"
 
@@ -308,6 +309,7 @@ def test_two_creates_at_once_cannot_pass_the_limit(app, session, world):
     """A create in flight holds the person's row: a second one waits for it and then sees the count
     it left (three), refusing with `team_limit`."""
     engine = session.get_bind()
+    subscribe(session, world.zed, "plan_20h")  # Starter owns three
     new_team(session, world.zed, "Z0")  # Zed owns Z and Z0: two of three
     zed_id = world.zed.id
     holder = Session(engine)
@@ -341,4 +343,4 @@ def test_two_creates_at_once_cannot_pass_the_limit(app, session, world):
     owned = session.scalars(
         select(Team).where(Team.owner_user_id == zed_id, Team.is_personal.is_(False))
     ).all()
-    assert len(owned) == teams.MAX_OWNED_TEAMS
+    assert len(owned) == 3

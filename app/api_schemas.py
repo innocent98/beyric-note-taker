@@ -1072,8 +1072,18 @@ class TeamSummary(BaseModel):
 
 class TeamList(BaseModel):
     teams: list[TeamSummary]
-    # How many more teams the caller may create now (they may own three).
-    can_create_more: int
+    # How many more teams the caller may create now on their plan. Null: as many as they like
+    # (the Scale plan, an admin).
+    can_create_more: int | None
+    # The team workspaces the caller owns besides their personal one (what the limit counts: a team
+    # they only belong to never does).
+    owned_teams: int
+    # How many they may own on their live plan: 0 on Free (a trial counts as Free), 3 Starter,
+    # 10 Pro; null is unlimited. A plan that lapses or drops never removes a workspace:
+    # `owned_teams` can then be above this, and only creating another is refused.
+    max_owned_teams: int | None
+    # The name of the caller's live plan (null on Free), for "your plan owns up to 3 teams".
+    plan_name: str | None
 
 
 class TeamCreate(Body):

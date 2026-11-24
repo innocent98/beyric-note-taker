@@ -50,6 +50,7 @@ from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
     HourGrant,
     Meeting,
+    Plan,
     ScheduledJoin,
     Subscription,
     UsageAllocation,
@@ -212,10 +213,10 @@ def _take_off(held: list[list], to_spend: int) -> None:
         to_spend -= taken
 
 
-def _subscription_state(session: Session, user: User, now: datetime) -> str | None:
-    """What the person's subscription is at `now` by the clock (`states.effective_status`): their
-    live one, else the newest one that ended. None when they never had one."""
-    sub = session.scalars(
+def _newest_subscription(session: Session, user: User) -> Subscription | None:
+    """The person's live subscription, else the newest one that ended; None when they never had
+    one."""
+    return session.scalars(
         select(Subscription)
         .where(Subscription.user_id == user.id)
         .order_by(
@@ -223,8 +224,9 @@ def _subscription_state(session: Session, user: User, now: datetime) -> str | No
         )
         .limit(1)
     ).first()
-    if sub is None:
-        return None
+
+
+def _effective_status(sub: Subscription, now: datetime) -> str:
     return states.effective_status(
         states.Snapshot(
             status=sub.status,
@@ -236,6 +238,13 @@ def _subscription_state(session: Session, user: User, now: datetime) -> str | No
         ),
         now,
     )
+
+
+def _subscription_state(session: Session, user: User, now: datetime) -> str | None:
+    """What the person's subscription is at `now` by the clock (`states.effective_status`): their
+    live one, else the newest one that ended. None when they never had one."""
+    sub = _newest_subscription(session, user)
+    return None if sub is None else _effective_status(sub, now)
 
 
 def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600) -> Status:
@@ -413,3 +422,29 @@ def can(
 ) -> bool:
     """`gate(...).allowed`: the question every gated route asks (`app/feature_gates.py`)."""
     return gate(session, user, feature, now, max_poll_seconds).allowed
+
+
+# ---- plan allowances and the workspace rule of the feature gates (workspaces design 5, 12.6) ----
+
+
+def live_plan(session: Session, user: User, now: datetime | None = None) -> Plan | None:
+    """The plan the person is on at `now`: the plan of their subscription while it is `active` or in
+    its 3 grace days (`past_due`), judged by the clock as everywhere in billing. None for a person
+    with no plan: never subscribed, an ended or lapsed plan, a trial or a pilot grant (those are
+    hours, not a plan). Pure reading."""
+    now = now or datetime.now(UTC)
+    sub = _newest_subscription(session, user)
+    if sub is None or _effective_status(sub, now) not in states.LIVE:
+        return None
+    return session.get(Plan, sub.plan_code)
+
+
+def max_owned_teams(session: Session, user: User, now: datetime | None = None) -> int | None:
+    """How many team workspaces the person may own besides their personal one: their live plan's
+    `max_owned_teams` (Free 0, a trial counts as Free; None = unlimited). An admin is never limited.
+    A lapse or a downgrade lowers this number but never touches a workspace that exists: it only
+    stops the person making more (`teams.create_owned_team`)."""
+    if user.is_admin:
+        return None
+    plan = live_plan(session, user, now)
+    return 0 if plan is None else plan.max_owned_teams

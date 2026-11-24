@@ -3,11 +3,13 @@
 and error shape. Which team a request is about is a different thing: the `X-Team-Id` header of
 the team-implicit routes (`app/team_admin.py`)."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import auth, teams, titles
+from app import auth, entitlements, teams, titles
 from app.api_schemas import ErrorResponse, TeamCreate, TeamList, TeamSummary
 from app.db import get_session
 from app.models import Team, TeamMember, User
@@ -52,14 +54,6 @@ def _summaries(session: Session, user: User) -> list[TeamSummary]:
     ]
 
 
-def _owned_count(session: Session, user: User) -> int:
-    return session.scalar(
-        select(func.count())
-        .select_from(Team)
-        .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
-    )
-
-
 @router.get("/teams", tags=["team"])
 def list_teams(
     session: Session = Depends(get_session), user: User = Depends(auth.current_user)
@@ -70,9 +64,16 @@ def list_teams(
     who joined a team before multi-team lost theirs)."""
     teams.ensure_personal_team(session, user)
     session.commit()
+    now = datetime.now(UTC)
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = teams.owned_team_count(session, user)
+    plan = entitlements.live_plan(session, user, now)
     return TeamList(
         teams=_summaries(session, user),
-        can_create_more=max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user)),
+        can_create_more=None if allowed is None else max(0, allowed - owned),
+        owned_teams=owned,
+        max_owned_teams=allowed,
+        plan_name=plan.name if plan is not None and not user.is_admin else None,
     )
 
 
@@ -90,8 +91,9 @@ def create_team(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamSummary:
-    """Make a team the caller owns. At most three teams per account besides the personal one (409
-    `team_limit`), 422 `invalid_name` for an empty name."""
+    """Make a team the caller owns, as many as their plan allows besides the personal one (Free 0,
+    Starter 3, Pro 10, Scale unlimited; 409 `team_limit` with a message naming the plan to upgrade
+    to), 422 `invalid_name` for an empty name."""
     name = titles.clean_title(body.name, 100)
     if not name:
         raise Refused(422, "invalid_name", "Give the team a name.")

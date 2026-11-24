@@ -30,6 +30,7 @@ from tests.test_api_tasks import add_task
 from tests.test_multi_team_leaks import PAT, QUINN, ZED, new_team, world  # noqa: F401
 from tests.test_series import meeting_in
 from tests.test_team_visibility import sign_in
+from tests.workspace_plans import subscribe
 
 ADA = "owner@example.test"
 
@@ -68,7 +69,7 @@ def test_the_teams_list_shows_every_membership_with_role_count_personal_and_defa
     personal = by_name["My team"]
     assert personal["is_personal"] is True and personal["role"] == "owner"
     assert personal["is_default"] is True  # two ordinary teams: the personal one is the default
-    assert body["can_create_more"] == 3
+    assert body["can_create_more"] == 0  # Pat is on Free: owning a team needs a plan
 
 
 def test_a_person_with_one_ordinary_team_has_it_as_the_default(app, session, world):
@@ -97,6 +98,7 @@ def test_the_teams_list_needs_a_login_and_never_shows_someone_elses_team(app, se
 
 
 def test_creating_a_team_makes_the_caller_its_owner(app, session, world):
+    subscribe(session, world.pat, "plan_20h")
     pat = sign_in(app, PAT)
     made = call(pat, "POST", "/api/teams", body={"name": "  Side project "})
     assert made.status_code == 201
@@ -109,6 +111,8 @@ def test_creating_a_team_makes_the_caller_its_owner(app, session, world):
 
 
 def test_at_most_three_owned_teams_and_the_personal_one_does_not_count(app, session, world):
+    subscribe(session, world.pat, "plan_20h")
+    subscribe(session, world.ada, "plan_20h")
     pat = sign_in(app, PAT)  # owns none, member of X and Y
     for n in range(3):
         assert call(pat, "POST", "/api/teams", body={"name": f"T{n}"}).status_code == 201
@@ -160,6 +164,7 @@ def test_a_bad_team_header_is_a_validation_error_not_a_server_error(app, session
 def test_what_the_team_screen_may_change_depends_on_the_team_named(app, session, world):
     """Pat is a plain member of X and of Y, owner of nothing: no change is allowed in either, but
     in a team Pat owns it is."""
+    subscribe(session, world.pat, "plan_20h")
     pat = sign_in(app, PAT)
     error_of(call(pat, "PATCH", "/api/team", world.x, {"name": "X2"}), 403, "team_forbidden")
     error_of(call(pat, "PATCH", "/api/team", world.y, {"name": "Y2"}), 403, "team_forbidden")

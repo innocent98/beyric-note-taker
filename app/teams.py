@@ -18,9 +18,11 @@ from datetime import datetime
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app import entitlements
 from app.models import (
     Meeting,
     Milestone,
+    Plan,
     Task,
     Team,
     TeamInvite,
@@ -163,18 +165,70 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     )
 
 
-def create_owned_team(session: Session, user: User, name: str) -> Team:
-    """Make a team the person owns: at most `MAX_OWNED_TEAMS` besides the personal one (409
-    `team_limit`). The person's row is locked first, so two creates at once count one after the
-    other. In the caller's transaction (flushes, no commit)."""
-    session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    owned = session.scalar(
+def owned_team_count(session: Session, user: User) -> int:
+    """How many team workspaces the person owns besides their personal one (what the plan limit
+    counts: being a member of a team never does)."""
+    return session.scalar(
         select(func.count())
         .select_from(Team)
         .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
     )
-    if owned >= MAX_OWNED_TEAMS:
-        raise TeamChangeRefused(409, "team_limit", f"You can own up to {MAX_OWNED_TEAMS} teams.")
+
+
+def _count_of_teams(n: int) -> str:
+    return f"{n} team" if n == 1 else f"{n} teams"
+
+
+def _upgrade_plan(session: Session, allowed: int) -> Plan | None:
+    """The first plan on sale that owns more than `allowed` teams (unlimited counts as the most)."""
+    return session.scalars(
+        select(Plan)
+        .where(
+            Plan.active.is_(True),
+            (Plan.max_owned_teams.is_(None)) | (Plan.max_owned_teams > allowed),
+        )
+        .order_by(Plan.sort_order, Plan.code)
+    ).first()
+
+
+def _upgrade_sentence(session: Session, allowed: int) -> str:
+    """ "Upgrade to the Pro plan to own up to 10 teams." (the plan to move to, in plain words), or
+    nothing when no bigger plan is on sale."""
+    plan = _upgrade_plan(session, allowed)
+    if plan is None:
+        return ""
+    if plan.max_owned_teams is None:
+        return f" Upgrade to the {plan.name} plan for as many teams as you need."
+    return f" Upgrade to the {plan.name} plan to own up to {_count_of_teams(plan.max_owned_teams)}."
+
+
+def _limit_message(session: Session, allowed: int, owned: int) -> str:
+    if allowed == 0:
+        return "Owning a team needs a paid plan." + _upgrade_sentence(session, allowed)
+    return (
+        f"Your plan owns up to {_count_of_teams(allowed)} and you have {owned}."
+        + _upgrade_sentence(session, allowed)
+    )
+
+
+def has_room_for_another_team(session: Session, user: User, now: datetime | None = None) -> bool:
+    """True when the person's live plan lets them own one more team (`create_owned_team`'s test)."""
+    allowed = entitlements.max_owned_teams(session, user, now)
+    return allowed is None or owned_team_count(session, user) < allowed
+
+
+def create_owned_team(session: Session, user: User, name: str, now: datetime | None = None) -> Team:
+    """Make a team the person owns, as many as their live plan's `max_owned_teams` allows besides
+    the personal one (Free 0, Starter 3, Pro 10, Scale unlimited; a trial counts as Free; being a
+    member never counts): 409 `team_limit` naming the plan to upgrade to. A lapse or a downgrade
+    never removes a team that exists, it only refuses this. The person's row is locked first, so
+    two creates at once count one after the other. In the caller's transaction (flushes, no
+    commit)."""
+    session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = owned_team_count(session, user)
+    if allowed is not None and owned >= allowed:
+        raise TeamChangeRefused(409, "team_limit", _limit_message(session, allowed, owned))
     team = Team(owner_user_id=user.id, name=name, is_personal=False)
     session.add(team)
     session.flush()
@@ -192,22 +246,37 @@ def doomed_teams(session: Session, user_id: int) -> list[int]:
     return [team_id for team_id in owned if not _has_other_members(session, team_id, user_id)]
 
 
+def _heir(session: Session, team: Team) -> TeamMember | None:
+    """Who inherits a team whose owner is going: the member who joined first AND has room under
+    their plan's team limit; failing that the member who joined first anyway. A purge must never be
+    blocked and a team is never destroyed over billing, so the limit only chooses between members;
+    it never refuses."""
+    members = list(
+        session.scalars(
+            select(TeamMember)
+            .where(TeamMember.team_id == team.id)
+            .order_by(TeamMember.joined_at, TeamMember.id)
+        )
+    )
+    for member in members:
+        person = session.get(User, member.user_id)
+        if person is not None and has_room_for_another_team(session, person):
+            return member
+    return members[0] if members else None
+
+
 def remove_users(session: Session, user_ids: list[int]) -> None:
     """Take these accounts out of their teams before the accounts are deleted. A team left with
     no members goes too (meetings shared with it become private: `shared_team_id` is set null by
-    the foreign key). A team that still has other members is handed to the one who joined first;
-    W3 will refuse that case until the pilot admin transfers ownership by hand (spec section 4),
-    but a purge must never be blocked by it. In the caller's transaction, no commit."""
+    the foreign key). A team that still has other members is handed to the one who joined first and
+    has room under their plan's team limit (`_heir`); a purge must never be blocked by it. In the
+    caller's transaction, no commit."""
     if not user_ids:
         return
     owned = list(session.scalars(select(Team).where(Team.owner_user_id.in_(user_ids))))
     session.execute(delete(TeamMember).where(TeamMember.user_id.in_(user_ids)))
     for team in owned:
-        heir = session.scalars(
-            select(TeamMember)
-            .where(TeamMember.team_id == team.id)
-            .order_by(TeamMember.joined_at, TeamMember.id)
-        ).first()
+        heir = _heir(session, team)
         if heir is None:
             # A meeting still filed in a team that goes (nobody should be: the recorders' meetings
             # went with them or were given back) returns to its recorder's personal workspace
@@ -255,9 +324,6 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
 # ---- W3: joining, leaving, the share default ----
 
 MANAGER_ROLES = ("owner", "admin")
-# Teams one account may own besides its personal one (a plan setting later; checked in the route,
-# not by a database constraint).
-MAX_OWNED_TEAMS = 3
 
 
 class TeamChangeRefused(Exception):
@@ -499,7 +565,9 @@ def owns_team_with_others(session: Session, user_id: int) -> bool:
 
 def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> None:
     """Hand a team to one of its members (the pilot admin does this by hand: spec section 4).
-    The old owner becomes an admin. In the caller's transaction, no commit."""
+    The old owner becomes an admin. The new owner must have room under their own plan's limit
+    (409 `team_limit`: a team is never handed to someone who could not have made it). In the
+    caller's transaction, no commit."""
     team = session.get(Team, team_id)
     heir = session.scalars(
         select(TeamMember).where(
@@ -508,6 +576,17 @@ def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> No
     ).first()
     if team is None or heir is None:
         raise TeamChangeRefused(404, "not_found", "That person is not a member of that team.")
+    new_owner = session.get(User, new_owner_user_id)
+    if team.owner_user_id != new_owner_user_id and not has_room_for_another_team(
+        session, new_owner
+    ):
+        allowed = entitlements.max_owned_teams(session, new_owner)
+        reason = (
+            "owning a team needs a paid plan."
+            if allowed == 0
+            else f"their plan owns up to {_count_of_teams(allowed)}."
+        )
+        raise TeamChangeRefused(409, "team_limit", f"That person can't take another team: {reason}")
     for member in session.scalars(
         select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.role == "owner")
     ):
