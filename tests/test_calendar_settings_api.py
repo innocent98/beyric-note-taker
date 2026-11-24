@@ -82,6 +82,12 @@ def stored_box(session, user) -> bool | None:
     return row.join_unanswered if row else None
 
 
+def stored_skip(session, user) -> bool | None:
+    session.expire_all()
+    row = session.get(UserSettings, user.id)
+    return row.skip_one_on_ones if row else None
+
+
 def stored_override(session, event) -> bool | None:
     session.expire_all()
     return session.get(CalendarEvent, event.id).override
@@ -157,6 +163,10 @@ def test_each_of_the_three_rules_can_be_chosen(web, session, owner, linked, rule
         {"calendar_template_id": "7"},
         {"calendar_template_id": True},
         {"join_unanswered": None},
+        {"skip_one_on_ones": None},
+        {"skip_one_on_ones": "yes"},
+        {"skip_one_on_ones": 1},
+        {"rule": "all", "skip_one_on_ones": None},
         {"join_unanswered": "yes"},
         {"join_unanswered": 1},
         {"rule": "all", "join_unanswered": None},
@@ -537,6 +547,182 @@ def test_one_users_box_never_touches_another_users_events(
     assert join_of(session, mine).state == "scheduled"
     assert join_of(session, theirs) is None
     assert stored_box(session, stranger) in (None, False)
+
+
+# ---- "Skip one-on-one meetings" ----
+
+PAIR = {"attendee_count": 2}
+ONE_ON_ONE_REASON = "Skipped because only two people are invited. Settings can join these too."
+
+
+def test_the_skip_is_off_by_default_and_changes_nothing_for_a_two_person_meeting(
+    web, session, owner, linked
+):
+    event = add_event(session, linked, 1, hours=2, **PAIR)
+    body = web.get(URL).json()
+    assert body["skip_one_on_ones"] is False
+    assert stored_skip(session, owner) in (None, False)
+    assert upcoming_of(web, event)["will_join"] is True
+
+
+def test_putting_the_skip_stores_it_and_answers_with_the_whole_state(web, session, owner, linked):
+    response = web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["skip_one_on_ones"] is True and body["join_unanswered"] is False
+    assert body["rule_text"] == (
+        "Joining all meetings except unanswered invites from outside your organisation "
+        "and meetings with only two people invited"
+    )
+    assert stored_skip(session, owner) is True
+    assert web.get(URL).json()["skip_one_on_ones"] is True
+    assert web.put(SETTINGS_URL, {"skip_one_on_ones": False}).json()["skip_one_on_ones"] is False
+    assert stored_skip(session, owner) is False
+
+
+def test_an_absent_skip_keeps_the_stored_value(web, session, owner, linked):
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert web.put(SETTINGS_URL, {"join_unanswered": True}).json()["skip_one_on_ones"] is True
+    assert web.put(SETTINGS_URL, {"rule": "organizer"}).json()["skip_one_on_ones"] is True
+    assert stored_skip(session, owner) is True
+    assert web.put(SETTINGS_URL, {"join_unanswered": False}).status_code == 200
+    assert stored_skip(session, owner) is True
+
+
+def test_the_skip_can_be_set_before_a_calendar_is_connected(web, session, owner):
+    body = web.put(SETTINGS_URL, {"skip_one_on_ones": True}).json()
+    assert (body["connected"], body["skip_one_on_ones"]) == (False, True)
+    assert stored_skip(session, owner) is True
+
+
+def test_an_empty_body_is_still_refused(web, session, owner, linked):
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    error_of(web.put(SETTINGS_URL, {}), 422, "validation_error")
+    assert stored_skip(session, owner) is True
+
+
+def test_ticking_the_skip_cancels_a_two_person_join_and_keeps_every_other_size(
+    web, session, linked
+):
+    pair = add_event(session, linked, 1, hours=2, **PAIR)
+    solo = add_event(session, linked, 2, hours=3)  # no invite list: 0 people
+    three = add_event(session, linked, 3, hours=4, attendee_count=3)
+    for event in (pair, solo, three):
+        add_join(session, event)
+
+    body = web.put(SETTINGS_URL, {"skip_one_on_ones": True}).json()
+    cancelled = join_of(session, pair)
+    assert (cancelled.state, cancelled.skip_reason) == ("cancelled", "one_on_one")
+    assert join_of(session, solo).state == "scheduled"
+    assert join_of(session, three).state == "scheduled"
+    rows = {item["id"]: item for item in body["upcoming"]}
+    assert (rows[pair.id]["will_join_text"], rows[pair.id]["reason_text"]) == (
+        "Off",
+        ONE_ON_ONE_REASON,
+    )
+    assert rows[pair.id]["can_send_now"] is False and rows[pair.id]["not_recorded_text"] is None
+    assert rows[solo.id]["will_join"] is True and rows[three.id]["will_join"] is True
+
+
+def test_clearing_the_skip_makes_the_join_again_for_a_meeting_that_has_not_started(
+    web, session, linked
+):
+    pair = add_event(session, linked, 1, hours=2, **PAIR)
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert join_of(session, pair) is None  # nothing was ever made while it was skipped
+
+    web.put(SETTINGS_URL, {"skip_one_on_ones": False})
+    assert join_of(session, pair).state == "scheduled"
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert join_of(session, pair).state == "cancelled"
+    web.put(SETTINGS_URL, {"skip_one_on_ones": False})
+    assert join_of(session, pair).state == "scheduled"  # the cancelled join is revived
+
+
+def test_the_skip_never_touches_a_join_whose_bot_is_in(web, session, linked):
+    pair = add_event(session, linked, 1, hours=-0.2, length=1, **PAIR)
+    add_join(session, pair, "joined")
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert join_of(session, pair).state == "joined"
+
+
+def test_the_skip_keeps_the_per_meeting_switches_and_they_win_both_ways(web, session, linked):
+    on = add_event(session, linked, 1, hours=2, override=True, **PAIR)
+    off = add_event(session, linked, 2, hours=3, override=False, attendee_count=5)
+    plain = add_event(session, linked, 3, hours=4, **PAIR)
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    assert stored_override(session, on) is True and stored_override(session, off) is False
+    assert join_of(session, on).state == "scheduled"  # the switch beats the skip
+    assert join_of(session, off) is None or join_of(session, off).state == "cancelled"
+    assert join_of(session, plain) is None
+    # Switching the skipped meeting on by hand joins it; clearing the switch skips it again.
+    assert web.put(override_url(plain.id), {"override": True}).status_code == 200
+    assert join_of(session, plain).state == "scheduled"
+    item = web.put(override_url(plain.id), {"override": None}).json()
+    assert item["reason_text"] == ONE_ON_ONE_REASON
+    assert join_of(session, plain).state == "cancelled"
+    # And switching the meeting off by hand is the person's word whatever the box says.
+    web.put(SETTINGS_URL, {"skip_one_on_ones": False})
+    off_by_hand = web.put(override_url(plain.id), {"override": False}).json()
+    assert off_by_hand["reason_text"] == "You switched this meeting off"
+
+
+def test_the_skip_applies_under_organizer_and_does_nothing_under_none(web, session, linked):
+    mine = add_event(session, linked, 1, hours=2, **PAIR)
+    theirs = add_event(
+        session, linked, 2, hours=3, organizer_self=False, self_response="accepted", **PAIR
+    )
+    web.put(SETTINGS_URL, {"rule": "organizer"})
+    assert join_of(session, mine).state == "scheduled"
+    body = web.put(SETTINGS_URL, {"skip_one_on_ones": True}).json()
+    assert join_of(session, mine).state == "cancelled"
+    rows = {item["id"]: item for item in body["upcoming"]}
+    assert rows[mine.id]["reason_text"] == ONE_ON_ONE_REASON
+    assert rows[theirs.id]["reason_text"] == "Skipped because you are not the organiser"
+    assert (
+        body["rule_text"]
+        == "Joining meetings you organise, except meetings with only two people invited"
+    )
+    none = web.put(SETTINGS_URL, {"rule": "none"}).json()
+    assert none["rule_text"] == "Auto-join is off"
+    assert none["skip_one_on_ones"] is True  # kept, and it does nothing here
+
+
+def test_a_skipped_one_on_one_is_not_on_the_not_recorded_list_and_cannot_be_sent_now(
+    web, session, linked
+):
+    """The skip is the person's own choice, like a switched-off meeting: the join is cancelled,
+    which the "Not recorded" list never shows (a join the note taker failed to get into does)."""
+    pair = add_event(session, linked, 1, hours=-0.5, length=1, **PAIR)
+    add_join(session, pair, "scheduled")
+    failed = add_event(session, linked, 2, hours=-0.4, length=1)
+    add_join(session, failed, "skipped", skip_reason="no_plan")
+    ids = [item["join_id"] for item in web.get("/api/not-recorded").json()["items"]]
+    assert ids == [join_of(session, failed).id]
+
+    web.put(SETTINGS_URL, {"skip_one_on_ones": True})
+    join = join_of(session, pair)
+    assert (join.state, join.skip_reason) == ("cancelled", "one_on_one")
+    items = web.get("/api/not-recorded").json()["items"]
+    assert [item["join_id"] for item in items] == [join_of(session, failed).id]
+    row = upcoming_of(web, pair)
+    assert (row["can_send_now"], row["not_recorded_text"]) == (False, None)
+    assert web.post(f"/api/scheduled-joins/{join.id}/send-now", {}).status_code == 409
+
+
+def test_one_users_skip_never_touches_another_users_events(
+    capp, web, session, owner, stranger, google, linked
+):
+    other = browser(capp, OTHER_EMAIL)
+    connect_google(other, google, email="other@example.test", sub="g-other-1")
+    theirs = add_event(session, connection_of(session, stranger), 9, hours=2, **PAIR)
+    add_join(session, theirs)
+    mine = add_event(session, linked, 1, hours=2, **PAIR)
+    add_join(session, mine)
+    assert web.put(SETTINGS_URL, {"skip_one_on_ones": True}).status_code == 200
+    assert join_of(session, mine).state == "cancelled"
+    assert join_of(session, theirs).state == "scheduled"
+    assert stored_skip(session, stranger) in (None, False)
 
 
 # ---- the per-meeting switch ----

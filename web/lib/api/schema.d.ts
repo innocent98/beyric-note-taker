@@ -362,16 +362,16 @@ export interface paths {
         get?: never;
         /**
          * Calendar Settings
-         * @description Change the auto-join rule, the box "Also join invites I haven't answered yet" and/or the
-         *     template for calendar meetings (CSRF header needed); a field left out stays as it is. Answers
-         *     with the whole state, as `GET /api/calendar` does, so the page can redraw from it. A changed
-         *     `rule` clears the person's per-meeting switches on events that have not started; a changed
-         *     `rule` or `join_unanswered` then decides every stored event again: joins it now forbids are
-         *     cancelled and joins it now allows are made or revived (the same rules the sync applies;
-         *     nothing is fetched from Google and no bot is sent here; a join whose bot is in is never
-         *     touched). Choosing a value that is already set changes nothing. 404 `not_found` for a
-         *     template that is not the caller's own, 404 `calendar_unavailable` while the calendar features
-         *     are off.
+         * @description Change the auto-join rule, the boxes "Also join invites I haven't answered yet" and "Skip
+         *     one-on-one meetings", and/or the template for calendar meetings (CSRF header needed); a field
+         *     left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so the
+         *     page can redraw from it. A changed `rule` clears the person's per-meeting switches on events
+         *     that have not started; a changed `rule`, `join_unanswered` or `skip_one_on_ones` then decides
+         *     every stored event again: joins it now forbids are cancelled and joins it now allows are made
+         *     or revived (the same rules the sync applies; nothing is fetched from Google and no bot is
+         *     sent here; a join whose bot is in is never touched). Choosing a value that is already set
+         *     changes nothing. 404 `not_found` for a template that is not the caller's own, 404
+         *     `calendar_unavailable` while the calendar features are off.
          */
         put: operations["calendar_settings"];
         post?: never;
@@ -2929,6 +2929,10 @@ export interface components {
          *     haven't answered yet" (false until they tick it): under `all`, an invite they have not
          *     answered from outside their organisation joins only when it is true. It is stored whatever the
          *     rule, and does nothing under `organizer` or `none`: show the box disabled there.
+         *     `skip_one_on_ones` is the person's tick on "Skip one-on-one meetings" (false until they tick
+         *     it): when true, an event with exactly two people invited (the person and one other) is not
+         *     joined, under `all` or `organizer`. The count is people invited, not who attends. It is stored
+         *     whatever the rule, and does nothing under `none`: show the box disabled there.
          *     `calendar_template_id` is the person's own template chosen for calendar meetings, null for the
          *     default (their first, oldest, template).
          *     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
@@ -2973,6 +2977,8 @@ export interface components {
             rule: "all" | "organizer" | "none";
             /** Rule Text */
             rule_text: string;
+            /** Skip One On Ones */
+            skip_one_on_ones: boolean;
             /**
              * State
              * @enum {string}
@@ -4235,7 +4241,9 @@ export interface components {
          *     person's own templates, or null for the default; it also reaches the meetings already planned
          *     that have not sent a bot. `join_unanswered` is the box "Also join invites I haven't answered
          *     yet" (a real true or false; never null). Changing it re-decides every stored event, like a
-         *     rule change, but keeps the person's per-meeting switches. At least one field is needed.
+         *     rule change, but keeps the person's per-meeting switches. `skip_one_on_ones` is the box "Skip
+         *     one-on-one meetings" (a real true or false; never null) and is handled the same way. At least
+         *     one field is needed.
          */
         SettingsIn: {
             /** Calendar Template Id */
@@ -4244,6 +4252,8 @@ export interface components {
             join_unanswered?: boolean | null;
             /** Rule */
             rule?: ("all" | "organizer" | "none") | null;
+            /** Skip One On Ones */
+            skip_one_on_ones?: boolean | null;
         };
         /** ShareCreated */
         ShareCreated: {

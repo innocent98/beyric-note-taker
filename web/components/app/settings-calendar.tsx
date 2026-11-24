@@ -90,8 +90,20 @@ const RULES = [
   ["organizer", "Only meetings I organise", "Skip meetings other people invited you to."],
   ["none", "Only when I turn it on", "Pick meetings one by one from the Upcoming list."],
 ] as const;
-const ALL_EXCEPT_UNANSWERED =
-  "Every event on your calendar with a meeting link, except invites you haven't answered from outside your organisation.";
+const UNANSWERED_EXCEPTION = "invites you haven't answered from outside your organisation";
+// LEAD-DESIGNED (2026-11-24): the second box's exception, named in the rule sentences it narrows.
+// The count is people INVITED (you and one other), not who turns up.
+const ONE_ON_ONE_EXCEPTION = "meetings with only two people invited";
+
+// What the rule sentence says: every exception that is in force is named, so it stays true.
+function ruleDescription(code: AutoJoinRule, plain: string, unanswered: boolean, skip: boolean): string {
+  if (code === "all") {
+    const exceptions = [...(unanswered ? [] : [UNANSWERED_EXCEPTION]), ...(skip ? [ONE_ON_ONE_EXCEPTION] : [])];
+    return exceptions.length > 0 ? `${plain.replace(/\.$/, "")}, except ${exceptions.join(" and ")}.` : plain;
+  }
+  if (code === "organizer" && skip) return `${plain} Also skip ${ONE_ON_ONE_EXCEPTION}.`;
+  return plain;
+}
 
 // LEAD-DESIGNED (2026-11-21), not in the designer's file: the box under the first rule. The words
 // are the lead's; the box is the designer's `Checkbox` and the help line is the rules' own
@@ -101,6 +113,15 @@ const UNANSWERED_HELP_OFF =
   "Off: the note taker waits until you accept an invite from someone outside your organisation.";
 const UNANSWERED_HELP_ON = "On: the note taker joins them without waiting for you to accept.";
 const UNANSWERED_HELP_OTHER_RULE = "Only used with All meetings with a video link.";
+
+// LEAD-DESIGNED (2026-11-24), not in the designer's file: the second box, under the first. Same
+// `Checkbox` and help style. It counts people invited, so the help says so. It narrows "All" and
+// "Only meetings I organise"; under "Only when I turn it on" nothing is joined by itself.
+const SKIP_LABEL = "Skip one-on-one meetings";
+const SKIP_HELP_OFF = "Off: meetings with only two people invited are joined like any other.";
+const SKIP_HELP_ON =
+  "On: the note taker skips meetings with only two people invited. You can still switch one on from the Upcoming list.";
+const SKIP_HELP_NONE_RULE = "Only used with All meetings with a video link or Only meetings I organise.";
 
 const PERMISSIONS_URL = "https://myaccount.google.com/permissions";
 
@@ -143,6 +164,7 @@ export function SettingsCalendar({
     rule?: AutoJoinRule;
     template?: number;
     join_unanswered?: boolean;
+    skip_one_on_ones?: boolean;
   } | null>(null);
   const writing = useRef(false);
 
@@ -201,7 +223,7 @@ export function SettingsCalendar({
 
   async function save(
     body: CalendarSettingsInput,
-    shown: { rule?: AutoJoinRule; template?: number; join_unanswered?: boolean },
+    shown: { rule?: AutoJoinRule; template?: number; join_unanswered?: boolean; skip_one_on_ones?: boolean },
   ) {
     if (writing.current) return;
     writing.current = true;
@@ -223,6 +245,7 @@ export function SettingsCalendar({
   const provider = (state?.provider ?? "google") as CalendarProvider;
   // The box as shown: where it was just pressed to while the server answers, else what it stores.
   const unanswered = saving?.join_unanswered ?? state?.join_unanswered ?? false;
+  const skipPairs = saving?.skip_one_on_ones ?? state?.skip_one_on_ones ?? false;
   const connectLabel = (which: CalendarProvider) =>
     connecting === which
       ? "Connecting..."
@@ -385,7 +408,7 @@ export function SettingsCalendar({
                 </div>
                 {RULES.map(([code, label, plain]) => {
                   const chosen = (saving?.rule ?? state.rule) === code;
-                  const description = code === "all" && !unanswered ? ALL_EXCEPT_UNANSWERED : plain;
+                  const description = ruleDescription(code, plain, unanswered, skipPairs);
                   return (
                     <label key={code} className={`cal-rule${chosen ? " cal-rule-on" : ""}`}>
                       <input
@@ -424,6 +447,24 @@ export function SettingsCalendar({
                 </Checkbox>
                 <div id="join-unanswered-help" className="cal-rule-desc">
                   {state.rule !== "all" ? UNANSWERED_HELP_OTHER_RULE : unanswered ? UNANSWERED_HELP_ON : UNANSWERED_HELP_OFF}
+                </div>
+              </div>
+
+              <div className="cal-rules">
+                <Checkbox
+                  id="skip-one-on-ones"
+                  checked={skipPairs}
+                  disabled={saving !== null || state.rule === "none"}
+                  aria-describedby="skip-one-on-ones-help"
+                  onChange={(event) => {
+                    const ticked = event.target.checked;
+                    if (ticked !== state.skip_one_on_ones) void save({ skip_one_on_ones: ticked }, { skip_one_on_ones: ticked });
+                  }}
+                >
+                  {SKIP_LABEL}
+                </Checkbox>
+                <div id="skip-one-on-ones-help" className="cal-rule-desc">
+                  {state.rule === "none" ? SKIP_HELP_NONE_RULE : skipPairs ? SKIP_HELP_ON : SKIP_HELP_OFF}
                 </div>
               </div>
 
@@ -485,6 +526,7 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     rule: current.rule,
     rule_text: current.rule_text,
     join_unanswered: current.join_unanswered,
+    skip_one_on_ones: current.skip_one_on_ones,
     calendar_template_id: current.calendar_template_id,
     auto_join_paused: current.auto_join_paused,
     auto_join_paused_text: current.auto_join_paused_text,

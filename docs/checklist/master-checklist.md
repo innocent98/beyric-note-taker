@@ -11,6 +11,13 @@
 - [ ] **Search is slow when few meetings match** (about 0.9 s at 300 meetings, 13 s at 4,000; about 3 ms per readable meeting); Adebayo approved a GIN expression index as its own PR after #260 (migration 0056) merges; the exact expression and the query change it needs are in the SOP, NOT added here
 - [ ] **Not verified:** the files in Excel, Sheets, Notion, Obsidian; a real team's data; the server
 
+**Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
+- [x] Per-person checkbox "Skip one-on-one meetings" under the rule box (`user_settings.skip_one_on_ones`, off by default); skips an event with exactly two people INVITED (count, not attendance), under `all` and `organizer`; 0 (solo) and 1 are not skipped
+- [x] `will_join` reason `one_on_one` (Off, visible muted line on the Upcoming row); the per-meeting switch still wins both ways; `JoinSettings.for_user` is still the one constructor (sync, API, runner re-check, organiser bot, mail)
+- [x] `PUT /api/calendar/settings` takes `skip_one_on_ones`; a change re-runs the stored events (joins cancelled or revived, running bots untouched, switches kept); a skipped one-on-one is a cancelled join: never on "Not recorded", no Send now
+- [x] Wording made true (`rule_text`, the card's rule sentences); the checkbox and texts are lead-designed (listed in the SOP); looked at in a real browser at 1280 and 390 px
+- [x] Tests, live captures (`docs/fe-captures/skip-one-on-ones/`), FE guide section 3c; **not verified:** a real Google calendar, Outlook live (documented shape only), the server
+
 **Addendum 2026-11-23: speaker naming chain** (branch `fix/speaker-name-chained-elimination`, SOP `docs/sop/2026-11-23-speaker-name-chain.md`, no migration, no endpoint or FE guide change):
 - [x] Chained elimination: a name given to one tag by elimination or as a sole candidate counts as held in the next round, to a fixed point; a name from round 2 on stands only on Meet's positive evidence (usable events, clock check, agrees with the given names, the person leads the tag 1.5x and 30 s), else Unknown as before; a contested name is never held (`shared_claim` stays shared)
 - [x] Exclusion route `how: meet_exclusion`: one open tag, one left-over Meet participant (everyone present counts; a tag's own candidate list limits the count), 90 s tag floor, 30 s and 20% overlap, 1.5x anyone else's seconds, behind the timeline rule's own gates; `MIN_RATIO` untouched; same-display-name limit documented

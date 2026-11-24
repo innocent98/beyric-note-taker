@@ -1,0 +1,37 @@
+{
+  "note": "The person's switch for one skipped meeting: `Will join`, and the join is made again. The switch beats the box.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/1/override",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "1:1 with Sam",
+      "starts_at": "2026-11-24T15:01:00+01:00",
+      "ends_at": "2026-11-24T15:31:00+01:00",
+      "platform": "google_meet",
+      "platform_label": "Google Meet",
+      "attendee_count": 2,
+      "will_join": true,
+      "will_join_text": "Will join",
+      "reason_text": null,
+      "join_id": 1,
+      "can_send_now": false,
+      "not_recorded_text": null
+    }
+  }
+}

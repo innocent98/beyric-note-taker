@@ -20,7 +20,9 @@ NOT_CONNECTED = "Google Calendar is not connected."
 WILL_JOIN = "Will join"
 OFF = "Off"
 CANNOT_JOIN = "Cannot join"
-OFF_REASONS = frozenset({"rule_none", "not_organizer", "not_accepted", "override_off"})
+OFF_REASONS = frozenset(
+    {"rule_none", "not_organizer", "not_accepted", "one_on_one", "override_off"}
+)
 
 # The plain reason behind a "no", one sentence for each reason `will_join` can give. The first is
 # the designer's own hint for an event without a link.
@@ -35,6 +37,7 @@ REASON_TEXT = {
     "event_type": "This kind of event is not joined",
     "not_organizer": "Skipped because you are not the organiser",
     "not_accepted": "Waiting for you to accept the invite. Settings can join these too.",
+    "one_on_one": "Skipped because only two people are invited. Settings can join these too.",
     "rule_none": "Auto-join is set to only when you turn it on",
     "override_off": "You switched this meeting off",
 }
@@ -42,16 +45,16 @@ UNKNOWN_REASON_TEXT = "Will not join"  # a reason added to the rules before it w
 
 # The designer's label for the rule (the Meetings page's Upcoming header).
 # LEAD-DESIGNED: the designer's "Joining all meetings" is only true when the person ticked "Also
-# join invites I haven't answered yet"; without the tick `will_join` leaves out an unanswered
-# invite from outside their organisation, so the label says so.
+# join invites I haven't answered yet" and has not ticked "Skip one-on-one meetings": without the
+# first, `will_join` leaves out an unanswered invite from outside their organisation, and with the
+# second it leaves out a meeting with only two people invited, so the label says so.
 RULE_TEXT = {
     "all": "Joining all meetings",
     "organizer": "Joining meetings you organise",
     "none": "Auto-join is off",
 }
-ALL_EXCEPT_UNANSWERED_TEXT = (
-    "Joining all meetings except unanswered invites from outside your organisation"
-)
+UNANSWERED_EXCEPTION = "unanswered invites from outside your organisation"
+ONE_ON_ONE_EXCEPTION = "meetings with only two people invited"
 
 RECONNECT_TEXT = {
     "revoked": "Google access was removed. Connect again to carry on.",
@@ -108,10 +111,23 @@ def join_reason(decision: JoinDecision) -> str | None:
     return REASON_TEXT.get(decision.reason, UNKNOWN_REASON_TEXT)
 
 
-def rule_text(rule: str, join_unanswered: bool = False) -> str:
-    if rule == "all" and not join_unanswered:
-        return ALL_EXCEPT_UNANSWERED_TEXT
-    return RULE_TEXT.get(rule, RULE_TEXT["all"])
+def rule_text(rule: str, join_unanswered: bool = False, skip_one_on_ones: bool = False) -> str:
+    """The rule's label with every exception that is really in force named. `join_unanswered`
+    matters only under `all`; `skip_one_on_ones` under `all` and `organizer`; `none` joins nothing
+    by itself, so it has no exceptions."""
+    if rule == "none":
+        return RULE_TEXT["none"]
+    if rule == "organizer":
+        base = RULE_TEXT["organizer"]
+        return f"{base}, except {ONE_ON_ONE_EXCEPTION}" if skip_one_on_ones else base
+    exceptions = []
+    if not join_unanswered:
+        exceptions.append(UNANSWERED_EXCEPTION)
+    if skip_one_on_ones:
+        exceptions.append(ONE_ON_ONE_EXCEPTION)
+    if not exceptions:
+        return RULE_TEXT["all"]
+    return f"{RULE_TEXT['all']} except {' and '.join(exceptions)}"
 
 
 def platform_label(platform: str | None) -> str | None:

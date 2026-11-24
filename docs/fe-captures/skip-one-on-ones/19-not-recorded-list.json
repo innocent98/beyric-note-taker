@@ -1,0 +1,22 @@
+{
+  "note": "The `Not recorded` list holds meetings the note taker failed to get into. A skipped one-on-one is a cancelled join (the person's own choice, like a switched-off meeting), so it is never on it. Every event here is still in the future, so the list is empty whatever the box says; the same claim is proved against started meetings by `tests/test_calendar_settings_api.py`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": []
+    }
+  }
+}
