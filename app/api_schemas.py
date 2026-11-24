@@ -1464,6 +1464,9 @@ class DocumentOut(DocumentBrief):
     # Only when status is "failed": a short code and a plain sentence to show.
     failure_code: str | None
     failure_message: str | None
+    # What the person chose at the Make dialog, so "Regenerate" can ask again for the same thing.
+    options: dict[str, str | int | float | bool]
+    use_brief: bool
 
 
 class DocumentList(BaseModel):

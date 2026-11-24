@@ -1921,6 +1921,26 @@
             "title": "Meeting Ids",
             "type": "array"
           },
+          "options": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Options",
+            "type": "object"
+          },
           "output_type": {
             "enum": [
               "document",
@@ -1978,6 +1998,10 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "use_brief": {
+            "title": "Use Brief",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1997,7 +2021,9 @@
           "sources_available",
           "left_out_count",
           "failure_code",
-          "failure_message"
+          "failure_message",
+          "options",
+          "use_brief"
         ],
         "title": "DocumentOut",
         "type": "object"

@@ -3371,6 +3371,10 @@ export interface components {
             left_out_count: number;
             /** Meeting Ids */
             meeting_ids: number[];
+            /** Options */
+            options: {
+                [key: string]: string | number | boolean;
+            };
             /**
              * Output Type
              * @enum {string}
@@ -3396,6 +3400,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Use Brief */
+            use_brief: boolean;
         };
         /**
          * DocumentPatch

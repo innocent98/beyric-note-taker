@@ -327,3 +327,15 @@ def test_the_team_header_names_the_team_and_a_foreign_one_is_404(api, session, t
         error_of(make(api, meeting, options={"n": 2}), 404, "not_found")
     finally:
         del api.client.headers["X-Team-Id"]
+
+
+def test_the_draft_carries_the_options_and_brief_choice_so_regenerate_can_repeat_them(
+    api, session, template
+):
+    meeting = meeting_of(session, template)
+    made = make(api, meeting, options={"tone": "formal", "recipient": "Daniel"}, use_brief=False)
+    assert made.status_code == 202
+    body = made.json()
+    assert body["options"] == {"tone": "formal", "recipient": "Daniel"}
+    assert body["use_brief"] is False
+    assert api.get(url(body["id"])).json()["options"] == {"tone": "formal", "recipient": "Daniel"}
