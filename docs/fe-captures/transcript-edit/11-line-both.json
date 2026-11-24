@@ -1,0 +1,94 @@
+{
+  "note": "Words and speaker in one save.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/1/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "37d2764977c0f9c6",
+      "line": 1,
+      "text": "Hello all, thanks for joining.",
+      "speaker": "Ben Sample"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 2,
+      "template_name": "Client call",
+      "created_at": "2026-11-24T13:45:04.496687Z",
+      "tasks_count": 0,
+      "failure_reason": null,
+      "bot_invite_email": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "can_delete": true,
+      "shared_with_team": true,
+      "can_share": true,
+      "shared_by": null,
+      "team": {
+        "id": 1,
+        "name": "My team"
+      },
+      "owned_by_team": false,
+      "can_move": false,
+      "can_move_back": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": "## Summary\nAda Example and Ben Sample agreed to ship the **beta** on Friday.\n\n## Key points\n- The beta covers meetings and templates\n- Support rota starts Monday\n\n## Decisions\n- Ship the beta on Friday\n\n## Action items\n- Ada Example: write the release note by Thursday\n\n## Open questions\nNone noted\n\n## Please check\nNone noted",
+      "notes_html": "<h2>Summary</h2>\n<p>Ada Example and Ben Sample agreed to ship the <strong>beta</strong> on Friday.</p>\n<h2>Key points</h2>\n<ul>\n<li>The beta covers meetings and templates</li>\n<li>Support rota starts Monday</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Ship the beta on Friday</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Ada Example: write the release note by Thursday</li>\n</ul>\n<h2>Open questions</h2>\n<p>None noted</p>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Ben Sample]: Hello all, thanks for joining.\n[Ben Sample]: I can ship the beta on Thursday.\n[Ben Sample]: Good. I will take the support rota from Monday.\n[Cleo Example]: Thanks, and I will write the release note.",
+      "can_edit_transcript": true,
+      "transcript_version": "eee134a15bbd690e",
+      "transcript_edited": true,
+      "transcript_edited_at": "2026-11-24T13:45:04.667579Z",
+      "transcript_edited_by": "owner",
+      "notes_outdated": true,
+      "translations": [
+        {
+          "language": "fr",
+          "status": "ready",
+          "stale": true
+        }
+      ],
+      "duration_seconds": null,
+      "participants": [
+        "Ben Sample",
+        "Cleo Example"
+      ],
+      "decisions_count": 0,
+      "review_open_count": 0,
+      "tasks": [],
+      "series": null,
+      "suggest_recurring": false,
+      "can_make_recurring": true,
+      "recurring_team_id": 1,
+      "open_questions": []
+    }
+  }
+}

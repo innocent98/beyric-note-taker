@@ -46,6 +46,7 @@ from app import (
     tasks,
     team_admin,
     teams,
+    transcript_edit,
     translation,
     usage,
     visibility,
@@ -73,6 +74,8 @@ from app.api_schemas import (
     TemplateOut,
     TermList,
     TermOut,
+    TranscriptEdit,
+    TranscriptRestore,
     UsageOut,
     UserOut,
     WorkspaceRef,
@@ -95,6 +98,7 @@ from app.pipeline import (
     join_retry_at,
 )
 from app.services import Refused, get_bot_provider, get_openai_client
+from app.transcript_text import version_of
 
 REFRESH_SECONDS = 30  # how often the Jinja page refreshes while a meeting is active
 LIST_DEFAULT, LIST_MAX = 50, 100
@@ -413,6 +417,15 @@ def _can_move_back(session: Session, user: User, meeting: Meeting) -> bool:
     return member is not None and member.role in teams.MANAGER_ROLES
 
 
+def _editor_name(session: Session, meeting: Meeting) -> str | None:
+    """Who made the last edit of the transcript, shown to anyone who reads it; null if nobody has
+    (or the account is gone)."""
+    if meeting.transcript_edited_by_user_id is None:
+        return None
+    editor = session.get(User, meeting.transcript_edited_by_user_id)
+    return visibility.former_or_name(editor) if editor is not None else None
+
+
 def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
     carries its meeting password. The `can_*` flags are false for a teammate reading a shared
@@ -465,6 +478,16 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
+        can_edit_transcript=owner and ready,
+        transcript_version=(
+            version_of(transcript_edit.shown_text(meeting))
+            if transcript_edit.shown_text(meeting)
+            else None
+        ),
+        transcript_edited=transcript_edit.is_edited(meeting),
+        transcript_edited_at=meeting.transcript_edited_at,
+        transcript_edited_by=_editor_name(session, meeting),
+        notes_outdated=ready and transcript_edit.notes_outdated(meeting),
         duration_seconds=meeting.recorded_seconds,
         participants=_participants(meeting),
         decisions_count=decisions_count,
@@ -959,6 +982,80 @@ def regenerate_notes(
         session,
         user,
     )
+
+
+_EDIT_ERRORS = {code: {"model": ErrorResponse} for code in (404, 409, 422)}
+
+
+@router.patch(
+    "/meetings/{meeting_id:id}/transcript",
+    tags=["meetings"],
+    responses={
+        **_EDIT_ERRORS,
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`: the caller can "
+            "read the meeting but may not change it",
+        },
+    },
+)
+def edit_transcript(
+    meeting_id: int,
+    body: TranscriptEdit,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Edit the transcript of a `ready` meeting: rename a speaker everywhere (`rename`), or change
+    one line's words and/or speaker (`line`, the 1-based row of the page, with `text` and/or
+    `speaker`). The number and order of lines never change. The original is kept once, before the
+    first edit (`POST .../transcript/restore` puts it back). Nothing is rewritten: the response has
+    `notes_outdated: true` until the owner rewrites the notes. Who may: whoever may delete the
+    meeting (its recorder; a team's owner and admins); 403 `team_forbidden` for a reader, 404 when
+    the caller cannot read it. 409 `not_ready`, `transcript_changed` (the `version` is old),
+    `speaker_exists` (renaming into an existing speaker needs `merge: true`), `meeting_busy`; 422
+    `no_speakers`, `speaker_not_found`, `invalid_name`, `empty_text`, `no_change`,
+    `line_out_of_range`, `invalid_edit`."""
+    meeting = transcript_edit.editable_meeting(session, user, meeting_id)
+    if body.rename is not None:
+        meeting = transcript_edit.rename(
+            session,
+            user,
+            meeting,
+            body.version,
+            body.rename.from_,
+            body.rename.to,
+            body.rename.merge,
+        )
+    else:
+        assert body.line is not None
+        meeting = transcript_edit.change_line(
+            session, user, meeting, body.version, body.line, body.text, body.speaker
+        )
+    return _detail(meeting, session, user)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/transcript/restore",
+    tags=["meetings"],
+    responses={
+        **_EDIT_ERRORS,
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`",
+        },
+    },
+)
+def restore_transcript(
+    meeting_id: int,
+    body: TranscriptRestore,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Put back the transcript as it was before the first edit and forget the edits. 409
+    `nothing_to_restore` when it was never edited; the other refusals are those of the edit."""
+    meeting = transcript_edit.editable_meeting(session, user, meeting_id)
+    meeting = transcript_edit.restore(session, meeting, body.version)
+    return _detail(meeting, session, user)
 
 
 # ---- templates ----

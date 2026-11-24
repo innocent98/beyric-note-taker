@@ -1,0 +1,29 @@
+{
+  "note": "There is no line 5: 422, nothing changes.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/1/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "b9ed480a17efee24",
+      "line": 5,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "line_out_of_range",
+        "message": "There is no line 5 in this transcript."
+      }
+    }
+  }
+}

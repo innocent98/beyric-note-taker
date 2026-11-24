@@ -1082,6 +1082,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Transcript
+         * @description Edit the transcript of a `ready` meeting: rename a speaker everywhere (`rename`), or change
+         *     one line's words and/or speaker (`line`, the 1-based row of the page, with `text` and/or
+         *     `speaker`). The number and order of lines never change. The original is kept once, before the
+         *     first edit (`POST .../transcript/restore` puts it back). Nothing is rewritten: the response has
+         *     `notes_outdated: true` until the owner rewrites the notes. Who may: whoever may delete the
+         *     meeting (its recorder; a team's owner and admins); 403 `team_forbidden` for a reader, 404 when
+         *     the caller cannot read it. 409 `not_ready`, `transcript_changed` (the `version` is old),
+         *     `speaker_exists` (renaming into an existing speaker needs `merge: true`), `meeting_busy`; 422
+         *     `no_speakers`, `speaker_not_found`, `invalid_name`, `empty_text`, `no_change`,
+         *     `line_out_of_range`, `invalid_edit`.
+         */
+        patch: operations["edit_transcript"];
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/transcript/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Transcript
+         * @description Put back the transcript as it was before the first edit and forget the edits. 409
+         *     `nothing_to_restore` when it was never edited; the other refusals are those of the edit.
+         */
+        post: operations["restore_transcript"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/translations": {
         parameters: {
             query?: never;
@@ -3371,6 +3421,11 @@ export interface components {
             can_cancel: boolean;
             /** Can Delete */
             can_delete: boolean;
+            /**
+             * Can Edit Transcript
+             * @default false
+             */
+            can_edit_transcript: boolean;
             /** Can End */
             can_end: boolean;
             /**
@@ -3421,6 +3476,11 @@ export interface components {
             notes: string | null;
             /** Notes Html */
             notes_html: string | null;
+            /**
+             * Notes Outdated
+             * @default false
+             */
+            notes_outdated: boolean;
             /**
              * Open Questions
              * @default []
@@ -3490,6 +3550,17 @@ export interface components {
             title: string;
             /** Transcript */
             transcript: string | null;
+            /**
+             * Transcript Edited
+             * @default false
+             */
+            transcript_edited: boolean;
+            /** Transcript Edited At */
+            transcript_edited_at?: string | null;
+            /** Transcript Edited By */
+            transcript_edited_by?: string | null;
+            /** Transcript Version */
+            transcript_version?: string | null;
             /** Translations */
             translations: components["schemas"]["TranslationBrief"][];
             /** Worker Stale */
@@ -4408,6 +4479,22 @@ export interface components {
             /** Status */
             status: string | null;
         };
+        /**
+         * SpeakerRename
+         * @description Every line labelled exactly `from` becomes `to`. When `to` is already a speaker of the
+         *     meeting the two become one: that needs `merge: true` (else 409 `speaker_exists`).
+         */
+        SpeakerRename: {
+            /** From */
+            from: string;
+            /**
+             * Merge
+             * @default false
+             */
+            merge: boolean;
+            /** To */
+            to: string;
+        };
         /** SprintClosed */
         SprintClosed: {
             closed: components["schemas"]["SprintOut"];
@@ -4873,6 +4960,28 @@ export interface components {
              * @enum {string}
              */
             reason: "no_decision" | "no_owner" | "not_final";
+        };
+        /**
+         * TranscriptEdit
+         * @description One edit of the transcript. `version` is the `transcript_version` of the page the person
+         *     edited from (409 `transcript_changed` when the transcript has changed since). Send exactly one
+         *     of: `rename`; or `line` (the 1-based row of the page) with `text`, `speaker` or both.
+         */
+        TranscriptEdit: {
+            /** Line */
+            line?: number | null;
+            rename?: components["schemas"]["SpeakerRename"] | null;
+            /** Speaker */
+            speaker?: string | null;
+            /** Text */
+            text?: string | null;
+            /** Version */
+            version: string;
+        };
+        /** TranscriptRestore */
+        TranscriptRestore: {
+            /** Version */
+            version: string;
         };
         /**
          * TranslationBrief
@@ -8454,6 +8563,148 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_transcript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranscriptEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token, or `team_forbidden`: the caller can read the meeting but may not change it */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restore_transcript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranscriptRestore"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token, or `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;

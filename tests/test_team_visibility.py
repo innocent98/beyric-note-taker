@@ -209,6 +209,14 @@ OWNER_ONLY = {
 # Readable by whoever reads the meeting, changeable only by the owning team's owner or admin: the
 # others who can read it get 403 `team_forbidden`, everyone else 404 (test_multi_team_moved.py).
 TEAM_ADMIN_ONLY = {("POST", "/api/meetings/{meeting_id}/move-back")}
+# The transcript editor: the same "who may change it" rule as OWNER_ONLY (`visibility.owns`), but a
+# reader who may not change it gets 403 `team_forbidden` (the page is told `can_edit_transcript`
+# and never offers the control); everyone who cannot read the meeting gets 404
+# (tests/test_transcript_edit.py).
+TRANSCRIPT_EDIT = {
+    ("PATCH", "/api/meetings/{meeting_id}/transcript"),
+    ("POST", "/api/meetings/{meeting_id}/transcript/restore"),
+}
 # Routes with no meeting id in the path that still read meeting content, through the same rule.
 LISTS = {("GET", "/api/meetings"), ("GET", "/api/decisions")}
 
@@ -221,7 +229,7 @@ def test_every_route_with_a_meeting_id_is_classified(app):
     """A new meeting route fails here until someone decides: a read (through visible_meetings)
     or owner-only."""
     found = set(meeting_routes(app))
-    everything = READS | OWNER_ONLY | TEAM_ADMIN_ONLY
+    everything = READS | OWNER_ONLY | TEAM_ADMIN_ONLY | TRANSCRIPT_EDIT
     assert found == everything, found ^ everything
 
 

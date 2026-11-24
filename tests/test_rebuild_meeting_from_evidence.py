@@ -249,6 +249,51 @@ def test_a_meeting_whose_lists_are_being_read_right_now_is_refused(
     assert client.chats == 0 and stored(session, meeting).transcript == OLD_TRANSCRIPT
 
 
+def edited_by_a_person(session, meeting):
+    meeting.transcript_original = meeting.speaker_transcript
+    meeting.speaker_transcript = meeting.speaker_transcript.replace("[", "[Edited ", 1)
+    meeting.transcript_edited_at = NOW
+    session.commit()
+
+
+@pytest.mark.parametrize("argv", [[], ["--apply"], ["--apply", "--force"]])
+def test_a_meeting_a_person_edited_is_skipped_and_left_alone(
+    session, meeting, backups, capsys, argv
+):
+    """The transcript editor's edits are never overwritten by this script (dry run, apply or
+    force): it says so and changes nothing, not even a backup."""
+    edited_by_a_person(session, meeting)
+    before = snapshot(stored(session, meeting))
+    code, client, out = go([str(meeting.id), *argv], backups, capsys=capsys)
+    assert code != 0
+    assert "SKIPPED" in out and "edited its transcript" in out and "Restore original" in out
+    assert snapshot(stored(session, meeting)) == before
+    assert client.chats == 0 and not backups.exists()
+
+
+def test_a_backup_is_not_restored_over_a_meeting_a_person_edited(
+    session, meeting, tmp_path, capsys
+):
+    edited_by_a_person(session, meeting)
+    backup = tmp_path / "backup.json"
+    backup.write_text(
+        json.dumps(
+            {
+                "version": rebuild.BACKUP_VERSION,
+                "meeting_id": meeting.id,
+                "transcript": OLD_TRANSCRIPT,
+                "speaker_transcript": OLD_LABELLED,
+                "notes": OLD_NOTES,
+                "transcript_source": "own",
+            }
+        )
+    )
+    before = snapshot(stored(session, meeting))
+    code = rebuild.run(["--restore", str(backup), "--apply"])
+    assert code != 0 and "SKIPPED" in capsys.readouterr().out
+    assert snapshot(stored(session, meeting)) == before
+
+
 def test_a_meeting_a_different_provider_ran_has_no_evidence_to_rebuild_from(
     session, owner, template, backups, capsys
 ):
@@ -405,6 +450,20 @@ def test_apply_rewrites_the_notes_from_the_new_transcript(session, meeting, back
     notes_run = session.scalars(select(AiRun).where(AiRun.kind == "notes")).one()
     assert notes_run.meeting_id == meeting.id and notes_run.status == "ok"
     assert notes_run.prompt_version.endswith("+rebuild")  # still a "notes" call for the cost report
+
+
+def test_apply_records_the_text_the_notes_were_written_from(session, meeting, backups, capsys):
+    """An earlier owner's rewrite had recorded another text; the rebuilt notes are current."""
+    from app import transcript_edit
+    from app.transcript_text import version_of
+
+    meeting.notes_source_version = version_of("an older text")
+    session.commit()
+    code, _, _ = apply(session, meeting, backups, capsys)
+    assert code == 0
+    row = stored(session, meeting)
+    assert row.notes_source_version == version_of(row.speaker_transcript)
+    assert transcript_edit.notes_outdated(row) is False
 
 
 def test_apply_asks_for_the_owners_vocabulary_like_the_live_path_does(

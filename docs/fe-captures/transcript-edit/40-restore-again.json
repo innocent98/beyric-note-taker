@@ -1,0 +1,27 @@
+{
+  "note": "Nothing left to restore: 409 `nothing_to_restore`.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/transcript/restore",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "1458874aa6bd37e0"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "nothing_to_restore",
+        "message": "This transcript has not been edited."
+      }
+    }
+  }
+}

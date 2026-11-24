@@ -1,0 +1,29 @@
+{
+  "note": "A transcript with no speaker names has no lines to tell apart: 422 `no_speakers`.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/5/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "55eeedf431f7c8dc",
+      "line": 1,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "no_speakers",
+        "message": "This transcript has no speaker names, so there is nothing to edit yet."
+      }
+    }
+  }
+}

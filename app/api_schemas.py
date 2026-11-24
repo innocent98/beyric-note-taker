@@ -6,7 +6,7 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _utc(value: datetime) -> datetime:
@@ -219,6 +219,44 @@ class Regenerate(Body):
     template_id: int
 
 
+class SpeakerRename(Body):
+    """Every line labelled exactly `from` becomes `to`. When `to` is already a speaker of the
+    meeting the two become one: that needs `merge: true` (else 409 `speaker_exists`)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+    from_: str = Field(alias="from", min_length=1, max_length=200)
+    to: str = Field(min_length=1, max_length=80)
+    merge: bool = False
+
+
+class TranscriptEdit(Body):
+    """One edit of the transcript. `version` is the `transcript_version` of the page the person
+    edited from (409 `transcript_changed` when the transcript has changed since). Send exactly one
+    of: `rename`; or `line` (the 1-based row of the page) with `text`, `speaker` or both."""
+
+    version: str = Field(min_length=1, max_length=64)
+    rename: SpeakerRename | None = None
+    line: int | None = Field(default=None, ge=1, le=100000)
+    text: str | None = Field(default=None, max_length=5000)
+    speaker: str | None = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def _one_edit(self) -> "TranscriptEdit":
+        one_line = self.line is not None and (self.text is not None or self.speaker is not None)
+        if (self.rename is not None) == one_line or (
+            self.rename is not None and self.line is not None
+        ):
+            raise ValueError("send either `rename`, or `line` with `text` and/or `speaker`")
+        if self.rename is None and self.line is None:
+            raise ValueError("send either `rename`, or `line` with `text` and/or `speaker`")
+        return self
+
+
+class TranscriptRestore(Body):
+    version: str = Field(min_length=1, max_length=64)
+
+
 class MeetingSummary(BaseModel):
     id: int
     title: str
@@ -354,6 +392,20 @@ class MeetingDetail(MeetingSummary):
     notes_html: str | None
     # The speaker-labelled transcript when there is one, else the plain one, else null.
     transcript: str | None
+    # The transcript editor. `can_edit_transcript`: the one who may change the meeting (its
+    # recorder, a team's owner or admin) and it is `ready`; false for a teammate who can only read
+    # it. `transcript_version` is what an edit sends back (a hash of `transcript`; null with no
+    # transcript). `transcript_edited` is true while a person's edit is in place (Restore original
+    # is then possible); `transcript_edited_at` and `transcript_edited_by` say when and by whom the
+    # last edit was made. `notes_outdated`: the notes were written from different words than
+    # `transcript` now holds, so they (and the decisions, open questions and tasks read from them)
+    # are not what the page shows until the owner rewrites the notes. Nothing is rewritten for them.
+    can_edit_transcript: bool = False
+    transcript_version: str | None = None
+    transcript_edited: bool = False
+    transcript_edited_at: UtcDatetime | None = None
+    transcript_edited_by: str | None = None
+    notes_outdated: bool = False
     # The translations this meeting has (any state), at most one per language; empty unless ready.
     translations: list[TranslationBrief]
     # Length of the recording in seconds (what the hours cap counts); null until the recording
