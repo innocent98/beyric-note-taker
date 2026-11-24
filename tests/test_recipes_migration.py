@@ -17,7 +17,7 @@ PREVIOUS = "0056"
 TABLES = {"documents", "document_meetings", "document_shares", "recipes", "team_briefs"}
 
 
-def test_0060_is_the_only_head_and_follows_0056(scratch_url):
+def test_0060_follows_0056_and_there_is_one_head(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
     assert script.get_revision(REVISION).down_revision == PREVIOUS
@@ -147,4 +147,21 @@ def test_the_checks_refuse_a_bad_status_type_scope_and_a_second_share(scratch_ur
     for sql in bad.values():
         with pytest.raises(IntegrityError), engine.begin() as conn:
             conn.execute(text(sql), {"u": uid})
+    engine.dispose()
+
+
+def test_0061_adds_the_ledger_link_to_documents_and_the_round_trip_removes_it(scratch_url):
+    cfg = alembic_config(scratch_url)
+    engine = create_engine(scratch_url)
+    command.upgrade(cfg, "0060")
+    names = {c["name"] for c in inspect(engine).get_columns("documents")}
+    assert "ledger_run_id" not in names
+    assert ScriptDirectory.from_config(cfg).get_revision("0061").down_revision == "0060"
+    command.upgrade(cfg, "0061")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("documents")}
+    assert columns["ledger_run_id"]["nullable"] is True
+    command.downgrade(cfg, "0060")
+    assert "ledger_run_id" not in {c["name"] for c in inspect(engine).get_columns("documents")}
+    command.upgrade(cfg, "head")
+    assert "ledger_run_id" in {c["name"] for c in inspect(engine).get_columns("documents")}
     engine.dispose()

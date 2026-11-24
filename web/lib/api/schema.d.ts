@@ -545,6 +545,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Documents
+         * @description The caller's own drafts, newest first; with `meeting_id`, only those made from that meeting
+         *     (cross-meeting drafts included). For the next page pass the smallest `id` as `before_id`.
+         */
+        get: operations["list_documents"];
+        put?: never;
+        /**
+         * Create Document
+         * @description Ask for a draft made from a meeting (or several, for a cross-meeting recipe) by a recipe.
+         *     Answers 202 with `status: "writing"`; the worker writes it and the page polls
+         *     `GET /api/documents/{id}`. The team is the `X-Team-Id` header (404 for one the caller is not
+         *     in), else their default team: it decides whose brief and team recipes are used. Asking again
+         *     for the same recipe, meetings and options while that draft is still being written returns
+         *     that draft and starts nothing. Regenerating is a new request and a new draft.
+         */
+        post: operations["create_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document
+         * @description A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.
+         *     `checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.
+         *     404 for another person's draft.
+         */
+        get: operations["get_document"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description Discard a draft (also cancels one still being written; the model call it may have made is
+         *     still counted against the day's 20).
+         */
+        delete: operations["delete_document"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit Document
+         * @description Save the edited draft: send every block as it now stands. Text is cleaned and bounded as
+         *     at generation; a block keeps the sources it had and cannot gain new ones. Marks the draft
+         *     `edited`. The `checks` in the answer are recomputed from what was saved. Refused while the
+         *     draft is still `writing` (409 `writing`) and for one that `failed` (409 `not_ready`).
+         */
+        patch: operations["edit_document"];
+        trace?: never;
+    };
     "/api/documents/{document_id}/export": {
         parameters: {
             query?: never;
@@ -2870,6 +2934,13 @@ export interface components {
             /** Tasks New */
             tasks_new: number;
         };
+        /** BlankOut */
+        BlankOut: {
+            /** Block Index */
+            block_index: number;
+            /** What */
+            what: string;
+        };
         /** BotNameIn */
         BotNameIn: {
             /** Bot Name */
@@ -2900,6 +2971,16 @@ export interface components {
          */
         BroughtBack: {
             team: components["schemas"]["SeriesTeam"];
+        };
+        /** Bullets */
+        Bullets: {
+            /** Items */
+            items: components["schemas"]["Item"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "bullets";
         };
         /**
          * CalendarOut
@@ -2977,6 +3058,21 @@ export interface components {
             /** Upcoming */
             upcoming: components["schemas"]["UpcomingEvent"][];
         };
+        /** Card */
+        Card: {
+            /**
+             * Kind
+             * @default note
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /** Owner */
+            owner?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
+        };
         /** CarriedQuestion */
         CarriedQuestion: {
             /** Can Update */
@@ -3006,6 +3102,18 @@ export interface components {
             target: "transcript" | "notes";
             /** Title */
             title: string;
+        };
+        /** Column */
+        Column: {
+            /** Cards */
+            cards: components["schemas"]["Card"][];
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "column";
         };
         /**
          * ConnectIn
@@ -3171,6 +3279,137 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /** DocumentBrief */
+        DocumentBrief: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited */
+            edited: boolean;
+            /** Id */
+            id: number;
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /** Recipe Id */
+            recipe_id: number | null;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "writing" | "ready" | "failed";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DocumentChecks */
+        DocumentChecks: {
+            /** Blanks */
+            blanks: components["schemas"]["BlankOut"][];
+            /** Flags */
+            flags: components["schemas"]["FlagOut"][];
+        };
+        /**
+         * DocumentIn
+         * @description Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or
+         *     `recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the
+         *     choices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10.
+         */
+        DocumentIn: {
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /** Options */
+            options?: {
+                [key: string]: string | number | boolean;
+            };
+            /** Recipe Id */
+            recipe_id?: number | null;
+            /** Recipe Key */
+            recipe_key?: string | null;
+            /**
+             * Use Brief
+             * @default true
+             */
+            use_brief: boolean;
+        };
+        /** DocumentList */
+        DocumentList: {
+            /** Documents */
+            documents: components["schemas"]["DocumentBrief"][];
+        };
+        /** DocumentOut */
+        DocumentOut: {
+            /** Blocks */
+            blocks: (components["schemas"]["Heading"] | components["schemas"]["Paragraph"] | components["schemas"]["Bullets"] | components["schemas"]["Table"] | components["schemas"]["Column"])[];
+            checks: components["schemas"]["DocumentChecks"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited */
+            edited: boolean;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Message */
+            failure_message: string | null;
+            /** Id */
+            id: number;
+            /** Left Out Count */
+            left_out_count: number;
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /** Recipe Id */
+            recipe_id: number | null;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /** Sources Available */
+            sources_available: boolean;
+            /** Stale */
+            stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "writing" | "ready" | "failed";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DocumentPatch
+         * @description The edited draft: every block as it now stands, and optionally a new title. A block may
+         *     keep the sources it has and may not gain new ones.
+         */
+        DocumentPatch: {
+            /** Blocks */
+            blocks: {
+                [key: string]: unknown;
+            }[];
+            /** Title */
+            title?: string | null;
+        };
         /** EmailIn */
         EmailIn: {
             /** Email */
@@ -3221,6 +3460,30 @@ export interface components {
             field: string;
             /** Message */
             message: string;
+        };
+        /** FlagOut */
+        FlagOut: {
+            /** Block Index */
+            block_index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "figure" | "derived";
+            /** Text */
+            text: string;
+        };
+        /** Heading */
+        Heading: {
+            /** Level */
+            level: number;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "heading";
         };
         /**
          * InvitePreview
@@ -3281,6 +3544,13 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "member";
+        };
+        /** Item */
+        Item: {
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
         };
         /** LanguagePreferencesIn */
         LanguagePreferencesIn: {
@@ -3775,6 +4045,18 @@ export interface components {
         OverrideIn: {
             /** Override */
             override: boolean | null;
+        };
+        /** Paragraph */
+        Paragraph: {
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paragraph";
         };
         /** PasswordChanged */
         PasswordChanged: {
@@ -4371,6 +4653,26 @@ export interface components {
             /** Status */
             status: string | null;
         };
+        /**
+         * Source
+         * @description Where a piece of text was drafted from. `quote` is the first words of the line, so a line
+         *     that moved can be found again (`ask._quote_row`); `ref` is a decision or task id.
+         */
+        Source: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "line" | "meeting" | "decision" | "task";
+            /** Line */
+            line?: number | null;
+            /** Meeting Id */
+            meeting_id: number;
+            /** Quote */
+            quote?: string | null;
+            /** Ref */
+            ref?: number | null;
+        };
         /** SprintClosed */
         SprintClosed: {
             closed: components["schemas"]["SprintOut"];
@@ -4438,6 +4740,18 @@ export interface components {
             tasks_done: number;
             /** Tasks Total */
             tasks_total: number;
+        };
+        /** Table */
+        Table: {
+            /** Columns */
+            columns: string[];
+            /** Rows */
+            rows: components["schemas"]["Item"][][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "table";
         };
         /** TaskCreate */
         TaskCreate: {
@@ -6426,6 +6740,323 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_documents: {
+        parameters: {
+            query?: {
+                meeting_id?: number | null;
+                before_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIn"];
+            };
+        };
+        responses: {
+            /** @description Queued (or the draft just asked for is returned): poll `GET` every 2 s. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: making documents needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe, team or meeting (a meeting the caller cannot read too) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the meeting's notes are not written */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `recipe_invalid` (name exactly one recipe) or `meetings_invalid` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `recipe_limit`: 20 drafts a day; failed ones and regenerations count */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `writing`: the draft is still being written; `not_ready`: it failed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `blocks_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

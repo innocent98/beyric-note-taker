@@ -1,0 +1,102 @@
+{
+  "note": "Ready. Look at `checks`: the model wrote a setup fee of 120,000 naira that is nowhere in the meeting, so it is a `figure` flag; `[need: call date]` is a blank. 50,000 naira and 2026-12-01 are in the meeting so they are not flagged. The model also cited line 99, which does not exist: that source was dropped. Each line source's `quote` is written by the server from the real line, not by the model. Note `title` is the model's, replaced the recipe name.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "title": "Thanks for today, next steps on the onboarding",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
+      "recipe_id": null,
+      "status": "ready",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T13:39:06.998047Z",
+      "updated_at": "2026-11-24T13:39:07.095237Z",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Subject: Thanks for today, next steps on the onboarding",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Hi Daniel, thank you for your time today.",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 1,
+              "line": 1,
+              "quote": "Thanks for joining, Daniel.",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "As agreed, the onboarding is 50,000 naira and starts on 2026-12-01. The setup fee is 120,000 naira. Our first call is [need: call date].",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 1,
+              "line": 2,
+              "quote": "We would like the onboarding for 50,000 naira,",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "Ada sends the plan by Friday.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 3,
+                  "quote": "Agreed. I will send the plan by Friday.",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "checks": {
+        "blanks": [
+          {
+            "block_index": 2,
+            "what": "call date"
+          }
+        ],
+        "flags": [
+          {
+            "block_index": 2,
+            "text": "120,000 naira",
+            "kind": "figure"
+          }
+        ]
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null
+    }
+  }
+}
