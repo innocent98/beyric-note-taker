@@ -1013,6 +1013,7 @@ For the next person to touch the screens. Every sentence is a rule the code and 
   browser client and by the server render. **Never** on `/api/teams`, a write to `/api/session` (login, logout), the meeting routes
   other than the list (the share and move routes take the team in the **body**), `/api/decisions/{id}`, `/api/review/{id}/*`, `/api/settings/*` or any other route.
   **Added in section 17 (2026-11-14):** the READS `GET /api/meetings`, `GET /api/decisions`, `GET /api/review` and `GET /api/session` also carry it, and the default team is named explicitly.
+  **Added 2026-11-24 (meeting recipes):** `/api/recipes*`, `/api/briefs*` (the import too) and `POST /api/documents` also carry it (other `/api/documents` calls do not). See `docs/fe-integration-guide-recipes-library.md`.
 - **Per browser tab, never on the server.** On the Team, Tasks, Projects and Settings pages the team is in the
   URL, `?team=<id>`, because the server render can only read the URL. This tab remembers the choice in
   `sessionStorage` (one tab's), for pages without the parameter (the meeting page), stored with a hash of the

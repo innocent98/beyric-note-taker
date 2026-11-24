@@ -27,6 +27,7 @@ export const NEXT_PAGES = [
   "/review",
   "/share",
   "/templates",
+  "/recipes",
   "/vocabulary",
   "/settings",
   "/billing",

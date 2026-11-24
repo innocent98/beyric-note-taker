@@ -479,4 +479,5 @@ Validation errors from the body have the usual shape with `fields` (a blank name
 | a password-locked PDF, a zip bomb, an XML entity bomb, a read past the 20 s limit, `import_busy` | not run live; proved in `tests/test_recipe_importer.py` |
 | the file is never written to disk or the database, even when large | proved in `tests/test_recipe_importer.py` (temp-file creation made to fail; 2.4 MB upload); live capture only confirms the brief is unchanged after imports (60) |
 | the nginx upload limit (6 MB for `/api/briefs/import`, 1 MB elsewhere) and the Next.js front door's body limit | **not run**: these captures go straight to the app. The guard test reads `deploy/nginx.conf`; a live upload through nginx and Next is a server step to check at release |
-| these calls through the browser (FormData upload, `X-Team-Id`) | pending slice S3's web part (T12) |
+| these calls from the browser through the Next.js dev server (`X-Team-Id`, `POST /api/documents`, a 2.4 MB `FormData` upload to `/api/briefs/import`) | verified in a real browser against the real API: the draft request answered 202 through Next; the upload answered 200 with `truncated: true` and nothing saved. Not the production Next build, not nginx |
+| the web screens built on these calls | `docs/sop/2026-11-24-recipes-library.md`, section T12; vitest uses these captures as fixtures |

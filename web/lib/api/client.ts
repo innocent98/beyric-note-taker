@@ -65,6 +65,14 @@ import type {
   SlackState,
   TasksSettings,
   Template,
+  Brief,
+  BriefImported,
+  DocumentRequest,
+  DocumentStarted,
+  Recipe,
+  RecipeChanges,
+  RecipeInput,
+  RecipeList,
   ShareBody,
   ShareCreated,
   ShareList,
@@ -161,7 +169,7 @@ export type ApiOptions = {
 type Query = Record<string, string | number | undefined>;
 // `team` names the team of this one call (null: none) in place of `teamId`'s: the meeting page asks
 // about the team the MEETING belongs to, whatever the tab's team is.
-type Call = { body?: unknown; query?: Query; write?: boolean; accept?: string; team?: number | null };
+type Call = { body?: unknown; form?: FormData; query?: Query; write?: boolean; accept?: string; team?: number | null };
 
 export const TEAM_HEADER = "X-Team-Id";
 export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
@@ -180,6 +188,10 @@ export function isTeamScoped(path: string, method = "GET"): boolean {
   return (
     /^\/api\/team(\/|$)/.test(p) ||
     /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
+    // The recipe library and the team brief are the active team's; so is asking for a draft (whose brief and team
+    // recipes it uses). Reading or editing a draft is about the draft, not a team.
+    /^\/api\/(recipes|briefs)(\/|$)/.test(p) ||
+    (p === "/api/documents" && method === "POST") ||
     /^\/api\/(tasks|series)$/.test(p) ||
     p === "/api/series/removed" ||
     /^\/api\/meetings\/\d+\/milestones$/.test(p)
@@ -218,7 +230,7 @@ export function createApi(options: ApiOptions = {}) {
   // team being gone triggers `onTeamGone`.
   const teamSent = new WeakMap<Response, { team: number; explicit: boolean }>();
 
-  async function send(method: string, path: string, { body, query, write, accept, team }: Call): Promise<Response> {
+  async function send(method: string, path: string, { body, form, query, write, accept, team }: Call): Promise<Response> {
     const search = query
       ? Object.entries(query)
           .filter(([, v]) => v !== undefined)
@@ -231,7 +243,8 @@ export function createApi(options: ApiOptions = {}) {
     };
     const teamId = isTeamScoped(path, method) ? (team !== undefined ? team : (options.teamId?.() ?? null)) : null;
     if (teamId !== null) headers[TEAM_HEADER] = String(teamId);
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    // A file goes as multipart: the browser writes the Content-Type with the boundary itself.
+    if (body !== undefined && form === undefined) headers["Content-Type"] = "application/json";
     if (write) {
       sentCsrf = csrf ?? (await readSession()).csrf_token;
       headers["X-CSRF-Token"] = sentCsrf;
@@ -241,7 +254,7 @@ export function createApi(options: ApiOptions = {}) {
       res = await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: form !== undefined ? form : body === undefined ? undefined : JSON.stringify(body),
         cache: "no-store",
         redirect: "manual",
       });
@@ -419,6 +432,33 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
       // second delete of the same template is a 404.
       remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
+    },
+    // Meeting recipes (docs/fe-integration-guide-recipes-library.md). `team` names the team a call is about in
+    // place of the tab's: the Make dialog's switch. A member's write to a team recipe or the brief is 403
+    // `team_forbidden`; `importFile` is the owner's and admin's only and saves nothing (the text comes back
+    // for review, then `brief.save`).
+    recipes: {
+      list: (team?: number | null) => request<RecipeList>("GET", "/api/recipes", { team }),
+      create: (body: RecipeInput, team?: number | null) =>
+        request<Recipe>("POST", "/api/recipes", { body, write: true, team }),
+      update: (id: number, body: RecipeChanges) => request<Recipe>("PUT", `/api/recipes/${id}`, { body, write: true }),
+      archive: (id: number) => request<void>("DELETE", `/api/recipes/${id}`, { write: true }),
+    },
+    brief: {
+      get: (team?: number | null) => request<Brief>("GET", "/api/briefs", { team }),
+      save: (text: string, team?: number | null) =>
+        request<Brief>("PUT", "/api/briefs", { body: { text }, write: true, team }),
+      importFile: (file: File, team?: number | null) => {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        return request<BriefImported>("POST", "/api/briefs/import", { form, write: true, team });
+      },
+    },
+    // The draft routes the Make dialog needs: a request answers 202 with the draft in `writing`.
+    // 403 `plan_inactive`, 429 `recipe_limit`, 422 `recipe_invalid` and `meetings_invalid` carry a message.
+    documents: {
+      make: (body: DocumentRequest, team?: number | null) =>
+        request<DocumentStarted>("POST", "/api/documents", { body, write: true, team }),
     },
     // Ask Beyric: `scope` is the counts and the suggestion chips; `ask` answers one question (422
     // `question_invalid`, 429 `ask_limit`, 502 `ask_failed` carry a message written for the person).

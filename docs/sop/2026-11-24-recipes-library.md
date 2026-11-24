@@ -1,6 +1,6 @@
 # SOP: Meeting recipes, slice S3 (starters, recipe library, team brief, file import)
 
-**What shipped.** The eighteen starter recipes (ten General, eight School) as code constants; the recipe library routes (`GET/POST/PUT/DELETE /api/recipes`: personal recipes, team recipes written by owners and admins only, delete = archive); the team brief routes (`GET/PUT /api/briefs`); and the brief file import (`POST /api/briefs/import`: Word, PDF, text and Markdown into text for review, never stored). Backend part (T10 and T11): PR into `feature/recipes` (number in the PR list there). The web part (T12: Make dialog, library page, brief editor) lands after the engine PR (#265) merges: see "T12" below. Spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md` (5.1 to 5.4, 5.3a, 5.6), plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md` tasks 10 to 12. No migration: the tables came with `0060` (slice S1).
+**What shipped.** The eighteen starter recipes (ten General, eight School) as code constants; the recipe library routes (`GET/POST/PUT/DELETE /api/recipes`: personal recipes, team recipes written by owners and admins only, delete = archive); the team brief routes (`GET/PUT /api/briefs`); and the brief file import (`POST /api/briefs/import`: Word, PDF, text and Markdown into text for review, never stored). Backend part (T10 and T11): PR into `feature/recipes` (number in the PR list there). The web part (T12: Make button and dialog on the meeting page, the Recipes page with the recipe editor and the brief editor with file import, a Recipes link in the sidebar) is in the same PR: see "T12" below. Spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md` (5.1 to 5.4, 5.3a, 5.6), plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md` tasks 10 to 12. No migration: the tables came with `0060` (slice S1).
 
 ## Why
 
@@ -61,11 +61,51 @@ The engine (S1) makes a draft from a recipe, but nothing says what the recipes a
 
 ## Follow-ups
 
-- **The fence test against the real prompt** ("an imported line 'ignore all rules' is fenced at generation", plan T11/T4) needs `app/recipes/generate.py` from PR #265; add it once #265 is merged into this branch.
-- Check a real upload **through nginx and the Next.js front door** (the front door buffers a proxied body up to its own limit, 10 MB by default; ours is below it) at the first staging run.
+- Check a real upload **through nginx and the production Next.js build** at the first staging run. Done here: a 2.4 MB upload through the Next *dev* server to the real API (see T12 verification); not done: nginx, and the standalone production server.
+- The draft page `/documents/{id}` (slice S2, T9) is where the Make dialog navigates; until S2 merges it is a 404 page.
+- The meeting picker (slice S5) mounts in the Make dialog through `renderMeetingPicker`.
 - `class_faq` over several classes (see the decision above).
 - Option choices are English words stored as typed; labels are not translated.
 
 ## T12 (web)
 
-Pending: starts after #265 merges (regenerated types needed). This section is completed then.
+**What shipped.** The Make button and dialog on a ready meeting, the Recipes page (the brief editor, the library list and the recipe editor), and a Recipes link in the sidebar. Plan task 12, tests-first; the API is the one above and `POST /api/documents` from the engine (PR #265).
+
+### Lead-designed pieces (the designer's files draw none of recipes; existing components and tokens only)
+
+| Piece | Where | Built from |
+|---|---|---|
+| **Make…** button | `web/components/app/meeting-view.tsx`, in the `trailing` slot of the header actions, before Share notes; drawn on a ready meeting with notes for anyone who can read it (not only the owner, unlike Share) | `Button` secondary, `Icon plus` |
+| **Make dialog** ("Make from this meeting") | `web/components/app/make-dialog.tsx` | the Share dialog's frame (`dialog tm-dialog sh-dialog`, head, body, foot) |
+| recipe chooser: General, School, Team recipes, My recipes, each recipe a radio card (name and output type, "several meetings" for scope many); the list scrolls inside the dialog (252 px) so choices and buttons stay in view; the foot is sticky | same | new classes `mk-*` in `web/styles/pages.css` from existing tokens |
+| the recipe's **choices** (a text field, or the segmented word control) | same | `Field`, `.segmented` (the Share dialog's Attach control) |
+| **Team switch** (only with more than one team) and **brief line** ("Use the brief of <team>" tick with its length; a team with no brief says so and, to an owner or admin, links "Write one") | same | `SelectField`, the Share dialog's tick row |
+| marked **place for the meeting picker** when the recipe's scope is `many` (`mk-slot`, dashed box labelled Meetings; text "This recipe is made from several meetings. Right now it uses this one." until slice S5 passes `renderMeetingPicker`) | same | one new class |
+| **Recipes page** (`/recipes`, `?team=`): page head with New recipe; brief card; the list beside the editor | `web/app/recipes/page.tsx`, `recipes-view.tsx` | the Templates screen's split layout (`split`, `split-list`, `pick`) |
+| **Recipe editor** (name, instruction, output, made from, use the brief, choices editor, who can use it, archive with confirmation, "Make a copy to change" for a starter or a member's view of a team recipe) | `recipe-editor.tsx` | `Field`, `TextareaField`, `SelectField`, the Templates editor's foot and inline confirm |
+| **Brief editor** (counter against the cap, Save brief, Import from a file with a review panel: Replace the brief, Add to the end, Discard; read-only for a member) | `brief-editor.tsx` | `Card`, `TextareaField`, `Alert`, `Button` |
+| **Recipes** sidebar link, in Configure after Templates, team-aware (carries `?team=`) | `web/components/app/shell.tsx` | `NavLink` / `TeamNavLink` |
+
+### How, and what was decided
+
+| Decision | Choice | Why |
+|---|---|---|
+| Where the team comes from | `X-Team-Id` rides on `/api/recipes*`, `/api/briefs*` and `POST /api/documents` (`isTeamScoped`); the dialog's switch passes `team` per call; the page follows `?team=` | The recipes, the brief and a draft's brief are the active team's (spec 5.4 item 6) |
+| One meeting or several | A recipe of scope `one` always sends the page's own meeting id; for scope `many` the dialog sends `meetingIds`, which starts as this meeting and is what `renderMeetingPicker` (a prop; slice S5) changes. Switching recipe resets it | The lead's request: extensible, never a single-meeting assumption for a cross-meeting recipe |
+| Starters vs rows | A starter is addressed by `recipe_key`, a row by `recipe_id` (`recipeRef`), never both | `POST /api/documents` rejects both (`recipe_invalid`) |
+| Copying a starter | The editor opens prefilled ("... (copy)", the starter's instruction and choices) and `POST /api/recipes` carries `key`; nothing is saved until Save | A copy that saved at once would litter the person's list |
+| Choices editor | A row is a name, a kind (Text or Word choice) and, for words, comma-separated words; at most six; a renamed existing choice keeps its key; a new one gets a key made from its label (`slug`) | The API's shape (`options`) is keys with labels; a person should only see labels |
+| Messages | The server's sentence is shown for refusals written for the person (`PERSON_CODES`: import failures, `brief_too_long`, `too_many_recipes`, `options_invalid`) and for the daily limit and plan refusals; `errorMessage` still hides other 422s | The FE guide: "show the server's message" |
+| Two Save buttons on one page | The brief's is "Save brief" | Two buttons named Save are ambiguous to a screen reader |
+| Import | The file input is hidden behind an "Import from a file" button; the same file can be chosen again; nothing is saved until the person puts the text in the brief and presses Save brief | Review before save, as the API's contract says |
+
+### Files
+
+`web/lib/api/client.ts` (`api.recipes`, `api.brief`, `api.documents.make`, multipart `form` calls, `isTeamScoped`), `web/lib/api/types.ts`, `web/lib/api/schema.d.ts` (regenerated with `npm run gen:api`), `web/lib/recipes.ts`, `web/lib/routes.ts` and `web/proxy.ts` (`/recipes`), `web/components/app/{make-dialog,recipes-view,recipe-editor,brief-editor,meeting-view,shell}.tsx`, `web/app/recipes/page.tsx`, `web/styles/pages.css`, tests `web/tests/{recipes-api,make-dialog,meeting-make,recipes-view,brief-editor,recipes-nav}` and the capture helpers in `web/tests/helpers.ts`. `docs/openapi.json` was regenerated after merging `feature/recipes`.
+
+### Verification
+
+- Vitest, only the files above plus the neighbours that share the client and the shell (16 files, 350 tests), with the real captured bodies as fixtures (`docs/fe-captures/recipes-library/`, and `docs/fe-captures/recipes/07-create.json` and `39-create-over-the-cap.json` for the draft request). `npm run lint` (0 errors; 3 warnings in an old script) and `npm run typecheck`.
+- **In a real browser** (the built-in browser against the Next dev server in front of the real API on a seeded scratch database), at 1280 and 390 px: the Make button beside Download and Share notes; the dialog (recipes, choices, brief tick); Make draft sent `POST /api/documents` through Next and got 202 and the page navigated to `/documents/1` (404 until slice S2); the Recipes page; a 2.4 MB text file handed to the import input went through Next to the API (200, truncated at 12,000 characters, review panel shown, nothing saved); no horizontal scroll at 390.
+- Found by looking: the long recipe list pushed the choices and the buttons off the screen (now a bounded scroll area and a sticky foot); the editor sat out of view under the list on a phone (now scrolled to on choosing).
+- **Not run**: the dialog and page as a member or admin in the browser (covered in vitest only); the team switch with two real teams (vitest only; the seeded database has one team); a Word or PDF file through Next (only text); nginx and the production Next build; the plan-inactive sentence and a full recipe shelf over HTTP (vitest, from the guide's text).

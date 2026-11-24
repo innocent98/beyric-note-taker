@@ -281,3 +281,21 @@ export function teamsCapture(file: string): { as: string; request: { method: str
 export function teamsBody<T>(file: string): T {
   return teamsCapture(file).response.body as T;
 }
+
+// A capture from the running API for the recipe library, the team brief and the brief import
+// (docs/fe-captures/recipes-library/<file>, `python scripts/capture_recipes_library.py`): the whole
+// exchange, or its response body.
+export function recipesLibraryCapture(file: string): { request: { method: string; path: string; body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/recipes-library", file)));
+}
+export function recipesLibraryBody<T>(file: string): T {
+  return recipesLibraryCapture(file).response.body as T;
+}
+
+// A capture of the draft routes (docs/fe-captures/recipes/<file>, `python scripts/capture_recipes.py`).
+export function recipesCapture(file: string): { request: { method: string; path: string; body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/recipes", file)));
+}
+export function recipesBody<T>(file: string): T {
+  return recipesCapture(file).response.body as T;
+}

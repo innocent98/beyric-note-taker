@@ -136,3 +136,17 @@ export type AskCite = Schemas["CiteOut"];
 export type AskPoint = Schemas["PointOut"];
 export type AskAnswer = Schemas["AskOut"];
 export type AskScope = Schemas["ScopeOut"];
+
+// Meeting recipes: the recipe library, the team brief and the brief file import
+// (docs/fe-integration-guide-recipes-library.md). `DocumentRequest` is the body of `POST /api/documents`
+// and `DocumentStarted` its 202 answer (the draft screens have their own names for the rest).
+export type Recipe = Schemas["RecipeOut"];
+export type RecipeList = Schemas["RecipeList"];
+export type RecipeInput = Schemas["RecipeIn"];
+export type RecipeChanges = Schemas["RecipePatch"];
+export type RecipeOption = Schemas["OptionDef"];
+export type RecipeTeam = Schemas["RecipeTeam"];
+export type Brief = Schemas["BriefOut"];
+export type BriefImported = Schemas["BriefImported"];
+export type DocumentRequest = Schemas["DocumentIn"];
+export type DocumentStarted = Schemas["DocumentOut"];
