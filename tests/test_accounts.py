@@ -14,6 +14,7 @@ from app.models import (
     CalendarConnection,
     CalendarEvent,
     Decision,
+    Document,
     Meeting,
     Milestone,
     Notification,
@@ -622,6 +623,13 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     sprint = Sprint(
         team_id=project.team_id, number=1, start_date=date(2026, 11, 2), end_date=date(2026, 11, 6)
     )
+    draft = Document(
+        owner_user_id=owner.id,
+        title="d",
+        output_type="email",
+        status="ready",
+        blocks=[{"type": "paragraph", "text": "x", "sources": []}],
+    )
     session.add_all(
         [
             term,
@@ -637,6 +645,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             project,
             milestone,
             sprint,
+            draft,
         ]
     )
     session.commit()
@@ -702,6 +711,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "project_id": project.id,
         "milestone_id": milestone.id,
         "sprint_id": sprint.id,
+        "document_id": draft.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
@@ -737,6 +747,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/api/projects/{project_id}": {"name": "x"},
             "/api/milestones/{milestone_id}": {"name": "x"},
             "/api/team/members/{user_id}": {"aliases": ["x"]},
+            "/api/documents/{document_id}": {
+                "blocks": [{"type": "paragraph", "text": "x", "sources": []}]
+            },
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
@@ -761,6 +774,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     assert session.get(SeriesIgnored, personal_mark.id) is not None
     # the stranger's DELETE of the owner's template was refused, not carried out
     assert session.get(Template, template.id).deleted_at is None
+    # and their PATCH and DELETE of the owner's draft changed nothing
+    kept = session.get(Document, draft.id)
+    assert kept is not None and kept.edited is False and kept.blocks[0]["text"] == "x"
     anon.log_in(email=OWNER_EMAIL)
     # and the owner's own link call works (an owner of the team, who made the series)
     linked = anon.put(f"/api/series/{recurring.id}/project", {"project_id": project.id})
