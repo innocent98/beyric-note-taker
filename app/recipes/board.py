@@ -43,7 +43,7 @@ KIND_LABEL = {"decision": "Decision", "action": "Action", "question": "Question"
 
 class BoardInvalid(Exception):
     """The operation cannot be done to this board. `code` is a short word: `board_full`,
-    `column_full`, `title`, `card_text`, `last_column`, `not_a_board`."""
+    `column_full`, `title_empty`, `card_empty`, `last_column`, `not_a_board`."""
 
     def __init__(self, code: str):
         super().__init__(code)
@@ -62,6 +62,9 @@ Kind = Literal["decision", "action", "question", "note"]
 
 class _Op(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    # The `updated_at` of the draft as the person's screen last saw it. `apply` does not read it;
+    # the route requires it (`api_recipe_board`) to refuse an edit made on an out-of-date screen.
+    revision: str | None = Field(default=None, max_length=64)
 
 
 class MoveCard(_Op):
@@ -169,14 +172,14 @@ def _column(columns: list[Column], column: int) -> Column:
 def _title(text: str) -> str:
     title = b.plain(text, b.TITLE_CHARS)
     if not title:
-        raise BoardInvalid("title")
+        raise BoardInvalid("title_empty")
     return title
 
 
 def _card_text(text: str) -> str:
     cleaned = b.plain(text, b.CARD_CHARS)
     if not cleaned:
-        raise BoardInvalid("card_text")
+        raise BoardInvalid("card_empty")
     return cleaned
 
 
