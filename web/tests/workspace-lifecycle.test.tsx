@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TeamSwitcher } from "@/components/app/team-switcher";
+import { pageLoad, TeamSwitcher } from "@/components/app/team-switcher";
 import { TeamView } from "@/components/app/team-view";
 import { TEAM_STORAGE_KEY } from "@/lib/active-team";
 import { ApiError } from "@/lib/api/client";
@@ -66,8 +66,9 @@ describe("Delete team", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
-  it("confirming deletes it, forgets it for this tab and goes to the Teams list", async () => {
+  it("confirming deletes it, forgets it for this tab and loads the Teams list afresh", async () => {
     mocks.remove.mockResolvedValue(undefined);
+    const load = vi.spyOn(pageLoad, "to").mockImplementation(() => undefined);
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, `1:${owner.id}`);
     render(<TeamView initialTeam={owner} initialMembers={solo} multiTeam />);
     await userEvent.click(screen.getByRole("button", { name: "Delete team" }));
@@ -75,17 +76,18 @@ describe("Delete team", () => {
     await userEvent.click(within(ask).getByRole("button", { name: "Delete team" }));
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith(owner.id));
     expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
-    expect(nav.push).toHaveBeenCalledWith("/teams");
-    expect(nav.refresh).toHaveBeenCalled(); // the switcher was drawn by the server
+    expect(load).toHaveBeenCalledWith("/teams"); // a full load: the switcher was drawn by the server
+    load.mockRestore();
   });
 
   it("a refusal (someone joined meanwhile) is shown as the API wrote it and the screen stays", async () => {
     mocks.remove.mockRejectedValue(new ApiError(409, refused.code, refused.message));
+    const load = vi.spyOn(pageLoad, "to").mockImplementation(() => undefined);
     render(<TeamView initialTeam={owner} initialMembers={solo} multiTeam />);
     await userEvent.click(screen.getByRole("button", { name: "Delete team" }));
     await userEvent.click(within(screen.getByRole("group", { name: `Delete ${owner.name}?` })).getByRole("button", { name: "Delete team" }));
     expect((await screen.findByRole("alert")).textContent).toContain(refused.message);
-    expect(nav.push).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
   });
 
   it("only the owner of an ordinary team is offered it", () => {
@@ -105,7 +107,8 @@ describe("a class", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Class" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Students" })).toBeTruthy();
     expect(screen.getByText("1 student, 0 pending")).toBeTruthy();
-    expect(screen.getByText("Lecturer")).toBeTruthy();
+    expect(screen.getAllByText("Lecturer").length).toBe(2); // the member's role and the Roles card
+    expect(screen.getByText(/manages settings and the class\./)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete class" })).toBeTruthy();
   });
 

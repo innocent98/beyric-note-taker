@@ -130,7 +130,7 @@ export function TeamsView({ initial }: { initial: TeamList | null }) {
                   {team.is_personal ? <Badge>Personal</Badge> : <Badge tone="info">{roleLabel(team.role, team.kind)}</Badge>}
                   {team.kind === "class" ? <Badge tone="success">Class</Badge> : null}
                   {team.id === activeId ? <Badge tone="brand">Working in this team</Badge> : null}
-                  <span className="meta">{team.is_personal ? "Only you" : plural(team.member_count, "member")}</span>
+                  <span className="meta">{team.is_personal ? "Only you" : plural(team.member_count, workspaceWords(team.kind).member.toLowerCase())}</span>
                 </span>
               </ListRow>
             ))}

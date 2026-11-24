@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TeamInviteDialog } from "@/components/app/team-invite-dialog";
+import { pageLoad } from "@/components/app/team-switcher";
 import { MAX_NAME, roleLabel } from "@/components/app/teams-view";
 import { Alert, AppLink, Button, Field, Icon, PageHead, Toast, Toggle } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
-import { writeStoredTeam } from "@/lib/active-team";
+import { beginTeamSwitch, writeStoredTeam } from "@/lib/active-team";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { Team, TeamInvite, TeamMember, TeamMembers, TeamRole } from "@/lib/api/types";
@@ -291,7 +292,7 @@ export function TeamView({
                       }
                     >
                       <option value="admin">Admin</option>
-                      <option value="member">Member</option>
+                      <option value="member">{words.member}</option>
                     </select>
                   ) : (
                     <span className="tm-role-text">{roleLabel(m.role, team.kind)}</span>
@@ -394,13 +395,13 @@ export function TeamView({
         <section className="tm-info-card tm-roles">
           <h2>Roles</h2>
           <div>
-            <strong>Owner</strong> manages settings and the team.
+            <strong>{words.owner}</strong> manages settings and the {words.noun}.
           </div>
           <div>
             <strong>Admin</strong> invites people and manages all tasks.
           </div>
           <div>
-            <strong>Member</strong> sees shared meetings and works on their tasks.
+            <strong>{words.member}</strong> sees shared meetings and works on their tasks.
           </div>
         </section>
       </div>
@@ -464,10 +465,12 @@ export function TeamView({
                       "delete-team",
                       () => api.teams.remove(team.id),
                       () => {
-                        // The team is gone: forget it for this tab, then read the page again from the Teams list.
+                        // The team is gone: forget it for this tab and load the Teams list afresh, a full
+                        // page load like the switcher's, so nothing of the deleted team is left on screen
+                        // (a soft refresh would call it a team "no longer available to you").
                         writeStoredTeam(null);
-                        router.push("/teams");
-                        router.refresh();
+                        beginTeamSwitch();
+                        pageLoad.to("/teams");
                       },
                     )
                   }
