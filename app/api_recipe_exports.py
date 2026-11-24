@@ -11,15 +11,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import auth, export
-from app.api_recipes import readable_document_or_404
+from app.api_recipes import _generic_title, readable_document_or_404
 from app.api_schemas import ErrorResponse
 from app.db import get_session
-from app.models import Document, User
+from app.models import Document, DocumentMeeting, User
 from app.notes_document import content_disposition
 from app.recipes import exporters
+from app.recipes import visibility as doc_visibility
 
 router = APIRouter()
 
@@ -79,6 +81,11 @@ def export_document(
     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
     name is the draft's title, cleaned."""
     doc = readable_document_or_404(session, user, document_id)
+    # A reader who cannot read every source meeting gets the generic title in the file name and the
+    # heading, as on the screen (the exports carry no sources: nothing else to redact).
+    title = None
+    if doc.owner_user_id != user.id and not _reads_every_source(session, user, doc):
+        title = _generic_title(session, doc)
     try:
         # Reads the blocks before the session is closed: the Word and PDF build can take seconds.
         # The renderer builds one file at a time and a build takes well under a second, so a
@@ -87,7 +94,9 @@ def export_document(
         _release(session, doc, format)
         for attempt in range(BUSY_RETRIES + 1):
             try:
-                content, media_type, filename = exporters.export(doc, format, table=table)
+                content, media_type, filename = exporters.export(
+                    doc, format, table=table, title=title
+                )
                 break
             except export.ExportBusy:
                 if attempt == BUSY_RETRIES:
@@ -113,6 +122,15 @@ def export_document(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+def _reads_every_source(session: Session, user: User, doc: Document) -> bool:
+    ids = set(
+        session.scalars(
+            select(DocumentMeeting.meeting_id).where(DocumentMeeting.document_id == doc.id)
+        )
+    )
+    return ids <= doc_visibility.readable_sources(session, user, doc)
 
 
 def _release(session: Session, doc: Document, fmt: str) -> None:

@@ -585,7 +585,7 @@ Read this response carefully:
 - **`title` is generic** ("Follow-up email, 24 Nov": the recipe name and the day it was made) for a reader who cannot read EVERY source meeting, because the model's title can carry a hidden meeting's title. The creator, and a reader who can read all the sources, get the real title. The same rule applies to the title in the list rows.
 - `meeting_ids` holds **only the meetings the reader may read** (here `[]`). `sources_available` is false when that list is empty. `left_out_count` is 0, `options` is `{}` and `use_brief` is false for a reader: those are the creator's choices.
 - `checks` (blanks and flagged figures) is worked out from what the reader can read: a figure that only a hidden meeting contains **is flagged "check this" for the reader**. `stale` is **false** for a reader who cannot read every source meeting (they cannot tell).
-- `can_edit` is false: hide Edit, Share, Regenerate and Discard. Copy, Open in mail app and Download still work (a reader may export the draft's text, `GET .../export` answers 200 *(capture `20-teammate-exports-markdown.json`)*; an export never contains sources).
+- `can_edit` is false: hide Edit, Share, Regenerate and Discard. Copy, Open in mail app and Download still work (a reader may export the draft's text, `GET .../export` answers 200 *(capture `20-teammate-exports-markdown.json`)*; an export never contains sources, and for a reader who cannot read every source meeting its file name and heading use the generic title).
 
 *A reader who CAN read the meeting* (capture `11-teammate-reads-open-sources.json`): `GET /api/documents/1` as tunde (teammate) → **200**
 

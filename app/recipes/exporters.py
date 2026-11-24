@@ -115,11 +115,15 @@ def _xlsx(tables: list[tuple[str | None, b.Table]]) -> bytes:
     return out.getvalue()
 
 
-def export(document: Document, fmt: str, *, table: int = 0) -> tuple[bytes, str, str]:
+def export(
+    document: Document, fmt: str, *, table: int = 0, title: str | None = None
+) -> tuple[bytes, str, str]:
     """`(file bytes, media type, file name)` of the draft as `fmt`.
 
-    `table` picks which table a CSV holds (the first by default); Excel gets every table, one sheet
-    each. Raises `services.Refused` 409 `not_ready` for a draft that is not written, 409
+    `title` replaces the draft's title in the file name and the heading (a reader who cannot read
+    every source meeting is given the generic one: the model's title can carry a hidden meeting's
+    title). `table` picks which table a CSV holds (the first by default); Excel gets every table,
+    one sheet each. Raises `services.Refused` 409 `not_ready` for a draft that is not written, 409
     `no_table` for CSV or Excel without that table, `ValueError` for an unknown format, and
     `export.ExportBusy` / `export.ExportFailed` (`app/export.py`) from the Word and PDF render."""
     if fmt not in FORMATS:
@@ -127,7 +131,8 @@ def export(document: Document, fmt: str, *, table: int = 0) -> tuple[bytes, str,
     if document.status != "ready":
         raise services.Refused(409, "not_ready", "This draft is not ready yet.")
     blocks = b.load_blocks(document.blocks)
-    name = export_filename(document.title, fmt)
+    shown = title if title is not None else document.title
+    name = export_filename(shown, fmt)
     if fmt == "md":
         data = b.to_markdown(blocks).encode()
     elif fmt == "txt":
@@ -144,10 +149,10 @@ def export(document: Document, fmt: str, *, table: int = 0) -> tuple[bytes, str,
             from app.recipes import board
 
             model = board.to_notes_document(
-                document.title, blocks, when=document.created_at or datetime.now(UTC)
+                shown, blocks, when=document.created_at or datetime.now(UTC)
             )
         else:
-            model = build_document_from_blocks(document)
+            model = build_document_from_blocks(document, title=shown)
         data = renderer.build_file(model, fmt)
         return data, renderer.FORMATS[fmt][0], name
     return data, _TYPES[fmt], name
