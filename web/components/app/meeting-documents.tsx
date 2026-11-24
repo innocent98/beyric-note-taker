@@ -38,3 +38,34 @@ export function MeetingDocuments({ meetingId }: { meetingId: number }) {
     </Card>
   );
 }
+
+// Said inside "Delete this meeting?" (spec 5.4a): the person's own documents made from this meeting alone
+// are deleted with it, so the confirmation says how many, and that one made from several meetings stays.
+// Draws nothing while it asks, when it fails, or when there are none.
+export function DraftsGoWithIt({ meetingId }: { meetingId: number }) {
+  const [alone, setAlone] = useState(0);
+  const [several, setSeveral] = useState(0);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve()
+      .then(() => api.documents.list({ meetingId, limit: 100 }))
+      .then((found) => {
+        if (!live) return;
+        const own = found.documents.filter((row) => row.access === "owner");
+        setAlone(own.filter((row) => row.meeting_ids.length === 1).length);
+        setSeveral(own.filter((row) => row.meeting_ids.length > 1).length);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [meetingId]);
+  if (alone === 0 && several === 0) return null;
+  return (
+    <p>
+      {alone > 0 ? `This also deletes the ${alone === 1 ? "document" : `${alone} documents`} made only from it.` : ""}
+      {alone > 0 && several > 0 ? " " : ""}
+      {several > 0 ? `${several === 1 ? "A document" : `${several} documents`} made from several meetings stays; its link to this meeting will read not available.` : ""}
+    </p>
+  );
+}
