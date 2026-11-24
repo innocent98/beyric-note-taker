@@ -6,22 +6,21 @@ is one). Words match by prefix on their crude stem (`app/words.py`), so "pricing
 "decid" finds "decided". Nothing here calls a model.
 """
 
-from sqlalchemy import ColumnElement, and_, func, or_
+from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import aliased
 
 from app.models import Meeting
 from app.words import stems
 
 
-def document():
-    """The text of a meeting as one `tsvector` (the `simple` configuration: no language rules, so a
-    French or Yoruba name matches as typed)."""
-    return func.to_tsvector(
-        "simple",
-        func.concat_ws(
-            " ",
-            Meeting.notes,
-            func.coalesce(func.nullif(Meeting.speaker_transcript, ""), Meeting.transcript),
-        ),
+def document(meeting=Meeting):
+    """The text of a meeting as one `tsvector`: a call to the one SQL function
+    `meeting_search_text` (`app/models.py`), which the GIN index `ix_meetings_search_text` is built
+    on. Every search calls it, never a copy of its body: that is what lets Postgres use the index.
+    `meeting` is `Meeting` or an alias of it."""
+    return func.meeting_search_text(
+        meeting.notes, meeting.speaker_transcript, meeting.transcript, type_=TSVECTOR
     )
 
 
@@ -41,18 +40,30 @@ def keyword_clause(text: str) -> ColumnElement[bool]:
 
     A meeting with no title is shown as "Google Meet abc-defg-hij" or "Zoom 8820...", so the code
     in that name is matched too. Words that never identify a topic ("meeting", "last", "the") are
-    left out of the full-text part; a search made only of them matches titles only."""
+    left out of the full-text part; a search made only of them matches titles only.
+
+    The two kinds of match are two separate subqueries (`id IN (...) OR id IN (...)`), not one `OR`
+    over the row: with the title test in the same `OR` Postgres cannot use the full-text index and
+    reads every meeting's text (measured: 13 s at 4,000 meetings, 3 ms with the split)."""
     pattern = f"%{_like_escaped(text)}%"
-    titled = Meeting.title.ilike(pattern, escape="\\")
-    untitled = and_(
-        func.coalesce(Meeting.title, "") == "",
-        Meeting.platform != "teams",  # a Teams meeting is shown with no code
-        Meeting.native_id.ilike(pattern, escape="\\"),
+    by_title = aliased(Meeting)
+    titled = select(by_title.id).where(
+        or_(
+            by_title.title.ilike(pattern, escape="\\"),
+            and_(
+                func.coalesce(by_title.title, "") == "",
+                by_title.platform != "teams",  # a Teams meeting is shown with no code
+                by_title.native_id.ilike(pattern, escape="\\"),
+            ),
+        )
     )
-    parts = [titled, untitled]
+    parts = [Meeting.id.in_(titled)]
     words = stems(text)
     if words:
-        parts.append(
-            and_(Meeting.status == "ready", document().op("@@")(prefix_query(words, " & ")))
+        by_text = aliased(Meeting)
+        in_text = select(by_text.id).where(
+            by_text.status == "ready",
+            document(by_text).op("@@")(prefix_query(words, " & ")),
         )
+        parts.append(Meeting.id.in_(in_text))
     return or_(*parts)

@@ -131,6 +131,27 @@ class Base(DeclarativeBase):
     pass
 
 
+# The text of a meeting that search reads, as one `tsvector`: its notes plus its transcript (the
+# speaker-labelled one when there is one). ONE function for every reader (Ask Beyric's
+# `candidates`, the Meetings list's search box: `app/meeting_search.py`), and the GIN index on
+# `meetings` is built on a call to it, so Postgres can use that index only when a query calls
+# exactly `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an
+# index to use it (`concat_ws` is not). Migration 0057 holds its own frozen copy of this text.
+MEETING_SEARCH_TEXT_SQL = """
+CREATE OR REPLACE FUNCTION meeting_search_text(
+    notes text, speaker_transcript text, transcript text
+) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT to_tsvector(
+        'simple',
+        coalesce(notes, '') || ' ' || coalesce(nullif(speaker_transcript, ''), transcript, '')
+    )
+$$
+"""
+# The tests build the schema with `create_all`, not the migrations: the function has to exist
+# before the index that calls it is made.
+sa.event.listen(Base.metadata, "before_create", sa.DDL(MEETING_SEARCH_TEXT_SQL))
+
+
 class User(Base):
     """An account. Emails are stored lower-cased (the check keeps it so), which makes the plain
     unique constraint a unique-on-lower(email) one."""
@@ -739,6 +760,11 @@ class Meeting(Base):
             "owner_team_id is null or shared_team_id is null", name="ck_meetings_team_xor"
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
+        Index(
+            "ix_meetings_search_text",
+            sa.text("meeting_search_text(notes, speaker_transcript, transcript)"),
+            postgresql_using="gin",
+        ),
         Index(
             "ix_meetings_series_id",
             "series_id",
