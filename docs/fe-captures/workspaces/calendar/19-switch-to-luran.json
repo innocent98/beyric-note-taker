@@ -1,0 +1,41 @@
+{
+  "note": "Switching the meeting ON in Luran moves the recording there: the answer carries `moved_text` (show it where the person sees it), Luran's join is made and the personal workspace's, which had not started, is cancelled (`recorded_elsewhere`).",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/3/override",
+    "headers": {
+      "X-Team-Id": "2",
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Weekly planning",
+      "starts_at": "2026-11-25T02:00:00Z",
+      "ends_at": "2026-11-25T02:30:00Z",
+      "platform": "google_meet",
+      "platform_label": "Google Meet",
+      "attendee_count": 2,
+      "will_join": true,
+      "will_join_text": "Will join",
+      "reason_text": null,
+      "join_id": 4,
+      "can_send_now": false,
+      "not_recorded_text": null,
+      "recorded_in": null,
+      "recorded_in_text": null,
+      "moved_text": "Moved here from My team (personal). My team (personal) will not record this meeting."
+    }
+  }
+}

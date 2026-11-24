@@ -142,9 +142,14 @@ def test_the_workspace_that_does_not_record_a_meeting_says_where_it_is_recorded(
 
     assert (here["will_join"], here["recorded_in"], here["recorded_in_text"]) == (True, None, None)
     assert there["will_join"] is False
-    assert there["recorded_in"] == {"team_id": two.home.id, "name": two.home.name}
-    assert there["recorded_in_text"] == f"Recorded in {two.home.name}. Switch here instead."
-    assert there["will_join_text"] == f"Recorded in {two.home.name}"
+    assert there["recorded_in"] == {
+        "team_id": two.home.id,
+        "name": two.home.name,
+        "is_personal": True,
+    }
+    mine = f"{two.home.name} (personal)"  # a personal workspace is named as the switcher names it
+    assert there["recorded_in_text"] == f"Recorded in {mine}. Switch here instead."
+    assert there["will_join_text"] == f"Recorded in {mine}"
     assert there["can_send_now"] is False
 
 
@@ -171,7 +176,11 @@ def test_the_workspace_that_skips_a_meeting_is_not_said_to_record_it(web, sessio
     [here] = get_calendar(web, two.home)["upcoming"]
     [there] = get_calendar(web, two.luran)["upcoming"]
 
-    assert here["recorded_in"] == {"team_id": two.luran.id, "name": two.luran.name}
+    assert here["recorded_in"] == {
+        "team_id": two.luran.id,
+        "name": two.luran.name,
+        "is_personal": False,
+    }
     assert there["recorded_in"] is None and there["will_join"] is True
 
 
@@ -196,9 +205,8 @@ def test_switching_a_meeting_on_in_the_other_workspace_moves_it_with_a_note(web,
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["will_join"] is True and body["recorded_in"] is None
-    assert body["moved_text"] == (
-        f"Moved here from {two.home.name}. {two.home.name} will not record this meeting."
-    )
+    mine = f"{two.home.name} (personal)"
+    assert body["moved_text"] == f"Moved here from {mine}. {mine} will not record this meeting."
     assert held_in(session) == [(two.luran.id, "scheduled")]
     [here] = get_calendar(web, two.home)["upcoming"]
     assert here["recorded_in"]["name"] == two.luran.name
@@ -248,7 +256,7 @@ def test_a_running_note_taker_is_never_moved_and_nothing_changes(web, session, t
 
     error = error_of(refused, 409, "already_recording")
     assert error["message"] == (
-        f"{two.home.name} is already recording this meeting. "
+        f"{two.home.name} (personal) is already recording this meeting. "
         "A note taker that is already in the meeting is never moved."
     )
     session.expire_all()

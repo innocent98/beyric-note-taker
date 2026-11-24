@@ -6,7 +6,15 @@ import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { ApiError } from "@/lib/api/client";
 import { formatDuration, formatEventDay, formatEventTime } from "@/lib/format";
 import type { CalendarEvent, CalendarState } from "@/lib/api/types";
-import { calendarBody, settingsBody, settingsError, skipBody, unansweredBody } from "./helpers";
+import {
+  calendarBody,
+  settingsBody,
+  settingsError,
+  skipBody,
+  unansweredBody,
+  workspaceCalendarBody,
+  workspaceCalendarError,
+} from "./helpers";
 
 const mocks = vi.hoisted(() => ({ override: vi.fn(), get: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { calendar: { override: mocks.override, get: mocks.get } } }));
@@ -430,5 +438,54 @@ describe("the switch on each row", () => {
     cleanup();
     show(notConnected);
     expect(screen.queryAllByRole("switch")).toHaveLength(0);
+  });
+});
+
+// LEAD-DESIGNED (2026-11-25, workspaces): the same meeting on the calendar of two of the person's
+// workspaces is recorded by ONE of them. The other's row says where ("Recorded in Luran. Switch here
+// instead.") and has a Switch here button; the switch is the same override write, and its answer
+// carries a note that the recording moved. The bodies are the ones captured from the running app
+// (docs/fe-captures/workspaces/calendar/).
+describe("a meeting another workspace records", () => {
+  const elsewhere = workspaceCalendarBody<CalendarState>("16-upcoming-luran-recorded-elsewhere.json");
+  const moved = workspaceCalendarBody<CalendarEvent>("19-switch-to-luran.json");
+  const refusal = workspaceCalendarError("21-switch-refused-bot-already-in.json");
+  const shared = elsewhere.upcoming.find((event) => event.recorded_in) as CalendarEvent;
+  const own = elsewhere.upcoming.find((event) => !event.recorded_in) as CalendarEvent;
+  const rowOf = (title: string) =>
+    rows().find((row) => within(row).queryByText(title) !== null) as HTMLElement;
+
+  it("says where it is recorded, in the server's words, with a Switch here button", () => {
+    show(elsewhere);
+    const row = rowOf(shared.title);
+    expect(within(row).getByText(shared.recorded_in_text as string).closest("p")?.className).toBe("meta-line");
+    expect(within(row).getByText(shared.will_join_text)).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Switch here" })).toBeTruthy();
+    expect(within(row).getByRole("switch").getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("draws no Switch here on a row this workspace records", () => {
+    show(elsewhere);
+    expect(within(rowOf(own.title)).queryByRole("button", { name: "Switch here" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Switch here" })).toHaveLength(1);
+  });
+
+  it("switches with the same write as the switch, and shows the note that it moved", async () => {
+    mocks.override.mockResolvedValue(moved);
+    show(elsewhere);
+    await userEvent.click(within(rowOf(shared.title)).getByRole("button", { name: "Switch here" }));
+    expect(mocks.override).toHaveBeenCalledWith(shared.id, true);
+    const row = rowOf(shared.title);
+    await waitFor(() => expect(within(row).getByText(moved.moved_text as string)).toBeTruthy());
+    expect(within(row).queryByRole("button", { name: "Switch here" })).toBeNull();
+    expect(within(row).getByRole("switch").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("shows the refusal when the other workspace's note taker is already in the meeting", async () => {
+    mocks.override.mockRejectedValue(new ApiError(refusal.status, refusal.code, refusal.message));
+    mocks.get.mockResolvedValue(elsewhere);
+    show(elsewhere);
+    await userEvent.click(within(rowOf(shared.title)).getByRole("button", { name: "Switch here" }));
+    await waitFor(() => expect(screen.getByText(refusal.message)).toBeTruthy());
   });
 });

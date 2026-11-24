@@ -1,0 +1,7 @@
+{
+  "note": "Tokens revoked at the fake Google by the end (the work account's, at the leave).",
+  "content": {
+    "revoked_tokens": 1,
+    "boss_id": 2
+  }
+}

@@ -148,6 +148,7 @@ class RecordedIn(BaseModel):
 
     team_id: int
     name: str
+    is_personal: bool
 
 
 class CalendarOut(BaseModel):
@@ -517,12 +518,15 @@ def _upcoming_item(
     )
     if recorded_in is not None:
         # Another of the person's workspaces records this meeting: this one sends no note taker.
+        label = calendar_text.workspace_label(recorded_in.name, recorded_in.is_personal)
         item.will_join = False
-        item.will_join_text = f"Recorded in {recorded_in.name}"
+        item.will_join_text = f"Recorded in {label}"
         item.reason_text = None
         item.can_send_now = False
-        item.recorded_in = RecordedIn(team_id=recorded_in.id, name=recorded_in.name)
-        item.recorded_in_text = calendar_text.recorded_in_text(recorded_in.name)
+        item.recorded_in = RecordedIn(
+            team_id=recorded_in.id, name=recorded_in.name, is_personal=recorded_in.is_personal
+        )
+        item.recorded_in_text = calendar_text.recorded_in_text(label)
     return item
 
 
@@ -814,7 +818,9 @@ def calendar_event_override(
     join = _joins_of(session, user.id, [row.id]).get(row.id)
     item = _upcoming_item(row, join_settings, now, join)
     if moved_from is not None:
-        item.moved_text = calendar_text.moved_here_text(moved_from.name)
+        item.moved_text = calendar_text.moved_here_text(
+            calendar_text.workspace_label(moved_from.name, moved_from.is_personal)
+        )
     return item
 
 
@@ -840,7 +846,11 @@ def _take_over(
         raise services.Refused(
             409,
             "already_recording",
-            calendar_text.already_recording_text(team.name if team else "Another workspace"),
+            calendar_text.already_recording_text(
+                calendar_text.workspace_label(team.name, team.is_personal)
+                if team
+                else "Another workspace"
+            ),
         )
     wants = gcal_sync.make_wants(
         session,

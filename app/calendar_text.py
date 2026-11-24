@@ -97,6 +97,12 @@ MICROSOFT_REVOKED_ERROR_TEXT = (
 GENERIC_ERROR_TEXT = "The last check of your calendar did not work. Beyric will try again soon."
 
 
+def workspace_label(name: str, is_personal: bool) -> str:
+    """How a workspace is named in a sentence: the way the workspace switcher names it, so the
+    personal one reads `My team (personal)`."""
+    return f"{name} (personal)" if is_personal else name
+
+
 def recorded_in_text(workspace: str) -> str:
     """The Upcoming line of an event that another of the person's workspaces records (workspaces
     design 12.4): said with the workspace's name; the switch that moves it here sits beside it."""

@@ -31,6 +31,13 @@ const subscribe = () => () => {};
 // second time (a reason is shown once; the tooltip stays nowhere, because every row with a reason
 // shows the line).
 //
+// LEAD-DESIGNED (2026-11-25, workspaces): the same meeting can be on the person's calendar in two of
+// their workspaces, and only one records it. The other's row says where, in the server's words
+// (`recorded_in_text`, "Recorded in Luran. Switch here instead.", the row's own `meta-line`), keeps
+// its switch off and shows a secondary "Switch here" button that is the same write as the switch
+// (`PUT .../override` with true); the answer carries `moved_text`, a muted line that says it moved.
+// A refusal (the other workspace's note taker is already in) shows in the list's own error line.
+//
 // A row the note taker did not get into (`not_recorded_text`) says so under its title, with a
 // Send now while `can_send_now` (LEAD-DESIGNED, 2026-11-08: the designer's file draws neither); the
 // button is the same one the Not recorded list has and needs `sendNow`, the shared control.
@@ -210,6 +217,7 @@ function Row({
   const on = switchedTo ?? event.will_join;
   const words = switchedTo === undefined ? event.will_join_text : switchedTo ? "Will join" : "Off";
   const hint = switchedTo === undefined ? event.reason_text : null;
+  const elsewhere = switchedTo === undefined ? event.recorded_in_text : null;
   const sent = event.join_id != null && sendNow?.sent.has(event.join_id);
   const missed = sent ? null : event.not_recorded_text;
   const canSend = !sent && event.can_send_now && event.join_id != null && sendNow !== undefined;
@@ -235,6 +243,16 @@ function Row({
             {hint}
           </p>
         ) : null}
+        {elsewhere ? (
+          <p className="meta-line" id={`cal-up-elsewhere-${event.id}`}>
+            {elsewhere}
+          </p>
+        ) : null}
+        {event.moved_text ? (
+          <p className="meta-line" role="status">
+            {event.moved_text}
+          </p>
+        ) : null}
         {missed ? (
           <p className="nr-reason">
             Not recorded: {missed}
@@ -248,6 +266,18 @@ function Row({
         ) : null}
       </div>
       <div className="cal-up-actions">
+        {event.recorded_in ? (
+          <Button
+            type="button"
+            kind="secondary"
+            size="sm"
+            disabled={switchedTo !== undefined}
+            aria-describedby={`cal-up-elsewhere-${event.id}`}
+            onClick={onToggle}
+          >
+            Switch here
+          </Button>
+        ) : null}
         {canSend ? (
           <Button
             type="button"
@@ -267,7 +297,9 @@ function Row({
           aria-disabled={cannot ? true : undefined}
           aria-labelledby={`cal-up-name-${event.id} cal-up-state-${event.id}`}
           className={`cal-up-switch${cannot ? " cal-up-state-off" : ""}`}
-          aria-describedby={hint && !on ? `cal-up-reason-${event.id}` : undefined}
+          aria-describedby={
+            hint && !on ? `cal-up-reason-${event.id}` : elsewhere ? `cal-up-elsewhere-${event.id}` : undefined
+          }
           onClick={onToggle}
         >
           <span className="cal-up-state" id={`cal-up-state-${event.id}`}>

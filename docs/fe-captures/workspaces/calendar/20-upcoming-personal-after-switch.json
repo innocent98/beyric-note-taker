@@ -1,0 +1,80 @@
+{
+  "note": "Now it is the personal workspace's row that says where it is recorded.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "account_email": "grace@example.test",
+      "provider": "google",
+      "last_sync_at": null,
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
+      "join_unanswered": false,
+      "skip_one_on_ones": false,
+      "calendar_template_id": 1,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "microsoft_enabled": false,
+      "bot_invite_email": null,
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-25T02:00:00Z",
+          "ends_at": "2026-11-25T02:30:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Recorded in Luran",
+          "reason_text": null,
+          "join_id": 1,
+          "can_send_now": false,
+          "not_recorded_text": null,
+          "recorded_in": {
+            "team_id": 2,
+            "name": "Luran",
+            "is_personal": false
+          },
+          "recorded_in_text": "Recorded in Luran. Switch here instead.",
+          "moved_text": null
+        },
+        {
+          "id": 2,
+          "title": "Dentist call",
+          "starts_at": "2026-11-25T04:00:00Z",
+          "ends_at": "2026-11-25T04:30:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 2,
+          "can_send_now": false,
+          "not_recorded_text": null,
+          "recorded_in": null,
+          "recorded_in_text": null,
+          "moved_text": null
+        }
+      ]
+    }
+  }
+}
