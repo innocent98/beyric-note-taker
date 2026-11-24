@@ -821,6 +821,102 @@
         "title": "BotNameOut",
         "type": "object"
       },
+      "BriefImported": {
+        "properties": {
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A PDF's page count; null for other files",
+            "title": "Pages"
+          },
+          "text": {
+            "description": "Review and edit it, then save it with `PUT /api/briefs`",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "The file held more than a brief may: the rest is cut",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "truncated",
+          "pages"
+        ],
+        "title": "BriefImported",
+        "type": "object"
+      },
+      "BriefIn": {
+        "properties": {
+          "text": {
+            "description": "The whole brief; an empty text clears it",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BriefIn",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "max_chars": {
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/RecipeTeam",
+            "description": "Whose brief this is: the active team"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who saved it last; null when none was saved",
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "team",
+          "text",
+          "max_chars",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
       "BroughtBack": {
         "description": "What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No\ncard is made by the call itself (a Personal card is made by the next hourly calendar sync; a\nteam's by the next time an owner or admin shares a meeting of it, or their recording is shared\nautomatically).",
         "properties": {
@@ -8367,6 +8463,275 @@
         "summary": "Google Start",
         "tags": [
           "google"
+        ]
+      }
+    },
+    "/api/briefs": {
+      "get": {
+        "description": "The active team's brief (`text` is empty when none was saved). Members read it too: its\nprices and terms appear in the drafts they make. `X-Team-Id` names the team (404 for one the\ncaller is not on).",
+        "operationId": "read_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Brief",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "put": {
+        "description": "Replace the active team's brief (owners and admins; 403 `team_forbidden` for a member).\n422 `brief_too_long` over `max_chars`. The text is data: stored as typed, minus control\ncharacters, and shown to the model only inside a fence.",
+        "operationId": "write_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Brief",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/briefs/import": {
+      "post": {
+        "description": "Read a `.docx`, `.pdf`, `.txt` or `.md` file (multipart, field `file`) into text for the\nbrief. The text comes back for the person to review and edit: **nothing is saved** and the file\nis never stored (not on disk, not in the database). Owners and admins only (the people who can\nsave a brief). The text is data: if saved, the model sees it inside a fence.",
+        "operationId": "import_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefImported"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`too_big`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`file_missing`, `unsupported`, `too_many_pages`, `no_text_layer` (a scanned PDF) or `unreadable`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`import_busy`: try again in a moment"
+          }
+        },
+        "summary": "Import Brief",
+        "tags": [
+          "recipes"
         ]
       }
     },
