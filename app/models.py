@@ -839,6 +839,22 @@ class Meeting(Base):
     # saved and for meetings made before this column existed (they were all `own`).
     transcript_source: Mapped[str | None] = mapped_column(String(16))
     speaker_transcript: Mapped[str | None] = mapped_column(Text)
+    # A person's edits to the transcript (`app/transcript_edit.py`). The edit changes the displayed
+    # column (`speaker_transcript`, else `transcript`; every reader falls back the same way).
+    # `transcript_original` holds that column's text from before the FIRST edit, once; it is null
+    # for a transcript nobody edited, and "Restore original" puts it back and nulls all three
+    # edit columns. Machinery that rewrites a transcript
+    # (`scripts/rebuild_meeting_from_evidence.py`) skips a meeting where this is set.
+    transcript_original: Mapped[str | None] = mapped_column(Text)
+    transcript_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcript_edited_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # The version (`transcript_text.version_of`) of the exact text the current `notes` were written
+    # from, set by the owner's rewrite from the text it sent to the model. Null = the notes were
+    # written by the pipeline or the rebuild script from the transcript as it was before any edit
+    # (`transcript_edit.notes_outdated` compares it with the shown text).
+    notes_source_version: Mapped[str | None] = mapped_column(String(16))
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

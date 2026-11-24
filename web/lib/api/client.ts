@@ -82,6 +82,7 @@ import type {
   Term,
   Translation,
   TranslationLanguage,
+  TranscriptEdit,
 } from "./types";
 import type {
   AdminPayment,
@@ -390,6 +391,12 @@ export function createApi(options: ApiOptions = {}) {
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),
       regenerate: (id: number, template_id: number) =>
         request<Meeting>("POST", `/api/meetings/${id}/regenerate`, { body: { template_id }, write: true }),
+      // The transcript editor (docs/fe-integration-guide-transcript-edit.md): one edit, then the
+      // whole meeting back. `version` is the meeting's `transcript_version` from the page being edited.
+      editTranscript: (id: number, body: TranscriptEdit) =>
+        request<Meeting>("PATCH", `/api/meetings/${id}/transcript`, { body, write: true }),
+      restoreTranscript: (id: number, version: string) =>
+        request<Meeting>("POST", `/api/meetings/${id}/transcript/restore`, { body: { version }, write: true }),
       // The notes as a PDF or Word file, built when asked and not stored (GET .../export).
       // `language` fr or es builds it from the finished translation (409 translation_missing
       // otherwise); `en` is the original.

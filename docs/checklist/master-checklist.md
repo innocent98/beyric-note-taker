@@ -3,6 +3,15 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-24: transcript and speaker editor** (branch `feature/transcript-speaker-editor`, SOP `docs/sop/2026-11-24-transcript-speaker-editor.md`, FE guide `docs/fe-integration-guide-transcript-edit.md`, migration 0058, **Alembic head now 0058**):
+- [x] Owner's editor on the transcript tab: rename a speaker everywhere (merge into an existing name asks first), fix one line's words, move one line to another speaker; no add, delete, split or merge, so Ask Beyric's line numbers and the quote links hold
+- [x] `PATCH /api/meetings/{id}/transcript` and `POST .../transcript/restore`; strict bodies, names cleaned like participants' names, a line is one plain line, `version` token (409 `transcript_changed`) for two editors; same who-may rule as deleting a meeting (`visibility.owns`), readers 403 `team_forbidden`, ready meetings only
+- [x] The original kept once (`transcript_original`), "Restore original"; `notes_outdated` notice with the existing Rewrite action; nothing regenerated; translations go stale through the existing `is_stale`
+- [x] `scripts/rebuild_meeting_from_evidence.py` skips an edited meeting (dry run, apply, force and `--restore`); a test lists every writer of the transcript columns so a new one cannot slip in
+- [x] Lead-designed UI (listed in the SOP), looked at in a real browser at 1280 and 390 px; live captures `docs/fe-captures/transcript-edit/`
+- [ ] **Not verified:** the server and a real meeting; editing a transcript with no speaker names (v1 refuses it); a screen reader; other widths and dark mode
+- [ ] Follow-ups: editing a transcript with no speaker names; adding or splitting lines (needs a way to keep Ask's line numbers); a per-line history
+
 **Addendum 2026-11-24: meeting search index** (branch `feature/meeting-search-index`, stacked on PR 261, SOP `docs/sop/2026-11-24-meeting-search-index.md`, **migration 0057, Alembic head now 0057**):
 - [x] `meeting_search_text()` (IMMUTABLE SQL function) and GIN index `ix_meetings_search_text` built CONCURRENTLY; Ask Beyric's `candidates()` and the list's `q` search call the one function; the list's query is split (`id IN title OR id IN full text`) so the index is usable
 - [x] Proven with EXPLAIN (ANALYZE) of the SQL both readers really send, and by a test on every run; rare-word search at 4,000 meetings: list 22,620 ms to 11 ms, Ask 20,468 ms to 17 ms; accents folded in the stored text and the title ("équipe" finds "equipe" and the reverse), subqueries scoped to the readable set

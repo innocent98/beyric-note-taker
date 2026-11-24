@@ -49,9 +49,9 @@ def function_exists(engine) -> bool:
         )
 
 
-def test_0057_is_the_only_head_and_follows_0056(scratch_url):
+def test_0057_follows_0056_and_the_chain_has_one_head(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
-    assert script.get_heads() == ["0057"]
+    assert len(script.get_heads()) == 1  # later migrations (0058) sit on top of it
     assert script.get_revision("0057").down_revision == "0056"
 
 

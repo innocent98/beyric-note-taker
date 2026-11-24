@@ -1,0 +1,28 @@
+{
+  "note": "Like every write: no token, no edit (403 `csrf_rejected`).",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/1/transcript",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "b9ed480a17efee24",
+      "line": 1,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

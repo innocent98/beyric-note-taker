@@ -1,0 +1,29 @@
+{
+  "note": "The French translation made before the edits is now `stale`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/translations/fr",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "language": "fr",
+      "status": "ready",
+      "stale": true,
+      "notes": "Notes",
+      "notes_html": "<p>Notes</p>\n",
+      "transcript": "Texte",
+      "failure_code": null,
+      "failure_message": null,
+      "updated_at": "2026-11-24T13:45:04.510992Z"
+    }
+  }
+}

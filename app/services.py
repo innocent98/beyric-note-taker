@@ -80,6 +80,7 @@ from app.pipeline import (
     send_again,
 )
 from app.placement import PlacementRefused, PlacementRequest
+from app.transcript_text import version_of
 
 logger = logging.getLogger(__name__)
 
@@ -722,6 +723,9 @@ def regenerate_notes(
         raise Refused(400, "template_required", "Choose a template.")
     feature_gates.require(session, user, entitlements.REWRITE)
     source = meeting.speaker_transcript or meeting.transcript or ""
+    # The version of the text actually sent to the model, taken before the (long) call: an edit
+    # that lands meanwhile then leaves the notes out of date, as they are.
+    source_version = version_of(source)
     terms = list(
         session.scalars(
             select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
@@ -736,6 +740,7 @@ def regenerate_notes(
             502, "notes_failed", "The notes could not be written. The old notes were kept."
         ) from None
     meeting.notes = notes
+    meeting.notes_source_version = source_version  # `transcript_edit.notes_outdated` compares it
     meeting.template_id = template.id
     ai_runs.record_usage(
         session,
@@ -747,6 +752,7 @@ def regenerate_notes(
     )
     workspace.mark_pending(meeting)  # the lists read from the notes follow the new ones
     session.commit()
+    session.refresh(meeting)  # an edit that landed during the model call is what the page gets
     return meeting
 
 
