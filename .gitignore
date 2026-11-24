@@ -20,3 +20,6 @@ docs/spike/outlook-m0/out/
 tools/bakeoff/logs/
 tools/bakeoff/keys.env
 tools/bakeoff/*.env
+
+# the real-model pass writes here (scripts/recipes_live.py pass --real): never committed by accident
+docs/fe-captures/recipes/live-pass-real/

@@ -2,6 +2,8 @@
 
     PYTHONPATH=. python scripts/recipes_live.py serve  ADMIN_URL [PORT]   # app + worker, for a browser
     PYTHONPATH=. python scripts/recipes_live.py pass   ADMIN_URL          # all 18 starters + the board
+    OPENAI_API_KEY=... PYTHONPATH=. python scripts/recipes_live.py pass ADMIN_URL --real [--out DIR]
+                                                                           # the same, on a REAL model
     PYTHONPATH=. python scripts/recipes_live.py load   ADMIN_URL          # export load, two sessions
     PYTHONPATH=. python scripts/recipes_live.py capture ADMIN_URL         # sharing, stale, deletion exchanges
 
@@ -22,6 +24,30 @@ sent (so sources, blanks and figures behave like a grounded draft), plus two del
 audit has something to catch. Its wording, latency and token counts say NOTHING about a real model;
 the token counts in the pass come from the prompt it was sent (estimated at 4 characters a token) and
 its own output, and are labelled estimates.
+
+REAL MODEL (`pass ADMIN_URL --real`, or `RECIPES_LIVE_REAL=1`): the same pass on the real OpenAI client
+and the configured `RECIPE_MODEL`, for a person with a spend-capped TEST key. The synthetic meetings and
+placeholder people stay; only the model is real.
+
+* The key is read ONLY from the environment (`OPENAI_API_KEY`), the script refuses to start without it,
+  and it is never printed, logged, written to a file or sent anywhere but the OpenAI client.
+* Hard spend stop: the run stops calling the model once its estimated cost reaches `RECIPE_LIVE_MAX_USD`
+  (default 3), counted from each response's real token usage at the prices in
+  `scripts/ai_cost_report.py`. A model with no price there is not guessed: it stops after
+  `RECIPE_LIVE_MAX_DRAFTS` drafts (default 5).
+* Results go to `--out DIR` (default `docs/fe-captures/recipes/live-pass-real/`, git-ignored, never
+  committed by the script): `results.json` and `summary.txt`. Send `results.json` back.
+
+ONE COMMAND, step by step (run it from the repo root, with the project's virtualenv active):
+
+    docker run -d --name recipes-live-pg -e POSTGRES_PASSWORD=pw -p 55640:5432 postgres:16
+    OPENAI_API_KEY=sk-... RECIPE_LIVE_MAX_USD=3 PYTHONPATH=. python scripts/recipes_live.py pass \
+        postgresql+psycopg://postgres:pw@localhost:55640/postgres --real
+    docker rm -f recipes-live-pg
+
+(Wait a few seconds after the first line for Postgres to start. The key is on the command line of the
+second line only, so it exists for that one command. Send back `docs/fe-captures/recipes/live-pass-real/
+results.json`.) Eighteen drafts take a few minutes.
 """
 
 # ruff: noqa: E501
@@ -49,10 +75,39 @@ PEOPLE = {  # email -> (name, password); all placeholders
     "eve@example.test": ("Eve Outsider", "-".join(["eve", "live", "password", "3"])),
 }
 
-mode = sys.argv[1] if len(sys.argv) > 1 else ""
-admin_url = sys.argv[2] if len(sys.argv) > 2 else ""
-serve_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8800
+
+def _positional(argv: list[str]) -> list[str]:
+    out, skip = [], False
+    for a in argv:
+        if skip:
+            skip = False
+        elif a == "--out":
+            skip = True  # its value is not a positional argument
+        elif not a.startswith("--"):
+            out.append(a)
+    return out
+
+
+_args = _positional(sys.argv[1:])
+mode = _args[0] if _args else ""
+admin_url = _args[1] if len(_args) > 1 else ""
+serve_port = int(_args[2]) if len(_args) > 2 else 8800
+REAL = "--real" in sys.argv or os.environ.get("RECIPES_LIVE_REAL") == "1"
+OUT_DIR = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else None
 scratch_url = urlparse(admin_url)._replace(path=f"/{DB_NAME}").geturl() if admin_url else ""
+if REAL:
+    # Fail fast, before a database or a server is touched; the refusal text never holds the key.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import recipes_live_real as live_real  # noqa: E402
+
+    if mode != "pass":
+        sys.exit("--real is only for `pass`.")
+    try:
+        REAL_KEY = live_real.require_key()
+        REAL_MAX_USD = live_real.env_float("RECIPE_LIVE_MAX_USD", live_real.DEFAULT_MAX_USD)
+        REAL_MAX_DRAFTS = int(live_real.env_float("RECIPE_LIVE_MAX_DRAFTS", live_real.DEFAULT_MAX_DRAFTS_UNPRICED))  # fmt: skip
+    except live_real.LiveRealRefused as refusal:
+        sys.exit(str(refusal))
 if scratch_url:
     os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADMIN_EMAIL
@@ -524,7 +579,15 @@ def start_stack(port: int):
     from app import services
 
     app.dependency_overrides[services.get_bot_provider] = lambda: object()
-    model = LiveModel()
+    if REAL:
+        from openai import OpenAI
+
+        from app.config import get_settings
+
+        guard = live_real.SpendGuard(model=get_settings().recipe_model, max_usd=REAL_MAX_USD, prices=live_real.load_prices(), max_drafts_unpriced=REAL_MAX_DRAFTS)  # fmt: skip
+        model = live_real.RecordingClient(OpenAI(api_key=REAL_KEY, max_retries=0, timeout=generate.RECIPE_TIMEOUT), guard, REAL_KEY)  # fmt: skip
+    else:
+        model = LiveModel()
     generate._client = lambda: model
     stop = threading.Event()
     from app import db
@@ -557,8 +620,8 @@ class Client:
         return self.http.request(method, path, json=body, headers=h)
 
 
-def wait_ready(c: Client, doc_id: int) -> dict:
-    for _ in range(300):
+def wait_ready(c: Client, doc_id: int, seconds: float = 30) -> dict:
+    for _ in range(int(seconds * 10)):
         got = c.call("GET", f"/api/documents/{doc_id}").json()
         if got["status"] != "writing":
             return got
@@ -577,23 +640,29 @@ def one_meeting_for(key: str, ids: dict) -> int:
     return ids["lecture"] if school else ids["sales"]
 
 
+def body_for(starter, ids: dict) -> dict:
+    """The meetings (and options) each starter is run on in the pass."""
+    if starter.scope == "many":
+        meetings = (
+            ids["earlier"][:3]
+            if starter.pack == "general"
+            else [ids["lecture"]] + ids["earlier"][3:]
+        )
+        if starter.key == "revision_plan":
+            body = {"meeting_ids": meetings, "options": {}}
+        else:
+            body = {"meeting_ids": [ids["sprint"]] + ids["earlier"][:3], "options": {}}
+    else:
+        body = {"meeting_ids": [one_meeting_for(starter.key, ids)], "options": {}}
+    return body
+
+
 def run_pass(base: str, engine, ids: dict) -> list[dict]:
     ada = Client(base, "ada@example.test")
     rows = []
     for starter in library.STARTERS:
         started = time.time()
-        if starter.scope == "many":
-            meetings = (
-                ids["earlier"][:3]
-                if starter.pack == "general"
-                else [ids["lecture"]] + ids["earlier"][3:]
-            )
-            if starter.key == "revision_plan":
-                body = {"meeting_ids": meetings, "options": {}}
-            else:
-                body = {"meeting_ids": [ids["sprint"]] + ids["earlier"][:3], "options": {}}
-        else:
-            body = {"meeting_ids": [one_meeting_for(starter.key, ids)], "options": {}}
+        body = body_for(starter, ids)
         got = ada.call("POST", "/api/documents", {"recipe_key": starter.key, **body})
         assert got.status_code == 202, (starter.key, got.text)
         doc = wait_ready(ada, got.json()["id"])
@@ -623,6 +692,81 @@ def run_pass(base: str, engine, ids: dict) -> list[dict]:
     return rows
 
 
+def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]:
+    """The pass on a real model: one draft at a time, each recorded from the response's own usage.
+    Stops before a draft when the spend guard says so."""
+    from app.recipes import blocks as blocks_mod
+
+    ada = Client(base, "ada@example.test")
+    guard = client.guard
+    rows: list[dict] = []
+    stopped = None
+    for starter in library.STARTERS:
+        stopped = guard.reason_to_stop()
+        if stopped:
+            print(f"STOP: {stopped}")
+            break
+        before = len(client.calls)
+        started = time.time()
+        got = ada.call(
+            "POST", "/api/documents", {"recipe_key": starter.key, **body_for(starter, ids)}
+        )
+        assert got.status_code == 202, (starter.key, got.status_code)
+        doc = wait_ready(ada, got.json()["id"], seconds=400)
+        seconds = round(time.time() - started, 1)
+        calls = client.calls[before:]
+        done = [c for c in calls if "error" not in c]
+        tin = sum(c["input_tokens"] or 0 for c in done)
+        tout = sum(c["output_tokens"] or 0 for c in done)
+        stored = [blk for blk in doc["blocks"]]
+        text = blocks_mod.to_text(blocks_mod.load_blocks(stored)) if stored else ""
+        rows.append(
+            {
+                "key": starter.key, "pack": starter.pack, "scope": starter.scope, "output_type": starter.output_type,
+                "status": doc["status"], "failure_code": doc["failure_code"], "blocks": len(doc["blocks"]),
+                "input_tokens": tin, "output_tokens": tout, "model_calls": len(done),
+                "seconds": seconds,
+                "cost_usd_estimated": guard.price_of(tin, tout),
+                "blanks": [b["what"] for b in doc["checks"]["blanks"]],
+                "flags": [{"text": f["text"], "kind": f["kind"]} for f in doc["checks"]["flags"]],
+                "sources_dropped": live_real.sources_dropped(done[-1]["raw"], stored) if done else None,
+                "finish_reason": done[-1]["finish_reason"] if done else None,
+                "errors": [c["error"] for c in calls if "error" in c],
+                "first_300_characters": live_real.preview(text),
+                "document_id": doc["id"],
+            }
+        )  # fmt: skip
+        r = rows[-1]
+        usd = "n/a" if r["cost_usd_estimated"] is None else f"{r['cost_usd_estimated']:.5f}"
+        print(f"{starter.key:18} {doc['status']:7} in={tin} out={tout} {seconds}s ~${usd} blanks={len(r['blanks'])} flags={len(r['flags'])} spend=${guard.cost:.4f}")  # fmt: skip
+    return rows, stopped
+
+
+def cmd_pass_real(server, base, engine, ids, model) -> None:
+    out = OUT_DIR or ROOT / "docs" / "fe-captures" / "recipes" / "live-pass-real"
+    try:
+        rows, stopped = run_pass_real(base, ids, model)
+        out.mkdir(parents=True, exist_ok=True)
+        table = live_real.summary_table(rows, model.guard, stopped)
+        report = {
+            "model": model.guard.model,
+            "note": "REAL model, synthetic meetings and placeholder people. Costs are estimates from real token usage and scripts/ai_cost_report.py prices.",  # fmt: skip
+            "price_known": model.guard.priced, "max_usd": model.guard.max_usd,
+            "estimated_spend_usd": round(model.guard.cost, 5), "stopped_early": stopped,
+            "when": datetime.now(UTC).isoformat(), "rows": rows,
+        }  # fmt: skip
+        (out / "results.json").write_text(
+            live_real.mask(json.dumps(report, indent=2), REAL_KEY) + "\n"
+        )
+        (out / "summary.txt").write_text(live_real.mask(table, REAL_KEY) + "\n")
+        print()
+        print(live_real.mask(table, REAL_KEY))
+        print(f"\nSend back: {out / 'results.json'}")
+    finally:
+        server.should_exit = True
+        engine.dispose()
+
+
 def cmd_serve() -> None:
     server, base, engine, ids, _ = start_stack(serve_port)
     print(f"serving on {base}")
@@ -639,6 +783,9 @@ def cmd_serve() -> None:
 
 def cmd_pass() -> None:
     server, base, engine, ids, model = start_stack(serve_port)
+    if REAL:
+        print(f"real model {model.guard.model}; key is set (hidden); {model.guard.note()}")
+        return cmd_pass_real(server, base, engine, ids, model)
     try:
         rows = run_pass(base, engine, ids)
         OUT.mkdir(parents=True, exist_ok=True)
