@@ -62,6 +62,7 @@ from app.models import (
     User,
     UserSettings,
     VocabularyTerm,
+    WorkspacePrefs,
 )
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
@@ -1188,6 +1189,17 @@ def delete_template(session: Session, user: User, template_id: int) -> None:
     if settings is not None and settings.calendar_template_id == target.id:
         settings.calendar_template_id = fallback.id
         gcal_sync.set_join_template(session, user.id, fallback.id, commit=False)
+    # The same for every workspace whose calendar meetings were set to use the deleted template
+    # (the calendar settings are per workspace, `app/calendar_prefs.py`).
+    for prefs in session.scalars(
+        select(WorkspacePrefs).where(
+            WorkspacePrefs.user_id == user.id, WorkspacePrefs.calendar_template_id == target.id
+        )
+    ):
+        prefs.calendar_template_id = fallback.id
+        gcal_sync.set_join_template(
+            session, user.id, fallback.id, team_id=prefs.team_id, commit=False
+        )
     session.commit()
 
 

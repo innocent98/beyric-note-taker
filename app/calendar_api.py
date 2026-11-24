@@ -22,7 +22,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import (
     auth,
+    calendar_arbitration,
     calendar_connect,
+    calendar_prefs,
     calendar_providers,
     calendar_text,
     gcal_sync,
@@ -32,6 +34,7 @@ from app import (
     send_now,
     services,
     titles,
+    workspace_context,
 )
 from app.api_schemas import ErrorResponse
 from app.db import get_session
@@ -41,8 +44,8 @@ from app.models import (
     CalendarConnection,
     CalendarEvent,
     ScheduledJoin,
+    Team,
     User,
-    UserSettings,
 )
 from app.services import get_bot_provider
 
@@ -129,6 +132,22 @@ class UpcomingEvent(BaseModel):
     join_id: int | None = None
     can_send_now: bool = False
     not_recorded_text: str | None = None
+    # Set when the same meeting is also on the person's calendar in another of their workspaces
+    # and THAT workspace records it (workspaces design 12.4): `recorded_in` names it, and
+    # `recorded_in_text` is the sentence to show ("Recorded in Luran. Switch here instead."), with
+    # a button that calls the override route with `true` to move it to this workspace. While it is
+    # set `will_join` is false here, because no note taker goes from this workspace.
+    recorded_in: "RecordedIn | None" = None
+    recorded_in_text: str | None = None
+    # Only on the answer to a switch that moved the recording here: say it where the person sees it.
+    moved_text: str | None = None
+
+
+class RecordedIn(BaseModel):
+    """The workspace that records an event instead of the one asked about."""
+
+    team_id: int
+    name: str
 
 
 class CalendarOut(BaseModel):
@@ -273,25 +292,31 @@ def calendar_connect_start(
     response: Response,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
     microsoft: microsoft_oauth.MicrosoftOAuth | None = Depends(microsoft_oauth.get_microsoft),
 ) -> ConnectOut:
-    """Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.
-    `provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked
+    """Start connecting a calendar to the ACTIVE workspace (CSRF header needed; `X-Team-Id` names
+    the workspace, else the caller's default one; a team the caller is not in is 404 `not_found`).
+    Returns the consent URL to navigate to. The connection will belong to that workspace and the
+    callback returns to it; a person may connect the same provider, even the same account, in
+    several workspaces, but only one calendar provider per workspace. `provider` is `google` or
+    `microsoft`. For Google only the permissions in `features` are asked
     for, each at the moment its feature is switched on; permissions given earlier are kept. For
     Microsoft `features` must be `["calendar"]` (there is no Meet feature: 422 `invalid_features`).
     Sets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the
     callback to this browser. 404 `calendar_unavailable` when the calendar features are off (for
     Microsoft: also while its switch is off, so the route does not exist for anyone), 409
-    `calendar_already_connected` when another provider's calendar is connected (one calendar at a
-    time), 503 `calendar_unavailable` when the server cannot store a token safely."""
+    `calendar_already_connected` when another provider's calendar is connected IN THIS WORKSPACE
+    (one calendar per workspace), 503 `calendar_unavailable` when the server cannot store a token
+    safely."""
     settings = request.app.state.settings
     if provider == "microsoft":
-        return _start_microsoft(request, response, body, session, user, microsoft)
+        return _start_microsoft(request, response, body, session, user, ws, microsoft)
     google = _enabled(request, google)
     try:
         url, state = calendar_connect.start_connect(
-            session, user, body.features, body.return_to, google=google, now=_now()
+            session, user, body.features, body.return_to, google=google, now=_now(), team_id=ws.id
         )
     except calendar_connect.AlreadyConnected:
         raise services.Refused(
@@ -321,6 +346,7 @@ def _start_microsoft(
     body: ConnectIn,
     session: Session,
     user: User,
+    ws: Team,
     microsoft: microsoft_oauth.MicrosoftOAuth | None,
 ) -> ConnectOut:
     microsoft = _microsoft_client(request, microsoft)
@@ -331,7 +357,7 @@ def _start_microsoft(
         )
     try:
         url, state = microsoft_connect.start_connect(
-            session, user, body.return_to, microsoft=microsoft, now=_now()
+            session, user, body.return_to, microsoft=microsoft, now=_now(), team_id=ws.id
         )
     except calendar_connect.AlreadyConnected:
         raise services.Refused(
@@ -378,10 +404,15 @@ def calendar_connect_callback(
     flow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the
     stored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`
     `google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),
-    `no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another
-    provider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,
-    `scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,
-    `wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to
+    `no_refresh_token`, `wrong_account`, `different_account` (another account of the same provider
+    is connected in that workspace) or `already_connected` (another provider's calendar is connected
+    in that workspace) or `workspace_unavailable` (the person left the workspace meanwhile); for
+    Microsoft `microsoft_denied`, `microsoft_failed`, `scope_missing`, `no_mailbox` (the account has
+    no calendar to read), `tenant_not_allowed`, `wrong_account`, `different_account`,
+    `already_connected` or `workspace_unavailable`. When the connection was started from a
+    workspace that is not the person's default one the redirect also carries `team=<id>`: the page
+    it returns to is that workspace's. No header is needed: the workspace is remembered with the
+    single-use `state`. Nobody signed in goes to
     `/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404
     `calendar_unavailable` while the feature is off."""
     settings = request.app.state.settings
@@ -425,29 +456,34 @@ def calendar_connect_disconnect(
     provider: ProviderName,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> DisconnectOut:
-    """Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the
-    access at Google first. Either way it deletes the caller's calendar events, all their
-    scheduled joins (every state) and calendar notifications, and the stored token. Meetings
-    already recorded, the hours used and the settings stay; a meeting being recorded right now
-    carries on. Safe to repeat (200 again), and it works while the calendar features are switched
-    off. If Google cannot be reached the local deletion still happens and `revoked` is false: tell
-    the person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to
-    remove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the
+    """Disconnect the caller's calendar IN THE ACTIVE WORKSPACE (CSRF header needed, no body;
+    `X-Team-Id` names the workspace). For Google it revokes the access at Google, but only when no
+    other connection of the caller (in another workspace) uses the same Google account: then
+    `revoked` is true and nothing is called, because the grant is still in use. Either way it
+    deletes the calendar events of this workspace's connection, the scheduled joins filed in this
+    workspace (every state), this workspace's calendar notifications, and the stored token. The
+    caller's other workspaces are untouched. Meetings already recorded, the hours used and the
+    settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again), and
+    it works while the calendar features are switched off. If Google cannot be reached the local
+    deletion still happens and `revoked` is false: tell the person to remove Beyric at
+    myaccount.google.com/permissions. Microsoft cannot be asked to remove its own access: `revoked`
+    is false with `reason` `provider_has_no_revoke`, and the
     person is told to remove Beyric in their Microsoft account's app permissions. `reason` is
     absent (not null) for Google, so Google's answer keeps its shape.
     Afterwards `connect` works again, for the same or another account."""
     if calendar_providers.get(provider) is None:
         raise _unavailable()
-    revoked = calendar_connect.disconnect(session, user, google, provider)
+    revoked = calendar_connect.disconnect(session, user, google, provider, team_id=ws.id)
     return DisconnectOut(
         revoked=revoked,
         reason=None if revoked or provider != "microsoft" else "provider_has_no_revoke",
     )
 
 
-def _join_settings(prefs: UserSettings | None, request: Request) -> JoinSettings:
+def _join_settings(prefs, request: Request) -> JoinSettings:
     return JoinSettings.for_user(
         prefs, teams_join_enabled=request.app.state.settings.teams_join_enabled
     )
@@ -458,10 +494,11 @@ def _upcoming_item(
     join_settings: JoinSettings,
     now: datetime,
     join: ScheduledJoin | None = None,
+    recorded_in: Team | None = None,
 ) -> UpcomingEvent:
     decision = will_join(row, row.override, join_settings, now=now)
     not_recorded = join is not None and calendar_text.is_not_recorded(join, now)
-    return UpcomingEvent(
+    item = UpcomingEvent(
         id=row.id,
         title=titles.clean_title(row.title),
         starts_at=row.starts_at,
@@ -478,6 +515,15 @@ def _upcoming_item(
             calendar_text.not_recorded_text(join.state, join.skip_reason) if not_recorded else None
         ),
     )
+    if recorded_in is not None:
+        # Another of the person's workspaces records this meeting: this one sends no note taker.
+        item.will_join = False
+        item.will_join_text = f"Recorded in {recorded_in.name}"
+        item.reason_text = None
+        item.can_send_now = False
+        item.recorded_in = RecordedIn(team_id=recorded_in.id, name=recorded_in.name)
+        item.recorded_in_text = calendar_text.recorded_in_text(recorded_in.name)
+    return item
 
 
 def _joins_of(session: Session, user_id: int, event_ids: list[int]) -> dict[int, ScheduledJoin]:
@@ -492,8 +538,58 @@ def _joins_of(session: Session, user_id: int, event_ids: list[int]) -> dict[int,
     return {row.calendar_event_id: row for row in rows}
 
 
+def _recorded_elsewhere(
+    session: Session,
+    request: Request,
+    conn: CalendarConnection,
+    rows: list[CalendarEvent],
+    joins: dict[int, ScheduledJoin],
+    join_settings: JoinSettings,
+    now: datetime,
+) -> dict[int, Team]:
+    """For each of these events, the OTHER workspace that records it when the person holds the same
+    occurrence in two workspaces and the chooser (`app/calendar_arbitration.py`) gives it to
+    another: event id to that workspace. Empty for a person with one calendar."""
+    if not rows:
+        return {}
+    other_calendar = session.scalar(
+        select(CalendarConnection.id)
+        .where(
+            CalendarConnection.user_id == conn.user_id,
+            CalendarConnection.id != conn.id,
+            CalendarConnection.status != "disconnected",
+        )
+        .limit(1)
+    )
+    if other_calendar is None:
+        return {}
+    wants = gcal_sync.make_wants(
+        session,
+        conn,
+        join_settings,
+        now,
+        teams_join_enabled=request.app.state.settings.teams_join_enabled,
+    )
+    found: dict[int, Team] = {}
+    for row in rows:
+        others = calendar_arbitration.siblings(session, row)
+        if not others:
+            continue
+        me = calendar_arbitration.Member(row, conn, joins.get(row.id))
+        winner = calendar_arbitration.winner_among(me, others, wants)
+        if winner is not None and winner.event_id != row.id:
+            team = session.get(Team, winner.team_id)
+            if team is not None:
+                found[row.id] = team
+    return found
+
+
 def _upcoming(
-    session: Session, conn: CalendarConnection, join_settings: JoinSettings, now: datetime
+    session: Session,
+    request: Request,
+    conn: CalendarConnection,
+    join_settings: JoinSettings,
+    now: datetime,
 ) -> list[UpcomingEvent]:
     """Events not over yet that start within seven days, soonest first, each with the join rules'
     answer for this user. Cancelled events are left out."""
@@ -510,17 +606,22 @@ def _upcoming(
         .limit(UPCOMING_LIMIT)
     ).all()
     joins = _joins_of(session, conn.user_id, [row.id for row in rows])
-    return [_upcoming_item(row, join_settings, now, joins.get(row.id)) for row in rows]
+    elsewhere = _recorded_elsewhere(session, request, conn, rows, joins, join_settings, now)
+    return [
+        _upcoming_item(row, join_settings, now, joins.get(row.id), elsewhere.get(row.id))
+        for row in rows
+    ]
 
 
-def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut:
-    """The whole state, as `GET /api/calendar` and `PUT /api/calendar/settings` answer."""
-    conn = calendar_connect.live_calendar_connection(session, user)
-    prefs = session.get(UserSettings, user.id)
-    rule = prefs.auto_join_rule if prefs else "all"
-    join_unanswered = prefs.join_unanswered if prefs else False
-    skip_one_on_ones = prefs.skip_one_on_ones if prefs else False
-    template_id = prefs.calendar_template_id if prefs else None
+def _calendar_out(request: Request, session: Session, user: User, ws: Team) -> CalendarOut:
+    """The whole state of the caller's calendar in workspace `ws`, as `GET /api/calendar` and
+    `PUT /api/calendar/settings` answer."""
+    conn = calendar_connect.live_calendar_connection(session, user, ws.id)
+    prefs = calendar_prefs.for_workspace(session, user.id, ws.id)
+    rule = prefs.auto_join_rule
+    join_unanswered = prefs.join_unanswered
+    skip_one_on_ones = prefs.skip_one_on_ones
+    template_id = prefs.calendar_template_id
     # Paused when the scheduler (the process that sends the bots) has recorded that auto-join is
     # off. Read from the database only: `web` keeps the environment it was started with, and a
     # restart of `scheduler` alone, as the runbook says, must be enough in both directions.
@@ -566,7 +667,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         auto_join_paused_text=paused_text,
         microsoft_enabled=microsoft_on,
         bot_invite_email=invite_email,
-        upcoming=_upcoming(session, conn, _join_settings(prefs, request), _now()),
+        upcoming=_upcoming(session, request, conn, _join_settings(prefs, request), _now()),
     )
 
 
@@ -575,15 +676,18 @@ def calendar_state(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> CalendarOut:
-    """Everything the calendar settings page shows, in one read (no CSRF header needed): whether
+    """Everything the calendar settings page shows for the ACTIVE workspace (`X-Team-Id`, else the
+    caller's default one; another workspace's calendar is never shown), in one read (no CSRF header
+    needed): whether
     Google Calendar is connected, which Google address, the last time it was read, the last
     failure in plain words, and the next seven days of synced events, each with whether the bot
     will join it and why not when it will not. Nothing is fetched from Google here: this reads what
     the sync job last stored. 404 `calendar_unavailable` while the calendar features are off."""
     _calendar_on(request, google)
-    return _calendar_out(request, session, user)
+    return _calendar_out(request, session, user, ws)
 
 
 @router.put("/settings", responses=SETTINGS_RESPONSES)
@@ -592,6 +696,7 @@ def calendar_settings(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> CalendarOut:
     """Change the auto-join rule, the boxes "Also join invites I haven't answered yet" and "Skip
@@ -608,12 +713,7 @@ def calendar_settings(
     set_template = "calendar_template_id" in body.model_fields_set
     if set_template and body.calendar_template_id is not None:
         services.template_or_404(session, user, body.calendar_template_id)
-    prefs = session.get(UserSettings, user.id)
-    if prefs is None:
-        prefs = UserSettings(
-            user_id=user.id, auto_join_rule="all", join_unanswered=False, skip_one_on_ones=False
-        )
-        session.add(prefs)
+    prefs = calendar_prefs.for_update(session, user.id, ws.id)  # this workspace's, never another's
     now = _now()
     rule_changed = body.rule is not None and body.rule != prefs.auto_join_rule
     unanswered_changed = (
@@ -630,12 +730,14 @@ def calendar_settings(
         prefs.skip_one_on_ones = body.skip_one_on_ones
     if set_template:
         prefs.calendar_template_id = body.calendar_template_id
-        gcal_sync.set_join_template(session, user.id, body.calendar_template_id, commit=False)
-    conn = calendar_connect.live_calendar_connection(session, user)
-    if rule_changed:
+        gcal_sync.set_join_template(
+            session, user.id, body.calendar_template_id, team_id=ws.id, commit=False
+        )
+    conn = calendar_connect.live_calendar_connection(session, user, ws.id)
+    if rule_changed and conn is not None:
         session.execute(
             update(CalendarEvent)
-            .where(CalendarEvent.user_id == user.id, CalendarEvent.starts_at > now)
+            .where(CalendarEvent.connection_id == conn.id, CalendarEvent.starts_at > now)
             .values(override=None)
         )
     if (rule_changed or unanswered_changed or skip_changed) and conn is not None:
@@ -652,7 +754,7 @@ def calendar_settings(
         )
     else:
         session.commit()
-    return _calendar_out(request, session, user)
+    return _calendar_out(request, session, user, ws)
 
 
 @router.put("/events/{event_id:id}/override", responses=OVERRIDE_RESPONSES)
@@ -662,6 +764,7 @@ def calendar_event_override(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> UpcomingEvent:
     """The person's switch for one meeting on the Upcoming list (CSRF header needed): `true` joins
@@ -673,7 +776,9 @@ def calendar_event_override(
     before Teams can be joined): `message` is the reason in plain words, and nothing is stored.
     404 `calendar_unavailable` while the calendar features are off."""
     _calendar_on(request, google)
-    conn = calendar_connect.live_calendar_connection(session, user)
+    # The person's lock first, the row lock second: the order the sync takes them in.
+    calendar_arbitration.lock_person(session, user.id)
+    conn = calendar_connect.live_calendar_connection(session, user, ws.id)
     row = None
     if conn is not None:
         row = session.scalars(
@@ -687,24 +792,73 @@ def calendar_event_override(
         ).first()
     if row is None:
         raise StarletteHTTPException(404, "No such event")
-    prefs = session.get(UserSettings, user.id)
+    prefs = calendar_prefs.for_workspace(session, user.id, ws.id)
     join_settings = _join_settings(prefs, request)
     now = _now()
     # With the switch on, only what the event itself is can still say no: that is "not joinable".
     blocked = will_join(row, True, join_settings, now=now)
     if not blocked.join:
         raise services.Refused(409, "not_joinable", calendar_text.join_reason(blocked))
+    moved_from: Team | None = None
+    if body.override is True:
+        moved_from = _take_over(session, request, conn, row, join_settings, now)
     row.override = body.override
     gcal_sync.rerun_rules(
         session,
         conn,
-        prefs or gcal_sync.DEFAULT_USER_SETTINGS,
+        prefs,
         [row],
         now=now,
         settings=request.app.state.settings,
     )
     join = _joins_of(session, user.id, [row.id]).get(row.id)
-    return _upcoming_item(row, join_settings, now, join)
+    item = _upcoming_item(row, join_settings, now, join)
+    if moved_from is not None:
+        item.moved_text = calendar_text.moved_here_text(moved_from.name)
+    return item
+
+
+def _take_over(
+    session: Session,
+    request: Request,
+    conn: CalendarConnection,
+    row: CalendarEvent,
+    join_settings: JoinSettings,
+    now: datetime,
+) -> Team | None:
+    """Switching a meeting ON here when the person holds it in another workspace too: refuse (409
+    `already_recording`) when the other workspace's note taker is already in the meeting (a running
+    bot is never moved; nothing is changed), otherwise clear the switch the person had set on the
+    other copies (one workspace is the one they chose) and name the workspace that was recording it,
+    if any, so the answer can say it moved. The join itself moves when the rules are re-run."""
+    others = calendar_arbitration.siblings(session, row)
+    if not others:
+        return None
+    holding = next((m for m in others if m.locked), None)
+    if holding is not None:
+        team = session.get(Team, holding.conn.team_id)
+        raise services.Refused(
+            409,
+            "already_recording",
+            calendar_text.already_recording_text(team.name if team else "Another workspace"),
+        )
+    wants = gcal_sync.make_wants(
+        session,
+        conn,
+        join_settings,
+        now,
+        teams_join_enabled=request.app.state.settings.teams_join_enabled,
+    )
+    me = calendar_arbitration.Member(row, conn, None)
+    before = calendar_arbitration.winner_among(me, others, wants)
+    session.execute(
+        update(CalendarEvent)
+        .where(CalendarEvent.id.in_([m.event.id for m in others]), CalendarEvent.override.is_(True))
+        .values(override=None)
+    )
+    if before is None or before.event_id == row.id:
+        return None
+    return session.get(Team, before.team_id)
 
 
 # ---- not recorded, and Send now (plan C15b) ----
@@ -767,12 +921,14 @@ def _not_recorded_item(join: ScheduledJoin, title: str | None, now: datetime) ->
 def not_recorded(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
 ) -> NotRecordedOut:
     """The meetings of the last seven days the note taker did not get into, for the Meetings page
     (no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones
     whose reason means the meeting was not recorded (recording hours used up, too many note takers
     at once, the link still in use, a note taker from another account already there, the calendar
-    disconnected, a suspended account). Only the caller's own. Each item says why in plain words
+    disconnected, a suspended account). Only the caller's own, filed in the ACTIVE workspace
+    (`X-Team-Id`; another workspace's are never shown). Each item says why in plain words
     and whether Send now is on offer. Newest first."""
     now = _now()
     rows = session.execute(
@@ -780,6 +936,7 @@ def not_recorded(
         .outerjoin(CalendarEvent, CalendarEvent.id == ScheduledJoin.calendar_event_id)
         .where(
             ScheduledJoin.user_id == user.id,
+            ScheduledJoin.team_id == ws.id,
             ScheduledJoin.run_at <= now,
             ScheduledJoin.starts_at > now - timedelta(days=NOT_RECORDED_DAYS),
             (ScheduledJoin.state.in_(("failed", "no_capacity")))
