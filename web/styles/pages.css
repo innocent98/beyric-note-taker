@@ -580,8 +580,10 @@
 .bd-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .bd-note { font-size: var(--text-sm); color: var(--text-3); }
 .bd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; }
+.bd-board-dragging { user-select: none; }
 .bd-board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); align-items: start; }
 .bd-board .tk-col { min-height: 160px; }
+@media (max-width: 640px) { .bd-board { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: minmax(0, 1fr); } }
 .bd-card { cursor: default; border-left-width: 4px; }
 .bd-kind-decision { border-left-color: var(--teal); }
 .bd-kind-action { border-left-color: var(--dot-amber); }

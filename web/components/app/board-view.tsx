@@ -193,7 +193,7 @@ export function BoardView({
         </div>
       </div>
       {error ? <Alert kind="error">{error}</Alert> : null}
-      <div className="tk-board bd-board" ref={boardRef} aria-busy={busy}>
+      <div className={`tk-board bd-board${dragging ? " bd-board-dragging" : ""}`} ref={boardRef} aria-busy={busy}>
         {columns.map((column, c) => (
           <section
             key={c}
@@ -392,6 +392,9 @@ function CardView({
   onEdit: () => void;
 }) {
   const sources = (card.sources ?? []).slice(0, 3);
+  // The column chosen in the menu; nothing moves until Move is pressed, so a keyboard that arrows
+  // through the options (a closed select fires `change` on each arrow in some browsers) moves nothing.
+  const [to, setTo] = useState("");
   return (
     <div
       className={`tk-card bd-card bd-kind-${card.kind}${dragging ? " tk-card-dragging" : ""}`}
@@ -434,12 +437,9 @@ function CardView({
           <select
             className="select select-sm"
             aria-label={`Move “${card.text}” to column`}
-            value=""
+            value={to}
             disabled={busy}
-            onChange={(event) => {
-              const to = Number(event.target.value);
-              if (event.target.value !== "" && Number.isInteger(to)) onMove(to);
-            }}
+            onChange={(event) => setTo(event.target.value)}
           >
             <option value="">Move to column…</option>
             {columns.map((c, i) =>
@@ -450,6 +450,20 @@ function CardView({
               ),
             )}
           </select>
+          {to !== "" ? (
+            <button
+              type="button"
+              className="rh-btn"
+              disabled={busy}
+              onClick={() => {
+                const target = Number(to);
+                setTo("");
+                if (Number.isInteger(target)) onMove(target);
+              }}
+            >
+              Move
+            </button>
+          ) : null}
           <button type="button" className="rh-btn" aria-label={`Edit card: ${card.text}`} disabled={busy} onClick={onEdit}>
             Edit
           </button>

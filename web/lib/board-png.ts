@@ -224,7 +224,8 @@ export function paletteFromCss(root: HTMLElement = document.documentElement): Pa
       question: cssVar(style, "--info"),
       note: cssVar(style, "--chevron"),
     },
-    font: getComputedStyle(root).fontFamily || "sans-serif",
+    // the page sets its font on the body, not on the root
+    font: getComputedStyle(root.ownerDocument.body).fontFamily || "sans-serif",
   };
 }
 

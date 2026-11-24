@@ -203,12 +203,14 @@ describe("moving a card by dragging", () => {
 });
 
 describe("the Move to column… menu", () => {
-  it("lists the other columns and does what the drag does, to the end of the column", async () => {
+  it("lists the other columns; Move then does what the drag does, to the end of the column", async () => {
     mocks.edit.mockResolvedValue(answer({}));
     render(<Page />);
     const menu = within(col("Pricing")).getAllByRole("combobox", { name: /move.*to column/i })[0];
     expect(within(menu).getAllByRole("option").map((o) => o.textContent)).toEqual(["Move to column…", "Next steps", "Later"]);
     await userEvent.selectOptions(menu, "Next steps");
+    expect(mocks.edit).not.toHaveBeenCalled(); // choosing is not moving
+    await userEvent.click(within(col("Pricing")).getByRole("button", { name: /^move$/i }));
     expect(mocks.edit).toHaveBeenCalledWith(7, "2026-11-24T12:00:05.123456Z", { op: "move_card", card: 0, to_column: 1, index: 1 });
   });
 
@@ -223,6 +225,7 @@ describe("the Move to column… menu", () => {
     render(<Page />);
     const menu = within(col("Pricing")).getAllByRole("combobox", { name: /move.*who signs/i })[0];
     await userEvent.selectOptions(menu, "Later");
+    await userEvent.click(screen.getByRole("button", { name: /^move$/i }));
     expect(mocks.edit.mock.calls[0]).toEqual(dragged);
   });
 
@@ -234,6 +237,8 @@ describe("the Move to column… menu", () => {
     for (let i = 0; i < 20 && document.activeElement !== menu; i++) await userEvent.tab();
     expect(document.activeElement).toBe(menu);
     await userEvent.selectOptions(menu, "Pricing");
+    expect(mocks.edit).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Tab}{Enter}"); // the Move button is next in the tab order
     expect(mocks.edit).toHaveBeenCalledWith(7, expect.any(String), { op: "move_card", card: 2, to_column: 0, index: 2 });
   });
 });
