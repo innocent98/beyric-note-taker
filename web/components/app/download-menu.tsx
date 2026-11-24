@@ -11,8 +11,10 @@ import type { ExportFormat, NoteLanguage } from "@/lib/api/types";
 const FORMATS: { format: ExportFormat; tag: string; label: string; sub: string }[] = [
   { format: "pdf", tag: "PDF", label: "PDF", sub: "Best for reading and printing" },
   { format: "docx", tag: "DOCX", label: "Word document", sub: "Edit in Word or Google Docs" },
+  { format: "md", tag: "MD", label: "Markdown", sub: "For Notion, Obsidian and other notes apps" },
+  { format: "txt", tag: "TXT", label: "Plain text", sub: "Opens anywhere, no formatting" },
 ];
-const NAME: Record<ExportFormat, string> = { pdf: "PDF", docx: "Word document" };
+const NAME: Record<ExportFormat, string> = { pdf: "PDF", docx: "Word document", md: "Markdown file", txt: "text file" };
 const DONE_SECONDS = 8;
 
 type State =
@@ -23,7 +25,8 @@ type State =
 
 // Two siblings for the header's flex row (`.detail-bar`): the button (`.dl`) and, on a row of its
 // own below, the answer to the last click (`.dl-status`).
-// The Download menu of the meeting page (the designer's: PDF, Word, "Include the full transcript").
+// The Download menu of the meeting page (the designer's: PDF, Word, "Include the full transcript"; Markdown and
+// Plain text are lead-designed additions in the same rows).
 // `ready` is false while the notes are still being written: the button shows, disabled, with the
 // reason. The file comes from GET /api/meetings/{id}/export; the answer to the click shows below
 // the header: preparing, "<name> downloaded", or why it did not work.

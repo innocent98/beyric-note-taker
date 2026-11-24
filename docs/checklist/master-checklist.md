@@ -3,6 +3,14 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-24: export formats, Tasks CSV and Meetings search** (branch `feature/export-formats-and-meeting-search`, SOP `docs/sop/2026-11-24-export-formats-and-meeting-search.md`, **no migration**, Alembic head unchanged; gap analysis rows 6 and 8):
+- [x] `GET /api/meetings/{id}/export?format=md|txt` (notes, `transcript=true`, `language` en/fr/es, same 404/409 rules); built in the request, never through the child renderer, so never `export_busy`; Markdown and Plain text rows in the Download menu
+- [x] `GET /api/tasks/export?format=csv`: the active team's board through `tasks.visible` (the Tasks list's own scoping), eight columns, UTF-8 with BOM, CSV-injection quote on `= + - @ tab CR`; **Export CSV** button on the Tasks screen (lead-designed)
+- [x] `GET /api/meetings?q=` (title, notes and transcript, prefix stems, all words, 2 to 100 characters else 422 `invalid_query`) and a search box on the Meetings list with the term in the address; shared helpers in `app/meeting_search.py`, Ask Beyric uses them unchanged
+- [x] Live captures (`docs/fe-captures/export-formats-and-search/`), FE guides (export section 8, owner-app 5.1b, tasks pointer), `docs/openapi.json` regenerated
+- [ ] **Search is slow when few meetings match** (about 0.9 s at 300 meetings, 13 s at 4,000; about 3 ms per readable meeting); Adebayo approved a GIN expression index as its own PR after #260 (migration 0056) merges; the exact expression and the query change it needs are in the SOP, NOT added here
+- [ ] **Not verified:** the files in Excel, Sheets, Notion, Obsidian; a real team's data; the server
+
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
 - [x] Per-person checkbox "Skip one-on-one meetings" under the rule box (`user_settings.skip_one_on_ones`, off by default); skips an event with exactly two people INVITED (count, not attendance), under `all` and `organizer`; 0 (solo) and 1 are not skipped
 - [x] `will_join` reason `one_on_one` (Off, visible muted line on the Upcoming row); the per-meeting switch still wins both ways; `JoinSettings.for_user` is still the one constructor (sync, API, runner re-check, organiser bot, mail)

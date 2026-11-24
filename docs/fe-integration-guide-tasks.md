@@ -411,6 +411,10 @@ Response body:
 
 `has_more` and `next_before_id`: pass `before_id` = `next_before_id` for the next page. `next_before_id` is null on the last page.
 
+### `GET /api/tasks/export`: "Export CSV" (added 2026-11-24)
+
+The Tasks screen's **Export CSV** button (lead-designed) downloads the active team's board as a spreadsheet file: `GET /api/tasks/export?format=csv` with the usual `X-Team-Id` header. It reads the same tasks as `GET /api/tasks` (same visibility rule, suggested tasks left out) but **all of them, not one page**, and **without the screen's chips and tabs**. Eight columns (`Title,Status,Assignee,Due date,Project,Sprint,Meeting title,Meeting date`), UTF-8 with a byte order mark, and a single quote in front of any cell that begins with `=`, `+`, `-` or `@` (after any leading white space) or with a tab or a carriage return. The real headers, file text and errors are in `docs/fe-integration-guide-export.md` section 8.3 (captures `17` to `21` in `docs/fe-captures/export-formats-and-search/`).
+
 ### `GET /api/tasks/{id}`: the drawer
 
 Same object as a list item. Opening the drawer from the board needs no call; call it to refresh one task.

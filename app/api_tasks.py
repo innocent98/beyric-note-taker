@@ -15,7 +15,19 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, mail, services, tasks, team_admin, teams, timezones, titles, workspace
+from app import (
+    auth,
+    mail,
+    services,
+    sprints,
+    tasks,
+    tasks_csv,
+    team_admin,
+    teams,
+    timezones,
+    titles,
+    workspace,
+)
 from app.api_schemas import (
     AttentionOut,
     ErrorResponse,
@@ -32,7 +44,8 @@ from app.api_schemas import (
 )
 from app.db import get_session
 from app.extraction import TranscriptIndex
-from app.models import Meeting, Task, Team, User, UserSettings
+from app.models import Meeting, Project, Sprint, Task, Team, User, UserSettings
+from app.notes_document import content_disposition
 from app.visibility import can_read_clause, owns
 
 router = APIRouter()
@@ -216,6 +229,98 @@ def list_tasks(
         attention=AttentionOut(**tasks.attention(session, user, team_id)),
         has_more=more,
         next_before_id=rows[-1].id if more else None,
+    )
+
+
+# Tasks read per page while a CSV is made, and the most pages: a team past this many tasks gets the
+# newest ones (10,000), which is far past what the board itself loads (500).
+_EXPORT_PAGES = 20
+
+
+@router.get(
+    "/tasks/export",
+    tags=["tasks"],
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The CSV file, built for this request and not stored.",
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+        },
+        404: {"model": ErrorResponse, "description": "`not_found`: a team the caller is not in"},
+    },
+)
+def export_tasks(
+    format: Literal["csv"] = Query("csv"),
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    """The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
+    and the same `X-Team-Id` scoping as `GET /api/tasks` (suggested tasks left out, newest first),
+    every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
+    Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
+    are filled only when the caller may read that meeting, as on the screen; the date is in the
+    caller's stored time zone (UTC when none).
+
+    UTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage
+    return gets a single quote in front so a spreadsheet shows it as text instead of running it."""
+    if team_id is not None:
+        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
+    zone = _zone(session, user)
+    rows: list[list[object]] = []
+    before: int | None = None
+    for _ in range(_EXPORT_PAGES):
+        page, more = tasks.list_tasks(
+            session,
+            user,
+            assignee=None,
+            status=None,
+            limit=tasks.LIST_MAX,
+            before_id=before,
+            team_id=team_id,
+        )
+        shown = present(session, user, page)
+        projects = {
+            pid: name
+            for pid, name in session.execute(
+                select(Project.id, Project.name).where(
+                    Project.id.in_({t.project_id for t in shown if t.project_id})
+                )
+            )
+        }
+        sprint_names = {
+            sprint.id: sprints.name_of(sprint)
+            for sprint in session.scalars(
+                select(Sprint).where(Sprint.id.in_({t.sprint_id for t in shown if t.sprint_id}))
+            )
+        }
+        for t in shown:
+            rows.append(
+                [
+                    t.title,
+                    tasks_csv.STATUS_LABELS[t.status],
+                    t.assignee.name if t.assignee else "",
+                    t.due_date.isoformat() if t.due_date else "",
+                    projects.get(t.project_id, "") if t.project_id else "",
+                    sprint_names.get(t.sprint_id, "") if t.sprint_id else "",
+                    t.meeting.title if t.meeting else "",
+                    timezones.localise(t.meeting.created_at, zone)[0].date().isoformat()
+                    if t.meeting
+                    else "",
+                ]
+            )
+        if not more:
+            break
+        before = page[-1].id
+    today = timezones.localise(datetime.now(UTC), zone)[0].date().isoformat()
+    return Response(
+        tasks_csv.build_csv(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": content_disposition(f"tasks-{today}.csv"),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
