@@ -17,7 +17,7 @@ notes, names and notification titles of its workspace only.
 """
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -33,6 +33,7 @@ from app.models import (
     Notification,
     Project,
     ReviewItem,
+    ScheduledJoin,
     Series,
     SeriesIgnored,
     Task,
@@ -83,6 +84,11 @@ WORKSPACE_DATA = {
     "/api/integrations/slack",
     "/api/team",
     "/api/team/members",
+    # W3: a calendar connection belongs to one workspace, with its Upcoming list, its Recurring
+    # cards and the meetings it did not get into
+    "/api/calendar",
+    "/api/calendar/recurring",
+    "/api/not-recorded",
 }
 
 # The caller's own account, not a workspace's: sign-in, plan and hours, payments, the personal
@@ -118,16 +124,12 @@ ACCOUNT_LEVEL = {
     "/api/admin/waitlist",
 }
 
-# Moves to the workspace in the slice named (W2: templates, vocabulary and settings; W3: the
-# calendar connection, its upcoming list and its recurring cards). They are the person's own for now
-# and the integration branch is not deployed until those slices have moved them into
-# WORKSPACE_DATA, which this test then enforces.
+# Moves to the workspace in the slice named (W2: templates, vocabulary and settings). They are the
+# person's own for now and the integration branch is not deployed until that slice has moved them
+# into WORKSPACE_DATA, which this test then enforces.
 PENDING_SLICE = {
     "/api/templates": "W2",
     "/api/vocabulary": "W2",
-    "/api/calendar": "W3",
-    "/api/calendar/recurring": "W3",
-    "/api/not-recorded": "W3",
 }
 
 
@@ -141,13 +143,7 @@ def test_every_get_route_is_classified(app):
     # a route is in one set only
     assert not (WORKSPACE_DATA & ACCOUNT_LEVEL) and not (WORKSPACE_DATA & set(PENDING_SLICE))
     # nothing that carries a meeting's, task's or decision's text is allowed to wait for a slice
-    assert set(PENDING_SLICE) <= {
-        "/api/templates",
-        "/api/vocabulary",
-        "/api/calendar",
-        "/api/calendar/recurring",
-        "/api/not-recorded",
-    }
+    assert set(PENDING_SLICE) <= {"/api/templates", "/api/vocabulary"}
 
 
 # ---- the cast -----------------------------------------------------------------------------
@@ -173,10 +169,20 @@ def cast(session, template, world) -> Cast:
     for key, team in c.team.items():  # team names carry a TEAM_ marker, apart from the DATA_ ones
         team.name = f"TEAM_{key.upper()}"
     c.meetings = {}
-    connection = CalendarConnection(user_id=c.pat.id, team_id=c.team["p"].id)
-    session.add(connection)
+    connections = {}
+    for key, team in c.team.items():  # one calendar connection per workspace (W3)
+        connections[key] = CalendarConnection(
+            user_id=c.pat.id,
+            team_id=team.id,
+            provider="google",
+            status="connected",
+            granted_scopes="https://www.googleapis.com/auth/calendar.events.readonly",
+            account_email="pat@example.test",
+        )
+        session.add(connections[key])
     session.flush()
     for key, team in c.team.items():
+        connection = connections[key]
         mark = MARKS[key]
         fields = {
             "notes": NOTES.format(m=mark),
@@ -247,6 +253,52 @@ def cast(session, template, world) -> Cast:
                 ends_at=datetime(2026, 11, 20, 10, 0, tzinfo=UTC),
             )
         )
+        soon = datetime.now(UTC) + timedelta(days=2)  # ahead: Upcoming and a Recurring card
+        session.add(
+            CalendarEvent(
+                user_id=c.pat.id,
+                connection_id=connection.id,
+                source_event_id=f"up-{key}",
+                recurring_event_id=f"card-{key}",
+                title=f"{mark} planning call",
+                starts_at=soon,
+                ends_at=soon + timedelta(hours=1),
+                platform="google_meet",
+                meeting_url=f"https://meet.google.com/abc-defg-{key}",
+                native_id=f"abc-defg-{key}",
+                organizer_self=True,
+                self_response="accepted",
+            )
+        )
+        gone = datetime.now(UTC) - timedelta(days=1)  # behind: a join the note taker missed
+        missed = CalendarEvent(
+            user_id=c.pat.id,
+            connection_id=connection.id,
+            source_event_id=f"past-{key}",
+            title=f"{mark} missed call",
+            starts_at=gone,
+            ends_at=gone + timedelta(hours=1),
+            platform="google_meet",
+            meeting_url=f"https://meet.google.com/zzz-yyyy-{key}",
+            native_id=f"zzz-yyyy-{key}",
+        )
+        session.add(missed)
+        session.flush()
+        session.add(
+            ScheduledJoin(
+                user_id=c.pat.id,
+                team_id=team.id,
+                calendar_event_id=missed.id,
+                platform="google_meet",
+                native_id=missed.native_id,
+                meeting_url=missed.meeting_url,
+                starts_at=gone,
+                ends_at=gone + timedelta(hours=1),
+                run_at=gone - timedelta(minutes=1),
+                deadline_at=gone + timedelta(minutes=15),
+                state="failed",
+            )
+        )
         session.add(
             SeriesIgnored(team_id=team.id, calendar_recurring_id=f"rid-{key}", created_by=c.pat.id)
         )
@@ -278,6 +330,18 @@ def cast(session, template, world) -> Cast:
     return c
 
 
+@pytest.fixture
+def calendar_on(app):
+    """The calendar features are on, so its routes answer 200 instead of `calendar_unavailable`."""
+    app.state.settings = app.state.settings.model_copy(
+        update={
+            "calendar_enabled": True,
+            "google_client_id": "id.apps.example.test",
+            "google_client_secret": "s3cret",
+        }
+    )
+
+
 class NoSuchTeam:
     id = 999_999
 
@@ -295,7 +359,7 @@ def leaks(body: str, own: str) -> list[str]:
 # ---- the guard ----------------------------------------------------------------------------
 
 
-def test_every_workspace_data_route_honours_the_header(app, session, cast):
+def test_every_workspace_data_route_honours_the_header(app, session, cast, calendar_on):
     pat = sign_in(app, PAT)
     for path in sorted(WORKSPACE_DATA):
         for key, team in cast.team.items():
@@ -322,7 +386,7 @@ def test_every_workspace_data_route_honours_the_header(app, session, cast):
         error_of(get(pat, path, NoSuchTeam), 404, "not_found")
 
 
-def test_each_workspace_shows_its_own_data_on_the_list_routes(app, session, cast):
+def test_each_workspace_shows_its_own_data_on_the_list_routes(app, session, cast, calendar_on):
     """The leak check above would pass for an empty answer: prove the data IS there."""
     pat = sign_in(app, PAT)
     for key, team in cast.team.items():
@@ -336,6 +400,9 @@ def test_each_workspace_shows_its_own_data_on_the_list_routes(app, session, cast
             "/api/projects",
             "/api/milestones",
             "/api/series",
+            "/api/calendar",
+            "/api/calendar/recurring",
+            "/api/not-recorded",
         ):
             assert mark in get(pat, path, team).text, (path, key)
         assert f"TEAM_{key.upper()}" in get(pat, "/api/team", team).text
@@ -539,7 +606,9 @@ def test_the_meetings_search_stays_in_the_active_workspace(app, session, cast):
     assert get(pat, "/api/meetings", cast.z, q="pricing").status_code == 404
 
 
-def test_a_person_in_exactly_one_team_gets_that_team_without_a_header(app, session, cast):
+def test_a_person_in_exactly_one_team_gets_that_team_without_a_header(
+    app, session, cast, calendar_on
+):
     """Ada is in X and her own personal workspace only: no header is her default, X."""
     ada = sign_in(app, ADA)
     for path in sorted(WORKSPACE_DATA - {"/api/integrations/linear", "/api/integrations/slack"}):

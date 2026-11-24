@@ -410,9 +410,12 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
         )
         .values(workspace_team_id=home.id)
     )
-    from app import series  # series imports this module
+    from app import calendar_connect, series  # both import this module
 
     series.forget_meetings_of(session, user.id, old_team_id)
+    # Their calendar connection in this workspace goes with them, and the joins it planned: a person
+    # who left must not keep recording into it (workspaces design 12.3). What they recorded stays.
+    calendar_connect.detach_workspace(session, user.id, old_team_id)
     session.execute(
         update(TeamInvite)
         .where(

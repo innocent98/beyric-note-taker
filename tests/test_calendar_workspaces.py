@@ -398,3 +398,101 @@ def test_live_calendar_connection_is_per_workspace(session, owner, home, luran):
 def test_a_workspace_must_be_named_to_find_a_connection(session, owner):
     with pytest.raises(TypeError):
         calendar_connect.live_calendar_connection(session, owner)  # type: ignore[call-arg]
+
+
+# ---- leaving or being removed: the connection and its joins go, the meetings stay ----
+
+
+@pytest.fixture
+def borrowed(session, owner, stranger):
+    """A workspace the OTHER person owns and the person is a member of (they cannot leave one they
+    own), besides their own personal workspace."""
+    teams.ensure_personal_team(session, owner)
+    teams.ensure_personal_team(session, stranger)
+    session.commit()
+    return new_team(session, stranger, "Elsewhere", owner)
+
+
+def leave(web, team, user):
+    return web.client.delete(
+        f"/api/team/members/{user.id}", headers={CSRF: web.csrf, "X-Team-Id": str(team.id)}
+    )
+
+
+def test_leaving_a_workspace_disconnects_the_connection_there_and_cancels_its_joins(
+    web, session, owner, google, borrowed
+):
+    home = teams.personal_team(session, owner.id)
+    connect_in(web, google, home)
+    connect_in(web, google, borrowed, email="work@example.test", sub="g-work-9")
+    rows = connections(session, owner)
+    add_join(session, rows[home.id], owner, "scheduled", 1)
+    add_join(session, rows[borrowed.id], owner, "scheduled", 2)
+    add_join(session, rows[borrowed.id], owner, "joined", 3)  # a running meeting there
+    work_token = google.refresh_tokens[-1]
+
+    response = leave(web, borrowed, owner)
+
+    assert response.status_code == 204, response.text
+    after = connections(session, owner)
+    assert set(after) == {home.id}  # the connection in the workspace they left is gone
+    assert after[home.id].status == "connected"  # the personal one is untouched
+    session.expire_all()
+    assert [j.team_id for j in session.scalars(select(ScheduledJoin))] == [home.id]
+    assert [e.connection_id for e in session.scalars(select(CalendarEvent))] == [after[home.id].id]
+    assert google.revoked == [work_token]  # nobody else uses that account
+
+
+def test_leaving_keeps_the_grant_while_another_workspace_uses_the_account(
+    web, session, owner, google, borrowed
+):
+    home = teams.personal_team(session, owner.id)
+    connect_in(web, google, home)
+    connect_in(web, google, borrowed)  # the same account in both
+
+    assert leave(web, borrowed, owner).status_code == 204
+
+    assert google.revoked == []
+    assert set(connections(session, owner)) == {home.id}
+
+
+def test_a_removed_member_loses_their_connection_there_too(
+    capp, web, session, owner, stranger, google, borrowed
+):
+    from tests.test_calendar_connect import browser
+
+    connect_in(web, google, borrowed)
+    token = google.refresh_tokens[-1]
+    boss = browser(capp, email=stranger.email)
+
+    response = leave(boss, borrowed, owner)  # the owner of the workspace removes them
+
+    assert response.status_code == 204, response.text
+    assert connections(session, owner) == {}
+    assert google.revoked == [token]
+
+
+def test_their_recorded_meetings_stay_when_they_leave(
+    web, session, owner, google, borrowed, template
+):
+    from app.models import Meeting
+
+    meeting = Meeting(
+        owner_user_id=owner.id,
+        url="https://meet.google.com/abc-defg-hij",
+        platform="google_meet",
+        native_id="abc-defg-hij",
+        template_id=template.id,
+        status="ready",
+        workspace_team_id=borrowed.id,
+        owner_team_id=borrowed.id,  # moved into the workspace: it is the workspace's now
+    )
+    session.add(meeting)
+    session.commit()
+    connect_in(web, google, borrowed)
+
+    assert leave(web, borrowed, owner).status_code == 204
+
+    session.expire_all()
+    kept = session.get(Meeting, meeting.id)
+    assert kept is not None and kept.workspace_team_id == borrowed.id

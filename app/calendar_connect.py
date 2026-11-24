@@ -708,3 +708,57 @@ def disconnect(
         run_disconnect_hooks(session, released, None)
         return not released.had_token
     return _release_at_google(session, released, google)
+
+
+# ---- leaving a workspace ----
+
+# `session.info` key: what `detach_workspace` released and the route must settle after its commit.
+RELEASED_KEY = "calendar_released"
+
+
+def detach_workspace(session: Session, user_id: int, team_id: int) -> None:
+    """The person leaves workspace `team_id` (or is removed from it): THEIR calendar connection
+    there is deleted with its events, the scheduled joins filed there are removed in every state
+    (a meeting already recorded or running is a `meetings` row and stays), and the calendar notices
+    of that workspace go. Their connections in other workspaces are untouched. In the caller's
+    transaction, no commit; the provider-side clean-up (the grant revoked only when no other
+    connection of theirs uses the account, and the `ON_DISCONNECT` hooks) is parked on
+    `session.info` for `settle_released`, which the route calls after it has committed."""
+    conns = list(
+        session.scalars(
+            select(CalendarConnection)
+            .where(CalendarConnection.user_id == user_id, CalendarConnection.team_id == team_id)
+            .with_for_update()
+        )
+    )
+    parked = session.info.setdefault(RELEASED_KEY, [])
+    for conn in conns:
+        parked.append((_release(conn), grant_still_used(session, conn), conn.provider))
+        session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    session.execute(
+        delete(ScheduledJoin).where(
+            ScheduledJoin.user_id == user_id, ScheduledJoin.team_id == team_id
+        )
+    )
+    session.execute(
+        delete(Notification).where(
+            Notification.user_id == user_id,
+            Notification.team_id == team_id,
+            Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+        )
+    )
+    for conn in conns:
+        session.delete(conn)
+    session.flush()
+
+
+def settle_released(session: Session, google: GoogleOAuth | None) -> None:
+    """After the commit of a leave or removal: for each connection `detach_workspace` released,
+    revoke the provider's grant (Google only; Microsoft has no revoke) unless another connection of
+    the person still uses the account, and run the hooks. Best effort, as `disconnect`: the local
+    deletion is what was asked for. A no-op when nothing was parked."""
+    for released, keep_grant, provider in session.info.pop(RELEASED_KEY, []):
+        if keep_grant or provider == "microsoft":
+            run_disconnect_hooks(session, released, None)
+        else:
+            _release_at_google(session, released, google)
