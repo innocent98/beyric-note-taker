@@ -5822,6 +5822,15 @@
       "TeamCreate": {
         "additionalProperties": false,
         "properties": {
+          "kind": {
+            "default": "team",
+            "enum": [
+              "team",
+              "class"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -5915,8 +5924,52 @@
       "TeamList": {
         "properties": {
           "can_create_more": {
-            "title": "Can Create More",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Create More"
+          },
+          "limit_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Message"
+          },
+          "max_owned_teams": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Owned Teams"
+          },
+          "owned_teams": {
+            "title": "Owned Teams",
             "type": "integer"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
           },
           "teams": {
             "items": {
@@ -5928,7 +5981,11 @@
         },
         "required": [
           "teams",
-          "can_create_more"
+          "can_create_more",
+          "owned_teams",
+          "max_owned_teams",
+          "plan_name",
+          "limit_message"
         ],
         "title": "TeamList",
         "type": "object"
@@ -6085,6 +6142,15 @@
             "default": false,
             "title": "Is Personal",
             "type": "boolean"
+          },
+          "kind": {
+            "default": "team",
+            "enum": [
+              "team",
+              "class"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "member_count": {
             "title": "Member Count",
@@ -6303,6 +6369,14 @@
             "title": "Is Personal",
             "type": "boolean"
           },
+          "kind": {
+            "enum": [
+              "team",
+              "class"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "member_count": {
             "title": "Member Count",
             "type": "integer"
@@ -6328,7 +6402,8 @@
           "member_count",
           "is_personal",
           "is_default",
-          "can_manage"
+          "can_manage",
+          "kind"
         ],
         "title": "TeamSummary",
         "type": "object"
@@ -18322,7 +18397,7 @@
         ]
       },
       "post": {
-        "description": "Make a team the caller owns. At most three teams per account besides the personal one (409\n`team_limit`), 422 `invalid_name` for an empty name.",
+        "description": "Make a team the caller owns, as many as their plan allows besides the personal one (Free 0,\nStarter 3, Pro 10, Scale unlimited; 409 `team_limit` with a message naming the plan to upgrade\nto), 422 `invalid_name` for an empty name.",
         "operationId": "create_team",
         "requestBody": {
           "content": {
@@ -18387,6 +18462,92 @@
           }
         },
         "summary": "Create Team",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/teams/{team_id}": {
+      "delete": {
+        "description": "Delete a team workspace. Only its owner, and only when nobody else is in it (409\n`team_has_members`); the personal space cannot be deleted (409 `personal_team`). Its tasks,\nprojects, series and integrations go with it. Its meetings go back to the people who recorded\nthem, private, in their personal workspaces; a meeting whose recorder's account is gone is\ndeleted. Deleting never depends on a plan: a lapsed plan keeps every workspace until its owner\ndeletes it.",
+        "operationId": "delete_team",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: not the owner"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such team (of the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `team_has_members`, `meeting_active`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`recording_delete_failed`"
+          }
+        },
+        "summary": "Delete Team",
         "tags": [
           "team"
         ]

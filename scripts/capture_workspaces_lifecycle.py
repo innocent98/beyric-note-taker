@@ -53,6 +53,9 @@ os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADA
 os.environ["OWNER_PASSWORD"] = PASSWORD
 os.environ["FEATURE_GATES_MODE"] = "enforce"
+# The delete route builds the bot provider (a team may hold a meeting whose recording must go); no
+# meeting of this cast needs it, so a placeholder key is never used.
+os.environ["SKRIBBY_API_KEY"] = "capture-placeholder-not-a-key"
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
@@ -175,6 +178,9 @@ def seed(engine) -> dict:
     with Session(engine) as session:
         ada = session.scalars(select(User).where(User.email == ADA)).one()
         ada.name = "Ada Example"
+        # The account migration 0006 makes is an admin, and an admin is never limited and always passes
+        # the gates: Ada must be an ordinary person for the plan rules to show.
+        ada.is_admin = False
         session.commit()
         teams.ensure_personal_team(session, ada)
         session.commit()
