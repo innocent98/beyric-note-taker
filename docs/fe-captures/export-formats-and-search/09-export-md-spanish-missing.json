@@ -1,0 +1,25 @@
+{
+  "note": "No Spanish translation: 409 `translation_missing`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=md&language=es",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "translation_missing",
+        "message": "Translate the notes to Spanish first."
+      }
+    }
+  }
+}

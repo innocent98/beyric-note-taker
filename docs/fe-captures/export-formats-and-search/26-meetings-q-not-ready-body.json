@@ -1,0 +1,27 @@
+{
+  "note": "A meeting that is not ready is matched on its title only: its transcript is not searched, so nothing is found.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?q=hedgehogs",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "meetings": [],
+      "has_more": false,
+      "next_before_id": null,
+      "worker_stale": true,
+      "refresh_after_seconds": null
+    }
+  }
+}

@@ -175,6 +175,10 @@ describe("the filter box", () => {
 
   it("can be used from the keyboard alone: every control is a labelled input or a button in tab order", async () => {
     view(<MeetingList initial={first} templates={templates} />);
+    await userEvent.tab(); // the search box and its button come first (lead-designed, above the dates)
+    expect(document.activeElement).toBe(screen.getByRole("searchbox"));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Search" }));
     await userEvent.tab();
     expect(document.activeElement).toBe(screen.getByLabelText("From"));
     await userEvent.tab();

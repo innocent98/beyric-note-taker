@@ -10,6 +10,14 @@
 - [x] Wording made true (`rule_text`, the card's rule sentences); the checkbox and texts are lead-designed (listed in the SOP); looked at in a real browser at 1280 and 390 px
 - [x] Tests, live captures (`docs/fe-captures/skip-one-on-ones/`), FE guide section 3c; **not verified:** a real Google calendar, Outlook live (documented shape only), the server
 
+**Addendum 2026-11-24: export formats, Tasks CSV and Meetings search** (branch `feature/export-formats-and-meeting-search`, SOP `docs/sop/2026-11-24-export-formats-and-meeting-search.md`, **no migration**, Alembic head unchanged; gap analysis rows 6 and 8):
+- [x] `GET /api/meetings/{id}/export?format=md|txt` (notes, `transcript=true`, `language` en/fr/es, same 404/409 rules); built in the request, never through the child renderer, so never `export_busy`; Markdown and Plain text rows in the Download menu
+- [x] `GET /api/tasks/export?format=csv`: the active team's board through `tasks.visible` (the Tasks list's own scoping), eight columns, UTF-8 with BOM, CSV-injection quote on `= + - @ tab CR`; **Export CSV** button on the Tasks screen (lead-designed)
+- [x] `GET /api/meetings?q=` (title, notes and transcript, prefix stems, all words, 2 to 100 characters else 422 `invalid_query`) and a search box on the Meetings list with the term in the address; shared helpers in `app/meeting_search.py`, Ask Beyric uses them unchanged
+- [x] Live captures (`docs/fe-captures/export-formats-and-search/`), FE guides (export section 8, owner-app 5.1b, tasks pointer), `docs/openapi.json` regenerated
+- [ ] **Search is slow when few meetings match** (about 0.9 s at 300 meetings, 13 s at 4,000; about 3 ms per readable meeting); Adebayo approved a GIN expression index as its own PR after #260 (migration 0056) merges; the exact expression and the query change it needs are in the SOP, NOT added here
+- [ ] **Not verified:** the files in Excel, Sheets, Notion, Obsidian; a real team's data; the server
+
 **Addendum 2026-11-23: speaker naming chain** (branch `fix/speaker-name-chained-elimination`, SOP `docs/sop/2026-11-23-speaker-name-chain.md`, no migration, no endpoint or FE guide change):
 - [x] Chained elimination: a name given to one tag by elimination or as a sole candidate counts as held in the next round, to a fixed point; a name from round 2 on stands only on Meet's positive evidence (usable events, clock check, agrees with the given names, the person leads the tag 1.5x and 30 s), else Unknown as before; a contested name is never held (`shared_claim` stays shared)
 - [x] Exclusion route `how: meet_exclusion`: one open tag, one left-over Meet participant (everyone present counts; a tag's own candidate list limits the count), 90 s tag floor, 30 s and 20% overlap, 1.5x anyone else's seconds, behind the timeline rule's own gates; `MIN_RATIO` untouched; same-display-name limit documented
