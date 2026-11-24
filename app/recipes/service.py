@@ -40,6 +40,7 @@ from app.models import AiRun, Document, DocumentMeeting, Meeting, Recipe, TeamBr
 from app.recipes import blocks as blocks_mod
 from app.recipes import generate
 from app.recipes.generate import GenerationFailed, RecipeSpec
+from app.recipes.picker_spec import PickerSpec
 from app.services import Refused
 from app.visibility import visible_meetings
 
@@ -183,6 +184,20 @@ def _readable_meetings(
     return ready, len(ids) - len(ready)
 
 
+def _picker_left_out(
+    session: Session, user: User, picker: PickerSpec, scope: str, team_id: int | None
+) -> int:
+    """How many meetings the person's choice in the picker names that they cannot read (the chosen
+    ids sent with the request are only the readable ones). Counted again here, not taken from the
+    client; it only fills `left_out_count`, it never adds a meeting to the draft. A picker belongs
+    to a recipe that reads several meetings."""
+    from app.recipes import picker as picking  # picker reads series, projects, sprints
+
+    if scope != "many":
+        raise Refused(422, "meetings_invalid", "This recipe uses one meeting, not a choice.")
+    return picking.resolve_meetings(session, user, picker, team_id=team_id).left_out_count
+
+
 def request_draft(
     session: Session,
     user: User,
@@ -192,6 +207,7 @@ def request_draft(
     options: dict | None = None,
     team_id: int | None = None,
     use_brief: bool = True,
+    picker: PickerSpec | None = None,
     now: datetime | None = None,
 ) -> Document:
     """Queue a draft, or hand back the one this person just asked for. Commits. Raises `Refused`:
@@ -203,6 +219,8 @@ def request_draft(
     resolved = resolve_recipe(session, user, recipe_ref, member.team_id)
     ids = list(dict.fromkeys(meeting_ids))
     meetings, left_out = _readable_meetings(session, user, ids, resolved.scope)
+    if picker is not None:
+        left_out = max(left_out, _picker_left_out(session, user, picker, resolved.scope, team_id))
     chosen = {m.id for m in meetings}
     clean = _options(options)
     feature_gates.require(session, user, entitlements.MAKE, now=now)

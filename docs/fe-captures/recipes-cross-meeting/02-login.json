@@ -1,0 +1,51 @@
+{
+  "note": "",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "daniel@example.test",
+      "password": "<password placeholder>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "daniel@example.test",
+        "name": "Daniel Okoro",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000,
+        "state": null,
+        "seconds_left": null,
+        "warning": null,
+        "can_record": null,
+        "unlimited": null,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      },
+      "multi_team": false
+    }
+  }
+}

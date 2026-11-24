@@ -2070,6 +2070,16 @@
             "title": "Options",
             "type": "object"
           },
+          "picker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PickerSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recipe_id": {
             "anyOf": [
               {
@@ -2200,6 +2210,19 @@
             "title": "Left Out Count",
             "type": "integer"
           },
+          "left_out_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A plain sentence for `left_out_count` (\"2 meetings were left out because ...\"); null for\nnone. It never names a meeting.",
+            "readOnly": true,
+            "title": "Left Out Message"
+          },
           "meeting_ids": {
             "items": {
               "type": "integer"
@@ -2309,7 +2332,8 @@
           "failure_code",
           "failure_message",
           "options",
-          "use_brief"
+          "use_brief",
+          "left_out_message"
         ],
         "title": "DocumentOut",
         "type": "object"
@@ -4387,6 +4411,171 @@
           "is_you"
         ],
         "title": "PersonOut",
+        "type": "object"
+      },
+      "PickedMeeting": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "day"
+        ],
+        "title": "PickedMeeting",
+        "type": "object"
+      },
+      "PickerPreview": {
+        "properties": {
+          "capped": {
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "left_out_count": {
+            "title": "Left Out Count",
+            "type": "integer"
+          },
+          "left_out_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left Out Message"
+          },
+          "max_meetings": {
+            "title": "Max Meetings",
+            "type": "integer"
+          },
+          "meetings": {
+            "items": {
+              "$ref": "#/components/schemas/PickedMeeting"
+            },
+            "title": "Meetings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "meetings",
+          "left_out_count",
+          "left_out_message",
+          "capped",
+          "max_meetings"
+        ],
+        "title": "PickerPreview",
+        "type": "object"
+      },
+      "PickerSpec": {
+        "description": "Which meetings to use. Exactly one of: `series_id` (a recurring meeting), `project_id`,\n`sprint_id`, a date range (`from_day` and/or `to_day`, `YYYY-MM-DD`, both days included, in the\ncaller's time zone) or `meeting_ids` (hand-picked). At most 12 are used, newest first; a meeting\nthe caller cannot read is left out and counted.",
+        "properties": {
+          "from_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Day"
+          },
+          "meeting_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 100,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Ids"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
+          },
+          "to_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Day"
+          },
+          "tz": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tz"
+          }
+        },
+        "title": "PickerSpec",
         "type": "object"
       },
       "PilotOut": {
@@ -16017,6 +16206,100 @@
         "summary": "Create Recipe",
         "tags": [
           "recipes"
+        ]
+      }
+    },
+    "/api/recipes/picker/resolve": {
+      "post": {
+        "description": "Preview the meetings a cross-meeting recipe would read for this choice: those the caller may\nread, ready, newest first, at most 12. Send the returned ids as `meeting_ids` of\n`POST /api/documents`, together with this body as `picker`, so the draft keeps the\n`left_out_count`.",
+        "operationId": "resolve_meetings",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickerSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickerPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such team, recurring meeting, project or sprint for the caller"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`validation_error` (name exactly one way of choosing), `invalid_date_range`, `invalid_time_zone`"
+          }
+        },
+        "summary": "Resolve Meetings",
+        "tags": [
+          "documents"
         ]
       }
     },

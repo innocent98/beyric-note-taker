@@ -1,0 +1,26 @@
+{
+  "note": "No CSRF token: 403 `csrf_rejected` (it is a POST).",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 1
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

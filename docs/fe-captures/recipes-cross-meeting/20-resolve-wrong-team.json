@@ -1,0 +1,28 @@
+{
+  "note": "`X-Team-Id` naming a team the caller is not in: 404 `not_found`.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "999999",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2026-11-01"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

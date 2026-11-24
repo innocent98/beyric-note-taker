@@ -1,0 +1,28 @@
+{
+  "note": "`from_day` after `to_day`: 422 `invalid_date_range`.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2026-11-09",
+      "to_day": "2026-11-02"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_date_range",
+        "message": "From must be on or before To. Swap the two dates."
+      }
+    }
+  }
+}

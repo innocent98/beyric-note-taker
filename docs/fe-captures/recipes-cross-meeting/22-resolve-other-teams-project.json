@@ -1,0 +1,27 @@
+{
+  "note": "A project of another team: 404.",
+  "client": "eve",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such project."
+      }
+    }
+  }
+}

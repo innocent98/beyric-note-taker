@@ -18,11 +18,17 @@ const mocks = vi.hoisted(() => ({
   teams: vi.fn(),
   make: vi.fn(),
   push: vi.fn(),
+  series: vi.fn(),
+  resolve: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
-    recipes: { list: mocks.list },
+    recipes: { list: mocks.list, resolvePicker: mocks.resolve },
+    series: { list: mocks.series },
+    projects: { list: vi.fn().mockResolvedValue({ projects: [] }) },
+    sprints: { list: vi.fn().mockResolvedValue({ sprints: [] }) },
+    meetings: { list: vi.fn().mockResolvedValue({ meetings: [] }) },
     brief: { get: mocks.brief },
     teams: { list: mocks.teams },
     documents: { create: mocks.make },
@@ -57,6 +63,17 @@ beforeEach(() => {
   mocks.brief.mockResolvedValue(savedBrief);
   mocks.teams.mockResolvedValue({ teams: [team(2, "My team")], can_create_more: 0 });
   mocks.make.mockResolvedValue(started);
+  mocks.series.mockResolvedValue({ timezone: "UTC", series: [{ id: 3, title: "Monday planning" }] });
+  mocks.resolve.mockResolvedValue({
+    meetings: [
+      { id: 12, title: "Review", day: "2026-11-09" },
+      { id: 11, title: "Kick-off", day: "2026-11-02" },
+    ],
+    left_out_count: 1,
+    left_out_message: "1 meeting was left out because you cannot read it or it is not ready.",
+    capped: false,
+    max_meetings: 12,
+  });
   HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
     this.setAttribute("open", "");
   };
@@ -258,16 +275,55 @@ describe("making the draft", () => {
 });
 
 describe("a recipe across meetings", () => {
-  it("leaves a marked place for the meeting picker instead of assuming one meeting", async () => {
+  it("mounts the meeting picker in a marked place, only for a recipe that reads several meetings", async () => {
     await open();
     expect(screen.queryByRole("region", { name: "Meetings" })).toBeNull();
     await userEvent.click(screen.getByRole("radio", { name: /Status report/ }));
     const slot = screen.getByRole("region", { name: "Meetings" });
-    expect(within(slot).getByText(/several meetings/i)).toBeTruthy();
+    expect(within(slot).getByLabelText("Choose meetings by")).toBeTruthy();
+    await userEvent.click(screen.getByRole("radio", { name: /Follow-up email/ }));
+    expect(screen.queryByRole("region", { name: "Meetings" })).toBeNull();
+  });
+
+  it("waits for a choice, then sends the previewed meetings and the choice, and shows what was left out", async () => {
+    await open();
+    await userEvent.click(screen.getByRole("radio", { name: /Status report/ }));
+    expect((screen.getByRole("button", { name: "Make draft" }) as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByRole("option", { name: "Monday planning" });
+    await userEvent.selectOptions(screen.getByLabelText("Recurring meeting"), "3");
+    expect(await screen.findByText("Review")).toBeTruthy();
+    expect(screen.getByText(/1 meeting was left out because you cannot read it/)).toBeTruthy();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Make draft" }) as HTMLButtonElement).disabled).toBe(false));
+    await make();
+    await waitFor(() => expect(mocks.make).toHaveBeenCalled());
+    expect(mocks.make.mock.calls[0][0]).toMatchObject({
+      recipe_key: "status_report",
+      meeting_ids: [12, 11],
+      picker: { series_id: 3 },
+    });
+    expect(mocks.resolve).toHaveBeenCalledWith({ series_id: 3 }, null);
+  });
+
+  it("sends no picker for a recipe that reads one meeting", async () => {
+    await open();
+    await make();
+    await waitFor(() => expect(mocks.make).toHaveBeenCalled());
+    expect(mocks.make.mock.calls[0][0].picker).toBeUndefined();
+    expect(mocks.make.mock.calls[0][0].meeting_ids).toEqual([7]);
+  });
+
+  it("asks the picker about the team chosen in the dialog", async () => {
+    mocks.teams.mockResolvedValue({ teams: [team(2, "My team"), team(5, "Other team")], can_create_more: 0 });
+    await open();
+    await screen.findByLabelText("Team");
+    await userEvent.selectOptions(screen.getByLabelText("Team"), "5");
+    await userEvent.click(await screen.findByRole("radio", { name: /Status report/ }));
+    await screen.findByRole("option", { name: "Monday planning" });
+    expect(mocks.series).toHaveBeenLastCalledWith(5);
   });
 
   it("mounts the picker it is given, hands it this meeting and sends what it chooses", async () => {
-    const picker = vi.fn(({ meetingIds, onChange }: { meetingIds: number[]; onChange: (ids: number[]) => void }): ReactNode => (
+    const picker = vi.fn(({ meetingIds, onChange }: { meetingIds: number[]; onChange: (ids: number[]) => void; team: number | null }): ReactNode => (
       <button type="button" onClick={() => onChange([...meetingIds, 9, 12])}>
         Pick more ({meetingIds.join(",")})
       </button>

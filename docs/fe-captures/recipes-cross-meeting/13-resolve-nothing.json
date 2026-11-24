@@ -1,0 +1,28 @@
+{
+  "note": "Nothing matches: `meetings` is empty and nothing else is wrong. Say so plainly; do not offer to make a draft.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2030-01-01"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

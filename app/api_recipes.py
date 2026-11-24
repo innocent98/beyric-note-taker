@@ -170,6 +170,7 @@ def create_document(
         options=body.options,
         team_id=team_id,
         use_brief=body.use_brief,
+        picker=body.picker,
         now=datetime.now(UTC),
     )
     return _out(session, user, doc)

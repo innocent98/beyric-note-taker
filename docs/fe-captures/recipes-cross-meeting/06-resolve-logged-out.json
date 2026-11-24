@@ -1,0 +1,27 @@
+{
+  "note": "No login: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-E>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 1
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

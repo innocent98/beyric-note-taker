@@ -28,6 +28,7 @@ from app import (
     api_recipe_board,
     api_recipe_exports,
     api_recipe_library,
+    api_recipe_picker,
     api_recipes,
     api_series,
     api_settings,
@@ -1019,6 +1020,7 @@ router.include_router(api_team.router)
 router.include_router(api_translation.router)
 router.include_router(api_recipes.router)
 router.include_router(api_recipe_board.router)
+router.include_router(api_recipe_picker.router)
 router.include_router(api_ask.router)
 router.include_router(api_shares.router)
 router.include_router(api_recipe_library.router)

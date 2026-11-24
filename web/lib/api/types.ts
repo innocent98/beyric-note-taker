@@ -144,6 +144,10 @@ export type AskPoint = Schemas["PointOut"];
 export type AskAnswer = Schemas["AskOut"];
 export type AskScope = Schemas["ScopeOut"];
 
+// The meeting picker of cross-meeting recipes (docs/fe-integration-guide-recipes-cross-meeting.md).
+export type PickerSpec = Schemas["PickerSpec"];
+export type PickerPreview = Schemas["PickerPreview"];
+export type PickedMeeting = Schemas["PickedMeeting"];
 // Meeting recipes: the recipe library, the team brief and the brief file import
 // (docs/fe-integration-guide-recipes-library.md).
 export type Recipe = Schemas["RecipeOut"];
