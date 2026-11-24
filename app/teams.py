@@ -599,6 +599,9 @@ def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> No
     ).first()
     if team is None or heir is None:
         raise TeamChangeRefused(404, "not_found", "That person is not a member of that team.")
+    # Lock the new owner's row, as `create_owned_team` does, so a create running at the same moment
+    # cannot take their last place between this check and the hand-over.
+    session.execute(select(User.id).where(User.id == new_owner_user_id).with_for_update())
     new_owner = session.get(User, new_owner_user_id)
     if team.owner_user_id != new_owner_user_id and not has_room_for_another_team(
         session, new_owner

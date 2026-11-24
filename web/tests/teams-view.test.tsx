@@ -166,6 +166,7 @@ describe("making a team", () => {
     expect(freeLimit.message).toBe("Owning a team needs a paid plan. Upgrade to the 20 hours a month plan to own up to 3 teams.");
     render(<TeamsView initial={free} />);
     expect(document.body.textContent).toContain(free.limit_message!);
+    expect(document.body.textContent).toContain("You own 0. Your plan does not include owning a team.");
     expect(screen.getByRole("link", { name: "See plans" })).toBeTruthy();
     expect((submit() as HTMLButtonElement).disabled).toBe(true);
   });

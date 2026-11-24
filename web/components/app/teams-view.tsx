@@ -100,7 +100,9 @@ export function TeamsView({ initial }: { initial: TeamList | null }) {
   const allowance =
     list.max_owned_teams === null
       ? `You own ${list.owned_teams}. Your plan has no limit.`
-      : `You own ${list.owned_teams} of the ${plural(list.max_owned_teams, "team")} your plan allows. You can make ${list.can_create_more} more.`;
+      : list.max_owned_teams === 0
+        ? `You own ${list.owned_teams}. Your plan does not include owning a team.`
+        : `You own ${list.owned_teams} of the ${plural(list.max_owned_teams, "team")} your plan allows. You can make ${list.can_create_more} more.`;
   return (
     <div className="stack-md measure teams">
       <PageHead title="Teams" subtitle="The teams you belong to. The switcher chooses which one the Meetings, Tasks, Projects, Decisions, Review and Settings screens work on." />

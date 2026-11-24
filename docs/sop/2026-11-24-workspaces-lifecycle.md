@@ -58,4 +58,5 @@ No migration, no config. Roll back by reverting the PR: `Plan.max_owned_teams` s
 - When the recipes release merges: pass `workspace=` in `recipes/service.py` (see above).
 - A member refused because the OWNER's plan lapsed reads the ordinary "needs an active plan or trial" sentence; a sentence about the owner's plan would be kinder (a copy decision).
 - The switcher's unread dots (W1 web, PR B) and this slice's "(class)" tag touch the same option text; whichever merges second keeps both.
+- From the review (nits, not fixed): `dissolve_team` cascades `scheduled_joins` while `join_runner._place` can hold a row lock on one of them, a rare deadlock (W3 owns the join runner; a retry of the delete works); a team template kept for a meeting keeps its `owner_user_id`, which can meet `uq_templates_owner_team_name` once W2 seeds per-workspace defaults (W2/W5 to check); the Team screen's `alone` counts every listed member while the server ignores deleted accounts.
 - Privacy and terms wording for classes, former members and deletion is W5's lawyer list.
