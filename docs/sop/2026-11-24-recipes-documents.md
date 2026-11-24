@@ -18,7 +18,7 @@ A recipe draft is blocks (`app/recipes/blocks.py`). A proposal needs real tables
 | Excel | every table, one sheet each, named from the heading above it (illegal characters removed, 31 characters, `Table N` when empty or a duplicate), header bold and frozen, widths from the longest cell | `openpyxl` is the one new dependency (`pyproject.toml`) |
 | Formula injection | a cell whose text, after leading whitespace, starts with `=`, `+`, `-` or `@`, or that starts with a tab or CR, is written with a leading apostrophe, in CSV and Excel, header cells too; Excel cells are also forced to the string type (`data_type = "s"`) | OWASP's rule. **Known cost:** a legitimate `-5%` or `+234...` also gets the apostrophe. Markdown, text, Word and PDF keep the text unchanged (they run nothing) |
 | Route | `GET /api/documents/{id}/export?format=&table=` in a NEW file `app/api_recipe_exports.py`, included in `app/api.py`; `format` defaults to `pdf` like the meeting export | A new file means PR 265's `app/api_recipes.py` is untouched. The default exists because the IDOR guard (`tests/test_accounts.py`) calls every id route with the path only and expects 404 |
-| Who may export | the draft's owner; another person's or a missing draft is 404 | Until PR 265 merges the route has its own small `_own_document_or_404`; **slice S4 must replace it with `api_recipes.document_or_404`** once that widens to shared drafts (it is a follow-up below) |
+| Who may export | the draft's owner; another person's or a missing draft is 404 | The route uses `api_recipes.document_or_404` (PR 265), so slice S4 widening that one function to shared drafts widens exports with it |
 | Errors | 409 `not_ready` (writing or failed), 409 `no_table`, 503 `export_busy` with `Retry-After: 5`, 504 `export_timeout`, 500 `export_failed`; project error shape | Same words as the meeting export. The Word and PDF build releases the database connection first |
 
 **LEAD-DESIGNED pieces (not in the designer's files):** the export file formats and names above, the formula apostrophe, one CSV per table, one Excel sheet per table, the rule that exports use the saved blocks. (The T9 screens will be listed here when built.)
@@ -56,7 +56,7 @@ Local, scratch Postgres 16 container (removed afterwards), only named files, nev
 
 ## Follow-ups
 
-- **S4:** replace `_own_document_or_404` in `app/api_recipe_exports.py` with `api_recipes.document_or_404` and test export by a teammate of a shared draft.
+- **S4:** test export by a teammate of a shared draft (the route already goes through `api_recipes.document_or_404`).
 - T9: the document screens, the polling hook, the editor, vitest, a look in a real browser at 390 and 1280 px; this SOP and the FE guide gain their parts then.
 - S7: measure export time on the server with real drafts.
 - An Excel file of a board (columns as sheets) and a board PNG are S6's.

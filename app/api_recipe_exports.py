@@ -10,10 +10,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import auth, export, services
+from app import auth, export
+from app.api_recipes import document_or_404
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.models import Document, User
@@ -53,19 +53,6 @@ def _error(status: int, code: str, message: str, headers=None) -> JSONResponse:
     )
 
 
-def _own_document_or_404(session: Session, user: User, document_id: int) -> Document:
-    """The caller's own draft; another person's, or none, is a 404 (slice S4 widens this to a
-    draft shared with the caller's team)."""
-    doc = None
-    if 1 <= document_id <= services.MAX_ID:
-        doc = session.scalars(
-            select(Document).where(Document.id == document_id, Document.owner_user_id == user.id)
-        ).first()
-    if doc is None:
-        raise services.Refused(404, "not_found", "No such document.")
-    return doc
-
-
 @router.get(
     "/documents/{document_id:id}/export",
     tags=["documents"],
@@ -87,7 +74,7 @@ def export_document(
     each. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run
     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
     name is the draft's title, cleaned."""
-    doc = _own_document_or_404(session, user, document_id)
+    doc = document_or_404(session, user, document_id)
     try:
         # Reads the blocks before the session is closed: the Word and PDF build can take seconds.
         content, media_type, filename = _build(session, doc, format, table)

@@ -2,7 +2,7 @@
 
 The contract for `GET /api/documents/{id}/export`, the download behind Copy-adjacent actions on a draft (Word, PDF, Markdown, CSV, Excel). The draft API itself (make, poll, edit, discard) is in `docs/fe-integration-guide-recipes.md`; this file covers exports only and will gain the document-screen notes when slice S2's web part (T9) lands.
 
-**Where every body below comes from:** `scripts/capture_recipe_exports.py` drove the real app over HTTP on a scratch database and saved each exchange to `docs/fe-captures/recipes/exports/NN-name.json` (verbatim). Placeholder people only. **Not real:** the drafts were inserted straight into the database (the route that makes drafts is in PR 265), so the draft ids (`1`, `2`...) are the scratch database's; the blocks are the stored shape. Statuses 500, 503 and 504 were **not run live** (see the table at the end).
+**Where every body below comes from:** `scripts/capture_recipe_exports.py` drove the real app over HTTP on a scratch database and saved each exchange to `docs/fe-captures/recipes/exports/NN-name.json` (verbatim). Placeholder people only. **Not real:** the drafts were inserted straight into the database (the capture was made before PR 265 merged), so the draft ids (`1`, `2`...) are the scratch database's; the blocks are the stored shape. Statuses 500, 503 and 504 were **not run live** (see the table at the end).
 
 ## What it is, in the FE's terms
 
@@ -84,4 +84,4 @@ All use the project shape `{"error": {"code", "message"}}`.
 | edited blocks are exported | live (15) |
 | 401, 404, 409 (`not_ready`, `no_table`), 422 | live (05, 10, 16 to 23) |
 | 503, 504, 500 | **not run live**: unit tests with the renderer replaced (`tests/test_recipe_exports.py`) |
-| an export of a draft shared by a teammate | **not built**: slice S4 widens who may read; today only the owner can export |
+| an export of a draft shared by a teammate | **not built**: slice S4 widens who may read (`document_or_404`); today only the owner can export |
