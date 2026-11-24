@@ -29,11 +29,8 @@ FORBIDDEN = {403: {"model": ErrorResponse, "description": "`team_forbidden`"}}
 
 
 def refuse_personal_team(session: Session, me: TeamMember) -> None:
-    """Slack and Linear belong to a team; the personal space has none (multi-team design 6.9). While
-    `MULTI_TEAM_ENABLED` is on, connecting either to the caller's personal team is 409
-    `personal_team`. With it off the team of one stays allowed: it is the only team there is."""
-    if not teams.multi_team_enabled():
-        return
+    """Slack and Linear belong to a team; the personal space has none (multi-team design 6.9):
+    connecting either to the caller's personal team is 409 `personal_team`."""
     team = session.get(Team, me.team_id)
     if team is not None and teams.is_personal_of(team, me.user_id):
         raise Refused(

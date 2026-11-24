@@ -40,6 +40,8 @@
 }
 .dl-tile-pdf { background: var(--danger-tint); color: var(--danger); }
 .dl-tile-docx { background: var(--info-tint); color: var(--info); }
+.dl-tile-md { background: var(--success-tint); color: var(--success); }
+.dl-tile-txt { background: var(--warning-tint); color: var(--warning); }
 .dl-text { display: flex; flex-direction: column; }
 .dl-label { font-size: var(--text-base); font-weight: 550; }
 .dl-sub { color: var(--text-3); font-size: var(--text-xs); }
@@ -1015,3 +1017,18 @@
 /* The suggested billing country: one confirmable line (components/billing/billing-country.tsx). */
 .bill-suggest { display: flex; flex-direction: column; gap: var(--space-2); padding: 14px 16px; border: 1px solid var(--teal-line); border-radius: 9px; background: var(--teal-wash); }
 .bill-suggest .pl-row-sub { margin: 0; }
+
+/* ---- Transcript editor (lead-designed, not in the designer's file): existing tokens only ---- */
+.transcript-edit-hint { margin: var(--space-2) 0 0; }
+.transcript-speakers { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-5); padding: var(--space-3) 0; border-bottom: 1px solid var(--border-softer); }
+.transcript-speaker { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; }
+.transcript-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.transcript-head .icon-btn { width: 28px; height: 28px; margin-top: -4px; }
+.transcript-head-plain { grid-column: 1 / -1; }
+.transcript-plain-body { min-width: 0; flex: 1; }
+.transcript-edit-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); min-width: 0; }
+.transcript-edit-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.transcript-edited { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-5) 0; }
+.transcript-edited p { margin: 0; }
+.transcript-edited + .meeting-delete-ask { margin: var(--space-3) var(--space-5) 0; }
+@media (max-width: 640px) { .transcript-edited { padding-inline: var(--space-4); } .transcript-edited + .meeting-delete-ask { margin-inline: var(--space-4); } }

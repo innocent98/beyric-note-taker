@@ -171,9 +171,9 @@ def _give_back_meetings_of_doomed_teams(
         recorder = session.get(User, meeting.owner_user_id)
         meeting.owner_team_id = None
         if recorder is not None and recorder.status != "deleted":
-            teams.rehome_tasks(
-                session, meeting, target=teams.ensure_personal_team(session, recorder)
-            )
+            home = teams.ensure_personal_team(session, recorder)
+            meeting.workspace_team_id = home.id  # filed back in their personal workspace
+            teams.rehome_tasks(session, meeting, target=home)
             # Flag on: its series row goes with the team (the foreign key would null it), so it
             # follows to its recorder's personal row first.
             series.follow_meeting(session, meeting, actor=series.SYSTEM)

@@ -50,7 +50,6 @@ admin_url, scratch_url = database_urls(sys.argv[1] if len(sys.argv) > 1 else "")
 os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADA
 os.environ["OWNER_PASSWORD"] = PASSWORD
-os.environ["MULTI_TEAM_ENABLED"] = "true"
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
@@ -591,19 +590,7 @@ def run(base: str, seeded: dict, engine) -> None:
     pat.call("auto-share-clear", "PUT", "/api/settings/auto-share", body={"team_id": None})
 
     # ---- stage 3: the flag the screens read, and no integrations on a personal team ----
-    # Captures 01 (anonymous) and 02 (Ada) above already carry `multi_team: true`; the switch-off read is below.
-    # The server runs in this process, so the switch is turned off for this one read and put back.
-    switch = teams.multi_team_enabled
-    teams.multi_team_enabled = lambda: False
-    try:
-        Recorder(base, "nobody").call(
-            "session-anonymous-switch-off",
-            "GET",
-            "/api/session",
-            note="The same read with the switch OFF: `multi_team` is false, logged out as well as in.",
-        )
-    finally:
-        teams.multi_team_enabled = switch
+    # Captures 01 (anonymous) and 02 (Ada) above already carry `multi_team: true` (always, now).
     not_slack = {"webhook_url": "https://example.test/not-a-slack-webhook"}
     pat.call(
         "integrations-slack-personal-team",

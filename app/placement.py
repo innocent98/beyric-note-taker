@@ -114,6 +114,10 @@ class PlacementRequest:
     # meeting: under `HOURS_MODE=enforce` a second concurrent meeting reserves it instead of the
     # default reserve. None for a pasted link.
     expected_seconds: int | None = None
+    # The workspace the meeting is born in (workspaces design, section 4): the active workspace for
+    # a pasted link or Send now, the connection's for a calendar join. None: the column default
+    # (the recorder's personal workspace).
+    workspace_team_id: int | None = None
 
 
 class PlacementRefused(Exception):
@@ -434,6 +438,7 @@ def place_bot(
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),
+        workspace_team_id=req.workspace_team_id,
     )
     if provider_id is None:
         # The grace counts from after the send, not from the caller's `now`, which was taken

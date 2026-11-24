@@ -41,6 +41,7 @@ ADMIN_EMAIL, MEMBER_EMAIL = "admin@example.test", "member@example.test"
 def join(session, owner, email, role, name):
     user = make_user(session, email, name=name)
     team = teams.ensure_team(session, owner)
+    team.is_personal = False  # a team somebody joined is a team, not a personal space
     session.add(TeamMember(team_id=team.id, user_id=user.id, role=role))
     session.commit()
     return user
@@ -556,6 +557,12 @@ def test_deleting_a_team_deletes_its_tasks(session, team, private):
     add_task(session, team, private)
     session.execute(text("delete from team_members where team_id = :id"), {"id": team.id})
     session.execute(text("update meetings set shared_team_id = null"))
+    session.execute(  # the meeting is filed in another workspace before this one goes
+        text("insert into teams (owner_user_id) select owner_user_id from teams where id = :id"),
+        {"id": team.id},
+    )
+    session.execute(text("update meetings set workspace_team_id = (select max(id) from teams)"))
+    session.execute(text("update templates set team_id = (select max(id) from teams)"))
     session.execute(text("delete from teams where id = :id"), {"id": team.id})
     session.commit()
     assert session.scalars(select(Task)).all() == []

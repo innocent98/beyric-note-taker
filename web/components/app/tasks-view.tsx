@@ -14,6 +14,7 @@ import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
+import { saveBlob } from "@/lib/save-file";
 import type { Milestone, Project, Task, TaskList, TaskStatus } from "@/lib/api/types";
 import {
   boardSprintIds,
@@ -90,11 +91,28 @@ export function TasksView({
   const [dragId, setDragId] = useState<number | null>(null);
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null);
   const [creating, setCreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [toast, flash] = useToast();
   const dragging = useRef<number | null>(null);
 
   const tasks = data?.tasks ?? [];
   const people = data?.people ?? [];
+
+  // "Export CSV" (lead-designed: the designer's files have no export): every task of the active team's board
+  // as a spreadsheet file, built when asked. The answer is a line under the page, like the other actions here.
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const file = await api.tasks.exportCsv();
+      const name = file.filename ?? "tasks.csv";
+      saveBlob(file.blob, name);
+      flash(`${name} downloaded`);
+    } catch (caught) {
+      flash(errorMessage(caught));
+    }
+    setExporting(false);
+  }
 
   const replace = useCallback((next: Task) => {
     setData((current) =>
@@ -310,6 +328,10 @@ export function TasksView({
   return (
     <div className="stack-lg tk">
       <PageHead title="Tasks" subtitle="Action items from your meetings, assigned to the people responsible.">
+        <Button type="button" kind="secondary" size="md" onClick={() => void exportCsv()} disabled={exporting}>
+          <Icon name="download" size={14} />
+          {exporting ? "Preparing..." : "Export CSV"}
+        </Button>
         <Button type="button" size="md" onClick={() => void newTask()} disabled={creating}>
           <Icon name="plus" size={14} stroke={2.4} />
           New task

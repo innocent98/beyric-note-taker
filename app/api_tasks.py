@@ -15,7 +15,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, mail, services, tasks, team_admin, teams, timezones, titles, workspace
+from app import (
+    auth,
+    mail,
+    services,
+    sprints,
+    tasks,
+    tasks_csv,
+    team_admin,
+    timezones,
+    titles,
+    workspace,
+)
 from app.api_schemas import (
     AttentionOut,
     ErrorResponse,
@@ -32,7 +43,8 @@ from app.api_schemas import (
 )
 from app.db import get_session
 from app.extraction import TranscriptIndex
-from app.models import Meeting, Task, Team, User, UserSettings
+from app.models import Meeting, Project, Sprint, Task, Team, User, UserSettings
+from app.notes_document import content_disposition
 from app.visibility import can_read_clause, owns
 
 router = APIRouter()
@@ -151,8 +163,8 @@ def _task_or_404(session: Session, user: User, task_id: int) -> Task:
     return task
 
 
-def _team_people(session: Session, user: User, team_id: int | None = None) -> list[PersonOut]:
-    team = session.get(Team, team_id) if team_id is not None else teams.ensure_team(session, user)
+def _team_people(session: Session, user: User, team_id: int) -> list[PersonOut]:
+    team = session.get(Team, team_id)
     return [
         PersonOut(user_id=m.user_id, name=m.display_name, is_you=m.user_id == user.id)
         for m in tasks.members_of(session, team.id)
@@ -192,11 +204,9 @@ def list_tasks(
     """The tasks the caller can see: those assigned to them, those from meetings they can read,
     and their team's manual tasks. Newest first; for the next page pass `before_id` =
     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-    suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
-    in) only that team's board, its people and its counts; without it, every team's tasks the
-    caller can see, as before (`people` are then the default team's)."""
-    if team_id is not None:
-        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
+    suggested task is in no count. Only the active workspace's board, its people and its counts:
+    the `X-Team-Id` header (404 for a team the caller is not in), else the default workspace."""
+    team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs
     rows, more = tasks.list_tasks(
         session,
         user,
@@ -219,6 +229,98 @@ def list_tasks(
     )
 
 
+# Tasks read per page while a CSV is made, and the most pages: a team past this many tasks gets the
+# newest ones (10,000), which is far past what the board itself loads (500).
+_EXPORT_PAGES = 20
+
+
+@router.get(
+    "/tasks/export",
+    tags=["tasks"],
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The CSV file, built for this request and not stored.",
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+        },
+        404: {"model": ErrorResponse, "description": "`not_found`: a team the caller is not in"},
+    },
+)
+def export_tasks(
+    format: Literal["csv"] = Query("csv"),
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    """The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
+    and the same workspace scoping as `GET /api/tasks` (the `X-Team-Id` header, else the personal
+    workspace; suggested tasks left out, newest first),
+    every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
+    Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
+    are filled only when the caller may read that meeting, as on the screen; the date is in the
+    caller's stored time zone (UTC when none).
+
+    UTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage
+    return gets a single quote in front so a spreadsheet shows it as text instead of running it."""
+    team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs
+    zone = _zone(session, user)
+    rows: list[list[object]] = []
+    before: int | None = None
+    for _ in range(_EXPORT_PAGES):
+        page, more = tasks.list_tasks(
+            session,
+            user,
+            assignee=None,
+            status=None,
+            limit=tasks.LIST_MAX,
+            before_id=before,
+            team_id=team_id,
+        )
+        shown = present(session, user, page)
+        projects = {
+            pid: name
+            for pid, name in session.execute(
+                select(Project.id, Project.name).where(
+                    Project.id.in_({t.project_id for t in shown if t.project_id})
+                )
+            )
+        }
+        sprint_names = {
+            sprint.id: sprints.name_of(sprint)
+            for sprint in session.scalars(
+                select(Sprint).where(Sprint.id.in_({t.sprint_id for t in shown if t.sprint_id}))
+            )
+        }
+        for t in shown:
+            rows.append(
+                [
+                    t.title,
+                    tasks_csv.STATUS_LABELS[t.status],
+                    t.assignee.name if t.assignee else "",
+                    t.due_date.isoformat() if t.due_date else "",
+                    projects.get(t.project_id, "") if t.project_id else "",
+                    sprint_names.get(t.sprint_id, "") if t.sprint_id else "",
+                    t.meeting.title if t.meeting else "",
+                    timezones.localise(t.meeting.created_at, zone)[0].date().isoformat()
+                    if t.meeting
+                    else "",
+                ]
+            )
+        if not more:
+            break
+        before = page[-1].id
+    today = timezones.localise(datetime.now(UTC), zone)[0].date().isoformat()
+    return Response(
+        tasks_csv.build_csv(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": content_disposition(f"tasks-{today}.csv"),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.post(
     "/tasks",
     status_code=201,
@@ -232,10 +334,9 @@ def create_task(
     user: User = Depends(auth.current_user),
 ) -> TaskOut:
     """Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
-    is not in) or, without it, the caller's default team. Anyone on the team may. It has no
+    is not in) or, without it, the caller's default workspace. Anyone on the team may. It has no
     meeting."""
-    if team_id is not None:
-        team_admin.my_membership(session, user, team_id)
+    team_id = team_admin.my_membership(session, user, team_id).team_id
     zone = _zone(session, user)
     try:
         task = tasks.create(

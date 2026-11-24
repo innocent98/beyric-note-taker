@@ -15,11 +15,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from app import birth_workspace
 from app.billing.types import EVENT_KINDS as BILLING_EVENT_KINDS
 from app.bot_provider import DEFAULT_PROVIDER
 
@@ -28,6 +30,7 @@ STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
 MEETING_SOURCES = ("manual", "calendar", "instant_meet")
 USER_STATUSES = ("active", "suspended", "deleted")
 TEAM_ROLES = ("owner", "admin", "member")
+TEAM_KINDS = ("team", "class")
 INVITE_ROLES = ("admin", "member")
 TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite", "mail_optout")
 SHARE_LANGUAGES = ("en", "fr", "es")
@@ -129,6 +132,47 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 
 class Base(DeclarativeBase):
     pass
+
+
+# The accents and other combining marks folded away before words are matched, as
+# `app.extraction.normalise` folds the words a person types (it does NFKD and drops the combining
+# marks): the Latin, Greek and Cyrillic diacritics and their supplements, which is what French,
+# Spanish, Portuguese and Yoruba names ("équipe", "Ọlá") carry. A mark outside these blocks (Hebrew
+# points, Arabic vowel signs, Indic signs) is not folded in the stored text, though `normalise` does
+# drop it from a typed word: such a word will not match.
+SEARCH_FOLD_MARKS = r"[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]"
+
+# The text of a meeting that search reads, as one `tsvector`: its notes plus its transcript (the
+# speaker-labelled one when there is one), accents folded the way `normalise` folds a typed word.
+# ONE function for every reader (Ask Beyric's `candidates`, the Meetings list's search box:
+# `app/meeting_search.py`), and the GIN index on `meetings` is built on a call to it, so Postgres
+# can use that index only when a query calls exactly
+# `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an index
+# to use it (`concat_ws` is not; `normalize(text, NFKD)`, `regexp_replace` and `to_tsvector` with a
+# named configuration are; the `unaccent` extension is not). Keep it a single SQL statement so
+# Postgres inlines it. Migration 0057 holds its own frozen copy of this text.
+MEETING_SEARCH_TEXT_SQL = r"""
+CREATE OR REPLACE FUNCTION meeting_search_text(
+    notes text, speaker_transcript text, transcript text
+) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT to_tsvector(
+        'simple',
+        regexp_replace(
+            normalize(
+                coalesce(notes, '') || ' ' ||
+                    coalesce(nullif(speaker_transcript, ''), transcript, ''),
+                NFKD
+            ),
+            '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]',
+            '',
+            'g'
+        )
+    )
+$$
+"""
+# The tests build the schema with `create_all`, not the migrations: the function has to exist
+# before the index that calls it is made.
+sa.event.listen(Base.metadata, "before_create", sa.DDL(MEETING_SEARCH_TEXT_SQL))
 
 
 class User(Base):
@@ -253,6 +297,7 @@ class Notification(Base):
     __table_args__ = (
         CheckConstraint(_in("severity", SEVERITIES), name="ck_notifications_severity"),
         UniqueConstraint("user_id", "dedupe_key", name="uq_notifications_user_dedupe"),
+        Index("ix_notifications_team_user", "team_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -262,6 +307,13 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text, default="", server_default="")
     meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    # The workspace this notification belongs to (workspaces design, section 3): the bell shows the
+    # active workspace's. Its meeting's workspace when it has one, else the person's personal one.
+    team_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        default=birth_workspace.notification_default,
+    )
     dedupe_key: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -346,8 +398,10 @@ class Template(Base):
     __tablename__ = "templates"
     __table_args__ = (
         Index(
-            "uq_templates_owner_name",
+            "uq_templates_owner_team_name",
             "owner_user_id",
+            # team_id may be null until W2; two nulls must still clash (coalesce)
+            sa.text("coalesce(team_id, 0)"),
             "name",
             unique=True,
             postgresql_where=sa.text("deleted_at is null"),
@@ -356,6 +410,15 @@ class Template(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # The workspace the template belongs to (workspaces design, section 3). `owner_user_id` is who
+    # made it. Until the per-workspace template routes land (slice W2, which also makes the column
+    # NOT NULL), a new row is in its owner's personal workspace and the column may be null.
+    team_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        index=True,
+        default=birth_workspace.owner_personal_default,
+    )
     name: Mapped[str] = mapped_column(String(100))
     instructions: Mapped[str] = mapped_column(Text)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -363,10 +426,19 @@ class Template(Base):
 
 class VocabularyTerm(Base):
     __tablename__ = "vocabulary_terms"
-    __table_args__ = (UniqueConstraint("owner_user_id", "term", name="uq_vocabulary_owner_term"),)
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "team_id", "term", name="uq_vocabulary_owner_team_term"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # The workspace the term belongs to; see `Template.team_id`.
+    team_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        index=True,
+        default=birth_workspace.owner_personal_default,
+    )
     term: Mapped[str] = mapped_column(String(200))
 
 
@@ -383,6 +455,7 @@ class Team(Base):
         CheckConstraint(_in("reminder_timing", REMINDER_TIMINGS), name="ck_teams_reminder_timing"),
         CheckConstraint(_in("sprint_length", SPRINT_LENGTHS), name="ck_teams_sprint_length"),
         CheckConstraint("sprint_custom_days between 1 and 365", name="ck_teams_sprint_custom_days"),
+        CheckConstraint(_in("kind", TEAM_KINDS), name="ck_teams_kind"),
         Index(
             "uq_teams_one_personal_per_owner",
             "owner_user_id",
@@ -395,6 +468,8 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(200), default="My team", server_default="My team")
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     is_personal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # `class` changes wording only (Class, Students, Lecturer; workspaces design, section 6).
+    kind: Mapped[str] = mapped_column(String(8), default="team", server_default="team")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", server_default="UTC")
     # The team default for "Share with team" (spec 8.2): off. Read when a meeting's notes are first
     # written (`teams.apply_share_default`), never when the bot joins, and never copied anywhere.
@@ -459,8 +534,7 @@ class TeamInvite(Base):
 
 class TeamMember(Base):
     """A user's membership of one team. A person may have several (multi-team design): one row per
-    team, a role in each, unique on (team, user). `MULTI_TEAM_ENABLED` decides whether the app lets
-    a second one be made; the schema no longer stops it."""
+    team, a role in each, unique on (team, user)."""
 
     __tablename__ = "team_members"
     __table_args__ = (
@@ -547,6 +621,36 @@ class UserSettings(Base):
     )
 
 
+class WorkspacePrefs(Base):
+    """What a person sets once per workspace instead of once overall (workspaces design, section
+    3): the note taker's name, the auto-join rule and its two modifiers, and the template their
+    calendar's meetings use. One row per (workspace, person); a person with no row there falls back
+    to their own defaults (`user_settings`, `users.bot_name`). The cutover made a row in each
+    person's personal workspace and in the workspace their calendar moved to."""
+
+    __tablename__ = "workspace_prefs"
+    __table_args__ = (
+        CheckConstraint(_in("auto_join_rule", AUTO_JOIN_RULES), name="ck_workspace_prefs_rule"),
+        Index("ix_workspace_prefs_user_id", "user_id"),
+    )
+
+    team_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    bot_name: Mapped[str | None] = mapped_column(String(50))
+    auto_join_rule: Mapped[str] = mapped_column(String(16), default="all", server_default="all")
+    join_unanswered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    skip_one_on_ones: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    calendar_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("templates.id", ondelete="SET NULL")
+    )
+
+
 class CalendarConnection(Base):
     """A user's connected calendar source: their Google connection (the calendar and Meet features
     are each derived from `granted_scopes`, so Meet detection works without the Calendar scope) or,
@@ -576,6 +680,15 @@ class CalendarConnection(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    # The workspace this connection belongs to (workspaces design, section 4): meetings it joins
+    # are born there, and the join rules live on it. Until the connect routes take the active
+    # workspace, a new connection is in the person's default workspace.
+    team_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        index=True,
+        default=birth_workspace.connection_default,
+    )
     provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
     # The connected account, whichever provider: a label (the address shown on Settings), the
     # provider's stable subject id (Google `sub`; Microsoft `oid`), and the organisation domain
@@ -696,6 +809,13 @@ class ScheduledJoin(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    # The workspace the join records into (workspaces design, 12.4): its connection's.
+    team_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        index=True,
+        default=birth_workspace.join_default,
+    )
     source: Mapped[str] = mapped_column(String(16), default="calendar", server_default="calendar")
     # Null for an instant-Meet join. The event row goes two days after the meeting; the join stays.
     calendar_event_id: Mapped[int | None] = mapped_column(
@@ -739,6 +859,12 @@ class Meeting(Base):
             "owner_team_id is null or shared_team_id is null", name="ck_meetings_team_xor"
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
+        Index("ix_meetings_workspace_team_id", "workspace_team_id", "id"),
+        Index(
+            "ix_meetings_search_text",
+            sa.text("meeting_search_text(notes, speaker_transcript, transcript)"),
+            postgresql_using="gin",
+        ),
         Index(
             "ix_meetings_series_id",
             "series_id",
@@ -758,6 +884,14 @@ class Meeting(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # The workspace this meeting belongs to, from birth (workspaces design, section 3): the
+    # container every list, search and Ask answer narrows by. It is NOT who may read it: that stays
+    # `shared_team_id` / `owner_team_id` and `app/visibility.py`. Only `visibility.in_workspace` and
+    # the writers named in `app/meeting_teams.py` and `app/teams.py` use it. No ON DELETE action: a
+    # team is never deleted while it holds a meeting; its meetings are re-homed first.
+    workspace_team_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("teams.id"), default=birth_workspace.meeting_default
+    )
     url: Mapped[str] = mapped_column(Text)
     platform: Mapped[str] = mapped_column(String(32))
     native_id: Mapped[str] = mapped_column(String(200))
@@ -793,6 +927,22 @@ class Meeting(Base):
     # saved and for meetings made before this column existed (they were all `own`).
     transcript_source: Mapped[str | None] = mapped_column(String(16))
     speaker_transcript: Mapped[str | None] = mapped_column(Text)
+    # A person's edits to the transcript (`app/transcript_edit.py`). The edit changes the displayed
+    # column (`speaker_transcript`, else `transcript`; every reader falls back the same way).
+    # `transcript_original` holds that column's text from before the FIRST edit, once; it is null
+    # for a transcript nobody edited, and "Restore original" puts it back and nulls all three
+    # edit columns. Machinery that rewrites a transcript
+    # (`scripts/rebuild_meeting_from_evidence.py`) skips a meeting where this is set.
+    transcript_original: Mapped[str | None] = mapped_column(Text)
+    transcript_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcript_edited_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # The version (`transcript_text.version_of`) of the exact text the current `notes` were written
+    # from, set by the owner's rewrite from the text it sent to the model. Null = the notes were
+    # written by the pipeline or the rebuild script from the transcript as it was before any edit
+    # (`transcript_edit.notes_outdated` compares it with the shown text).
+    notes_source_version: Mapped[str | None] = mapped_column(String(16))
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1189,6 +1339,9 @@ class Plan(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # How many team workspaces a person on this plan may own besides their personal one (workspaces
+    # design, section 5). Null = unlimited. No plan (free, or a trial) is 0 in code.
+    max_owned_teams: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -2149,3 +2302,17 @@ class SkribbySegmentEvidence(Base):
     # could not be fetched. Same retention and deletion as the row.
     events: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# A meeting shared to, or owned by, a team is filed in that team's workspace (workspaces design,
+# 12.1): the container follows the share on EVERY writer (the routes, `app/teams.py`, tests,
+# scripts), so a team's members never find a meeting readable through the team but absent from its
+# list. Clearing a share (unshare, move back) leaves the container where it is: the writers that
+# move it elsewhere (`app/meeting_teams.py`, `app/teams.py`, `app/deletion.py`) say so themselves.
+def _file_in_team(target: Meeting, value, oldvalue, initiator) -> None:
+    if value is not None:
+        target.workspace_team_id = value
+
+
+event.listen(Meeting.shared_team_id, "set", _file_in_team)
+event.listen(Meeting.owner_team_id, "set", _file_in_team)

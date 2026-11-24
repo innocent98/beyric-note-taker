@@ -39,16 +39,19 @@ from app import (
     calendar_recurring,
     entitlements,
     export,
+    export_text,
     meeting_teams,
     notifications,
     services,
     tasks,
     team_admin,
     teams,
+    transcript_edit,
     translation,
     usage,
     visibility,
     workspace,
+    workspace_context,
 )
 from app import series as series_rules
 from app.api_schemas import (
@@ -61,6 +64,7 @@ from app.api_schemas import (
     MoveRequest,
     NewMeeting,
     NewTerm,
+    OtherWorkspace,
     Regenerate,
     SessionState,
     ShareRequest,
@@ -70,8 +74,11 @@ from app.api_schemas import (
     TemplateOut,
     TermList,
     TermOut,
+    TranscriptEdit,
+    TranscriptRestore,
     UsageOut,
     UserOut,
+    WorkspaceRef,
 )
 from app.bot_invite import meeting_invite_email
 from app.config import get_settings
@@ -91,6 +98,7 @@ from app.pipeline import (
     join_retry_at,
 )
 from app.services import Refused, get_bot_provider, get_openai_client
+from app.transcript_text import version_of
 
 REFRESH_SECONDS = 30  # how often the Jinja page refreshes while a meeting is active
 LIST_DEFAULT, LIST_MAX = 50, 100
@@ -222,6 +230,26 @@ def _usage_out(db: Session, user, settings) -> UsageOut:
     )
 
 
+def _workspace_ref(db: Session, user: User, team_id: int) -> WorkspaceRef:
+    team = db.get(Team, team_id)
+    return WorkspaceRef(
+        id=team.id, name=team.name, is_personal=teams.is_personal_of(team, user.id), kind=team.kind
+    )
+
+
+def _other_workspaces(db: Session, user: User, active_id: int) -> list[OtherWorkspace]:
+    """Every workspace the person is in except the active one, with how many notifications are
+    unread there (the switcher's dot), oldest membership first."""
+    unread = notifications.unread_by_workspace(db, user)
+    return [
+        OtherWorkspace(
+            **_workspace_ref(db, user, team_id).model_dump(), unread_notifications=unread[team_id]
+        )
+        for team_id in teams.team_ids_of(db, user.id)
+        if team_id != active_id
+    ]
+
+
 def _session_state(request: Request, db: Session, team_id: int | None = None) -> SessionState:
     current, user = request.state.session, request.state.user
     if user is None:
@@ -232,7 +260,9 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
             usage=None,
             unread_notifications=None,
             badges=None,
-            multi_team=teams.multi_team_enabled(),
+            active_workspace=None,
+            other_workspaces=None,
+            multi_team=True,
         )
     settings = request.app.state.settings
     active = team_admin.active_team_or_default(db, user, team_id)
@@ -250,12 +280,14 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
             ),
         ),
         usage=_usage_out(db, user, settings),
-        unread_notifications=notifications.unread_count(db, user),
+        unread_notifications=notifications.unread_count(db, user, active.id),
         badges=BadgesOut(
             review_open=workspace.open_review_count(db, user, active),
-            tasks_new=tasks.new_count(db, user, active.id if active else None),
+            tasks_new=tasks.new_count(db, user, active.id),
         ),
-        multi_team=teams.multi_team_enabled(),
+        active_workspace=_workspace_ref(db, user, active.id),
+        other_workspaces=_other_workspaces(db, user, active.id),
+        multi_team=True,
     )
 
 
@@ -270,9 +302,12 @@ def read_session(
     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
     it names the user and reports their recorded hours (`usage`).
 
-    The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
-    (with multi-team off and no header: everything they can see, as before). A team the caller is
-    not in is NOT an error here (this call is every page's first): it counts the default team.
+    The active workspace (`active_workspace`) is the `X-Team-Id` header's, else the person's
+    default one (their only team, else their personal workspace: the one the web opens on, the same
+    as `is_default` in `GET /api/teams`). `badges` and `unread_notifications` count that workspace
+    only, and `other_workspaces` lists the rest with their unread count (the switcher's dot). A team
+    the caller is not in is NOT an error here (this call is every page's first): it answers the
+    default workspace. Every other route with no header acts on that same default workspace.
     """
     return _session_state(request, session, team_id)
 
@@ -382,6 +417,15 @@ def _can_move_back(session: Session, user: User, meeting: Meeting) -> bool:
     return member is not None and member.role in teams.MANAGER_ROLES
 
 
+def _editor_name(session: Session, meeting: Meeting) -> str | None:
+    """Who made the last edit of the transcript, shown to anyone who reads it; null if nobody has
+    (or the account is gone)."""
+    if meeting.transcript_edited_by_user_id is None:
+        return None
+    editor = session.get(User, meeting.transcript_edited_by_user_id)
+    return visibility.former_or_name(editor) if editor is not None else None
+
+
 def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
     carries its meeting password. The `can_*` flags are false for a teammate reading a shared
@@ -394,7 +438,12 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
     review_open_count = review_open_count if recorder else 0  # review items are the recorder's
     task_rows = tasks.meeting_tasks(session, user, meeting.id) if ready else []
+    in_workspace = teams.membership(session, user.id, meeting.workspace_team_id) is not None
     return MeetingDetail(
+        workspace_team_id=meeting.workspace_team_id,
+        workspace=_workspace_ref(session, user, meeting.workspace_team_id)
+        if in_workspace
+        else None,
         **_summary(
             meeting,
             services.template_names(session, [meeting])[meeting.template_id],
@@ -414,13 +463,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         shared_by=None if recorder else _owner_name(session, meeting),
         team=_team_ref(session, meeting),
         owned_by_team=meeting.owner_team_id is not None,
-        can_move=(
-            owner
-            and ready
-            and meeting.owner_team_id is None
-            and recorder
-            and teams.multi_team_enabled()
-        ),
+        can_move=(owner and ready and meeting.owner_team_id is None and recorder),
         can_move_back=_can_move_back(session, user, meeting),
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
@@ -435,6 +478,16 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
+        can_edit_transcript=owner and ready,
+        transcript_version=(
+            version_of(transcript_edit.shown_text(meeting))
+            if transcript_edit.shown_text(meeting)
+            else None
+        ),
+        transcript_edited=transcript_edit.is_edited(meeting),
+        transcript_edited_at=meeting.transcript_edited_at,
+        transcript_edited_by=_editor_name(session, meeting),
+        notes_outdated=ready and transcript_edit.notes_outdated(meeting),
         duration_seconds=meeting.recorded_seconds,
         participants=_participants(meeting),
         decisions_count=decisions_count,
@@ -475,6 +528,11 @@ def list_meetings(
     from_day: str | None = Query(None, alias="from"),
     to_day: str | None = Query(None, alias="to"),
     tz: str | None = Query(None),
+    q: str | None = Query(
+        None,
+        description="Keywords: keep the meetings whose title contains the text, or whose notes "
+        "or transcript contain every word of it. 2 to 100 characters.",
+    ),
     team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
@@ -498,7 +556,16 @@ def list_meetings(
     `tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the
     caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
     day headings in, so the filter's days are always the headings' days. A stored zone wins and
-    `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know."""
+    `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.
+
+    `q` (optional, trimmed, 2 to 100 characters) is the search box: it keeps a meeting when its
+    title contains the text (upper and lower case alike; `%` and `_` count as themselves), or,
+    for a meeting whose notes are ready, when every word of it appears in the notes or the
+    transcript (a word matches by its start, so "pricing" finds "price"). A meeting that is not
+    ready can match on its title only. It only narrows the list: the team, the visibility rule,
+    the dates, the order and `before_id` paging are as without it. 422 `invalid_query` for a
+    value outside 2 to 100 characters. No model is called, so it costs nothing."""
+    keywords = services.parse_keywords(q)
     first = services.parse_day(from_day, "From")
     last = services.parse_day(to_day, "To")
     stored = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
@@ -506,7 +573,7 @@ def list_meetings(
     created_from, created_before = services.day_range_utc(zone, first, last)
     active = team_admin.active_team(session, user, team_id)
     rows = services.list_meetings(
-        session, user, limit + 1, before_id, created_from, created_before, active
+        session, user, limit + 1, before_id, created_from, created_before, active, keywords
     )
     page = rows[:limit]
     names = services.template_names(session, page)
@@ -540,6 +607,8 @@ EXPORT_RESPONSES = {
         "content": {
             "application/pdf": {"schema": {"type": "string", "format": "binary"}},
             export.FORMATS["docx"][0]: {"schema": {"type": "string", "format": "binary"}},
+            export_text.TEXT_FORMATS["md"][0]: {"schema": {"type": "string"}},
+            export_text.TEXT_FORMATS["txt"][0]: {"schema": {"type": "string"}},
         },
     },
     404: {
@@ -565,21 +634,24 @@ EXPORT_RESPONSES = {
 )
 def export_meeting(
     meeting_id: int,
-    format: Literal["pdf", "docx"] = Query("pdf"),
+    format: Literal["pdf", "docx", "md", "txt"] = Query("pdf"),
     transcript: bool = Query(False),
     language: Literal["en", "fr", "es"] = Query("en"),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    """The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
+    """The notes (and, with `transcript=true`, the full transcript) as a PDF, Word, Markdown or
+    plain-text file.
 
     `language` `fr` or `es` builds it from the finished, current translation (409
     `translation_missing` when there is none: translate first); `en`, the default, is the
     original.
 
-    Built when asked and never stored. One file is built at a time per server process: a second
-    request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
-    title, cleaned, in `Content-Disposition`.
+    Built when asked and never stored. PDF and Word are built one at a time per server process: a
+    second request meanwhile gets 503 `export_busy` with `Retry-After`. `md` (the notes as they
+    are stored, Markdown, with the title and date above and each speaker's turn bold) and `txt`
+    (the same with the marks taken off) are text made in the request itself, so they are never
+    busy. The file name is the meeting's title, cleaned, in `Content-Disposition`.
     """
     meeting = services.visible_meeting_or_404(session, user, meeting_id)
     if meeting.status != "ready" or not meeting.notes:
@@ -613,6 +685,14 @@ def export_meeting(
         generated_at=datetime.now(UTC),
     )
     session.close()  # the build can take seconds: do not hold a database connection meanwhile
+    if format in export_text.TEXT_FORMATS:
+        media_type, extension = export_text.TEXT_FORMATS[format]
+        text = (
+            export_text.build_markdown(doc, notes)
+            if format == "md"
+            else export_text.build_text(doc)
+        )
+        return _file_response(text, media_type, export_filename(title, extension))
     media_type, extension = export.FORMATS[format]
     try:
         content = export.build_file(doc, format)
@@ -631,11 +711,16 @@ def export_meeting(
                 "Preparing the file took too long. Try again, or leave the transcript out.",
             )
         return error_response(500, "export_failed", "The file could not be prepared. Try again.")
+    return _file_response(content, media_type, export_filename(title, extension))
+
+
+def _file_response(content: bytes, media_type: str, filename: str) -> Response:
+    """A file built for this request: an attachment, never cached, never sniffed."""
     return Response(
         content,
         media_type=media_type,
         headers={
-            "Content-Disposition": content_disposition(export_filename(title, extension)),
+            "Content-Disposition": content_disposition(filename),
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
         },
@@ -652,6 +737,7 @@ def create_meeting(
     body: NewMeeting,
     request: Request,
     response: Response,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     provider=Depends(get_bot_provider),
@@ -662,9 +748,18 @@ def create_meeting(
     bot of the account's is already in that meeting), `meeting_has_note_taker` (another account's
     bot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a
     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
-    when the bot host did not take the bot."""
+    when the bot host did not take the bot. The meeting is born in the active workspace (the
+    `X-Team-Id` header, else the default one): a member may record into any workspace they belong
+    to, on their own hours."""
     meeting = services.create_meeting(
-        session, provider, user, body.url, body.template_id, request.app.state.settings, body.title
+        session,
+        provider,
+        user,
+        body.url,
+        body.template_id,
+        request.app.state.settings,
+        body.title,
+        workspace.id,
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
     return _detail(meeting, session, user)
@@ -757,8 +852,7 @@ def unshare_meeting(
         },
         409: {
             "model": ErrorResponse,
-            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, "
-            "`multi_team_disabled`",
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`",
         },
     },
 )
@@ -888,6 +982,80 @@ def regenerate_notes(
         session,
         user,
     )
+
+
+_EDIT_ERRORS = {code: {"model": ErrorResponse} for code in (404, 409, 422)}
+
+
+@router.patch(
+    "/meetings/{meeting_id:id}/transcript",
+    tags=["meetings"],
+    responses={
+        **_EDIT_ERRORS,
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`: the caller can "
+            "read the meeting but may not change it",
+        },
+    },
+)
+def edit_transcript(
+    meeting_id: int,
+    body: TranscriptEdit,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Edit the transcript of a `ready` meeting: rename a speaker everywhere (`rename`), or change
+    one line's words and/or speaker (`line`, the 1-based row of the page, with `text` and/or
+    `speaker`). The number and order of lines never change. The original is kept once, before the
+    first edit (`POST .../transcript/restore` puts it back). Nothing is rewritten: the response has
+    `notes_outdated: true` until the owner rewrites the notes. Who may: whoever may delete the
+    meeting (its recorder; a team's owner and admins); 403 `team_forbidden` for a reader, 404 when
+    the caller cannot read it. 409 `not_ready`, `transcript_changed` (the `version` is old),
+    `speaker_exists` (renaming into an existing speaker needs `merge: true`), `meeting_busy`; 422
+    `no_speakers`, `speaker_not_found`, `invalid_name`, `empty_text`, `no_change`,
+    `line_out_of_range`, `invalid_edit`."""
+    meeting = transcript_edit.editable_meeting(session, user, meeting_id)
+    if body.rename is not None:
+        meeting = transcript_edit.rename(
+            session,
+            user,
+            meeting,
+            body.version,
+            body.rename.from_,
+            body.rename.to,
+            body.rename.merge,
+        )
+    else:
+        assert body.line is not None
+        meeting = transcript_edit.change_line(
+            session, user, meeting, body.version, body.line, body.text, body.speaker
+        )
+    return _detail(meeting, session, user)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/transcript/restore",
+    tags=["meetings"],
+    responses={
+        **_EDIT_ERRORS,
+        403: {
+            "model": ErrorResponse,
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`",
+        },
+    },
+)
+def restore_transcript(
+    meeting_id: int,
+    body: TranscriptRestore,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Put back the transcript as it was before the first edit and forget the edits. 409
+    `nothing_to_restore` when it was never edited; the other refusals are those of the edit."""
+    meeting = transcript_edit.editable_meeting(session, user, meeting_id)
+    meeting = transcript_edit.restore(session, meeting, body.version)
+    return _detail(meeting, session, user)
 
 
 # ---- templates ----

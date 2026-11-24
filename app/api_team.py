@@ -115,12 +115,12 @@ def update_team(
     Changing a sprint setting redraws the open sprints. The default applies,
     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
     member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
-    keeps its name while multi-team is on: 409 `personal_team` for a `name` on it."""
+    keeps its name: 409 `personal_team` for a `name` on it."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     team = session.get(Team, me.team_id)
     if body.name is not None:
-        if teams.multi_team_enabled() and teams.is_personal_of(team, user.id):
+        if teams.is_personal_of(team, user.id):
             raise Refused(
                 409,
                 "personal_team",

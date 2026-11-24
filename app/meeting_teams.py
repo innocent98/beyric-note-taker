@@ -9,6 +9,11 @@ Three states, one team at most:
   while a member, and the team's owner and admins change it with the recorder: `visibility.owns`).
   `shared_team_id` is cleared, so the two never disagree.
 
+The meeting's WORKSPACE (`workspace_team_id`, the container every list narrows by) follows: sharing
+or moving files the meeting in that team's workspace; moving back gives it to the recorder's
+personal workspace; unsharing leaves it where it is (a private meeting in a team's workspace is
+what "keep private" means: only its recorder lists it there).
+
 The routes call these after finding the meeting through `visibility` (a meeting the caller cannot
 read is a 404 before anything here runs). Each function changes the meeting, re-homes its tasks
 (`teams.rehome_tasks`) and flags the repeat topics stale; the route commits.
@@ -93,7 +98,7 @@ def share(session: Session, user: User, meeting: Meeting, team_id: int | None) -
         team = teams.ensure_team(session, user)
     else:
         team = _member_team(session, user, team_id)
-    meeting.shared_team_id = team.id
+    meeting.shared_team_id = meeting.workspace_team_id = team.id
     _touched(session, meeting, user)
 
 
@@ -111,11 +116,7 @@ def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:
     on, and it stays with the team if the recorder leaves or deletes their account. Doing it again
     for the same team is fine; a meeting the team already owns cannot go to another team except by
     the team's owner or admin moving it back first (409 `already_moved`). Only a finished meeting
-    (409 `meeting_not_ready`); 409 `multi_team_disabled` while the switch is off."""
-    if not teams.multi_team_enabled():
-        raise Refused(
-            409, "multi_team_disabled", "Moving a meeting to a team is not available yet."
-        )
+    (409 `meeting_not_ready`)."""
     team = _member_team(session, user, team_id)
     _lock(session, meeting)
     if meeting.owner_team_id is not None:
@@ -134,6 +135,7 @@ def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:
             409, "meeting_not_ready", "Wait until the notes are ready, then move the meeting."
         )
     meeting.owner_team_id, meeting.shared_team_id = team.id, None
+    meeting.workspace_team_id = team.id
     _touched(session, meeting, user)
 
 
@@ -157,4 +159,7 @@ def move_back(session: Session, user: User, meeting: Meeting) -> None:
         )
     meeting.owner_team_id = None
     meeting.shared_team_id = None
+    meeting.workspace_team_id = teams.ensure_personal_team(
+        session, session.get(User, meeting.owner_user_id)
+    ).id
     _touched(session, meeting, series_rules.SYSTEM)

@@ -7,6 +7,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
+import httpx
 import openai
 import pytest
 from sqlalchemy import func, select, text
@@ -14,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from app import ask, db, services, teams
 from app.limits import Limit, PublicLimits
-from app.models import AiRun, Decision, Task, UserSettings
+from app.models import AiRun, Decision, Meeting, Task, UserSettings
+from app.visibility import ActiveTeam
 from tests.conftest import TEST_DATABASE_URL
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     Api,
@@ -128,6 +130,12 @@ def model(app):
 def set_model(app, fake):
     app.dependency_overrides[services.get_openai_client] = lambda: fake
     return fake
+
+
+def in_team(api, session, owner):
+    """Work in the owner's team workspace (a shared meeting lives there): every call this client
+    makes names it in `X-Team-Id`."""
+    api.client.headers["X-Team-Id"] = str(teams.team_of(session, owner.id).id)
 
 
 def post(api, question):
@@ -485,7 +493,7 @@ def test_a_transport_error_is_tried_once_more_and_then_the_answer_is_kept(
     api, session, template, model
 ):
     meeting(session, template)
-    boom = openai.APIConnectionError(request=SimpleNamespace())
+    boom = openai.APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1"))
     model.reply = lambda ids, n: boom if n == 1 else FakeAsk.first_passage(ids, n)
     assert post(api, "pricing").json()["kind"] == "answer"
     assert len(model.calls) == 2
@@ -494,7 +502,7 @@ def test_a_transport_error_is_tried_once_more_and_then_the_answer_is_kept(
 
 def test_two_transport_errors_fail_the_question(api, session, template, model):
     meeting(session, template)
-    boom = openai.APIConnectionError(request=SimpleNamespace())
+    boom = openai.APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1"))
     model.reply = lambda ids, n: boom
     error_of(post(api, "pricing"), 502, "ask_failed")
     assert len(model.calls) == 2 and [r.status for r in runs(session)] == ["failed"]
@@ -735,6 +743,8 @@ def test_a_shared_meeting_is_searched_and_its_chip_names_the_owner(
     )
     teammate_api = sign_in(api.client.app, TEAMMATE_EMAIL)
     share(session, theirs, owner)  # shares into the owner's team (the teammate is in it)
+    in_team(api, session, owner)  # a shared meeting lives in the team's workspace
+    in_team(teammate_api, session, owner)
     body = post(api, "zanzibar plan").json()
     [cite] = body["points"][0]["cites"]
     assert cite["meeting_id"] == theirs.id
@@ -751,6 +761,7 @@ def test_a_meeting_that_stops_being_shared_stops_appearing(
         session, template, owner_user_id=teammate.id, notes="## Summary\nZanzibar plan."
     )
     share(session, theirs, owner)
+    in_team(api, session, owner)
     assert post(api, "zanzibar plan").json()["kind"] == "answer"
     theirs.shared_team_id = None
     session.commit()
@@ -935,7 +946,10 @@ def test_a_teammates_private_meeting_never_makes_a_chip_and_a_shared_one_does(
     assert ask.suggestions(session, owner, NOW) == EXPECTED
     assert not any("Fri 6 Nov" in c or "Zed" in c for c in ask.suggestions(session, owner, NOW))
     share(session, theirs, owner)
-    shared = ask.suggestions(session, owner, NOW)
+    team = teams.team_of(session, owner.id)
+    session.query(Meeting).update({"workspace_team_id": team.id})  # the whole world in the team
+    session.commit()
+    shared = ask.suggestions(session, owner, NOW, ActiveTeam(id=team.id, personal=False))
     assert shared[0] == "Summarise the meeting on Fri 6 Nov"
     assert shared[1] == "What did we decide on Fri 6 Nov?"
     assert shared[-1] == "What did Zed Private say?"

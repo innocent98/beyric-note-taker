@@ -6,7 +6,7 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _utc(value: datetime) -> datetime:
@@ -96,6 +96,23 @@ class BadgesOut(BaseModel):
     tasks_new: int
 
 
+class WorkspaceRef(BaseModel):
+    """A workspace (a team) as the switcher and the toast name it."""
+
+    id: int
+    name: str
+    # The person's own personal space (a workspace of one).
+    is_personal: bool
+    # `team` or `class`: `class` only changes the wording (Class, Students, Lecturer).
+    kind: str
+
+
+class OtherWorkspace(WorkspaceRef):
+    # Unread notifications in this workspace: the switcher shows a dot when it is above zero, so
+    # nothing in another workspace is missed.
+    unread_notifications: int
+
+
 class SessionState(BaseModel):
     authenticated: bool
     csrf_token: str
@@ -104,11 +121,17 @@ class SessionState(BaseModel):
     usage: UsageOut | None
     # Notifications the user has not read yet: the number on the bell.
     unread_notifications: int | None
-    # Counts for the sidebar.
+    # Counts for the sidebar, for the ACTIVE workspace: the `X-Team-Id` header, else the person's
+    # personal workspace (a team the caller is not in quietly gives the personal one).
     badges: BadgesOut | None
-    # `MULTI_TEAM_ENABLED`: whether this server lets a person belong to several teams. The frontend
-    # draws the team switcher, the teams list and the Move action only when it is true. A server
-    # setting, not a person's: the same answer logged in or out.
+    # The workspace the counts above are about; null while logged out.
+    active_workspace: WorkspaceRef | None
+    # Every other workspace the person is in, with its unread notification count; null while
+    # logged out.
+    other_workspaces: list[OtherWorkspace] | None
+    # Always true since the multi-team switch was removed (workspaces design, section 7): every
+    # server lets a person belong to several teams. Kept so an older frontend keeps drawing the
+    # team switcher; a new one need not read it.
     multi_team: bool
 
 
@@ -196,6 +219,44 @@ class Regenerate(Body):
     template_id: int
 
 
+class SpeakerRename(Body):
+    """Every line labelled exactly `from` becomes `to`. When `to` is already a speaker of the
+    meeting the two become one: that needs `merge: true` (else 409 `speaker_exists`)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+    from_: str = Field(alias="from", min_length=1, max_length=200)
+    to: str = Field(min_length=1, max_length=80)
+    merge: bool = False
+
+
+class TranscriptEdit(Body):
+    """One edit of the transcript. `version` is the `transcript_version` of the page the person
+    edited from (409 `transcript_changed` when the transcript has changed since). Send exactly one
+    of: `rename`; or `line` (the 1-based row of the page) with `text`, `speaker` or both."""
+
+    version: str = Field(min_length=1, max_length=64)
+    rename: SpeakerRename | None = None
+    line: int | None = Field(default=None, ge=1, le=100000)
+    text: str | None = Field(default=None, max_length=5000)
+    speaker: str | None = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def _one_edit(self) -> "TranscriptEdit":
+        one_line = self.line is not None and (self.text is not None or self.speaker is not None)
+        if (self.rename is not None) == one_line or (
+            self.rename is not None and self.line is not None
+        ):
+            raise ValueError("send either `rename`, or `line` with `text` and/or `speaker`")
+        if self.rename is None and self.line is None:
+            raise ValueError("send either `rename`, or `line` with `text` and/or `speaker`")
+        return self
+
+
+class TranscriptRestore(Body):
+    version: str = Field(min_length=1, max_length=64)
+
+
 class MeetingSummary(BaseModel):
     id: int
     title: str
@@ -266,6 +327,12 @@ class MoveRequest(BaseModel):
 
 
 class MeetingDetail(MeetingSummary):
+    # The workspace this meeting lives in (workspaces design, 12.2). The page may be opened from
+    # any workspace (a link, an email, a notification): the web switches to this one and says so.
+    # `workspace` is null only when the reader is not a member of that team (it is not theirs to
+    # name).
+    workspace_team_id: int
+    workspace: WorkspaceRef | None = None
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
     # The note taker's Google address, when the page may tell the owner to add it to the event's
@@ -297,8 +364,7 @@ class MeetingDetail(MeetingSummary):
     team: TeamRef | None = None
     owned_by_team: bool = False
     # The recorder of a finished, private or shared meeting may move it to a team they belong to
-    # (only while the switch is on, `MULTI_TEAM_ENABLED`); the team's owners and admins may move a
-    # team's meeting back to its recorder.
+    # the team's owners and admins may move a team's meeting back to its recorder.
     can_move: bool = False
     can_move_back: bool = False
     join_attempts: int
@@ -326,6 +392,20 @@ class MeetingDetail(MeetingSummary):
     notes_html: str | None
     # The speaker-labelled transcript when there is one, else the plain one, else null.
     transcript: str | None
+    # The transcript editor. `can_edit_transcript`: the one who may change the meeting (its
+    # recorder, a team's owner or admin) and it is `ready`; false for a teammate who can only read
+    # it. `transcript_version` is what an edit sends back (a hash of `transcript`; null with no
+    # transcript). `transcript_edited` is true while a person's edit is in place (Restore original
+    # is then possible); `transcript_edited_at` and `transcript_edited_by` say when and by whom the
+    # last edit was made. `notes_outdated`: the notes were written from different words than
+    # `transcript` now holds, so they (and the decisions, open questions and tasks read from them)
+    # are not what the page shows until the owner rewrites the notes. Nothing is rewritten for them.
+    can_edit_transcript: bool = False
+    transcript_version: str | None = None
+    transcript_edited: bool = False
+    transcript_edited_at: UtcDatetime | None = None
+    transcript_edited_by: str | None = None
+    notes_outdated: bool = False
     # The translations this meeting has (any state), at most one per language; empty unless ready.
     translations: list[TranslationBrief]
     # Length of the recording in seconds (what the hours cap counts); null until the recording

@@ -40,7 +40,9 @@ from app.models import (
 )
 from app.visibility import (
     ActiveTeam,
+    active_or_default,
     can_read_clause,
+    in_team,
     owns,
     readable_in,
     recorder_not_being_deleted,
@@ -293,7 +295,7 @@ def run_extraction(
         # The meeting's team: the one that owns it, else the one it is shared with, else (switch
         # on) its recorder's personal team; switch off, their default team as ever.
         team_id = teams.team_for_meeting(session, meeting).id
-        members = tasks.members_of(session, team_id)
+        members = _people_who_may_read(session, meeting, team_id)
         # What the notes parser can read of each action bullet, so a failed call still leaves tasks.
         from_notes = check_extraction(
             _EMPTY, ParsedNotes([], parsed.action_items, [], []), transcript, day
@@ -362,20 +364,23 @@ def run_extraction(
         # re-read the two team columns, and hold the row until the commit below so a move or an
         # unshare waits for the writes that follow.
         session.refresh(
-            meeting, attribute_names=["owner_team_id", "shared_team_id"], with_for_update=True
+            meeting,
+            attribute_names=["owner_team_id", "shared_team_id", "workspace_team_id"],
+            with_for_update=True,
         )
         team_id = teams.team_for_meeting(session, meeting).id
-        members = tasks.members_of(session, team_id)
+        members = _people_who_may_read(session, meeting, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
             quiet=quiet, suggest=suggest, fresh=fresh,
         )  # fmt: skip
         _write_decisions(session, meeting_id, parsed, checked, live)
         # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
-        projects.propose(
-            session, meeting, team_id, checked.milestones,
-            filing.team_projects(session, team_id), titles.meeting_name(meeting),
-        )  # fmt: skip
+        if in_team(meeting, team_id):  # a private meeting proposes nothing to a team
+            projects.propose(
+                session, meeting, team_id, checked.milestones,
+                filing.team_projects(session, team_id), titles.meeting_name(meeting),
+            )  # fmt: skip
         # Not for a meeting older than the outbox keeps its sent rows: the unique index that makes
         # "once" true would be gone, so a rewrite that long after could mail the same people twice.
         recent = stamp - created < mail.KEEP_SENT_FOR
@@ -384,14 +389,26 @@ def run_extraction(
         # A suggested task is not posted to Slack or Linear and not mailed: it is not a task yet.
         # An accepted one is a person's touch (`edited_at`), so no re-run posts or pushes it later.
         posted = [task for task in live if not task.suggested and task.edited_at is None]
-        if answered and not quiet and recent and posted:
-            post_to_slack = (posted, members)
+        if answered and not quiet and recent and posted and in_team(meeting, team_id):
+            post_to_slack = (posted, members)  # never a private meeting's tasks to a team's Slack
     session.commit()
     session.expire(meeting)
     if post_to_slack is not None:
         # After the commit and never raising: a Slack or Linear failure cannot touch the notes.
         integrations.after_extraction(session, meeting, team_id, *post_to_slack, now=stamp)
     return status
+
+
+def _people_who_may_read(session: Session, meeting: Meeting, team_id: int) -> list:
+    """The people a meeting's action items may be given to, mailed to and shown to: the team's
+    members when the meeting is shared to or owned by that team, but ONLY its recorder when it is
+    merely filed in the team's workspace and kept private (a paste into a team workspace, an
+    unshare): its tasks sit in the team's board, and a teammate must not be handed, mailed or
+    shown a task from a meeting they cannot read."""
+    members = tasks.members_of(session, team_id)
+    if in_team(meeting, team_id):
+        return members
+    return [m for m in members if m.user_id == meeting.owner_user_id]
 
 
 def claim_next(session: Session, now: datetime) -> Meeting | None:
@@ -548,7 +565,10 @@ def list_decisions(
     meeting code); a title match brings every decision of that meeting. Returns the groups of up
     to `limit` meetings and whether there are more; `before_id` is the last meeting id of the
     previous page. `status` keeps only decisions with that status (a tab of the screen)."""
-    shown = [readable_in(user, active), Decision.hidden_at.is_(None)]
+    shown = [
+        readable_in(user, active_or_default(session, user, active)),
+        Decision.hidden_at.is_(None),
+    ]
     if status is not None:
         shown.append(Decision.status == status)
     if query and query.strip():
@@ -586,7 +606,10 @@ def decision_counts(
     rows = session.execute(
         select(Decision.status, func.count())
         .join(Meeting)
-        .where(readable_in(user, active), Decision.hidden_at.is_(None))
+        .where(
+            readable_in(user, active_or_default(session, user, active)),
+            Decision.hidden_at.is_(None),
+        )
         .group_by(Decision.status)
     )
     counts = {status: 0 for status in DECISION_STATUSES}
@@ -614,7 +637,7 @@ def due_this_week(
         .select_from(Decision)
         .join(Meeting)
         .where(
-            readable_in(user, active),
+            readable_in(user, active_or_default(session, user, active)),
             Decision.hidden_at.is_(None),
             Decision.status.in_(("approved", "proposed")),
             Decision.revisit_on.between(monday, sunday),
@@ -762,7 +785,7 @@ def open_review_count(session: Session, user: User, active: ActiveTeam | None = 
         .where(
             ReviewItem.owner_user_id == user.id,
             ReviewItem.checked_at.is_(None),
-            readable_in(user, active),
+            readable_in(user, active_or_default(session, user, active)),
         )
     )
 
@@ -777,7 +800,11 @@ def list_review(
     rows = session.execute(
         select(ReviewItem, Meeting)
         .join(Meeting, Meeting.id == ReviewItem.meeting_id)
-        .where(ReviewItem.owner_user_id == user.id, state, readable_in(user, active))
+        .where(
+            ReviewItem.owner_user_id == user.id,
+            state,
+            readable_in(user, active_or_default(session, user, active)),
+        )
         .order_by(ReviewItem.meeting_id.desc(), ReviewItem.position)
         .limit(REVIEW_LIMIT + 1)
     ).all()

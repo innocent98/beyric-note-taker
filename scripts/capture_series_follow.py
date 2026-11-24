@@ -83,7 +83,6 @@ admin_url, scratch_url = database_urls(sys.argv[1] if len(sys.argv) > 1 else "")
 os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADA
 os.environ["OWNER_PASSWORD"] = PASSWORD
-os.environ["MULTI_TEAM_ENABLED"] = "true"
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("COOKIE_SECURE", "false")  # plain http on localhost
 os.environ.setdefault("SESSION_SECRET", "-".join(["capture", "placeholder", "secret"] * 4))
@@ -1542,7 +1541,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     prepare_database()
     settings = Settings()
-    assert settings.multi_team_enabled and not settings.series_follow_meetings
+    assert not settings.series_follow_meetings
     engine = create_engine(scratch_url)
     seeded = seed(engine)
     app = create_app(settings)

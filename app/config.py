@@ -693,16 +693,9 @@ class Settings(BaseSettings):
     # changes) and records since when, which the app shows. Restart `scheduler` after changing it.
     autojoin_enabled: bool = True
 
-    # Multi-team (docs/superpowers/specs/2026-11-13-multi-team-design.md). Off by default: while it
-    # is off a person is on one team at a time exactly as before, and accepting an invitation
-    # dissolves their team of one or is refused with `already_on_team`. On: a person keeps their
-    # personal team and may belong to several others. Switch it on only after the frontend that
-    # understands several teams is live (stage 4). Restart web, worker and scheduler after changing.
-    multi_team_enabled: bool = False
-
     # Recurring meetings follow the meetings (docs/superpowers/specs/2026-11-14-series-follow-
-    # meetings.md). Off by default: a series is read and written exactly as before. On (and only
-    # with MULTI_TEAM_ENABLED on too): a series row belongs to one team scope, and a meeting moves
+    # meetings.md). Off by default: a series is read and written exactly as before. On: a series
+    # row belongs to one team scope, and a meeting moves
     # to the row of its own scope when it is shared, unshared, moved, or its recorder leaves. Switch
     # it on only AFTER `scripts/backfill_series_follow.py --apply` has run. After changing it, run
     # `docker compose up -d --force-recreate web worker scheduler` (a plain restart does not re-read
