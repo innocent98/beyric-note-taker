@@ -3,6 +3,16 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-24: Meeting recipes (one complete release; design approved 2026-11-24)** (integration branch `feature/recipes`; spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md`, gap analysis `docs/competitive/claude-meetings-gap-analysis-2026-11-24.md`). Nothing deploys until S7 is done; slices merge into `feature/recipes`, one PR to `main` at the end. Also in flight the same day: transcript and speaker editor, exports and meeting search (#261, #262).
+- [ ] S1 Engine: T1 tables and models; T2 block schema; T3 number audit and blanks; T4 generation; T5 request, queue, worker, cap; T6 draft API
+- [ ] S2 Documents: T7 tables in Word and PDF; T8 exporters (md, txt, csv, xlsx, docx, pdf); T9 document view and block editor
+- [ ] S3 Recipes: T10 ten starters and the library; T11 team brief and file import; T12 Make dialog and library screens
+- [ ] S4 Sharing: T13 share and visibility; T14 share screens
+- [ ] S5 Cross-meeting: T15 picker, status report, client briefing
+- [ ] S6 Board: T16 board generation, drag-and-edit view, PNG and PDF
+- [ ] S7 Integration: T17 deletion rules, stale labels, privacy sentence, FE guide, live run on his own meetings, Opus review, one PR to `main`
+- [ ] After release (his decision): onboard sales users, rate the follow-up email and proposal drafts, tune (bar in spec 5.8); privacy sentence to his lawyer
+
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
 - [x] Per-person checkbox "Skip one-on-one meetings" under the rule box (`user_settings.skip_one_on_ones`, off by default); skips an event with exactly two people INVITED (count, not attendance), under `all` and `organizer`; 0 (solo) and 1 are not skipped
 - [x] `will_join` reason `one_on_one` (Off, visible muted line on the Upcoming row); the per-meeting switch still wins both ways; `JoinSettings.for_user` is still the one constructor (sync, API, runner re-check, organiser bot, mail)
