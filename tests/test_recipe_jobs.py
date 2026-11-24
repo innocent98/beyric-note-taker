@@ -514,3 +514,30 @@ def test_a_person_who_left_the_team_or_a_recipe_archived_meanwhile_fails_before_
     third = ask(session, owner, [meeting.id], team_id=team.id, options={"n": 3})
     svc.process_next(session, T0, client=model)
     assert session.get(Document, third.id).status == "ready"  # a starter needs no recipe row
+
+
+def test_a_person_who_left_the_team_gets_no_hint_of_its_brief_from_the_audit(
+    session, owner, stranger, meeting
+):
+    from app.models import Team, TeamMember
+
+    team = Team(name="Acme", owner_user_id=stranger.id)
+    session.add(team)
+    session.flush()
+    member = TeamMember(team_id=team.id, user_id=owner.id, role="member")
+    session.add_all([TeamMember(team_id=team.id, user_id=stranger.id, role="owner"), member])
+    session.add(
+        TeamBrief(
+            team_id=team.id, text="Package price 777,000 naira.", updated_by_user_id=stranger.id
+        )
+    )
+    session.commit()
+    doc = ask(session, owner, [meeting.id], team_id=team.id)
+    svc.process_next(session, T0, client=good([para("The package is 777,000 naira.")]))
+    session.refresh(doc)
+    assert svc.reading(session, owner, doc).flags == []  # supported by the brief while on the team
+    session.delete(member)
+    session.commit()
+    session.refresh(doc)
+    seen = svc.reading(session, owner, doc)
+    assert [f.text for f in seen.flags] == ["777,000 naira"]  # no longer explained by the brief

@@ -550,7 +550,13 @@ def reading(session: Session, user: User, document: Document) -> Reading:
     except blocks_mod.BlocksInvalid:
         blocks = []
     brief = None
-    if document.use_brief and document.team_id is not None:
+    # The team's brief is read only while the caller is still on that team (as the worker checks):
+    # a person who left it gets no hint of what it says from the audit.
+    if (
+        document.use_brief
+        and document.team_id is not None
+        and teams.membership(session, user.id, document.team_id) is not None
+    ):
         brief = session.scalar(select(TeamBrief.text).where(TeamBrief.team_id == document.team_id))
     corpus: list[str] = list(filter(None, [brief]))
     if meetings:
