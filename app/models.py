@@ -98,6 +98,7 @@ AI_RUN_KINDS = (
     "topics",
     "shadow",
     "vocabulary",
+    "recipe",
 )
 AI_RUN_STATUSES = ("ok", "failed", "pending")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
@@ -107,6 +108,11 @@ EXTRACTION_STATUSES = ("pending", "running", "done", "failed", "skipped")
 # English is the original, so only these two are translated into (spec section 11, D8).
 NOTE_LANGUAGES = ("en", "fr", "es")
 TRANSLATION_STATUSES = ("translating", "ready", "failed")
+# Meeting recipes (docs/superpowers/specs/2026-11-24-meeting-recipes-design.md): a draft is
+# `writing` while it waits for or is with the worker, then `ready` or `failed`.
+DOCUMENT_STATUSES = ("writing", "ready", "failed")
+RECIPE_OUTPUT_TYPES = ("document", "email", "table", "board")
+RECIPE_SCOPES = ("one", "many")
 TASK_STATUSES = ("todo", "doing", "done")
 TASK_SOURCES = ("ai", "manual")
 TASK_CONFIDENCES = ("high", "medium", "low")
@@ -2149,3 +2155,141 @@ class SkribbySegmentEvidence(Base):
     # could not be fetched. Same retention and deletion as the row.
     events: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Recipe(Base):
+    """A recipe: what to make from a meeting (a name, the author's instruction, an output type and
+    options). Personal (`team_id` null) or the team's (written by its owners and admins only).
+    The ten starters are code constants (`app/recipes/library.py`), not rows; `key` is set on a row
+    that was copied from one. Deleting one only archives it (`archived_at`): drafts keep the id."""
+
+    __tablename__ = "recipes"
+    __table_args__ = (
+        CheckConstraint(_in("output_type", RECIPE_OUTPUT_TYPES), name="ck_recipes_output_type"),
+        CheckConstraint(_in("scope", RECIPE_SCOPES), name="ck_recipes_scope"),
+        Index("ix_recipes_owner_user_id", "owner_user_id"),
+        Index("ix_recipes_team_id", "team_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="CASCADE")
+    )
+    key: Mapped[str | None] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(100))
+    instruction: Mapped[str] = mapped_column(Text)
+    output_type: Mapped[str] = mapped_column(String(16), default="document")
+    options: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=sa.text("'{}'::jsonb")
+    )
+    scope: Mapped[str] = mapped_column(String(8), default="one", server_default="one")
+    uses_brief: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Document(Base):
+    """A draft made from one or more meetings by a recipe: schema-validated blocks, each with the
+    lines or meetings it came from (`app/recipes/blocks.py`). Private to `owner_user_id` until
+    shared (`DocumentShare`). `status` is `writing` from the request until the worker finishes
+    (`app/recipes/service.py`, the translation queue pattern: `started_at` and `attempts` are the
+    worker's claim); `failure_code` is a short code, never meeting words. `source_hash` is the hash
+    of the meeting text and brief the draft was made from, so a later change shows as stale.
+    `recipe_id` is the recipe row, `recipe_key` the starter (code constant) it came from.
+    `left_out_count` is how many chosen meetings the owner could not read (left out, said so).
+    Deleted with its owner; `DocumentMeeting` rows go with the meeting, the draft stays (a service
+    removes the single-meeting drafts when their meeting is deleted)."""
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(_in("status", DOCUMENT_STATUSES), name="ck_documents_status"),
+        CheckConstraint(_in("output_type", RECIPE_OUTPUT_TYPES), name="ck_documents_output_type"),
+        Index("ix_documents_owner_created", "owner_user_id", "created_at"),
+        Index("ix_documents_status_started", "status", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
+    recipe_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("recipes.id", ondelete="SET NULL")
+    )
+    recipe_key: Mapped[str | None] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(200))
+    output_type: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="writing", server_default="writing")
+    blocks: Mapped[list] = mapped_column(JSONB, default=list, server_default=sa.text("'[]'::jsonb"))
+    # The person's choices at the Make dialog (tone, recipient, ...) and whether to read the brief.
+    options: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=sa.text("'{}'::jsonb")
+    )
+    use_brief: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    left_out_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    source_hash: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    failure_code: Mapped[str | None] = mapped_column(String(32))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DocumentMeeting(Base):
+    """The meetings a draft was made from (one for most recipes, up to 12 for a status report)."""
+
+    __tablename__ = "document_meetings"
+    __table_args__ = (Index("ix_document_meetings_meeting_id", "meeting_id"),)
+
+    document_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class DocumentShare(Base):
+    """A draft shared read-only with a team. Sharing never gives access to the draft's meetings."""
+
+    __tablename__ = "document_shares"
+    __table_args__ = (
+        UniqueConstraint("document_id", "team_id", name="uq_document_shares_document_team"),
+        Index("ix_document_shares_team_id", "team_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    shared_by_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TeamBrief(Base):
+    """A team's own reference text the model may use besides the meeting (services, prices, terms,
+    house style). One per team, the personal team's included. Edited by owners and admins."""
+
+    __tablename__ = "team_briefs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="CASCADE"), unique=True
+    )
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
