@@ -678,6 +678,14 @@ export interface paths {
          *     caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
          *     day headings in, so the filter's days are always the headings' days. A stored zone wins and
          *     `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.
+         *
+         *     `q` (optional, trimmed, 2 to 100 characters) is the search box: it keeps a meeting when its
+         *     title contains the text (upper and lower case alike; `%` and `_` count as themselves), or,
+         *     for a meeting whose notes are ready, when every word of it appears in the notes or the
+         *     transcript (a word matches by its start, so "pricing" finds "price"). A meeting that is not
+         *     ready can match on its title only. It only narrows the list: the team, the visibility rule,
+         *     the dates, the order and `before_id` paging are as without it. 422 `invalid_query` for a
+         *     value outside 2 to 100 characters. No model is called, so it costs nothing.
          */
         get: operations["list_meetings"];
         put?: never;
@@ -782,15 +790,18 @@ export interface paths {
         };
         /**
          * Export Meeting
-         * @description The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
+         * @description The notes (and, with `transcript=true`, the full transcript) as a PDF, Word, Markdown or
+         *     plain-text file.
          *
          *     `language` `fr` or `es` builds it from the finished, current translation (409
          *     `translation_missing` when there is none: translate first); `en`, the default, is the
          *     original.
          *
-         *     Built when asked and never stored. One file is built at a time per server process: a second
-         *     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
-         *     title, cleaned, in `Content-Disposition`.
+         *     Built when asked and never stored. PDF and Word are built one at a time per server process: a
+         *     second request meanwhile gets 503 `export_busy` with `Retry-After`. `md` (the notes as they
+         *     are stored, Markdown, with the title and date above and each speaker's turn bold) and `txt`
+         *     (the same with the marks taken off) are text made in the request itself, so they are never
+         *     busy. The file name is the meeting's title, cleaned, in `Content-Disposition`.
          */
         get: operations["export_meeting"];
         put?: never;
@@ -2155,6 +2166,34 @@ export interface paths {
          *     meeting.
          */
         post: operations["create_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Tasks
+         * @description The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
+         *     and the same `X-Team-Id` scoping as `GET /api/tasks` (suggested tasks left out, newest first),
+         *     every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
+         *     Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
+         *     are filled only when the caller may read that meeting, as on the screen; the date is in the
+         *     caller's stored time zone (UTC when none).
+         *
+         *     UTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage
+         *     return gets a single quote in front so a spreadsheet shows it as text instead of running it.
+         */
+        get: operations["export_tasks"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6960,6 +6999,8 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 tz?: string | null;
+                /** @description Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters. */
+                q?: string | null;
             };
             header?: {
                 /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
@@ -7364,7 +7405,7 @@ export interface operations {
     export_meeting: {
         parameters: {
             query?: {
-                format?: "pdf" | "docx";
+                format?: "pdf" | "docx" | "md" | "txt";
                 transcript?: boolean;
                 language?: "en" | "fr" | "es";
             };
@@ -7384,6 +7425,8 @@ export interface operations {
                 content: {
                     "application/pdf": string;
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "text/markdown; charset=utf-8": string;
+                    "text/plain; charset=utf-8": string;
                 };
             };
             /** @description Not logged in */
@@ -12010,6 +12053,67 @@ export interface operations {
                 };
             };
             /** @description `assignee_not_on_team` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_tasks: {
+        parameters: {
+            query?: {
+                format?: "csv";
+            };
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The CSV file, built for this request and not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: a team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -1,0 +1,23 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?q=pricing",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}
