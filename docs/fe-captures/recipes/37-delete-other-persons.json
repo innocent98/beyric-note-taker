@@ -1,0 +1,25 @@
+{
+  "note": "Same for discarding: 404.",
+  "client": "eve",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/documents/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

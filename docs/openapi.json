@@ -750,6 +750,24 @@
         "title": "BadgesOut",
         "type": "object"
       },
+      "BlankOut": {
+        "properties": {
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_index",
+          "what"
+        ],
+        "title": "BlankOut",
+        "type": "object"
+      },
       "BotNameIn": {
         "additionalProperties": false,
         "properties": {
@@ -930,6 +948,28 @@
         "title": "BroughtBack",
         "type": "object"
       },
+      "Bullets": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "type": {
+            "const": "bullets",
+            "default": "bullets",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Bullets",
+        "type": "object"
+      },
       "CalendarOut": {
         "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\", with the exception named while\n`join_unanswered` is false). `join_unanswered` is the person's tick on \"Also join invites I\nhaven't answered yet\" (false until they tick it): under `all`, an invite they have not\nanswered from outside their organisation joins only when it is true. It is stored whatever the\nrule, and does nothing under `organizer` or `none`: show the box disabled there.\n`skip_one_on_ones` is the person's tick on \"Skip one-on-one meetings\" (false until they tick\nit): when true, an event with exactly two people invited (the person and one other) is not\njoined, under `all` or `organizer`. The count is people invited, not who attends. It is stored\nwhatever the rule, and does nothing under `none`: show the box disabled there.\n`calendar_template_id` is the person's own template chosen for calendar meetings, null for the\ndefault (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
@@ -1091,6 +1131,48 @@
         "title": "CalendarOut",
         "type": "object"
       },
+      "Card": {
+        "properties": {
+          "kind": {
+            "default": "note",
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Card",
+        "type": "object"
+      },
       "CarriedQuestion": {
         "properties": {
           "can_update": {
@@ -1184,6 +1266,33 @@
           "line"
         ],
         "title": "CiteOut",
+        "type": "object"
+      },
+      "Column": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Card"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "column",
+            "default": "column",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "cards"
+        ],
+        "title": "Column",
         "type": "object"
       },
       "ConnectIn": {
@@ -1624,6 +1733,401 @@
         "title": "DisplayNameOut",
         "type": "object"
       },
+      "DocumentBrief": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "meeting_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "status": {
+            "enum": [
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "output_type",
+          "recipe_key",
+          "recipe_id",
+          "status",
+          "edited",
+          "meeting_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentBrief",
+        "type": "object"
+      },
+      "DocumentChecks": {
+        "properties": {
+          "blanks": {
+            "items": {
+              "$ref": "#/components/schemas/BlankOut"
+            },
+            "title": "Blanks",
+            "type": "array"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/FlagOut"
+            },
+            "title": "Flags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blanks",
+          "flags"
+        ],
+        "title": "DocumentChecks",
+        "type": "object"
+      },
+      "DocumentIn": {
+        "description": "Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or\n`recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the\nchoices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10.",
+        "properties": {
+          "meeting_ids": {
+            "items": {
+              "maximum": 2147483647.0,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "maxProperties": 10,
+            "title": "Options",
+            "type": "object"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "use_brief": {
+            "default": true,
+            "title": "Use Brief",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_ids"
+        ],
+        "title": "DocumentIn",
+        "type": "object"
+      },
+      "DocumentList": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentBrief"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "documents"
+        ],
+        "title": "DocumentList",
+        "type": "object"
+      },
+      "DocumentOut": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "bullets": "#/components/schemas/Bullets",
+                  "column": "#/components/schemas/Column",
+                  "heading": "#/components/schemas/Heading",
+                  "paragraph": "#/components/schemas/Paragraph",
+                  "table": "#/components/schemas/Table"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Heading"
+                },
+                {
+                  "$ref": "#/components/schemas/Paragraph"
+                },
+                {
+                  "$ref": "#/components/schemas/Bullets"
+                },
+                {
+                  "$ref": "#/components/schemas/Table"
+                },
+                {
+                  "$ref": "#/components/schemas/Column"
+                }
+              ]
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/DocumentChecks"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "left_out_count": {
+            "title": "Left Out Count",
+            "type": "integer"
+          },
+          "meeting_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "sources_available": {
+            "title": "Sources Available",
+            "type": "boolean"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "output_type",
+          "recipe_key",
+          "recipe_id",
+          "status",
+          "edited",
+          "meeting_ids",
+          "created_at",
+          "updated_at",
+          "blocks",
+          "checks",
+          "stale",
+          "sources_available",
+          "left_out_count",
+          "failure_code",
+          "failure_message"
+        ],
+        "title": "DocumentOut",
+        "type": "object"
+      },
+      "DocumentPatch": {
+        "description": "The edited draft: every block as it now stands, and optionally a new title. A block may\nkeep the sources it has and may not gain new ones.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "DocumentPatch",
+        "type": "object"
+      },
       "EmailIn": {
         "additionalProperties": false,
         "properties": {
@@ -1748,6 +2252,59 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "FlagOut": {
+        "properties": {
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "figure",
+              "derived"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_index",
+          "text",
+          "kind"
+        ],
+        "title": "FlagOut",
+        "type": "object"
+      },
+      "Heading": {
+        "properties": {
+          "level": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "heading",
+            "default": "heading",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "text"
+        ],
+        "title": "Heading",
         "type": "object"
       },
       "InvitePreview": {
@@ -1918,6 +2475,26 @@
           "invitees"
         ],
         "title": "InvitesIn",
+        "type": "object"
+      },
+      "Item": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Item",
         "type": "object"
       },
       "LanguagePreferencesIn": {
@@ -3366,6 +3943,32 @@
           "override"
         ],
         "title": "OverrideIn",
+        "type": "object"
+      },
+      "Paragraph": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "paragraph",
+            "default": "paragraph",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Paragraph",
         "type": "object"
       },
       "PasswordChanged": {
@@ -5446,6 +6049,64 @@
         "title": "SlackOut",
         "type": "object"
       },
+      "Source": {
+        "description": "Where a piece of text was drafted from. `quote` is the first words of the line, so a line\nthat moved can be found again (`ask._quote_row`); `ref` is a decision or task id.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "line",
+              "meeting",
+              "decision",
+              "task"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          }
+        },
+        "required": [
+          "kind",
+          "meeting_id"
+        ],
+        "title": "Source",
+        "type": "object"
+      },
       "SprintClosed": {
         "properties": {
           "closed": {
@@ -5616,6 +6277,39 @@
           "tasks_done"
         ],
         "title": "SprintOut",
+        "type": "object"
+      },
+      "Table": {
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/Item"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "type": {
+            "const": "table",
+            "default": "table",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "title": "Table",
         "type": "object"
       },
       "TaskCreate": {
@@ -9634,6 +10328,448 @@
         "summary": "Hide Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/documents": {
+      "get": {
+        "description": "The caller's own drafts, newest first; with `meeting_id`, only those made from that meeting\n(cross-meeting drafts included). For the next page pass the smallest `id` as `before_id`.",
+        "operationId": "list_documents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "meeting_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Meeting Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Documents",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "description": "Ask for a draft made from a meeting (or several, for a cross-meeting recipe) by a recipe.\nAnswers 202 with `status: \"writing\"`; the worker writes it and the page polls\n`GET /api/documents/{id}`. The team is the `X-Team-Id` header (404 for one the caller is not\nin), else their default team: it decides whose brief and team recipes are used. Asking again\nfor the same recipe, meetings and options while that draft is still being written returns\nthat draft and starts nothing. Regenerating is a new request and a new draft.",
+        "operationId": "create_document",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Queued (or the draft just asked for is returned): poll `GET` every 2 s."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token; or `plan_inactive`: making documents needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe, team or meeting (a meeting the caller cannot read too)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the meeting's notes are not written"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`recipe_invalid` (name exactly one recipe) or `meetings_invalid`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`recipe_limit`: 20 drafts a day; failed ones and regenerations count"
+          }
+        },
+        "summary": "Create Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}": {
+      "delete": {
+        "description": "Discard a draft (also cancels one still being written; the model call it may have made is\nstill counted against the day's 20).",
+        "operationId": "delete_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "get": {
+        "description": "A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.\n`checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.\n404 for another person's draft.",
+        "operationId": "get_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "description": "Save the edited draft: send every block as it now stands. Text is cleaned and bounded as\nat generation; a block keeps the sources it had and cannot gain new ones. Marks the draft\n`edited`. The `checks` in the answer are recomputed from what was saved. Refused while the\ndraft is still `writing` (409 `writing`) and for one that `failed` (409 `not_ready`).",
+        "operationId": "edit_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`writing`: the draft is still being written; `not_ready`: it failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`blocks_invalid`"
+          }
+        },
+        "summary": "Edit Document",
+        "tags": [
+          "documents"
         ]
       }
     },

@@ -1,0 +1,43 @@
+{
+  "note": "A table row that does not match its columns: 422 `blocks_invalid`. Nothing is saved.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            "A",
+            "B"
+          ],
+          "rows": [
+            [
+              {
+                "text": "x",
+                "sources": []
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "blocks_invalid",
+        "message": "Those blocks cannot be saved. Check the tables and try again."
+      }
+    }
+  }
+}
