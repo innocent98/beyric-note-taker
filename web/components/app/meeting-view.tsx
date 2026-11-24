@@ -12,6 +12,7 @@ import { RecurringHint } from "@/components/app/recurring-hint";
 import { SeriesPicker } from "@/components/app/series-picker";
 import { MeetingTeamCard, teamActionMessage } from "@/components/app/meeting-team-card";
 import { MakeDialog } from "@/components/app/make-dialog";
+import { DraftsGoWithIt, MeetingDocuments } from "@/components/app/meeting-documents";
 import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
@@ -458,6 +459,7 @@ export function MeetingView({
                 </>
               ) : null}
             </Card>
+            {m.notes ? <MeetingDocuments meetingId={m.id} /> : null}
             {teams ? (
               <MeetingTeamCard
                 meeting={m}
@@ -612,6 +614,7 @@ export function MeetingView({
               decisions and review items taken from it, and the recording. This cannot be undone.
               {m.tasks_count > 0 ? ` This also deletes its ${plural(m.tasks_count, "task")}.` : ""}
             </p>
+            <DraftsGoWithIt meetingId={m.id} />
             <p>The hours it used stay counted.</p>
             <div className="dec-ask-actions">
               <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => setConfirmingDelete(false)}>

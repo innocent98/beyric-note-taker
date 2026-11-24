@@ -1925,6 +1925,15 @@
       },
       "DocumentBrief": {
         "properties": {
+          "access": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "shared"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1955,6 +1964,17 @@
             "title": "Output Type",
             "type": "string"
           },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
           "recipe_id": {
             "anyOf": [
               {
@@ -1977,6 +1997,13 @@
             ],
             "title": "Recipe Key"
           },
+          "shared_with": {
+            "items": {
+              "$ref": "#/components/schemas/SharedTeam"
+            },
+            "title": "Shared With",
+            "type": "array"
+          },
           "status": {
             "enum": [
               "writing",
@@ -1985,6 +2012,16 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedTeam"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -2135,6 +2172,15 @@
       },
       "DocumentOut": {
         "properties": {
+          "access": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "shared"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
           "blocks": {
             "items": {
               "discriminator": {
@@ -2167,6 +2213,11 @@
             },
             "title": "Blocks",
             "type": "array"
+          },
+          "can_edit": {
+            "default": true,
+            "title": "Can Edit",
+            "type": "boolean"
           },
           "checks": {
             "$ref": "#/components/schemas/DocumentChecks"
@@ -2260,6 +2311,17 @@
             "title": "Output Type",
             "type": "string"
           },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
           "recipe_id": {
             "anyOf": [
               {
@@ -2282,6 +2344,24 @@
             ],
             "title": "Recipe Key"
           },
+          "share_blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Blocked"
+          },
+          "shared_with": {
+            "items": {
+              "$ref": "#/components/schemas/SharedTeam"
+            },
+            "title": "Shared With",
+            "type": "array"
+          },
           "sources_available": {
             "title": "Sources Available",
             "type": "boolean"
@@ -2298,6 +2378,16 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedTeam"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -6543,6 +6633,24 @@
         "title": "ShareRequest",
         "type": "object"
       },
+      "SharedTeam": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SharedTeam",
+        "type": "object"
+      },
       "SignUp": {
         "additionalProperties": false,
         "properties": {
@@ -6663,14 +6771,15 @@
         "type": "object"
       },
       "Source": {
-        "description": "Where a piece of text was drafted from. `quote` is the first words of the line, so a line\nthat moved can be found again (`ask._quote_row`); `ref` is a decision or task id.",
+        "description": "Where a piece of text was drafted from. `quote` is the first words of the line, so a line\nthat moved can be found again (`ask._quote_row`); `ref` is a decision or task id. `hidden` is\nnever stored and never written by the model: `recipes.visibility.redact` puts it in the place\nof a source the reader of a shared draft may not open (nothing else is set on it).",
         "properties": {
           "kind": {
             "enum": [
               "line",
               "meeting",
               "decision",
-              "task"
+              "task",
+              "hidden"
             ],
             "title": "Kind",
             "type": "string"
@@ -6687,8 +6796,15 @@
             "title": "Line"
           },
           "meeting_id": {
-            "title": "Meeting Id",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Id"
           },
           "quote": {
             "anyOf": [
@@ -6714,8 +6830,7 @@
           }
         },
         "required": [
-          "kind",
-          "meeting_id"
+          "kind"
         ],
         "title": "Source",
         "type": "object"
@@ -10946,7 +11061,7 @@
     },
     "/api/documents": {
       "get": {
-        "description": "The caller's own drafts, newest first; with `meeting_id`, only those made from that meeting\n(cross-meeting drafts included). For the next page pass the smallest `id` as `before_id`.",
+        "description": "Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts\nteammates shared with a team the caller is in now (never their own; an unshared one, or one of\na team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts\nmade from that meeting (cross-meeting drafts included; a shared draft only when the caller may\nread that meeting). For the next page pass the smallest `id` as `before_id`.",
         "operationId": "list_documents",
         "parameters": [
           {
@@ -10965,6 +11080,38 @@
                 }
               ],
               "title": "Meeting Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shared",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shared"
             }
           },
           {
@@ -11160,7 +11307,7 @@
     },
     "/api/documents/{document_id}": {
       "delete": {
-        "description": "Discard a draft (also cancels one still being written; the model call it may have made is\nstill counted against the day's 20).",
+        "description": "Discard a draft. One still being written is cancelled. If the worker has not picked it up\nyet no model was called, so its place in the day's limit is given back; once the worker has\nstarted it, the call may have been made and still counts.",
         "operationId": "delete_document",
         "parameters": [
           {
@@ -11224,7 +11371,7 @@
         ]
       },
       "get": {
-        "description": "A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.\n`checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.\n404 for another person's draft.",
+        "description": "A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.\n`checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.\nThe creator reads it whole. A teammate reading a draft shared with their team (`access:\n\"shared\"`) gets the text with every source of a meeting they cannot read replaced by\n`{\"kind\": \"hidden\"}`, and `can_edit: false`. 404 for anyone else's draft, and for a shared one\nonce it is unshared or the reader has left the team.",
         "operationId": "get_document",
         "parameters": [
           {
@@ -11295,7 +11442,7 @@
         ]
       },
       "patch": {
-        "description": "Save the edited draft: send every block as it now stands. Text is cleaned and bounded as\nat generation; a block keeps the sources it had and cannot gain new ones. Marks the draft\n`edited`. The `checks` in the answer are recomputed from what was saved. Refused while the\ndraft is still `writing` (409 `writing`) and for one that `failed` (409 `not_ready`).",
+        "description": "Save the edited draft: send every block as it now stands. Text is cleaned and bounded as\nat generation; a block keeps the sources it had and cannot gain new ones. Marks the draft\n`edited`. The `checks` in the answer are recomputed from what was saved. Refused while the\ndraft is still `writing` (409 `writing`), for one that `failed` (409 `not_ready`) and for a\nboard (409 `use_board`: `PATCH .../board` has the revision check and the row lock).",
         "operationId": "edit_document",
         "parameters": [
           {
@@ -11367,7 +11514,7 @@
                 }
               }
             },
-            "description": "`writing`: the draft is still being written; `not_ready`: it failed"
+            "description": "`writing`: the draft is still being written; `not_ready`: it failed; `use_board`: a board is edited through `PATCH .../board`"
           },
           "422": {
             "content": {
@@ -11680,6 +11827,153 @@
           }
         },
         "summary": "Export Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/share": {
+      "delete": {
+        "description": "Stop sharing the draft with every team. Takes effect at once; asking again changes nothing.\nOnly the creator may.",
+        "operationId": "unshare_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Unshare Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "description": "Share the draft, read-only, with **the team it was made in** (`team` on the draft; never\nanother, whatever `X-Team-Id` says): every current member can then open it and read its text and\ntitle, but not the meetings it was drafted from (a source they cannot read shows as hidden, and\na reader who cannot read every source meeting sees a generic title). Only the creator may;\nasking twice changes nothing. Leaving the team, or `DELETE .../share`, ends access at once.",
+        "operationId": "share_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: only a finished draft can be shared; `personal_team`: the draft was made in the creator's own space, so there is no team to share it with; `team_left`: the creator is no longer in the team the draft was made in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Share Document",
         "tags": [
           "documents"
         ]

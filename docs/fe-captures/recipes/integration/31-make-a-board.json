@@ -1,0 +1,60 @@
+{
+  "note": "A board draft.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "board",
+      "meeting_ids": [
+        1
+      ]
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 6,
+      "title": "Board",
+      "output_type": "board",
+      "recipe_key": "board",
+      "recipe_id": null,
+      "status": "writing",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T22:00:22.413319Z",
+      "updated_at": "2026-11-24T22:00:22.413319Z",
+      "access": "owner",
+      "owner_name": null,
+      "shared_with": [],
+      "team": {
+        "id": 2,
+        "name": "Acme Sales"
+      },
+      "blocks": [],
+      "checks": {
+        "blanks": [],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null,
+      "options": {},
+      "use_brief": false,
+      "can_edit": true,
+      "share_blocked": null,
+      "left_out_message": null
+    }
+  }
+}

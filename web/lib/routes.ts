@@ -15,6 +15,7 @@ export const NEXT_PAGES = [
   "/reset-password",
   "/pilot-full",
   "/meetings/[id]",
+  "/documents",
   "/documents/[id]",
   "/ask",
   "/series/[id]",

@@ -4,13 +4,14 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CopyButton } from "@/components/app/copy-button";
 import { DocumentBody } from "@/components/app/document-body";
+import { DocumentShareDialog } from "@/components/app/document-share-dialog";
 import { useDocument } from "@/components/app/use-document";
 import { Alert, AppLink, Badge, Button, Field, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { DocumentBlock, DocumentDraft, DocumentExportFormat } from "@/lib/api/types";
 import { saveBlob } from "@/lib/save-file";
-import { blanksPhrase, blocksToText, checkCounts, figuresPhrase, mailtoHref } from "@/lib/documents";
+import { blanksPhrase, blocksToText, checkCounts, figuresPhrase, mailtoHref, sharedWithPhrase, withoutHiddenSources } from "@/lib/documents";
 
 const KIND_NAME: Record<DocumentDraft["output_type"], string> = { document: "Document", email: "Email", table: "Table", board: "Board" };
 
@@ -41,8 +42,11 @@ const stillToFill = (blanks: number) => `${blanks} ${blanks === 1 ? "blank" : "b
 
 // A draft made from a meeting (docs/superpowers/specs/2026-11-24-meeting-recipes-design.md, 5.2): it is
 // written in the background (the page asks every 2 seconds), then read here, edited block by block,
-// copied, opened in the mail app, downloaded, regenerated (a new draft) or discarded. Lead-designed: the
-// designer's files draw none of this; it reuses their components, tokens and the Download menu's classes.
+// copied, opened in the mail app, downloaded, shared read-only with the team, regenerated (a new draft) or
+// discarded. A reader of a shared draft (`can_edit` false) sees it read-only: Copy, the mail app and Download
+// stay (reading is allowed), Edit, Share, Regenerate and Discard are not offered, and "Shared by <name>" says
+// whose it is. Lead-designed: the designer's files draw none of this; it reuses their components, tokens and
+// the Download menu's classes.
 export function DocumentView({ initial }: { initial: DocumentDraft }) {
   const router = useRouter();
   const { doc, gone, replace } = useDocument(initial);
@@ -53,12 +57,16 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const menu = useRef<HTMLDetailsElement>(null);
 
   const meetingId = doc.meeting_ids.length === 1 ? doc.meeting_ids[0] : null;
   const { blanks, figures } = checkCounts(doc.checks);
   const recipe = doc.recipe_key ?? doc.recipe_id;
-  const canRegenerate = recipe !== null && doc.meeting_ids.length > 0;
+  const canEdit = doc.can_edit;
+  const canRegenerate = canEdit && recipe !== null && doc.meeting_ids.length > 0;
+  const sharedLine = canEdit ? sharedWithPhrase(doc.shared_with) : null;
+  const isShared = sharedLine !== null;
   const mail = doc.output_type === "email" ? mailtoHref(doc.title, doc.blocks) : undefined;
 
   function startEditing() {
@@ -82,7 +90,7 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
     setBusy("save");
     setProblem(null);
     try {
-      const next = await api.documents.edit(doc.id, { blocks: working, ...(title.trim() && title !== doc.title ? { title } : {}) });
+      const next = await api.documents.edit(doc.id, { blocks: withoutHiddenSources(working), ...(title.trim() && title !== doc.title ? { title } : {}) });
       replace(next);
       setEditing(false);
     } catch (caught) {
@@ -143,7 +151,9 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
     }
   }
 
-  const back = meetingId !== null ? { href: `/meetings/${meetingId}`, label: "Back to the meeting" } : { href: "/", label: "All meetings" };
+  const back = !canEdit
+    ? { href: "/documents?tab=shared", label: "Back to documents" }
+    : meetingId !== null ? { href: `/meetings/${meetingId}`, label: "Back to the meeting" } : { href: "/", label: "All meetings" };
   const ready = doc.status === "ready";
 
   return (
@@ -162,6 +172,8 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
           </div>
           <p className="meta-line">
             <span>{KIND_NAME[doc.output_type]}</span>
+            {!canEdit && doc.owner_name ? <span>Shared by {doc.owner_name}</span> : null}
+            {sharedLine ? <span>{sharedLine}</span> : null}
             {doc.edited ? <span>Edited</span> : null}
           </p>
         </div>
@@ -181,7 +193,11 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
         <Alert kind="notice">This draft is older than the meeting: the notes or transcript changed after it was made. Regenerate to make a new one from the latest.</Alert>
       ) : null}
       {ready && !doc.sources_available ? (
-        <Alert kind="notice">The meetings this draft came from are no longer available to you, so its sources cannot be opened.</Alert>
+        <Alert kind="notice">
+          {canEdit
+            ? "The meetings this draft came from are no longer available to you, so its sources cannot be opened."
+            : "You cannot open the meetings this draft was made from, so its sources are not available to you."}
+        </Alert>
       ) : null}
       {ready && doc.left_out_count > 0 ? (
         <Alert kind="notice">
@@ -228,18 +244,24 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
                 ))}
               </div>
             </details>
-            {doc.output_type === "board" ? null : (
+            {canEdit && doc.output_type !== "board" ? (
               <Button kind="secondary" size="sm" type="button" onClick={startEditing}>
                 Edit
               </Button>
-            )}
+            ) : null}
+            {canEdit ? (
+              <Button kind="secondary" size="sm" type="button" onClick={() => setSharing(true)}>
+                <Icon name="send" size={14} />
+                {isShared ? "Shared" : "Share with team"}
+              </Button>
+            ) : null}
             {canRegenerate ? (
               <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => void regenerate()}>
                 <Icon name="rewrite" size={14} />
                 Regenerate
               </Button>
             ) : null}
-            {!confirming ? (
+            {canEdit && !confirming ? (
               <Button kind="quiet" size="sm" type="button" onClick={() => setConfirming(true)}>
                 <Icon name="trash" size={14} />
                 Discard
@@ -255,7 +277,7 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
         </div>
       ) : null}
 
-      {doc.status !== "ready" && !gone ? (
+      {doc.status !== "ready" && !gone && canEdit ? (
         <div className="doc-actions">
           {doc.status === "failed" && canRegenerate ? (
             <Button size="sm" type="button" disabled={busy !== null} onClick={() => void regenerate()}>
@@ -314,12 +336,14 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
               blocks={doc.blocks}
               editing={false}
               onBlocks={() => {}}
+              canEdit={canEdit}
               onSaved={replace}
               onStale={reload}
             />
           )}
         </div>
       ) : null}
+      {canEdit && ready ? <DocumentShareDialog open={sharing} doc={doc} onClose={() => setSharing(false)} onChanged={replace} /> : null}
     </div>
   );
 }

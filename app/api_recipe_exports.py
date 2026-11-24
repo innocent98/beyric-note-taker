@@ -6,21 +6,27 @@ built one at a time per server process by the notes export's child process, and 
 meanwhile answers 503 `export_busy`, as the notes export does.
 """
 
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import auth, export
-from app.api_recipes import document_or_404
+from app.api_recipes import _generic_title, readable_document_or_404
 from app.api_schemas import ErrorResponse
 from app.db import get_session
-from app.models import Document, User
+from app.models import Document, DocumentMeeting, User
 from app.notes_document import content_disposition
 from app.recipes import exporters
+from app.recipes import visibility as doc_visibility
 
 router = APIRouter()
+
+BUSY_RETRIES = 8  # waits of BUSY_PAUSE seconds for the renderer before answering 503
+BUSY_PAUSE = 0.4
 
 _FILE_TYPES = {
     exporters._TYPES["md"]: {"schema": {"type": "string"}},
@@ -74,10 +80,28 @@ def export_document(
     each. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run
     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
     name is the draft's title, cleaned."""
-    doc = document_or_404(session, user, document_id)
+    doc = readable_document_or_404(session, user, document_id)
+    # A reader who cannot read every source meeting gets the generic title in the file name and the
+    # heading, as on the screen (the exports carry no sources: nothing else to redact).
+    title = None
+    if doc.owner_user_id != user.id and not _reads_every_source(session, user, doc):
+        title = _generic_title(session, doc)
     try:
         # Reads the blocks before the session is closed: the Word and PDF build can take seconds.
-        content, media_type, filename = _build(session, doc, format, table)
+        # The renderer builds one file at a time and a build takes well under a second, so a
+        # second request waits its turn for a few seconds instead of failing at once (measured:
+        # two exports started together made one of them a 503 every time).
+        _release(session, doc, format)
+        for attempt in range(BUSY_RETRIES + 1):
+            try:
+                content, media_type, filename = exporters.export(
+                    doc, format, table=table, title=title
+                )
+                break
+            except export.ExportBusy:
+                if attempt == BUSY_RETRIES:
+                    raise
+                time.sleep(BUSY_PAUSE)
     except export.ExportBusy:
         return _error(
             503,
@@ -100,8 +124,16 @@ def export_document(
     )
 
 
-def _build(session: Session, doc: Document, fmt: str, table: int):
+def _reads_every_source(session: Session, user: User, doc: Document) -> bool:
+    ids = set(
+        session.scalars(
+            select(DocumentMeeting.meeting_id).where(DocumentMeeting.document_id == doc.id)
+        )
+    )
+    return ids <= doc_visibility.readable_sources(session, user, doc)
+
+
+def _release(session: Session, doc: Document, fmt: str) -> None:
     if fmt in ("docx", "pdf") and doc.status == "ready":
         session.expunge(doc)  # nothing else is read: hand the connection back before the render
         session.close()
-    return exporters.export(doc, fmt, table=table)

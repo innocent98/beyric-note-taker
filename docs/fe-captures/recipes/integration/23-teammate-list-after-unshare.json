@@ -1,0 +1,40 @@
+{
+  "note": "The draft left the list (the other shared draft stays).",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents?shared=true",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "documents": [
+        {
+          "id": 1,
+          "title": "Proposal",
+          "output_type": "document",
+          "recipe_key": "proposal",
+          "recipe_id": null,
+          "status": "ready",
+          "edited": false,
+          "meeting_ids": [
+            1
+          ],
+          "created_at": "2026-11-24T22:00:20.955484Z",
+          "updated_at": "2026-11-24T22:00:21.167163Z",
+          "access": "shared",
+          "owner_name": "Ada Lovelace",
+          "shared_with": [],
+          "team": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "note": "409 `personal_team`: the draft was made in her personal space, which has no team to share it with. Show the server's message (the same sentence is in `share_blocked` on the draft).",
+  "client": "eve (outsider, own team)",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents/3/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "This draft was made in your own space. Make it in a team workspace to share it with that team."
+      }
+    }
+  }
+}

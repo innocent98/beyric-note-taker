@@ -6,7 +6,7 @@ export function TermsContent() {
   return (
     <>
       <h1>Terms of Service</h1>
-      <p className="meta">Effective 2 November 2026 &middot; Last updated 14 November 2026</p>
+      <p className="meta">Effective 2 November 2026 &middot; Last updated 24 November 2026</p>
       <p>These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.</p>
 
       <h2 id="accept">Agreement to these terms</h2>
@@ -44,8 +44,9 @@ export function TermsContent() {
       <p>You confirm that you have the rights needed to give Your Content to us and that it does not break the law or anyone else's rights.</p>
       <p>You are responsible for who you invite to a team, what you share with it and what you move to it. A meeting you move to a team belongs to that team: you cannot take it back yourself, and it stays with the team if you leave it or close your account. Ask a team owner or admin to move it back.</p>
 
-      <h2 id="accuracy">Accuracy of notes</h2>
+      <h2 id="accuracy">Accuracy of notes and documents</h2>
       <p>Transcripts and notes are produced automatically and may contain errors, omissions or the wrong speaker, especially with poor audio, overlapping speech or specialist terms. Tasks, owners and due dates read from the notes are produced the same way and can be wrong: the original notes and the transcript are the record. Review them before relying on them. Do not use the Service as the only record for legal, medical, financial or other high-stakes decisions.</p>
+      <p>Documents the Service writes from your meetings and your team brief are first drafts, written automatically. They can be wrong or incomplete. We mark the places where a fact was missing and the figures we could not find in your meetings or brief, but that check is not complete. You are responsible for reading and correcting a document before you send it to anyone. Beyric never sends a document for you. A draft you share with your team can be read by every member of that team, even a member who cannot open the meeting it was made from.</p>
 
       <h2 id="use">Acceptable use</h2>
       <p>You agree not to:</p>

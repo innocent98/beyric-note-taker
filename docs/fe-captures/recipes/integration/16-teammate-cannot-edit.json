@@ -1,0 +1,33 @@
+{
+  "note": "Every write is the creator's: 404 for a reader.",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "tampered",
+          "sources": []
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

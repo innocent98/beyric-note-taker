@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import pytest
 from openpyxl import load_workbook
 
-from app import export, services
+from app import api_recipe_exports, export, services
 from app.models import Document
 from app.recipes import blocks as b
 from app.recipes import exporters
@@ -302,6 +302,23 @@ def test_the_route_needs_a_login(anon, session, owner):
     assert anon.get(url(doc, "md")).status_code == 401
 
 
+def test_a_second_export_waits_for_its_turn_instead_of_failing(api, session, owner, monkeypatch):
+    doc = saved(session, owner, with_table())
+    real = export.build_file
+    calls = []
+
+    def busy_twice(*args):
+        calls.append(1)
+        if len(calls) <= 2:
+            raise export.ExportBusy()
+        return real(*args)
+
+    monkeypatch.setattr(export, "build_file", busy_twice)
+    monkeypatch.setattr(api_recipe_exports, "BUSY_PAUSE", 0)
+    response = api.get(url(doc, "pdf"))
+    assert response.status_code == 200 and response.content[:4] == b"%PDF" and len(calls) == 3
+
+
 def test_a_busy_or_failed_render_answers_with_the_project_error_shape(
     api, session, owner, monkeypatch
 ):
@@ -311,6 +328,7 @@ def test_a_busy_or_failed_render_answers_with_the_project_error_shape(
         raise export.ExportBusy()
 
     monkeypatch.setattr(export, "build_file", busy)
+    monkeypatch.setattr(api_recipe_exports, "BUSY_PAUSE", 0)
     busy_response = api.get(url(doc, "pdf"))
     error_of(busy_response, 503, "export_busy")
     assert busy_response.headers["retry-after"] == "5"
@@ -326,3 +344,38 @@ def test_a_busy_or_failed_render_answers_with_the_project_error_shape(
 
     monkeypatch.setattr(export, "build_file", broken)
     error_of(api.get(url(doc, "docx")), 500, "export_failed")
+
+
+def test_an_excel_sheet_is_never_called_history_or_another_reserved_name():
+    for name in ("History", "history", "HISTORY"):
+        assert exporters._sheet_name(name, 2, set()) == "Table 2"
+    assert exporters._sheet_name("Histories", 2, set()) == "Histories"
+
+
+def test_a_table_under_the_heading_history_is_exported_with_a_safe_sheet_name(api, session, owner):
+    from openpyxl import load_workbook
+
+    doc = saved(
+        session,
+        owner,
+        Document(
+            owner_user_id=owner.id,
+            title="Log",
+            output_type="document",
+            status="ready",
+            blocks=[
+                b.dump_blocks([b.Heading(level=2, text="History")])[0],
+                *b.dump_blocks(
+                    [
+                        b.Table(
+                            columns=["When", "What"], rows=[[b.Cell(text="Mon"), b.Cell(text="x")]]
+                        )
+                    ]
+                ),
+            ],
+        ),
+    )
+    response = api.get(url(doc, "xlsx"))
+    assert response.status_code == 200
+    names = load_workbook(io.BytesIO(response.content)).sheetnames
+    assert names == ["Table 1"]

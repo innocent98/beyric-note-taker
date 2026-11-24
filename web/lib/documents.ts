@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api/client";
 import type { DocumentBlock, DocumentDraft, DocumentItem, DocumentSource } from "@/lib/api/types";
 
 // Helpers behind the document screen (components/app/document-view.tsx, document-editor.tsx): what a
@@ -7,10 +8,18 @@ import type { DocumentBlock, DocumentDraft, DocumentItem, DocumentSource } from 
 
 // ---- sources ----
 
+// A source the reader may not open: `hidden` (a shared draft's source in a meeting the reader cannot read),
+// or one with no meeting to open.
+export function isHiddenSource(source: DocumentSource): boolean {
+  return source.kind === "hidden" || source.meeting_id == null;
+}
+
 // A line source opens the transcript at that row (`?tab=transcript&line=N`, the mechanism Ask Beyric
 // uses); the meeting page shows the plain transcript when the row does not exist, so a line that moved
-// degrades to the meeting. A meeting, decision or task source opens the meeting.
-export function sourceHref(source: DocumentSource): string {
+// degrades to the meeting. A meeting, decision or task source opens the meeting. null for a hidden source:
+// it links nowhere.
+export function sourceHref(source: DocumentSource): string | null {
+  if (isHiddenSource(source)) return null;
   const base = `/meetings/${source.meeting_id}`;
   if (source.kind === "line" && source.line != null && source.line >= 1) return `${base}?tab=transcript&line=${source.line}`;
   return base;
@@ -44,6 +53,26 @@ export function sourcesOf(block: DocumentBlock): DocumentSource[] {
   else if (block.type === "table") block.rows.forEach((row) => row.forEach((cell) => add(cell.sources)));
   else if (block.type === "column") block.cards.forEach((card) => add(card.sources));
   return found;
+}
+
+// The blocks as the editor sends them back: no `hidden` source (a reader's placeholder, never a real
+// source) goes to the server; every other source is kept as it came.
+export function withoutHiddenSources(blocks: DocumentBlock[]): DocumentBlock[] {
+  const keep = (sources: DocumentSource[] | undefined) => sources?.filter((s) => s.kind !== "hidden");
+  return blocks.map((block): DocumentBlock => {
+    switch (block.type) {
+      case "paragraph":
+        return block.sources ? { ...block, sources: keep(block.sources) } : block;
+      case "bullets":
+        return { ...block, items: block.items.map((i) => (i.sources ? { ...i, sources: keep(i.sources) } : i)) };
+      case "table":
+        return { ...block, rows: block.rows.map((row) => row.map((c) => (c.sources ? { ...c, sources: keep(c.sources) } : c))) };
+      case "column":
+        return { ...block, cards: block.cards.map((c) => (c.sources ? { ...c, sources: keep(c.sources) } : c)) };
+      default:
+        return block;
+    }
+  });
 }
 
 // ---- blanks ----
@@ -198,3 +227,26 @@ export function moveBy<T>(list: T[], from: number, step: -1 | 1): T[] {
 
 // Blocks the editor can show. A board's columns have their own screen (the board view).
 export const isEditable = (block: DocumentBlock): boolean => block.type !== "column";
+
+// ---- the Documents list ----
+
+// How many drafts one page of the Documents list asks for; a full page means there may be more.
+export const DOCUMENT_PAGE = 20;
+
+export const OUTPUT_NAME: Record<DocumentDraft["output_type"], string> = { document: "Document", email: "Email", table: "Table", board: "Board" };
+export const STATUS_NAME: Record<DocumentDraft["status"], string> = { writing: "Writing", ready: "Ready", failed: "Failed" };
+
+// ---- sharing ----
+
+// The team names a draft is shared with, as a line ("Shared with Sales, Support"); null when it is not shared.
+export function sharedWithPhrase(shared: DocumentDraft["shared_with"]): string | null {
+  const names = (shared ?? []).map((t) => t.name);
+  return names.length > 0 ? `Shared with ${names.join(", ")}` : null;
+}
+
+// What the share dialog says when sharing or stopping failed: the server's own sentence for the two
+// refusals written for the person (`not_ready`, `personal_team`), a plain generic line for anything else.
+export function shareErrorMessage(error: unknown, action: "share" | "unshare"): string {
+  if (error instanceof ApiError && (error.code === "personal_team" || error.code === "not_ready" || error.code === "team_left")) return error.message;
+  return action === "share" ? "We could not share this draft. Try again." : "We could not stop sharing this draft. Try again.";
+}

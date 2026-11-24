@@ -1,0 +1,18 @@
+{
+  "note": "204. The drafts made from this meeting ALONE are deleted with it; a cross-meeting draft stays.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/meetings/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  }
+}

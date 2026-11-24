@@ -29,22 +29,27 @@ export function Marked({ text, flagged = [] }: { text: string; flagged?: string[
 }
 
 // "Drafted from" and one chip per source: a line opens the transcript at that row, anything else opens
-// the meeting. When none of the draft's meetings can be opened the chips say "not available" and link
-// nowhere. An edited block keeps its sources, so the words stay "drafted from".
+// the meeting. A source the reader may not open (`hidden`) and, when none of the draft's meetings can be
+// opened, every source read "not available" and link nowhere (one such chip, however many sources). An
+// edited block keeps its sources, so the words stay "drafted from".
 export function SourceChips({ sources, available }: { sources: DocumentSource[]; available: boolean }) {
   if (sources.length === 0) return null;
+  const links = available
+    ? sources.flatMap((source) => {
+        const href = sourceHref(source);
+        return href === null ? [] : [{ source, href }];
+      })
+    : [];
+  const closed = !available || links.length < sources.length;
   return (
     <p className="doc-sources">
       <span>Drafted from</span>
-      {available ? (
-        sources.map((source, i) => (
-          <AppLink key={i} className="doc-chip" href={sourceHref(source)} title={sourceHint(source)}>
-            {sourceLabel(source)}
-          </AppLink>
-        ))
-      ) : (
-        <span className="doc-chip doc-chip-off">not available</span>
-      )}
+      {links.map(({ source, href }, i) => (
+        <AppLink key={i} className="doc-chip" href={href} title={sourceHint(source)}>
+          {sourceLabel(source)}
+        </AppLink>
+      ))}
+      {closed ? <span className="doc-chip doc-chip-off">not available</span> : null}
     </p>
   );
 }

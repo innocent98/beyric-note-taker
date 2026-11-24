@@ -60,10 +60,12 @@ class BlocksInvalid(Exception):
 
 class Source(BaseModel):
     """Where a piece of text was drafted from. `quote` is the first words of the line, so a line
-    that moved can be found again (`ask._quote_row`); `ref` is a decision or task id."""
+    that moved can be found again (`ask._quote_row`); `ref` is a decision or task id. `hidden` is
+    never stored and never written by the model: `recipes.visibility.redact` puts it in the place
+    of a source the reader of a shared draft may not open (nothing else is set on it)."""
 
-    kind: Literal["line", "meeting", "decision", "task"]
-    meeting_id: int
+    kind: Literal["line", "meeting", "decision", "task", "hidden"]
+    meeting_id: int | None = None
     line: int | None = None
     quote: str | None = None
     ref: int | None = None

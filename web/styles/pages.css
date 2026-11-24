@@ -1099,6 +1099,9 @@
 /* ---- Recipe drafts (components/app/document-view.tsx, document-body.tsx, document-editor.tsx) ---- */
 .doc-bar { display: flex; flex-direction: column; gap: var(--space-3); }
 .doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* On a phone the Download panel opens under the whole toolbar, not under its button (the button sits
+   mid-row, so a 290px panel started there ran off the right edge: seen at 390px). */
+@media (max-width: 639px) { .doc-actions { position: relative; } .doc-actions .dl-menu { position: static; } }
 .doc-checks { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .doc-card { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .doc-body { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -1127,3 +1130,5 @@ a.doc-chip:hover { background: var(--surface-hover); color: var(--text); text-de
 .doc-level { flex: none; width: auto; }
 .doc-add { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .dl-tile-file { background: var(--surface-soft); color: var(--text-2); }
+.side-docs { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.side-doc { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }

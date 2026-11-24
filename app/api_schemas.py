@@ -1444,6 +1444,11 @@ class DocumentChecks(BaseModel):
     flags: list[FlagOut]
 
 
+class SharedTeam(BaseModel):
+    id: int
+    name: str
+
+
 class DocumentBrief(BaseModel):
     id: int
     title: str
@@ -1452,9 +1457,20 @@ class DocumentBrief(BaseModel):
     recipe_id: int | None
     status: DocumentStatus
     edited: bool
+    # For a reader of a shared draft: only the meetings THEY may read (never the others' ids).
     meeting_ids: list[int]
     created_at: UtcDatetime
     updated_at: UtcDatetime
+    # "owner" for the creator, "shared" for a teammate reading a draft shared with their team.
+    access: Literal["owner", "shared"] = "owner"
+    # The creator's name for a shared draft ("Former member" once their account is gone); null for
+    # the creator's own drafts.
+    owner_name: str | None = None
+    # The teams the creator shared it with (read only by the creator; empty for a reader).
+    shared_with: list[SharedTeam] = Field(default_factory=list)
+    # The team the draft was made in (the creator's view; null for a reader or a draft made in the
+    # person's own space with no team record). A draft is shared with this team only.
+    team: SharedTeam | None = None
 
 
 class DocumentOut(DocumentBrief):
@@ -1474,6 +1490,11 @@ class DocumentOut(DocumentBrief):
     # What the person chose at the Make dialog, so "Regenerate" can ask again for the same thing.
     options: dict[str, str | int | float | bool]
     use_brief: bool
+    # False for a reader of a shared draft: edit, share, discard and regenerate are the creator's.
+    can_edit: bool = True
+    # For the creator of a ready draft: a plain sentence saying why Share cannot be used now (made
+    # in the personal space, the creator left its team), else null. Show it and disable Share.
+    share_blocked: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

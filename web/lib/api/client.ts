@@ -12,6 +12,7 @@ import type {
   Decision,
   DecisionChanges,
   DocumentDraft,
+  DocumentList,
   DocumentExportFormat,
   DocumentRequest,
   DecisionList,
@@ -481,6 +482,23 @@ export function createApi(options: ApiOptions = {}) {
       edit: (id: number, body: { blocks: DocumentDraft["blocks"]; title?: string }) =>
         request<DocumentDraft>("PATCH", `/api/documents/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/documents/${id}`, { write: true }),
+      // The drafts, newest first: `mine` (the default), `shared` (teammates' drafts shared with a team the
+      // person is in), `meetingId` (made from that meeting); `beforeId` is the smallest id of the page before.
+      list: (query: { mine?: boolean; shared?: boolean; meetingId?: number; beforeId?: number; limit?: number } = {}) =>
+        request<DocumentList>("GET", "/api/documents", {
+          query: {
+            mine: query.mine === undefined ? undefined : String(query.mine),
+            shared: query.shared === undefined ? undefined : String(query.shared),
+            meeting_id: query.meetingId,
+            before_id: query.beforeId,
+            limit: query.limit,
+          },
+        }),
+      // Read-only sharing with the team the draft was made in (`doc.team`; no team is named, the server
+      // ignores the tab's): 200 with the draft; 409 `not_ready`, `personal_team`, `team_left`.
+      // `unshare` stops it for every team (204).
+      share: (id: number) => request<DocumentDraft>("POST", `/api/documents/${id}/share`, { write: true }),
+      unshare: (id: number) => request<void>("DELETE", `/api/documents/${id}/share`, { write: true }),
       export: (id: number, format: DocumentExportFormat, table = 0) =>
         download(`/api/documents/${id}/export`, { format, table }),
     },

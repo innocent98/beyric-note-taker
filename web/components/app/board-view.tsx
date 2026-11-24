@@ -23,6 +23,7 @@ import {
   type ColumnBox,
 } from "@/lib/board";
 import { boardFilename, boardPng } from "@/lib/board-png";
+import { sourceHref, sourceLabel } from "@/lib/documents";
 import { saveBlob } from "@/lib/save-file";
 
 // The board of a meeting (docs/fe-integration-guide-recipes-board.md): a static, one-page picture,
@@ -414,17 +415,16 @@ function CardView({
       </div>
       {sources.length ? (
         <div className="bd-sources">
-          {sources.map((s, i) =>
-            s.kind === "line" && s.line ? (
-              <AppLink key={i} href={`/meetings/${s.meeting_id}?tab=transcript&line=${s.line}`} title={s.quote ?? undefined}>
-                Line {s.line}
+          {sources.map((s, i) => {
+            // A source the reader may not open (hidden) is not a link.
+            const href = sourceHref(s);
+            if (href === null) return <span key={i} className="doc-chip doc-chip-off">not available</span>;
+            return (
+              <AppLink key={i} href={href} title={s.kind === "line" ? (s.quote ?? undefined) : undefined}>
+                {s.kind === "line" && !s.line ? "Meeting" : sourceLabel(s)}
               </AppLink>
-            ) : (
-              <AppLink key={i} href={`/meetings/${s.meeting_id}`}>
-                {s.kind === "decision" ? "Decision" : s.kind === "task" ? "Task" : "Meeting"}
-              </AppLink>
-            ),
-          )}
+            );
+          })}
         </div>
       ) : null}
       {card.owner ? (

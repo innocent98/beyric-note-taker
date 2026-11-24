@@ -30,7 +30,7 @@ export default async function DocumentPage({ params }: Props) {
   const doc = await fetchDocument(parseId((await params).id));
   return (
     <AppShell
-      current="meetings"
+      current="documents"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
       unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()}

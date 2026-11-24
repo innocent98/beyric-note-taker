@@ -1,0 +1,18 @@
+{
+  "note": "204.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/documents/6",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  }
+}

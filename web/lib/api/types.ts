@@ -97,6 +97,8 @@ export type NoticeList = Schemas["NotificationList"];
 // A recipe draft (docs/fe-integration-guide-recipes.md): the blocks, the checks, the status.
 export type DocumentDraft = Schemas["DocumentOut"];
 export type DocumentBlock = DocumentDraft["blocks"][number];
+export type DocumentList = Schemas["DocumentList"];
+export type DocumentRow = Schemas["DocumentBrief"];
 export type DocumentSource = Schemas["Source"];
 export type DocumentItem = Schemas["Item"];
 export type DocumentRequest = Schemas["DocumentIn"];

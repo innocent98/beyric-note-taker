@@ -11,8 +11,8 @@ last saw (the draft's `updated_at`); if the board has changed since, the edit is
 card. The check and the write happen under a row lock, so two tabs cannot both win.
 
 Only the CREATOR edits a board, even once it is shared with the team: the draft is looked up by its
-owner here and does not use `api_recipes.document_or_404`, which slice S4 widens to readers. Anyone
-else gets a 404.
+owner here (the rule of `api_recipes.document_or_404`; never `readable_document_or_404`, which lets
+a teammate read a shared board). Anyone else gets a 404.
 """
 
 from datetime import UTC, datetime, timedelta
