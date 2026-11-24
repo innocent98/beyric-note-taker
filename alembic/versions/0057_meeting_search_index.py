@@ -6,7 +6,9 @@ every meeting the caller may read (about 3 ms each: 13 s at 4,000 meetings, `doc
 2026-11-24-meeting-search-index.md`). This adds:
 
 * the SQL function `meeting_search_text(notes, speaker_transcript, transcript)`, IMMUTABLE (an
-  index needs that; `concat_ws`, which the search used before, is not), and
+  index needs that; `concat_ws`, which the search used before, is not). It folds accents out of
+  the stored text (Unicode NFKD, then the combining marks removed) the way `app.extraction.
+  normalise` folds the words a person types, so "équipe" and "equipe" both find "équipe"; and
 * a GIN index on a call to it, built CONCURRENTLY so inserts and updates to `meetings` (the worker
   writes to it all the time) are not blocked while it builds.
 
@@ -31,13 +33,22 @@ down_revision = "0056"
 branch_labels = None
 depends_on = None
 
-FUNCTION_SQL = """
+FUNCTION_SQL = r"""
 CREATE OR REPLACE FUNCTION meeting_search_text(
     notes text, speaker_transcript text, transcript text
 ) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
     SELECT to_tsvector(
         'simple',
-        coalesce(notes, '') || ' ' || coalesce(nullif(speaker_transcript, ''), transcript, '')
+        regexp_replace(
+            normalize(
+                coalesce(notes, '') || ' ' ||
+                    coalesce(nullif(speaker_transcript, ''), transcript, ''),
+                NFKD
+            ),
+            '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]',
+            '',
+            'g'
+        )
     )
 $$
 """

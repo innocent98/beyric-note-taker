@@ -5,8 +5,8 @@
 
 **Addendum 2026-11-24: meeting search index** (branch `feature/meeting-search-index`, stacked on PR 261, SOP `docs/sop/2026-11-24-meeting-search-index.md`, **migration 0057, Alembic head now 0057**):
 - [x] `meeting_search_text()` (IMMUTABLE SQL function) and GIN index `ix_meetings_search_text` built CONCURRENTLY; Ask Beyric's `candidates()` and the list's `q` search call the one function; the list's query is split (`id IN title OR id IN full text`) so the index is usable
-- [x] Proven with EXPLAIN (ANALYZE) of the SQL both readers really send, and by a test on every run; rare-word search at 4,000 meetings: list 13,095 ms to 13 ms, Ask 13,337 ms to 16 ms
-- [ ] **Common words stay slow** (12 to 29 s on the unkind synthetic data; the list's common-word search is slower than in 261's one-`OR` shape); a stored generated `tsvector` column measured under 160 ms in every case, costs a table rewrite and 2x table size, is recommended as the next PR (0058), NOT built without Adebayo's yes
+- [x] Proven with EXPLAIN (ANALYZE) of the SQL both readers really send, and by a test on every run; rare-word search at 4,000 meetings: list 22,620 ms to 11 ms, Ask 20,468 ms to 17 ms; accents folded in the stored text and the title ("équipe" finds "equipe" and the reverse), subqueries scoped to the readable set
+- [ ] **Common words stay slow** (18 to 44 s on the unkind synthetic data; the list's common-word search is slower than in 261's one-`OR` shape); a stored generated `tsvector` column measured under 230 ms in every case, costs a table rewrite and 2x table size, is recommended as the next PR (0058), NOT built without Adebayo's yes
 - [ ] **Not verified:** the real server's build time and the deploy script path
 
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):

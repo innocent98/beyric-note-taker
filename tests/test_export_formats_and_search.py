@@ -12,6 +12,7 @@ import io
 from datetime import UTC, date, datetime
 
 import pytest
+import sqlalchemy as sa
 
 from app import export, sprints, teams, translation
 from app.export_text import build_markdown, build_text
@@ -609,5 +610,5 @@ def test_the_search_clause_matches_the_database_by_the_same_words_as_ask(session
 
     hit = ready(session, template, notes="## Summary\nThe decisions about pricing")
     ready(session, template, notes="## Summary\nHiring")
-    clause = meeting_search.keyword_clause("decided price")
+    clause = meeting_search.keyword_clause("decided price", sa.true())
     assert [m.id for m in session.scalars(select(Meeting).where(clause))] == [hit.id]

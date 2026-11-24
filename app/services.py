@@ -499,9 +499,10 @@ def list_meetings(
     (already checked by `parse_keywords`) narrows it to the meetings whose title, notes or
     transcript match (`meeting_search.keyword_clause`); it only ever removes rows from what the
     rule above allows."""
-    query = select(Meeting).where(visibility.readable_in(user, active))
+    readable = visibility.readable_in(user, active)
+    query = select(Meeting).where(readable)
     if keywords:
-        query = query.where(meeting_search.keyword_clause(keywords))
+        query = query.where(meeting_search.keyword_clause(keywords, readable))
     query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)

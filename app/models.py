@@ -131,19 +131,39 @@ class Base(DeclarativeBase):
     pass
 
 
+# The accents and other combining marks folded away before words are matched, as
+# `app.extraction.normalise` folds the words a person types (it does NFKD and drops the combining
+# marks): the Latin, Greek and Cyrillic diacritics and their supplements, which is what French,
+# Spanish, Portuguese and Yoruba names ("équipe", "Ọlá") carry. A mark outside these blocks (Hebrew
+# points, Arabic vowel signs, Indic signs) is not folded in the stored text, though `normalise` does
+# drop it from a typed word: such a word will not match.
+SEARCH_FOLD_MARKS = r"[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]"
+
 # The text of a meeting that search reads, as one `tsvector`: its notes plus its transcript (the
-# speaker-labelled one when there is one). ONE function for every reader (Ask Beyric's
-# `candidates`, the Meetings list's search box: `app/meeting_search.py`), and the GIN index on
-# `meetings` is built on a call to it, so Postgres can use that index only when a query calls
-# exactly `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an
-# index to use it (`concat_ws` is not). Migration 0057 holds its own frozen copy of this text.
-MEETING_SEARCH_TEXT_SQL = """
+# speaker-labelled one when there is one), accents folded the way `normalise` folds a typed word.
+# ONE function for every reader (Ask Beyric's `candidates`, the Meetings list's search box:
+# `app/meeting_search.py`), and the GIN index on `meetings` is built on a call to it, so Postgres
+# can use that index only when a query calls exactly
+# `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an index
+# to use it (`concat_ws` is not; `normalize(text, NFKD)`, `regexp_replace` and `to_tsvector` with a
+# named configuration are; the `unaccent` extension is not). Keep it a single SQL statement so
+# Postgres inlines it. Migration 0057 holds its own frozen copy of this text.
+MEETING_SEARCH_TEXT_SQL = r"""
 CREATE OR REPLACE FUNCTION meeting_search_text(
     notes text, speaker_transcript text, transcript text
 ) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
     SELECT to_tsvector(
         'simple',
-        coalesce(notes, '') || ' ' || coalesce(nullif(speaker_transcript, ''), transcript, '')
+        regexp_replace(
+            normalize(
+                coalesce(notes, '') || ' ' ||
+                    coalesce(nullif(speaker_transcript, ''), transcript, ''),
+                NFKD
+            ),
+            '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]',
+            '',
+            'g'
+        )
     )
 $$
 """
