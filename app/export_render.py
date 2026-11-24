@@ -23,6 +23,7 @@ from app.notes_document import (
     Paragraph,
     Quote,
     Run,
+    Table,
 )
 
 # Left alone, a runaway render would take whatever memory the shared server has. A one-hour
@@ -62,6 +63,11 @@ li > p { margin: 0 0 2pt; }
 code, pre { font-family: "Geist Mono", monospace; font-size: 9pt; background: #F3F5F4; }
 pre { padding: 6pt 8pt; white-space: pre-wrap; border-radius: 3pt; }
 blockquote { margin: 0 0 6pt; padding-left: 10pt; border-left: 2pt solid #D5DBD8; color: #4A524E; }
+table { width: 100%%; border-collapse: collapse; margin: 0 0 8pt; font-size: 9.5pt; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th, td { border: 0.75pt solid #D5DBD8; padding: 3pt 5pt; text-align: left; vertical-align: top; }
+th { background: #F3F5F4; color: #0A5248; font-weight: 600; }
 .transcript h2 { break-before: page; }
 .turn { margin: 0 0 7pt; break-inside: avoid; }
 .who { font-weight: 600; color: #0A5248; }
@@ -105,6 +111,13 @@ def _block_html(block: Block) -> str:
                 f"<li>{''.join(_block_html(b) for b in item)}</li>" for item in block.items
             )
             return f"<{tag}{start}>{items}</{tag}>"
+        case Table():
+            head = "".join(f"<th>{escape(c)}</th>" for c in block.columns)
+            body = "".join(
+                "<tr>" + "".join(f"<td>{escape(c)}</td>" for c in row) + "</tr>"
+                for row in block.rows
+            )
+            return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
     raise TypeError(type(block))  # pragma: no cover
 
 
@@ -189,6 +202,32 @@ def _add_block(doc, block: Block, *, list_level: int = 0, quoted: bool = False) 
                     else:
                         _add_block(doc, inner, list_level=list_level)
                     first = False
+        case Table():
+            _add_table(doc, block)
+
+
+def _add_table(doc, block: Table) -> None:
+    """A real Word table: a header row (bold, repeated on each page) and rows that do not split
+    across pages. Cell text goes in as text, never as markup."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    table = doc.add_table(rows=1, cols=max(len(block.columns), 1), style="Table Grid")
+    for index, name in enumerate(block.columns):
+        cell = table.rows[0].cells[index]
+        cell.paragraphs[0].add_run(name).bold = True
+    for row in block.rows:
+        cells = table.add_row().cells
+        for index, text in enumerate(row[: len(cells)]):
+            cells[index].paragraphs[0].add_run(text)
+    for number, word_row in enumerate(table.rows):
+        properties = word_row._tr.get_or_add_trPr()
+        properties.append(OxmlElement("w:cantSplit"))
+        if number == 0:
+            header = OxmlElement("w:tblHeader")
+            header.set(qn("w:val"), "true")
+            properties.append(header)
+    doc.add_paragraph()  # a gap after the table, as Word does not add one
 
 
 def render_docx(doc: NotesDocument) -> bytes:
