@@ -236,6 +236,7 @@ def run(base: str, ids: dict) -> None:
     ada.call("bad-table-number", "GET", f"/api/documents/{p}{x}csv&table=-1", note="A negative table number: 422.")  # fmt: skip
     eve.call("someone-elses-draft", "GET", f"/api/documents/{p}{x}md", note="Another person's draft: 404 `not_found`, never 403.")  # fmt: skip
     ada.call("no-such-draft", "GET", f"/api/documents/999999{x}md", note="No such draft: 404, the same body.")  # fmt: skip
+    ada.call("the-draft", "GET", f"/api/documents/{p}", note="The draft these exports come from, as the draft API answers (`GET /api/documents/{id}`). The web tests feed their Copy text and mail link from this body and hold the Copy text equal to the plain-text export (07).")  # fmt: skip
 
 
 def main() -> None:

@@ -58,6 +58,14 @@ describe("which calls carry the team", () => {
     expect(isTeamScoped(path, method)).toBe(false);
   });
 
+  it("asks for a draft in the tab's team (its brief and recipes), and reads or changes one in none", () => {
+    expect(isTeamScoped("/api/documents", "POST")).toBe(true);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(false);
+    expect(isTeamScoped("/api/documents/5", "GET")).toBe(false);
+    expect(isTeamScoped("/api/documents/5", "PATCH")).toBe(false);
+    expect(isTeamScoped("/api/documents/5/export", "GET")).toBe(false);
+  });
+
   it.each([
     "/api/teams",
     "/api/team/invites/preview",
