@@ -505,7 +505,12 @@ def list_meetings(
     readable = visibility.readable_in(user, active)
     query = select(Meeting).where(readable)
     if keywords:
-        query = query.where(meeting_search.keyword_clause(keywords, readable))
+        # The search subqueries see what the caller may read, NOT the workspace too: a btree-indexed
+        # workspace equality inside them can win the planner's choice over the full-text index. The
+        # outer query narrows to the workspace.
+        query = query.where(
+            meeting_search.keyword_clause(keywords, visibility.can_read_clause(user))
+        )
     query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)

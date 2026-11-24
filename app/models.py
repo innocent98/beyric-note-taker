@@ -400,7 +400,8 @@ class Template(Base):
         Index(
             "uq_templates_owner_team_name",
             "owner_user_id",
-            "team_id",
+            # team_id may be null until W2; two nulls must still clash (coalesce)
+            sa.text("coalesce(team_id, 0)"),
             "name",
             unique=True,
             postgresql_where=sa.text("deleted_at is null"),
@@ -410,9 +411,9 @@ class Template(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     # The workspace the template belongs to (workspaces design, section 3). `owner_user_id` is who
-    # made it. Until the per-workspace template routes land, a new row is in its owner's personal
-    # workspace.
-    team_id: Mapped[int] = mapped_column(
+    # made it. Until the per-workspace template routes land (slice W2, which also makes the column
+    # NOT NULL), a new row is in its owner's personal workspace and the column may be null.
+    team_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("teams.id", ondelete="CASCADE"),
         index=True,

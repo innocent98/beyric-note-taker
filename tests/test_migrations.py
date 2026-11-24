@@ -580,10 +580,11 @@ def test_template_soft_delete_frees_the_name_and_downgrades_cleanly(scratch_url)
         )
     with pytest.raises(sa.exc.IntegrityError):
         with engine.begin() as conn:
-            conn.execute(
+            conn.execute(  # the same name in the same workspace as the live "General"
                 text(
-                    "insert into templates (owner_user_id, name, instructions)"
-                    " values (:o, 'General', 'again')"
+                    "insert into templates (owner_user_id, team_id, name, instructions)"
+                    " select owner_user_id, team_id, 'General', 'again' from templates"
+                    " where owner_user_id = :o and name = 'General' and deleted_at is null"
                 ),
                 {"o": owner},
             )
@@ -638,12 +639,16 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
             ),
             {"u": user},
         ).scalar()
+        workspace = conn.execute(
+            text("insert into teams (owner_user_id, is_personal) values (:u, true) returning id"),
+            {"u": user},
+        ).scalar()
         meeting = conn.execute(
             text(
-                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
-                "values (:u, 'u', 'zoom', '1', :t) returning id"
+                "insert into meetings (owner_user_id, workspace_team_id, url, platform, "
+                "native_id, template_id) values (:u, :w, 'u', 'zoom', '1', :t) returning id"
             ),
-            {"u": user, "t": template},
+            {"u": user, "w": workspace, "t": template},
         ).scalar()
         insert = (
             "insert into meeting_translations (meeting_id, language, source_hash) "
@@ -1045,10 +1050,16 @@ def test_0027_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly
         conn.execute(text("insert into users (email, status) values ('b@example.test', 'active')"))
         conn.execute(
             text(
-                "insert into calendar_connections (user_id, provider, account_subject, tenant_id, "
-                "account_kind) select id, 'microsoft', 'oid-1', "
-                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users "
-                "where email = 'b@example.test'"
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'b@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, team_id, provider, account_subject, "
+                "tenant_id, account_kind) select u.id, t.id, 'microsoft', 'oid-1', "
+                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'b@example.test'"
             )
         )
     for sql in (
@@ -1379,7 +1390,10 @@ def test_0036_link_rows_go_with_either_side(scratch_url):
     with engine.begin() as conn:
         conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
         conn.execute(
-            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
+            text(
+                "insert into teams (name, owner_user_id) select 'T', id from users "
+                "where email = 'a@example.test'"
+            )
         )
         conn.execute(
             text(

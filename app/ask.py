@@ -490,7 +490,7 @@ def candidates(
         query = meeting_search.prefix_query(stems)
         found = list(
             session.scalars(
-                base.where(doc.op("@@")(query))
+                base.where(meeting_search.text_match_clause(query))
                 .order_by(
                     func.ts_rank(doc, query).desc(), Meeting.created_at.desc(), Meeting.id.desc()
                 )

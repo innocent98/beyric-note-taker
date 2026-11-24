@@ -49,6 +49,23 @@ def _folded(column):
     return func.regexp_replace(func.normalize(column, sa_text("NFKD")), SEARCH_FOLD_MARKS, "", "g")
 
 
+def text_match_clause(query) -> ColumnElement[bool]:
+    """`id IN (matches)` for Ask's candidates, where `matches` is a MATERIALIZED subquery of the
+    ids of ready meetings whose text matches `query`. Postgres must then plan the match by itself,
+    on the GIN index: written inline beside the workspace predicate (a btree-indexed equality), the
+    planner may walk the workspace's meetings and compute each one's `tsvector` on the fly, which is
+    the 13-second case `keyword_clause` explains. It returns ids only and is always ANDed with the
+    caller's readability and workspace on the outer query, so it never widens what a person may
+    read."""
+    matches = (
+        select(Meeting.id)
+        .where(Meeting.status == "ready", document().op("@@")(query))
+        .cte("text_matches")
+        .prefix_with("MATERIALIZED")
+    )
+    return Meeting.id.in_(select(matches.c.id))
+
+
 def keyword_clause(text: str, readable: ColumnElement[bool]) -> ColumnElement[bool]:
     """The `where` condition for the Meetings list's search box: the title contains `text` (case
     and accents ignored, `%` and `_` taken literally), or, for a meeting whose notes are ready,

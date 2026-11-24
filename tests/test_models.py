@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app import teams
 from app.models import Meeting, ScheduledJoin, Template, VocabularyTerm
 from tests.test_web import make_user
 
@@ -288,6 +289,9 @@ def test_deleting_a_user_removes_their_calendar_rows_and_keeps_meetings(session)
     user, _, event = _calendar_fixture(session)
     session.add(_scheduled_join(user, event))
     session.commit()
+    # their connection was filed in a personal workspace when it was made; an account deletion
+    # takes the person out of their teams first (`app/deletion.py`)
+    teams.remove_users(session, [user.id])
     session.delete(user)
     session.commit()
     for model in (CalendarConnection, CalendarEvent, ScheduledJoin):

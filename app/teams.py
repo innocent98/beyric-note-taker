@@ -473,7 +473,7 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
     if member is None or member.role not in MANAGER_ROLES:
         return
     team = session.get(Team, member.team_id)
-    if team is not None and team.share_new_meetings and not team.is_personal:
+    if team is not None and team.share_new_meetings:
         meeting.shared_team_id = team.id
 
 

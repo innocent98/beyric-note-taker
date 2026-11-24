@@ -11,9 +11,10 @@ What each column or table is filled with:
   `shared_team_id` and `owner_team_id` are NOT touched: who may read a meeting is exactly what it
   was.
 - `notifications.team_id` (NOT NULL): the meeting's workspace, else the person's personal team.
-- `templates.team_id` and `vocabulary_terms.team_id` (NOT NULL): the owner's personal team; and a
-  COPY of the owner's live rows into the workspace their calendar connection moves to, when that is
-  not their personal one (so notes are written the same way after the cutover).
+- `templates.team_id` (nullable until slice W2 owns per-workspace templates) and
+  `vocabulary_terms.team_id` (NOT NULL): the owner's personal team; and a COPY of the owner's live
+  rows into the workspace their calendar connection moves to, when that is not their personal one
+  (so notes are written the same way after the cutover).
 - `calendar_connections.team_id` (NOT NULL): the person's default workspace: their only team, else
   their only ordinary team, else their personal one (`teams.default_membership`).
 - `scheduled_joins.team_id` (NOT NULL): the workspace of the join's calendar connection, else the
@@ -36,7 +37,7 @@ or removed (a vocabulary term), the lowest id (the original) kept. Per-workspace
 workspace kinds and plan limits are lost; personal teams made for people who had none stay.
 
 Revision ID: 0070
-Revises: 0057
+Revises: 0058
 Create Date: 2026-11-24
 
 0070 is a placeholder number: the lead renumbers the integration branch's migrations into one chain
@@ -47,7 +48,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0070"
-down_revision = "0057"
+down_revision = "0058"
 branch_labels = None
 depends_on = None
 
@@ -177,15 +178,16 @@ def upgrade() -> None:
         op.execute(
             f"update {table} x set team_id = " + personal.format(owner=f"x.{owner}")  # noqa: S608
         )
-        op.alter_column(table, "team_id", nullable=False)
+        if table == "vocabulary_terms":  # templates stay nullable until W2 owns them
+            op.alter_column(table, "team_id", nullable=False)
         op.create_foreign_key(
             f"fk_{table}_team_id", table, "teams", ["team_id"], ["id"], ondelete="CASCADE"
         )
         op.create_index(f"ix_{table}_team_id", table, ["team_id"])
-    op.create_index(
+    op.create_index(  # team_id may be null until W2: coalesce keeps two nulls clashing
         "uq_templates_owner_team_name",
         "templates",
-        ["owner_user_id", "team_id", "name"],
+        ["owner_user_id", sa.text("coalesce(team_id, 0)"), "name"],
         unique=True,
         postgresql_where=sa.text("deleted_at is null"),
     )
