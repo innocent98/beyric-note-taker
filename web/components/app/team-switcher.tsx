@@ -47,7 +47,7 @@ export function TeamSwitcher({ teams, variant }: { teams: TeamSummary[]; variant
       <select id={id} className="select select-sm team-switch-select" value={activeId ?? ""} onChange={(event) => choose(event.target.value)}>
         {teams.map((team) => (
           <option key={team.id} value={team.id}>
-            {team.is_personal ? `${team.name} (personal)` : team.name}
+            {team.is_personal ? `${team.name} (personal)` : team.kind === "class" ? `${team.name} (class)` : team.name}
           </option>
         ))}
       </select>

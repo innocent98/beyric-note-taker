@@ -48,6 +48,7 @@ from tests.test_api_tasks import (  # noqa: F401
 from tests.test_signup import open_pilot, queued, sign_up, token_of, verify
 from tests.test_team_visibility import OTHER_EMAIL, outsider, share, sign_in  # noqa: F401
 from tests.test_web import OWNER_EMAIL, make_user, stranger  # noqa: F401
+from tests.workspace_plans import subscribe
 
 NEW = "ada@example.test"
 
@@ -698,6 +699,7 @@ def test_an_owner_with_other_members_cannot_be_deleted_until_the_team_is_handed_
         pilot_admin.schedule_deletion(session, owner)
     assert refused.value.code == "team_owner_has_members"
     assert fresh(session).get(User, owner.id).status == "active"
+    subscribe(session, member, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, team.id, member.id)
     session.commit()
     pilot_admin.schedule_deletion(session, owner)
@@ -705,6 +707,7 @@ def test_an_owner_with_other_members_cannot_be_deleted_until_the_team_is_handed_
 
 
 def test_transferring_a_team_makes_the_old_owner_an_admin(session, owner, member, team):
+    subscribe(session, member, "plan_20h")
     teams.transfer_owner(session, team.id, member.id)
     session.commit()
     assert teams.membership(session, member.id).role == "owner"
@@ -746,6 +749,7 @@ TEAM_OTHER = {
     ("POST", "/api/team/invites/accept"),
     ("GET", "/api/teams"),  # the switcher's list (tests/test_multi_team_api.py)
     ("POST", "/api/teams"),
+    ("DELETE", "/api/teams/{team_id}"),  # tests/test_workspace_lifecycle.py
 }
 
 

@@ -497,10 +497,14 @@ export function createApi(options: ApiOptions = {}) {
       confirm: (id: number) => request<Milestone>("POST", `/api/milestones/${id}/confirm`, { body: {}, write: true }),
     },
     // The teams a person belongs to (docs/fe-integration-guide-teams.md section 9): the switcher's list and
-    // "Create a team" (409 `team_limit` at three owned teams, 422 `invalid_name`, 409 `multi_team_disabled`).
+    // "Create a team" (409 `team_limit` at the plan's owned-team allowance, 422 `invalid_name`; `kind` `class`
+    // makes a class) and "Delete team" (owner only, nobody else in it: 409 `team_has_members`, 409
+    // `personal_team`, 403 `team_forbidden`; docs/fe-integration-guide-workspaces-lifecycle.md).
     teams: {
       list: () => request<TeamList>("GET", "/api/teams"),
-      create: (name: string) => request<TeamSummary>("POST", "/api/teams", { body: { name }, write: true }),
+      create: (name: string, kind: "team" | "class" = "team") =>
+        request<TeamSummary>("POST", "/api/teams", { body: { name, kind }, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/teams/${id}`, { write: true }),
     },
     // The Team screen (docs/fe-integration-guide-team.md). A member is addressed by `user_id`.
     // `team` on a call names the team it is about in place of the tab's (the meeting page: the meeting's).

@@ -703,6 +703,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "milestone_id": milestone.id,
         "sprint_id": sprint.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
+        "team_id": teams.ensure_team(
+            session, owner
+        ).id,  # the owner's team: a stranger's delete is 404
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
     anon.log_in(email=OTHER_EMAIL)
