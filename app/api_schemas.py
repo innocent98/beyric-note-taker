@@ -1088,6 +1088,10 @@ class TeamList(BaseModel):
     max_owned_teams: int | None
     # The name of the caller's live plan (null on Free), for "your plan owns up to 3 teams".
     plan_name: str | None
+    # What to tell the caller when they cannot make another team (the same sentence a refused
+    # `POST /api/teams` carries in 409 `team_limit`, naming the plan to upgrade to); null while they
+    # still can.
+    limit_message: str | None
 
 
 class TeamCreate(Body):

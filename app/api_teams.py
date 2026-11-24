@@ -75,6 +75,7 @@ def list_teams(
         owned_teams=owned,
         max_owned_teams=allowed,
         plan_name=plan.name if plan is not None and not user.is_admin else None,
+        limit_message=teams.limit_message(session, user, now),
     )
 
 

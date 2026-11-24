@@ -211,6 +211,16 @@ def _limit_message(session: Session, allowed: int, owned: int) -> str:
     )
 
 
+def limit_message(session: Session, user: User, now: datetime | None = None) -> str | None:
+    """The plain sentence a refused `create_owned_team` carries, or None while the person still has
+    room. The Make-a-team card shows it before anyone presses the button."""
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = owned_team_count(session, user)
+    if allowed is None or owned < allowed:
+        return None
+    return _limit_message(session, allowed, owned)
+
+
 def has_room_for_another_team(session: Session, user: User, now: datetime | None = None) -> bool:
     """True when the person's live plan lets them own one more team (`create_owned_team`'s test)."""
     allowed = entitlements.max_owned_teams(session, user, now)

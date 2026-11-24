@@ -60,9 +60,10 @@ def _check(session: Session, team_id: int, user: User) -> Team:
 
 def delete_team(session: Session, provider, team_id: int, user: User) -> None:
     """Delete workspace `team_id` for its owner `user`. Commits. Meetings whose recorder is gone are
-    deleted one at a time first (each commits; 409 `meeting_active` or 502
-    `recording_delete_failed` stop it with the team still there, and a retry finishes); then, under
-    the team's lock and with the checks repeated, the rest is given back and the team goes."""
+    deleted one at a time first (each re-checks under the team's lock and commits; 409
+    `meeting_active` or 502 `recording_delete_failed` stop it with the team still there, and a
+    retry finishes); then, under the lock and with the checks repeated, the rest is given back and
+    the team goes."""
     _check(session, team_id, user)
     filed_here = or_(
         Meeting.workspace_team_id == team_id,
@@ -70,16 +71,24 @@ def delete_team(session: Session, provider, team_id: int, user: User) -> None:
         Meeting.shared_team_id == team_id,
     )
     hollow = select(User.id).where(User.status == "deleted")
-    for meeting in list(
+    doomed = list(
         session.scalars(
-            select(Meeting)
+            select(Meeting.id)
             .where(filed_here, Meeting.owner_user_id.in_(hollow))
             .order_by(Meeting.id)
         )
-    ):
-        services.delete_meeting(session, provider, meeting)
+    )
+    for meeting_id in doomed:
+        # Each deletion is authorised on its own, under the team's lock, right before it happens
+        # (`delete_meeting` commits, which releases the lock): a person who joined meanwhile stops
+        # the rest, and nothing is destroyed for a team that is no longer the owner's alone.
+        teams._lock_teams(session, team_id)
+        _check(session, team_id, user)
+        meeting = session.get(Meeting, meeting_id)
+        if meeting is not None:
+            services.delete_meeting(session, provider, meeting)
     teams._lock_teams(session, team_id)
-    team = _check(session, team_id, user)  # re-read under the lock: someone may have joined
+    team = _check(session, team_id, user)  # the same checks again for the give-back and the delete
     for meeting in session.scalars(select(Meeting).where(filed_here).order_by(Meeting.id)):
         deletion.give_back_meeting(session, meeting)
     session.flush()

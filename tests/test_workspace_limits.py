@@ -278,3 +278,20 @@ def test_an_owner_deleted_with_nobody_having_room_still_hands_the_team_on(sessio
 
 def test_the_old_constant_is_gone():
     assert not hasattr(teams, "MAX_OWNED_TEAMS")
+
+
+def test_the_teams_list_carries_the_plain_message_only_at_the_limit(app, session, world):
+    """The Make-a-team card shows it before anyone presses the button (`limit_message`)."""
+    seed_plans(session)
+    pat = sign_in(app, PAT)
+    assert get(pat, "/api/teams").json()["limit_message"] == (
+        "Owning a team needs a paid plan. "
+        "Upgrade to the 20 hours a month plan to own up to 3 teams."
+    )
+    subscribe(session, world.pat, "plan_20h")
+    assert get(pat, "/api/teams").json()["limit_message"] is None  # room for three
+    make_teams(session, world.pat, 3)
+    assert get(pat, "/api/teams").json()["limit_message"] == (
+        "Your plan owns up to 3 teams and you have 3. "
+        "Upgrade to the Pro plan to own up to 10 teams."
+    )

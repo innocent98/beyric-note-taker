@@ -169,6 +169,31 @@ def test_a_meeting_whose_recorder_is_gone_is_deleted_with_the_workspace(
     assert session.get(Meeting, survivor_id) is not None
 
 
+def test_a_member_who_joins_mid_deletion_stops_the_rest_nothing_more_is_destroyed(
+    app, session, world, template, monkeypatch
+):
+    """Each destructive step is authorised under the team's lock as it happens."""
+    from app import services
+
+    hollow = gone(session)
+    first = ready(session, template, owner_user_id=hollow.id, owner_team_id=world.z.id)
+    second = ready(session, template, owner_user_id=hollow.id, owner_team_id=world.z.id)
+    first_id, second_id, z_id, pat_id = first.id, second.id, world.z.id, world.pat.id
+    real = services.delete_meeting
+
+    def delete_then_someone_joins(session_, provider, meeting):
+        real(session_, provider, meeting)
+        session_.add(TeamMember(team_id=z_id, user_id=pat_id, role="member"))  # an invite accepted
+        session_.commit()
+
+    monkeypatch.setattr(services, "delete_meeting", delete_then_someone_joins)
+    error_of(call(sign_in(app, ZED), "DELETE", f"/api/teams/{z_id}"), 409, "team_has_members")
+    session.expire_all()
+    assert session.get(Meeting, first_id) is None  # deleted while the owner was alone
+    assert session.get(Meeting, second_id) is not None  # kept: Pat is in the team now
+    assert session.get(Team, z_id) is not None
+
+
 def test_a_template_a_kept_meeting_was_written_with_outlives_the_workspace(
     app, session, world, template
 ):
