@@ -3,17 +3,21 @@
 
 A request only queues the work; the worker's recipe thread writes the draft
 (`app/recipes/service.py`), and the page asks again every 2 seconds while the status is `writing`.
-No model call happens in a request. A draft is private to its creator: another person's draft is a
-404, never a 403. Regenerating is a new `POST` (a new draft); discarding is `DELETE`.
+No model call happens in a request. A draft is private to its creator until they share it,
+read-only, with their team (`POST /documents/{id}/share`): another person's draft is a 404, never a
+403. Reading goes through `readable_document_or_404`, every write through `document_or_404` (the
+creator only). Regenerating is a new `POST` (a new draft); discarding is `DELETE`.
 """
 
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import select
+from sqlalchemy import delete, exists, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, team_admin
+from app import auth, services, team_admin, teams
+from app import visibility as meeting_visibility
 from app.api_schemas import (
     BlankOut,
     DocumentBrief,
@@ -24,11 +28,13 @@ from app.api_schemas import (
     DocumentPatch,
     ErrorResponse,
     FlagOut,
+    SharedTeam,
 )
 from app.db import get_session
-from app.models import Document, DocumentMeeting, User
+from app.models import Document, DocumentMeeting, DocumentShare, Meeting, Team, User
 from app.recipes import blocks as blocks_mod
 from app.recipes import service
+from app.recipes import visibility as doc_visibility
 
 router = APIRouter()
 
@@ -43,7 +49,27 @@ def _meeting_ids(session: Session, document_id: int) -> list[int]:
     )
 
 
-def _brief(session: Session, doc: Document) -> DocumentBrief:
+def _brief(session: Session, user: User, doc: Document) -> DocumentBrief:
+    """A draft as a list row. For a reader of a shared draft the meeting ids are only the ones they
+    may read, and the creator's name is shown; the teams it was shared with are the creator's."""
+    ids = _meeting_ids(session, doc.id)
+    mine = doc.owner_user_id == user.id
+    shared_with: list[SharedTeam] = []
+    owner_name = None
+    if mine:
+        team_ids = doc_visibility.shared_team_ids(session, doc)
+        if team_ids:
+            shared_with = [
+                SharedTeam(id=t.id, name=t.name)
+                for t in session.scalars(
+                    select(Team).where(Team.id.in_(team_ids)).order_by(Team.id)
+                )
+            ]
+    else:
+        readable = doc_visibility.readable_sources(session, user, doc)
+        ids = [i for i in ids if i in readable]
+        owner = session.get(User, doc.owner_user_id)
+        owner_name = meeting_visibility.former_or_name(owner) if owner is not None else None
     return DocumentBrief(
         id=doc.id,
         title=doc.title,
@@ -52,19 +78,36 @@ def _brief(session: Session, doc: Document) -> DocumentBrief:
         recipe_id=doc.recipe_id,
         status=doc.status,
         edited=doc.edited,
-        meeting_ids=_meeting_ids(session, doc.id),
+        meeting_ids=ids,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
+        access="owner" if mine else "shared",
+        owner_name=owner_name,
+        shared_with=shared_with,
     )
 
 
 def _out(session: Session, user: User, doc: Document) -> DocumentOut:
-    seen = service.reading(session, user, doc)
+    """The draft as `user` may see it. For the creator: everything. For a reader of a shared draft
+    (`access: "shared"`): the text and its checks, with every source of a meeting they cannot read
+    hidden, no left-out count and none of the creator's choices. The checks and `stale` are worked
+    out as the creator would see them (they say something about the draft's own text, not about the
+    meetings' words), so a reader is not told "check this" about a figure from a meeting they
+    cannot open."""
+    mine = doc.owner_user_id == user.id
+    viewer = user if mine else session.get(User, doc.owner_user_id)
+    seen = service.reading(session, viewer, doc)
     ready = doc.status == "ready"
     failed = doc.status == "failed"
+    blocks = blocks_mod.load_blocks(doc.blocks) if ready else []
+    sources_available = seen.sources_available
+    if not mine:
+        readable = doc_visibility.readable_sources(session, user, doc)
+        blocks = doc_visibility.redact(blocks, readable)
+        sources_available = bool(readable)
     return DocumentOut(
-        **_brief(session, doc).model_dump(),
-        blocks=blocks_mod.load_blocks(doc.blocks) if ready else [],
+        **_brief(session, user, doc).model_dump(),
+        blocks=blocks,
         checks=DocumentChecks(
             blanks=[BlankOut(block_index=b.block_index, what=b.what) for b in seen.blanks],
             flags=[
@@ -72,26 +115,37 @@ def _out(session: Session, user: User, doc: Document) -> DocumentOut:
             ],
         ),
         stale=seen.stale,
-        sources_available=seen.sources_available,
-        left_out_count=doc.left_out_count,
+        sources_available=sources_available,
+        left_out_count=doc.left_out_count if mine else 0,
         failure_code=doc.failure_code if failed else None,
         failure_message=service.failure_message(doc.failure_code) if failed else None,
-        options=doc.options or {},
-        use_brief=doc.use_brief,
+        options=(doc.options or {}) if mine else {},
+        use_brief=doc.use_brief if mine else False,
+        can_edit=mine,
     )
 
 
-def document_or_404(session: Session, user: User, document_id: int) -> Document:
-    """The caller's own draft. Another person's, or none, is a 404 (slice S4 widens this to a
-    draft shared with the caller's team)."""
+def _find(session: Session, document_id: int, *conditions) -> Document:
     doc = None
     if 1 <= document_id <= services.MAX_ID:
         doc = session.scalars(
-            select(Document).where(Document.id == document_id, Document.owner_user_id == user.id)
+            select(Document).where(Document.id == document_id, *conditions)
         ).first()
     if doc is None:
         raise services.Refused(404, "not_found", "No such document.")
     return doc
+
+
+def document_or_404(session: Session, user: User, document_id: int) -> Document:
+    """The caller's OWN draft: the one every write uses (edit, discard, share, the board's
+    operations). Another person's, or none, is a 404, even for a draft shared with the caller."""
+    return _find(session, document_id, Document.owner_user_id == user.id)
+
+
+def readable_document_or_404(session: Session, user: User, document_id: int) -> Document:
+    """A draft the caller may READ: their own, or one shared with a team they are in right now. The
+    one every read uses (the draft itself and its exports); the rule is `recipes.visibility`."""
+    return _find(session, document_id, doc_visibility.readable_clause(user))
 
 
 def _sources_in(blocks: list) -> set[tuple]:
@@ -186,31 +240,55 @@ def get_document(
 ) -> DocumentOut:
     """A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.
     `checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.
-    404 for another person's draft."""
-    return _out(session, user, document_or_404(session, user, document_id))
+    The creator reads it whole. A teammate reading a draft shared with their team (`access:
+    "shared"`) gets the text with every source of a meeting they cannot read replaced by
+    `{"kind": "hidden"}`, and `can_edit: false`. 404 for anyone else's draft, and for a shared one
+    once it is unshared or the reader has left the team."""
+    return _out(session, user, readable_document_or_404(session, user, document_id))
 
 
 @router.get("/documents", tags=["documents"])
 def list_documents(
     meeting_id: int | None = Query(default=None, ge=1, le=services.MAX_ID),
+    mine: bool | None = Query(default=None),
+    shared: bool | None = Query(default=None),
     before_id: int | None = Query(default=None, ge=1, le=services.MAX_ID),
     limit: int = Query(default=50, ge=1, le=MAX_LISTED),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> DocumentList:
-    """The caller's own drafts, newest first; with `meeting_id`, only those made from that meeting
-    (cross-meeting drafts included). For the next page pass the smallest `id` as `before_id`."""
-    query = select(Document).where(Document.owner_user_id == user.id)
+    """Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts
+    teammates shared with a team the caller is in now (never their own; an unshared one, or one of
+    a team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts
+    made from that meeting (cross-meeting drafts included; a shared draft only when the caller may
+    read that meeting). For the next page pass the smallest `id` as `before_id`."""
+    want_mine = True if mine is None and not shared else bool(mine)
+    want_shared = bool(shared)
+    scopes = []
+    if want_mine:
+        scopes.append(Document.owner_user_id == user.id)
+    if want_shared:
+        scopes.append(doc_visibility.shared_clause(user))
+    if not scopes:
+        return DocumentList(documents=[])
+    query = select(Document).where(or_(*scopes))
     if meeting_id is not None:
         query = query.where(
             Document.id.in_(
                 select(DocumentMeeting.document_id).where(DocumentMeeting.meeting_id == meeting_id)
             )
         )
+        if want_shared and not session.scalar(
+            select(
+                exists().where(Meeting.id == meeting_id, meeting_visibility.can_read_clause(user))
+            )
+        ):
+            # A shared draft of a meeting the caller cannot read is not found by asking for it.
+            query = query.where(Document.owner_user_id == user.id)
     if before_id is not None:
         query = query.where(Document.id < before_id)
     rows = session.scalars(query.order_by(Document.id.desc()).limit(limit))
-    return DocumentList(documents=[_brief(session, doc) for doc in rows])
+    return DocumentList(documents=[_brief(session, user, doc) for doc in rows])
 
 
 @router.patch(
@@ -271,5 +349,66 @@ def delete_document(
     """Discard a draft (also cancels one still being written; the model call it may have made is
     still counted against the day's 20)."""
     session.delete(document_or_404(session, user, document_id))
+    session.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/documents/{document_id:id}/share",
+    tags=["documents"],
+    responses={
+        404: {"model": ErrorResponse},
+        409: {
+            "model": ErrorResponse,
+            "description": "`not_ready`: only a finished draft can be shared; `personal_team`: "
+            "the active team is the caller's own space, which has no one to share with",
+        },
+    },
+)
+def share_document(
+    document_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> DocumentOut:
+    """Share the draft, read-only, with the active team (`X-Team-Id`, else the caller's default
+    team): every current member can then open it, and see its text, but not the meetings it was
+    drafted from (a source they cannot read shows as hidden). Only the creator may; asking twice
+    changes nothing. Leaving the team, or `DELETE .../share`, ends the access at once."""
+    doc = document_or_404(session, user, document_id)
+    if doc.status != "ready":
+        raise services.Refused(409, "not_ready", "Only a finished draft can be shared.")
+    member = team_admin.my_membership(session, user, team_id)
+    team = session.get(Team, member.team_id)
+    if teams.is_personal_of(team, user.id):
+        raise services.Refused(
+            409,
+            "personal_team",
+            "This is your own space, so there is no team to share with. Switch to a team first.",
+        )
+    session.execute(
+        insert(DocumentShare)
+        .values(document_id=doc.id, team_id=team.id, shared_by_user_id=user.id)
+        .on_conflict_do_nothing(constraint="uq_document_shares_document_team")
+    )
+    session.commit()
+    return _out(session, user, doc)
+
+
+@router.delete(
+    "/documents/{document_id:id}/share",
+    status_code=204,
+    tags=["documents"],
+    responses={404: {"model": ErrorResponse}},
+)
+def unshare_document(
+    document_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    """Stop sharing the draft with every team. Takes effect at once; asking again changes nothing.
+    Only the creator may."""
+    doc = document_or_404(session, user, document_id)
+    session.execute(delete(DocumentShare).where(DocumentShare.document_id == doc.id))
     session.commit()
     return Response(status_code=204)

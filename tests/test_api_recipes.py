@@ -272,7 +272,7 @@ def test_list_is_the_callers_own_newest_first_and_filters_by_meeting(api, sessio
     assert [d["id"] for d in everything] == ids[::-1]
     assert set(everything[0]) == {
         "id", "title", "output_type", "recipe_key", "recipe_id", "status", "edited",
-        "meeting_ids", "created_at", "updated_at",
+        "meeting_ids", "created_at", "updated_at", "access", "owner_name", "shared_with",
     }  # fmt: skip
     only_first = api.get(f"/api/documents?meeting_id={first.id}").json()["documents"]
     assert [d["id"] for d in only_first] == [ids[2], ids[0]]

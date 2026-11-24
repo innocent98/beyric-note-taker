@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app import auth, export
-from app.api_recipes import document_or_404
+from app.api_recipes import readable_document_or_404
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.models import Document, User
@@ -74,7 +74,7 @@ def export_document(
     each. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run
     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
     name is the draft's title, cleaned."""
-    doc = document_or_404(session, user, document_id)
+    doc = readable_document_or_404(session, user, document_id)
     try:
         # Reads the blocks before the session is closed: the Word and PDF build can take seconds.
         content, media_type, filename = _build(session, doc, format, table)
