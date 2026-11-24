@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/ask/scope",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings": 2,
+      "decisions": 2,
+      "tasks": 0,
+      "suggestions": [
+        "Summarise the meeting on Tue 24 Nov",
+        "What did we decide on Tue 24 Nov?",
+        "What are my open tasks?",
+        "What did Ada say?"
+      ]
+    }
+  }
+}

@@ -51,28 +51,65 @@ describe("which calls carry the team", () => {
   });
 
   it.each([
-    ["POST", "/api/meetings"],
     ["POST", "/api/session"],
     ["DELETE", "/api/session"],
-  ])("%s %s is not: only the READ shows a team", (method, path) => {
+  ])("%s %s is not: logging in and out are the person's own", (method, path) => {
     expect(isTeamScoped(path, method)).toBe(false);
+  });
+
+  // Workspaces design, section 7: everything else names its workspace, even the routes that only open one
+  // thing by its id (the server ignores the header there) and the ones the later slices will scope.
+  it.each([
+    ["POST", "/api/meetings"],
+    ["POST", "/api/ask"],
+    ["GET", "/api/ask/scope"],
+    ["GET", "/api/notifications"],
+    ["POST", "/api/notifications/read-all"],
+    ["GET", "/api/templates"],
+    ["POST", "/api/templates"],
+    ["GET", "/api/vocabulary"],
+    ["GET", "/api/calendar"],
+    ["PUT", "/api/calendar/settings"],
+    ["POST", "/api/calendar/google/connect"],
+    ["GET", "/api/not-recorded"],
+    ["GET", "/api/settings/tasks"],
+    ["GET", "/api/settings/auto-share"],
+    ["GET", "/api/settings/reminders"],
+    ["GET", "/api/settings/bot-name"],
+    ["GET", "/api/tasks/5"],
+    ["GET", "/api/series/3"],
+    ["GET", "/api/decisions/4"],
+    ["POST", "/api/review/4/check"],
+    ["GET", "/api/meetings/12"],
+    ["POST", "/api/meetings/12/share"],
+  ])("%s %s is workspace-scoped", (method, path) => {
+    expect(isTeamScoped(path, method)).toBe(true);
   });
 
   it.each([
     "/api/teams",
     "/api/team/invites/preview",
     "/api/team/invites/accept",
-    "/api/tasks/5",
-    "/api/series/3",
-    "/api/series/3/agenda",
-    "/api/decisions/4",
-    "/api/review/4/check",
-    "/api/meetings/12",
-    "/api/meetings/12/share",
-    "/api/settings/auto-share",
-    "/api/settings/reminders",
-    "/api/templates",
-  ])("%s is not", (path) => {
+    "/api/settings/name",
+    "/api/settings/email",
+    "/api/settings/language",
+    "/api/settings/time-zone",
+    "/api/settings/recording-ack",
+    "/api/billing/plans",
+    "/api/billing/subscription",
+    "/api/billing/invoices/BN-2026-000001/pdf",
+    "/api/admin/users",
+    "/api/pilot",
+    "/api/waitlist",
+    "/api/signup",
+    "/api/verify-email",
+    "/api/password/forgot",
+    "/api/mail/opt-out",
+    "/api/auth/google/start",
+    "/api/calendar/google/callback",
+    "/api/calendar/microsoft/callback",
+    "/healthz",
+  ])("%s is the person's own, no workspace", (path) => {
     expect(isTeamScoped(path)).toBe(false);
   });
 });
@@ -83,7 +120,7 @@ describe("the header", () => {
     await api.team.get();
     await api.teams.list();
     await api.meetings.get(12).catch(() => undefined);
-    expect(calls.map(sent)).toEqual(["5", undefined, undefined]);
+    expect(calls.map(sent)).toEqual(["5", undefined, "5"]);
   });
 
   it("is not sent when there is no team (the default team, and the switch off)", async () => {
@@ -122,11 +159,11 @@ describe("the header", () => {
     expect(calls.map(sent)).toEqual(["8", undefined, "8", "8"]);
   });
 
-  it("an own team on a route that does not read it is not sent", async () => {
+  it("a share names its team in the body; the header is the tab's workspace", async () => {
     const { api, calls } = setup({ teamId: () => 5 }, () => json(200, { csrf_token: "tok", authenticated: true }));
     await api.meetings.share(1, 4);
     const post = calls.find((c) => c.init.method === "POST")!;
-    expect(sent(post)).toBeUndefined();
+    expect(sent(post)).toBe("5");
     // The team of a share is in the body, not the header.
     expect(JSON.parse(String(post.init.body))).toEqual({ team_id: 4 });
   });
@@ -177,8 +214,8 @@ describe("login and logout", () => {
     expect(onSessionChange).toHaveBeenCalledTimes(2);
   });
 
-  it("a meeting's series and an unscoped call do not carry the team: /api/meetings/N/series", () => {
-    expect(isTeamScoped("/api/meetings/12/series")).toBe(false);
-    expect(isTeamScoped("/api/meetings/12/recurring")).toBe(false);
+  it("a meeting's series call names the workspace too (the server ignores it there)", () => {
+    expect(isTeamScoped("/api/meetings/12/series")).toBe(true);
+    expect(isTeamScoped("/api/meetings/12/recurring")).toBe(true);
   });
 });

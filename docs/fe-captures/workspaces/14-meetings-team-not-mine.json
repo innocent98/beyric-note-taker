@@ -1,0 +1,22 @@
+{
+  "note": "A team the caller is not in (or that does not exist): 404, the same answer.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings",
+    "headers": {
+      "X-Team-Id": "99999",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}
