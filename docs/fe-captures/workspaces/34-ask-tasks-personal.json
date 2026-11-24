@@ -1,0 +1,24 @@
+{
+  "note": "The personal workspace has none.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What are my open tasks?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks",
+      "lead": "You have no open tasks assigned to you.",
+      "points": []
+    }
+  }
+}

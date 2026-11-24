@@ -1,0 +1,33 @@
+{
+  "note": "The tasks path (no model): only X's tasks assigned to Pat.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What are my open tasks?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks",
+      "lead": "You have 2 open tasks assigned to you.",
+      "points": [
+        {
+          "text": "Order the cake (to do)",
+          "cites": []
+        },
+        {
+          "text": "Book the room (to do)",
+          "cites": []
+        }
+      ]
+    }
+  }
+}
