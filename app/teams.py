@@ -175,10 +175,19 @@ def create_owned_team(session: Session, user: User, name: str) -> Team:
     )
     if owned >= MAX_OWNED_TEAMS:
         raise TeamChangeRefused(409, "team_limit", f"You can own up to {MAX_OWNED_TEAMS} teams.")
-    team = Team(owner_user_id=user.id, name=name, is_personal=False)
+    # A new team workspace starts with the seeded default templates (the notes need one) and with
+    # "share new meetings" on (decision D4: a team's meetings are shared with its members by
+    # default; "keep private" is the per-meeting unshare). Existing teams keep their stored value.
+    team = Team(owner_user_id=user.id, name=name, is_personal=False, share_new_meetings=True)
     session.add(team)
     session.flush()
     session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
+    from app.accounts import DEFAULT_TEMPLATES  # accounts imports this module
+
+    session.add_all(
+        Template(owner_user_id=user.id, team_id=team.id, name=n, instructions=text)
+        for n, text in DEFAULT_TEMPLATES
+    )
     session.flush()
     return team
 
@@ -440,6 +449,21 @@ def auto_share_team(session: Session, user: User) -> int | None:
     return team_id if team is not None and not team.is_personal else None
 
 
+def birth_share_team_id(session: Session, user: User, workspace_team_id: int) -> int | None:
+    """Decision D4 (workspaces design): a meeting BORN in a team workspace is shared with that
+    workspace by default, readable by every member, and the existing unshare is the per-meeting
+    "keep private". The personal workspace stays private, and so does a team that has switched
+    "share new meetings" off (each existing team kept the value it had; teams made from now on start
+    with it on). The recorder must belong to the workspace (a member may record into any workspace
+    they belong to, on their own hours), and the rule is the same whoever the recorder is: an owner,
+    an admin or a plain member. Existing meetings are never touched by it: it runs only when a
+    meeting row is made. Returns the team to share to, or None."""
+    team = session.get(Team, workspace_team_id)
+    if team is None or team.is_personal or not team.share_new_meetings:
+        return None
+    return team.id if membership(session, user.id, team.id) is not None else None
+
+
 def apply_share_default(session: Session, meeting: Meeting) -> None:
     """When a meeting's notes are first written: share it with the owner's team if the team's
     default says so (spec 8.2, decision D3). Read NOW, never when the bot joined and never again
@@ -456,6 +480,8 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
     workspace (sharing is what files it in the team); a meeting recorded into another team's
     workspace (a class, say) is never published to a different team by it, and its own workspace's
     default decides."""
+    if meeting.kept_private:  # "keep private" is the recorder's word: no default overrides it
+        return
     recorder = session.get(User, meeting.owner_user_id)
     chosen = auto_share_team(session, recorder) if recorder is not None else None
     workspace = session.get(Team, meeting.workspace_team_id)

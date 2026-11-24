@@ -65,6 +65,7 @@ import type {
   SlackState,
   TasksSettings,
   Template,
+  TemplateCopy,
   ShareBody,
   ShareCreated,
   ShareList,
@@ -80,9 +81,12 @@ import type {
   InviteRole,
   TemplateInput,
   Term,
+  TermCopy,
   Translation,
   TranslationLanguage,
   TranscriptEdit,
+  WorkspacePrefs,
+  WorkspacePrefsInput,
 } from "./types";
 import type {
   AdminPayment,
@@ -428,6 +432,15 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
       // second delete of the same template is a 404.
       remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
+      // Owners and admins of a team workspace: copy the person's personal templates into it, never
+      // overwriting a name that is there. 403 `team_forbidden` for a member; 409 `personal_team`.
+      copyFromPersonal: () => request<TemplateCopy>("POST", "/api/templates/copy-from-personal", { write: true }),
+    },
+    // What a person sets once per workspace (the active one): note taker name, auto-join rule and its
+    // two boxes, the calendar template. A field left out stays; `bot_name: null` clears it.
+    workspacePrefs: {
+      get: () => request<WorkspacePrefs>("GET", "/api/workspace-prefs"),
+      put: (body: WorkspacePrefsInput) => request<WorkspacePrefs>("PUT", "/api/workspace-prefs", { body, write: true }),
     },
     // Ask Beyric: `scope` is the counts and the suggestion chips; `ask` answers one question (422
     // `question_invalid`, 429 `ask_limit`, 502 `ask_failed` carry a message written for the person).
@@ -717,6 +730,7 @@ export function createApi(options: ApiOptions = {}) {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,
       add: (term: string) => request<Term>("POST", "/api/vocabulary", { body: { term }, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/vocabulary/${id}`, { write: true }),
+      copyFromPersonal: () => request<TermCopy>("POST", "/api/vocabulary/copy-from-personal", { write: true }),
     },
   };
 }

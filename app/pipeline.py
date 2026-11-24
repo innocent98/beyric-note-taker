@@ -36,6 +36,7 @@ from app import (
     usage,
     vocabulary_pass,
     workspace,
+    workspace_prefs,
 )
 from app.audio import AudioError, NoSpeechError
 from app.bot_provider import (
@@ -59,7 +60,6 @@ from app.models import (
     Template,
     TranscriptShadowMetric,
     User,
-    VocabularyTerm,
 )
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
@@ -426,15 +426,18 @@ def _owner_bot_name(session, meeting: Meeting, settings, provider: str) -> str |
     own stored name, then to the default."""
     if not bot_names.takes_name(provider):
         return None
-    owner = None
+    prefs = None
     if session is not None:
         try:
             with session.begin_nested():
-                owner = session.get(User, meeting.owner_user_id)
+                # the owner's name for this meeting's workspace (their default when none is set)
+                prefs = workspace_prefs.for_user(
+                    session, meeting.owner_user_id, meeting.workspace_team_id
+                )
         except Exception:  # a database hiccup must not stop the bot from being sent
             logger.warning("meeting %s: the owner's note taker name could not be read", meeting.id)
             return meeting.bot_name or bot_names.default_name(settings, provider)
-    return bot_names.bot_name_for_user(settings, owner, provider)
+    return bot_names.bot_name_for_user(settings, prefs, provider)
 
 
 def send_again(meeting: Meeting, provider, *, raise_duplicate: bool = False) -> bool:
@@ -459,6 +462,7 @@ def send_again(meeting: Meeting, provider, *, raise_duplicate: bool = False) -> 
                 provider,
                 meeting.owner_user_id,
                 settings,
+                workspace_team_id=meeting.workspace_team_id,
                 bot_name=sent,
                 shown_bot_name=bot_names.shown_name(
                     settings, provider=provider_label, platform=meeting.platform, stored=sent
@@ -832,15 +836,10 @@ def _step_audio(session: Session, meeting: Meeting, provider) -> bool:
     return True
 
 
-def _terms(session: Session, owner_user_id: int) -> list[str]:
-    """The meeting owner's vocabulary, never anyone else's."""
-    return list(
-        session.scalars(
-            select(VocabularyTerm.term)
-            .where(VocabularyTerm.owner_user_id == owner_user_id)
-            .order_by(VocabularyTerm.id)
-        )
-    )
+def _terms(session: Session, workspace_team_id: int) -> list[str]:
+    """The vocabulary of the meeting's workspace, never anyone's personal list (workspaces design,
+    section 3): it is the same for every meeting filed there, and it needs no recorder."""
+    return workspace_prefs.terms(session, workspace_team_id)
 
 
 def _apply_vocabulary(session: Session, meeting: Meeting, text: str, openai_client) -> str:
@@ -855,7 +854,7 @@ def _apply_vocabulary(session: Session, meeting: Meeting, text: str, openai_clie
         if skribby.takes_vocabulary(get_settings().skribby_transcription_model):
             return text  # Skribby's model was sent the vocabulary when the bot was
         with session.begin_nested():  # a failed read must not abort the transaction
-            terms = _terms(session, meeting.owner_user_id)
+            terms = _terms(session, meeting.workspace_team_id)
         if not terms:
             return text
         spent: list = []
@@ -1031,8 +1030,11 @@ def _shadow_run(session: Session, meeting_id: int, job: _ShadowJob, openai_clien
     even that commit fails, the cost is logged."""
     seconds = job.recording.seconds
     try:
+        workspace_id = session.scalar(
+            select(Meeting.workspace_team_id).where(Meeting.id == meeting_id)
+        )
         text = transcribe_chunks(
-            job.recording.chunks, _terms(session, job.owner_user_id), client=openai_client
+            job.recording.chunks, _terms(session, workspace_id), client=openai_client
         )
     except Exception as exc:
         session.rollback()
@@ -1147,7 +1149,7 @@ def _step_transcribing(session: Session, meeting: Meeting, provider, openai_clie
                 why_not,
             )
         text = transcribe_chunks(
-            recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
+            recording.chunks, _terms(session, meeting.workspace_team_id), client=openai_client
         )
         # One row per transcription, written in the same commit as whatever this step ends with
         # (no speech included: it was still billed). `recording.seconds` is the whole recording,
@@ -1388,11 +1390,19 @@ def _step_speakers(session: Session, meeting: Meeting, provider, openai_client) 
 
 def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     template = session.get(Template, meeting.template_id)
+    if template is None:  # defensive: the workspace's own default, never the recorder's
+        template = session.get(
+            Template, workspace_prefs.for_meeting(session, meeting).default_template_id
+        )
     text = meeting.speaker_transcript or meeting.transcript or ""
     spent: list = []
     first_notes = meeting.notes is None  # a rewrite never re-shares what the owner unshared
     meeting.notes = generate_notes(
-        text, template, _terms(session, meeting.owner_user_id), client=openai_client, usage=spent
+        text,
+        template,
+        _terms(session, meeting.workspace_team_id),
+        client=openai_client,
+        usage=spent,
     )
     ai_runs.record_usage(
         session,

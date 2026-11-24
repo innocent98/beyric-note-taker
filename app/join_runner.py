@@ -54,12 +54,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, calendar_providers, calendar_states, hours, organizer_bot, titles
+from app import (
+    alerts,
+    calendar_providers,
+    calendar_states,
+    hours,
+    organizer_bot,
+    titles,
+    workspace_prefs,
+)
 from app.bot_provider import BotProvider, BotProviderError, build_provider, describe_failure
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
-from app.gcal_sync import DEFAULT_USER_SETTINGS, apply_batch
+from app.gcal_sync import apply_batch
 from app.meeting_url import UnsupportedMeetingUrl
 from app.models import (
     LIVE_JOIN_STATES,
@@ -69,7 +77,6 @@ from app.models import (
     Meeting,
     ScheduledJoin,
     User,
-    UserSettings,
 )
 from app.placement import PlacementRefused, PlacementRequest, place_bot
 
@@ -420,7 +427,7 @@ def _gate(session: Session, join: ScheduledJoin, now: datetime, settings: Settin
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     ended = False
     if event is not None:
-        prefs = session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS
+        prefs = workspace_prefs.for_user(session, join.user_id, join.team_id)
         decision = will_join(
             event,
             event.override,
@@ -576,7 +583,7 @@ def _recheck(
         raw = calendar_providers.cancelled_stub(conn.provider, event.source_event_id)
     join.rechecked_at = now  # committed by apply_batch with the rest
     _touch(join, now)
-    user_settings = session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS
+    user_settings = workspace_prefs.for_user(session, join.user_id, join.team_id)
     try:
         apply_batch(
             session,
