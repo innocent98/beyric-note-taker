@@ -2,10 +2,11 @@
 
 A workspace is a team; a person's personal space is a workspace of one. Every request that returns
 or changes workspace data acts on exactly ONE workspace: the one named in the `X-Team-Id` header,
-else the caller's personal workspace. There is no "no narrowing" any more (the multi-team switch is
-gone; it was on in production already), so a person in a team who forgets the header sees their
-personal space, never everything at once. Nothing is kept on the server between requests: two
-browser tabs on two workspaces never fight over a "current" one.
+else the caller's DEFAULT workspace (`teams.default_membership`: their only team, else their only
+ordinary team, else their personal one). There is no "no narrowing" any more (the multi-team switch
+is gone; it was on in production already), so a request that forgets the header sees one
+workspace, never everything at once. The web always names its workspace. Nothing is kept on the
+server between requests: two browser tabs on two workspaces never fight over a "current" one.
 
 Named `workspace_context`, not `workspace`: `app/workspace.py` is the Decisions and Review module.
 
@@ -46,7 +47,8 @@ def requested_team(
             ge=1,
             le=MAX_ID,
             description="The workspace (team) this request is about. Omitted: the caller's "
-            "personal workspace. A team the caller is not in is 404 `not_found`.",
+            "default workspace (their only team, else their only ordinary team, else their "
+            "personal one). A team the caller is not in is 404 `not_found`.",
         ),
     ] = None,
 ) -> int | None:
@@ -57,10 +59,10 @@ def requested_team(
 
 def require(session: Session, user: User, header_value: int | None) -> Team:
     """The caller's active workspace: the team `header_value` names (404 `not_found` "No such
-    team." for a team they are not in: it is not theirs to know), else their personal team, made if
-    the account has none. Never None."""
+    team." for a team they are not in: it is not theirs to know), else their default workspace
+    (`teams.default_membership`; a personal team is made if the account has none). Never None."""
     if header_value is None:
-        return teams.ensure_personal_team(session, user)
+        return teams.ensure_team(session, user)
     member = teams.membership(session, user.id, header_value)
     team = session.get(Team, header_value) if member is not None else None
     if team is None:

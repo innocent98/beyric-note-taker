@@ -33,7 +33,7 @@ from openai import OpenAI
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import ai_runs, entitlements, feature_gates, timezones, titles
+from app import ai_runs, entitlements, feature_gates, meeting_search, timezones, titles
 from app import tasks as task_rules
 from app.ai_versions import ASK_PROMPT_VERSION
 from app.config import get_settings
@@ -43,7 +43,7 @@ from app.notes import NONE_NOTED, UNKNOWN_SPEAKER
 from app.services import Refused
 from app.visibility import (
     ActiveTeam,
-    active_or_personal,
+    active_or_default,
     can_read_clause,
     former_or_name,
     in_workspace,
@@ -479,22 +479,15 @@ def candidates(
     Only ready meetings the caller may read AND that live in the active workspace (the readability
     rule decides who may read; the workspace only narrows which readable meetings are searched, so
     an answer in one workspace never draws on another's)."""
-    workspace = active_or_personal(session, user, workspace)
+    workspace = active_or_default(session, user, workspace)
     base = select(Meeting).where(in_workspace(user, workspace), Meeting.status == "ready")
     if rng is not None:
         start, end = _utc_bounds(rng, zone)
         base = base.where(Meeting.created_at >= start, Meeting.created_at < end)
     found: list[Meeting] = []
     if stems:
-        doc = func.to_tsvector(
-            "simple",
-            func.concat_ws(
-                " ",
-                Meeting.notes,
-                func.coalesce(func.nullif(Meeting.speaker_transcript, ""), Meeting.transcript),
-            ),
-        )
-        query = func.to_tsquery("simple", " | ".join(f"{s}:*" for s in stems))
+        doc = meeting_search.document()
+        query = meeting_search.prefix_query(stems)
         found = list(
             session.scalars(
                 base.where(doc.op("@@")(query))
@@ -877,7 +870,7 @@ def answer(
     is kept. `workspace` is the active workspace (none given: the caller's personal one): only its
     meetings, decisions and tasks are searched."""
     now = now or datetime.now(UTC)
-    workspace = active_or_personal(session, user, workspace)
+    workspace = active_or_default(session, user, workspace)
     question = question.strip()
     if not question or len(question) > MAX_QUESTION_CHARS:
         raise Refused(422, "question_invalid", QUESTION_INVALID)
@@ -969,7 +962,7 @@ def frequent_speakers(
 ) -> list[str]:
     """The speakers named most often in the last 10 ready meetings of the active workspace the
     person may read, other than the person themself, most frequent first."""
-    workspace = active_or_personal(session, user, workspace)
+    workspace = active_or_default(session, user, workspace)
     recent = session.scalars(
         select(Meeting)
         .where(in_workspace(user, workspace), Meeting.status == "ready")
@@ -1034,7 +1027,7 @@ def suggestions(
     no model call, each shown only when it is guaranteed to be answerable; none without a ready
     meeting. In order: summarise a day, what was decided on a day, what I committed to (last
     week, else this week), my open tasks, what a frequent speaker said."""
-    workspace = active_or_personal(session, user, workspace)
+    workspace = active_or_default(session, user, workspace)
     zone = _zone_of(session, user)
     today = now.astimezone(zone).date()
     recent = list(
@@ -1103,7 +1096,7 @@ def scope(
     """What a question searches, by the one visibility rule inside the active workspace: ready
     meetings the person may read, their unhidden decisions, and the tasks of them the person may
     see."""
-    workspace = active_or_personal(session, user, workspace)
+    workspace = active_or_default(session, user, workspace)
     ready = select(Meeting.id).where(in_workspace(user, workspace), Meeting.status == "ready")
     meetings = session.scalar(select(func.count()).select_from(ready.subquery())) or 0
     decisions = (

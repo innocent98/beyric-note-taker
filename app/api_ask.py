@@ -75,7 +75,7 @@ def ask_scope(
     user: User = Depends(auth.current_user),
 ) -> ScopeOut:
     """What a question searches: the ready meetings of the active workspace (the `X-Team-Id`
-    header, else the personal workspace) the caller may read, their decisions and tasks, and the
+    header, else the default workspace) the caller may read, their decisions and tasks, and the
     question chips. No model call."""
     found = ask.scope(session, user, workspace=_active(workspace, user))
     return ScopeOut(
@@ -117,7 +117,7 @@ def ask_question(
 ) -> AskOut:
     """Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
     tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.
-    Only the active workspace is searched (the `X-Team-Id` header, else the personal workspace)."""
+    Only the active workspace is searched (the `X-Team-Id` header, else the default workspace)."""
     if not request.app.state.public_limits.ask_rate.hit(f"user:{user.id}"):
         raise Refused(429, "ask_rate", "Slow down a little and try again in a minute.")
     result = ask.answer(

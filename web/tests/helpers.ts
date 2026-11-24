@@ -74,6 +74,16 @@ export function captured<T>(file: string): T {
   return withDetailDefaults(body) as T;
 }
 
+// A capture from the running API for the Markdown and text exports, the Tasks CSV and the Meetings search
+// (docs/fe-captures/export-formats-and-search/<file>, `scripts/capture_export_formats_and_search.py`): the
+// whole exchange. A file the server sent has its text in `response.body_text`.
+export function formatsCapture(file: string): {
+  request: { method: string; path: string; headers: Record<string, string> };
+  response: { status: number; headers: Record<string, string>; body?: unknown; body_text?: string; starts_with_utf8_bom?: boolean };
+} {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/export-formats-and-search", file)));
+}
+
 // A capture from the running API for the translation routes and the default language
 // (docs/fe-captures/translate/<file>, `python scripts/capture_translate_api.py`).
 type TranslateCapture = {

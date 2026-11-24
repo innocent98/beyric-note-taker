@@ -117,20 +117,20 @@ def in_workspace(user: User, team: ActiveTeam | Team) -> ColumnElement[bool]:
     return and_(can_read_clause(user), Meeting.workspace_team_id == team.id)
 
 
-def active_or_personal(session: Session, user: User, active: ActiveTeam | None) -> ActiveTeam:
+def active_or_default(session: Session, user: User, active: ActiveTeam | None) -> ActiveTeam:
     """The workspace a service-level list narrows by. A route passes the `ActiveTeam` it got from
     `team_admin.active_team`; a caller that names none (an old page, a script) gets the caller's
-    personal workspace, never "everything the caller may read"."""
+    default workspace, never "everything the caller may read"."""
     if active is not None:
         return active
-    return ActiveTeam(
-        id=birth_workspace.personal_team_id(session.connection(), user.id), personal=True
-    )
+    team_id = birth_workspace.default_workspace_id(session.connection(), user.id)
+    team = session.get(Team, team_id)
+    return ActiveTeam(id=team_id, personal=team.is_personal and team.owner_user_id == user.id)
 
 
 def readable_in(user: User, active: ActiveTeam) -> ColumnElement[bool]:
     """`in_workspace` for the `ActiveTeam` a list was given. There is no `None` any more: every
-    list is about one workspace (call `active_or_personal` first when you may have none)."""
+    list is about one workspace (call `active_or_default` first when you may have none)."""
     return in_workspace(user, active)
 
 

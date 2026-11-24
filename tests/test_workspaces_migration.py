@@ -32,10 +32,10 @@ scratch_url = migrations.scratch_url
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 
 
-def test_0070_is_the_only_head_and_follows_0056(scratch_url):
+def test_0070_is_the_only_head_and_follows_0057(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
-    assert script.get_revision("0070").down_revision == "0056"
+    assert script.get_revision("0070").down_revision == "0057"
 
 
 def one(conn, sql, **params):
@@ -237,7 +237,7 @@ def visibility_columns(conn):
 def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
-    command.upgrade(cfg, "0056")
+    command.upgrade(cfg, "0057")
     ids = seed(engine)
     with engine.connect() as conn:
         before = snapshot(conn)
@@ -376,7 +376,7 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         assert one(conn, "select count(*) from meetings where workspace_team_id is null") == 0
 
     # ---- the round trip: the downgrade drops what 0070 made, the upgrade makes it again
-    command.downgrade(cfg, "0056")
+    command.downgrade(cfg, "0057")
     insp = inspect(engine)
     assert "workspace_prefs" not in insp.get_table_names()
     assert "workspace_team_id" not in {c["name"] for c in insp.get_columns("meetings")}
@@ -413,6 +413,6 @@ def test_0070_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
     assert {"workspace_prefs"} <= set(insp.get_table_names())
     team_columns = {c["name"]: c for c in insp.get_columns("teams")}
     assert team_columns["kind"]["nullable"] is False
-    command.downgrade(cfg, "0056")
+    command.downgrade(cfg, "0057")
     command.upgrade(cfg, "head")
     engine.dispose()

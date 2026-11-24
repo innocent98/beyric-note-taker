@@ -235,7 +235,8 @@ def test_decisions_open_questions_and_tasks_follow_the_meeting_never_the_team_al
     as_x = {"X-Team-Id": str(world.x.id)}  # the log is the active team's list
     groups = pat.client.get("/api/decisions", headers=as_x).json()["groups"]
     assert [g["meeting"]["id"] for g in groups] == [world.in_x.id]
-    assert [t["id"] for t in pat.get("/api/tasks").json()["tasks"]] == [in_x.id]
+    tasks_of_x = pat.client.get("/api/tasks", headers=as_x).json()["tasks"]
+    assert [t["id"] for t in tasks_of_x] == [in_x.id]
     assert pat.get(f"/api/tasks/{in_x.id}").status_code == 200
     error_of(pat.get(f"/api/tasks/{hidden.id}"), 404, "not_found")
 
@@ -246,9 +247,14 @@ def test_a_manual_task_of_team_x_is_not_seen_by_a_person_only_in_y_and_is_by_bot
     manual_x = add_task(session, world.x, title="Book the room")
     manual_y = add_task(session, world.y, title="Pay the invoice")
     ada, pat, quinn = sign_in(app, "owner@example.test"), sign_in(app, PAT), sign_in(app, QUINN)
-    assert {t["id"] for t in ada.get("/api/tasks").json()["tasks"]} == {manual_x.id}
-    assert {t["id"] for t in pat.get("/api/tasks").json()["tasks"]} == {manual_x.id, manual_y.id}
-    assert {t["id"] for t in quinn.get("/api/tasks").json()["tasks"]} == {manual_y.id}
+
+    def on(handle, team):
+        response = handle.client.get("/api/tasks", headers={"X-Team-Id": str(team.id)})
+        return {t["id"] for t in response.json()["tasks"]}
+
+    assert on(ada, world.x) == {manual_x.id}
+    assert on(pat, world.x) == {manual_x.id} and on(pat, world.y) == {manual_y.id}
+    assert on(quinn, world.y) == {manual_y.id}
 
 
 # ---- the mail's "Open notes" button ----

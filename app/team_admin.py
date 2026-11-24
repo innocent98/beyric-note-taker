@@ -44,8 +44,8 @@ def not_found() -> Refused:
 
 def my_membership(session: Session, user: User, team_id: int | None = None) -> TeamMember:
     """The caller's membership of the active workspace: `team_id` (the `X-Team-Id` header), else
-    their personal workspace. Naming a team the caller is not in is a 404, as for any team that is
-    not theirs (`workspace_context.require`)."""
+    their default workspace (`teams.default_membership`). Naming a team the caller is not in is a
+    404, as for any team that is not theirs (`workspace_context.require`)."""
     team = workspace_context.require(session, user, team_id)
     member = teams.membership(session, user.id, team.id)
     if member is None:  # a personal team the account lost its row in: every account has one
@@ -55,7 +55,7 @@ def my_membership(session: Session, user: User, team_id: int | None = None) -> T
 
 def active_team(session: Session, user: User, team_id: int | None) -> visibility.ActiveTeam:
     """The workspace a LIST (meetings, decisions, review, the sidebar counts) is about: the named
-    team (404 `No such team.` when the caller is not in it), else their personal workspace. Never
+    team (404 `No such team.` when the caller is not in it), else their default workspace. Never
     None: every list narrows. The result goes to `visibility.readable_in` / `in_workspace`."""
     team = workspace_context.require(session, user, team_id)
     return visibility.ActiveTeam(id=team.id, personal=teams.is_personal_of(team, user.id))
@@ -65,10 +65,9 @@ def active_team_or_default(
     session: Session, user: User, team_id: int | None
 ) -> visibility.ActiveTeam:
     """`active_team` for `GET /api/session`, the first call of every page, which must never fail
-    over a stale team (the page itself answers a stale `?team=`): a team the caller is not in, or
-    none named, gives the workspace the web OPENS on, their default one (`teams.default_membership`:
-    their only team, else their personal one), not a 404. Every other route that names no team acts
-    on the personal workspace (`workspace_context.require`)."""
+    over a stale team (the page itself answers a stale `?team=`): a team the caller is not in gives
+    their default workspace (`teams.default_membership`) instead of a 404. A route that names no
+    team acts on that same default workspace (`workspace_context.require`)."""
     if team_id is None or teams.membership(session, user.id, team_id) is None:
         default = teams.default_membership(session, user.id)
         team_id = default.team_id if default is not None else None

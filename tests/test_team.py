@@ -52,10 +52,11 @@ from tests.test_web import OWNER_EMAIL, make_user, stranger  # noqa: F401
 NEW = "ada@example.test"
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def team(session, owner):
     """The owner's team, committed (the app's own connection must be able to see it)."""
     team = teams.ensure_team(session, owner)
+    team.is_personal = False  # a team people are invited into is an ordinary team
     session.commit()
     return team
 
@@ -259,9 +260,8 @@ def test_a_new_person_signs_up_through_a_closed_pilot_that_the_invite_fills_and_
     assert member_row.aliases == ["Ada L"]
     assert session.scalars(select(TeamInvite)).one().accepted_at is not None
     assert signup.slots_taken(session, now()) == 3  # now a confirmed account: still once
-    assert (
-        session.scalars(select(func.count()).select_from(Team)).one() == 1
-    )  # her own team of one is gone: only the owner's team is left
+    # her personal workspace stays (joining dissolves nothing): the owner's team and hers
+    assert session.scalars(select(func.count()).select_from(Team)).one() == 2
 
 
 def test_the_link_works_for_its_own_address_only_and_once(app, api, session, owner):
@@ -339,36 +339,6 @@ def accept(handle, token):
     return handle.post("/api/team/invites/accept", {"token": token})
 
 
-def test_an_existing_account_accepts_and_its_team_of_one_dissolves_into_the_new_one(
-    app, api, session, owner, team, template, invitee
-):
-    ada, own_team = invitee
-    own_team_id = own_team.id
-    meeting = ready(session, template, owner_user_id=ada.id)
-    shared_before = ready(session, template, owner_user_id=ada.id)
-    shared_before.shared_team_id = own_team.id
-    task = add_task(session, own_team, meeting, title="Ada's task", assignee=ada)
-    manual = add_task(session, own_team, title="Ada's own list", assignee=ada)
-    invite(api, NEW, name="Lovelace")
-    raw = link_token(session)
-    ada_api = visitor(app, "198.51.100.9")
-    assert ada_api.log_in(email=NEW).status_code == 200
-    response = accept(ada_api, raw)
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["id"] == team.id and body["my_role"] == "member"
-    fresh(session)
-    assert teams.membership(session, ada.id).team_id == team.id
-    assert session.get(Team, own_team_id) is None  # dissolved
-    assert {session.get(Task, task.id).team_id, session.get(Task, manual.id).team_id} == {team.id}
-    # their meetings stay theirs and stay private
-    assert session.get(Meeting, meeting.id).owner_user_id == ada.id
-    assert session.get(Meeting, shared_before.id).shared_team_id is None
-    assert [m["id"] for m in api.get("/api/meetings").json()["meetings"]] == []
-    error_of(api.get(f"/api/meetings/{meeting.id}"), 404, "not_found")
-    assert teams.membership(session, ada.id).aliases == ["Lovelace"]
-
-
 def test_the_link_is_single_use_and_only_for_the_account_it_was_sent_to(
     app, api, session, owner, invitee, stranger
 ):
@@ -406,19 +376,6 @@ def test_a_dead_link_gets_the_one_answer(app, api, session, owner, invitee, how)
     assert "not valid any more" in error["message"]
 
 
-def test_someone_on_a_team_with_other_people_must_leave_it_first(app, api, session, owner, invitee):
-    ada, own_team = invitee
-    friend = make_user(session, "friend@example.test")
-    session.add(TeamMember(team_id=own_team.id, user_id=friend.id, role="member"))
-    session.commit()
-    invite(api, NEW)
-    mine = visitor(app, "198.51.100.9")
-    mine.log_in(email=NEW)
-    error_of(accept(mine, link_token(session)), 409, "already_on_team")
-    assert fresh(session).scalars(select(TeamInvite)).one().accepted_at is None  # not used up
-    assert teams.membership(session, ada.id).team_id == own_team.id
-
-
 def test_what_a_team_of_one_had_invited_is_revoked_when_it_joins_another(
     app, api, session, owner, invitee
 ):
@@ -448,7 +405,7 @@ def test_the_team_and_its_members_as_the_screen_needs_them(
         "id": team.id,
         "name": "My team",
         # a hand-built fixture team: made by `ensure_team` (flagged personal) and joined by hand
-        "is_personal": True,
+        "is_personal": False,
         "share_new_meetings": False,
         "reminders_on": False,
         "reminder_timing": "both",
@@ -716,12 +673,16 @@ def test_the_default_shares_the_meetings_of_owners_and_admins_only_and_only_at_f
     session.commit()
     results = {}
     for user in (owner, admin, member):
-        meeting = ready(session, template, owner_user_id=user.id, shared_team_id=None)
+        meeting = ready(
+            session, template, owner_user_id=user.id, shared_team_id=None, workspace_team_id=team.id
+        )
         teams.apply_share_default(session, meeting)
         results[user.email] = meeting.shared_team_id
     assert results == {OWNER_EMAIL: team.id, ADMIN_EMAIL: team.id, MEMBER_EMAIL: None}
     team.share_new_meetings = False
-    other = ready(session, template, owner_user_id=owner.id, shared_team_id=None)
+    other = ready(
+        session, template, owner_user_id=owner.id, shared_team_id=None, workspace_team_id=team.id
+    )
     teams.apply_share_default(session, other)
     assert other.shared_team_id is None
 

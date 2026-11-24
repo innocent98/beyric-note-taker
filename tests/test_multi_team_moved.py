@@ -473,6 +473,7 @@ def test_moving_re_homes_the_extracted_tasks_to_the_team_and_moving_back_takes_t
     task = add_task(session, personal, world.private, title="Send the deck", assignee=world.ada)
     other = add_task(session, personal, world.private, title="Book room", assignee=world.pat)
     ada, pat, quinn = sign_in(app, ADA), sign_in(app, PAT), sign_in(app, QUINN)
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # the board of team X
     assert pat.get("/api/tasks").json()["tasks"] == []
 
     assert move(ada, world.private, world.x).status_code == 200
@@ -485,6 +486,7 @@ def test_moving_re_homes_the_extracted_tasks_to_the_team_and_moving_back_takes_t
     session.expire_all()
     assert {t.team_id for t in tasks_of(session, world.private)} == {personal.id}
     assert pat.get("/api/tasks").json()["tasks"] == []  # no longer exposed to the team
+    ada.client.headers["X-Team-Id"] = str(personal.id)  # her personal board
     mine = {t["id"] for t in ada.get("/api/tasks").json()["tasks"]}
     assert mine == {task.id, other.id}
     # Pat does not hold a task in a team of one they are not in
@@ -502,6 +504,7 @@ def test_sharing_and_unsharing_re_home_the_extracted_tasks_without_exposing_them
     assert ada.post(f"/api/meetings/{meeting.id}/share", {"team_id": world.x.id}).status_code == 200
     session.expire_all()
     assert session.get(Task, task.id).team_id == world.x.id
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # the board of team X
     assert [t["id"] for t in pat.get("/api/tasks").json()["tasks"]] == [task.id]
     assert quinn.get("/api/tasks").json()["tasks"] == []
 

@@ -58,6 +58,7 @@ def test_ask_finds_a_meeting_shared_to_x_through_x_and_never_one_the_asker_may_n
     mark(world.in_z, "ZULUMARK")
     session.commit()
     pat = sign_in(app, PAT)
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # Ask searches the active workspace
     assert post(pat, "What was said about pricing?").status_code == 200
     seen = passages_text(model.calls[0])
     assert "XRAYMARK" in seen

@@ -295,18 +295,26 @@ def test_0007_names_are_unique_per_owner_not_globally(scratch_url):
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(text("insert into users (email) values ('second@example.test')"))
+        conn.execute(
+            text(
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'second@example.test'"
+            )
+        )
         # The second user may have a "General" template and the same vocabulary term.
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'x' from users where email = 'second@example.test'"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'x' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
-        conn.execute(  # but not twice for one owner
+        conn.execute(  # but not twice for one owner in one workspace
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'y' from users where email = 'second@example.test'"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'y' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     engine.dispose()
@@ -346,8 +354,15 @@ def test_0007_downgrade_fails_when_two_users_share_a_template_name(scratch_url):
         conn.execute(text("insert into users (email) values ('second@example.test')"))
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'x' from users where email = 'second@example.test'"
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'second@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'x' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     with pytest.raises(sa.exc.IntegrityError):
@@ -1368,14 +1383,16 @@ def test_0036_link_rows_go_with_either_side(scratch_url):
         )
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'T', 'x' from users where email = 'a@example.test'"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, tm.id, 'T', 'x' from users u join teams tm "
+                "on tm.owner_user_id = u.id where u.email = 'a@example.test'"
             )
         )
         conn.execute(
             text(
-                "insert into meetings (owner_user_id, url, platform, native_id, template_id, "
-                "status, step) select u.id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
+                "insert into meetings (owner_user_id, workspace_team_id, url, platform, "
+                "native_id, template_id, status, step) "
+                "select u.id, t.team_id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
                 "from users u join templates t on t.owner_user_id = u.id "
                 "where u.email = 'a@example.test'"
             )

@@ -114,12 +114,11 @@ def test_the_three_lists_of_a_person_in_two_teams_do_not_overlap_or_lose_anythin
     )
 
 
-def test_no_header_means_the_personal_workspace(app, cast):
-    # Pat's personal workspace holds the one meeting nobody has.
+def test_no_header_means_the_default_workspace_never_everything(app, cast):
+    # Pat has two ordinary teams: the personal one is the default.
     assert meeting_ids(sign_in(app, PAT)) == [cast.p_private.id]
-    # Ada has exactly one ordinary team, X, and still: no header is her personal workspace, never
-    # "everything she may read" and never the team she happens to be in.
-    assert meeting_ids(sign_in(app, ADA)) == [cast.private.id]
+    # Ada has exactly one ordinary team, X: it is the default.
+    assert meeting_ids(sign_in(app, ADA)) == sorted([cast.in_x.id, cast.p_in_x.id])
 
 
 def test_a_team_the_caller_is_not_in_is_404_and_a_team_never_widens_the_read(app, cast):
@@ -152,12 +151,16 @@ def test_has_more_and_paging_work_inside_a_team(app, cast, session, template):
     assert sorted(shown) == sorted([cast.p_private.id, *(m.id for m in extra)])
 
 
-def test_unsharing_moves_a_meeting_between_the_teams_lists(app, cast, session):
-    pat = sign_in(app, PAT)
+def test_unsharing_keeps_the_meeting_in_the_team_workspace_private_to_its_recorder(
+    app, cast, session
+):
+    """ "Keep private" (design 12.1): the container stays X and only Pat, its recorder, reads it."""
+    pat, ada = sign_in(app, PAT), sign_in(app, ADA)
     cast.p_in_x.shared_team_id = None
     session.commit()
-    assert cast.p_in_x.id in meeting_ids(pat, cast.personal_pat)
-    assert cast.p_in_x.id not in meeting_ids(pat, cast.x)
+    assert cast.p_in_x.id in meeting_ids(pat, cast.x)
+    assert cast.p_in_x.id not in meeting_ids(pat, cast.personal_pat)
+    assert cast.p_in_x.id not in meeting_ids(ada, cast.x)  # a teammate no longer reads it
 
 
 # ---- decisions ----

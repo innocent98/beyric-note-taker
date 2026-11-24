@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -131,6 +132,47 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 
 class Base(DeclarativeBase):
     pass
+
+
+# The accents and other combining marks folded away before words are matched, as
+# `app.extraction.normalise` folds the words a person types (it does NFKD and drops the combining
+# marks): the Latin, Greek and Cyrillic diacritics and their supplements, which is what French,
+# Spanish, Portuguese and Yoruba names ("équipe", "Ọlá") carry. A mark outside these blocks (Hebrew
+# points, Arabic vowel signs, Indic signs) is not folded in the stored text, though `normalise` does
+# drop it from a typed word: such a word will not match.
+SEARCH_FOLD_MARKS = r"[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]"
+
+# The text of a meeting that search reads, as one `tsvector`: its notes plus its transcript (the
+# speaker-labelled one when there is one), accents folded the way `normalise` folds a typed word.
+# ONE function for every reader (Ask Beyric's `candidates`, the Meetings list's search box:
+# `app/meeting_search.py`), and the GIN index on `meetings` is built on a call to it, so Postgres
+# can use that index only when a query calls exactly
+# `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an index
+# to use it (`concat_ws` is not; `normalize(text, NFKD)`, `regexp_replace` and `to_tsvector` with a
+# named configuration are; the `unaccent` extension is not). Keep it a single SQL statement so
+# Postgres inlines it. Migration 0057 holds its own frozen copy of this text.
+MEETING_SEARCH_TEXT_SQL = r"""
+CREATE OR REPLACE FUNCTION meeting_search_text(
+    notes text, speaker_transcript text, transcript text
+) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT to_tsvector(
+        'simple',
+        regexp_replace(
+            normalize(
+                coalesce(notes, '') || ' ' ||
+                    coalesce(nullif(speaker_transcript, ''), transcript, ''),
+                NFKD
+            ),
+            '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]',
+            '',
+            'g'
+        )
+    )
+$$
+"""
+# The tests build the schema with `create_all`, not the migrations: the function has to exist
+# before the index that calls it is made.
+sa.event.listen(Base.metadata, "before_create", sa.DDL(MEETING_SEARCH_TEXT_SQL))
 
 
 class User(Base):
@@ -372,7 +414,7 @@ class Template(Base):
     # workspace.
     team_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("teams.id"),
+        ForeignKey("teams.id", ondelete="CASCADE"),
         index=True,
         default=birth_workspace.owner_personal_default,
     )
@@ -392,7 +434,7 @@ class VocabularyTerm(Base):
     # The workspace the term belongs to; see `Template.team_id`.
     team_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("teams.id"),
+        ForeignKey("teams.id", ondelete="CASCADE"),
         index=True,
         default=birth_workspace.owner_personal_default,
     )
@@ -817,6 +859,11 @@ class Meeting(Base):
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
         Index("ix_meetings_workspace_team_id", "workspace_team_id", "id"),
+        Index(
+            "ix_meetings_search_text",
+            sa.text("meeting_search_text(notes, speaker_transcript, transcript)"),
+            postgresql_using="gin",
+        ),
         Index(
             "ix_meetings_series_id",
             "series_id",
@@ -2238,3 +2285,17 @@ class SkribbySegmentEvidence(Base):
     # could not be fetched. Same retention and deletion as the row.
     events: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# A meeting shared to, or owned by, a team is filed in that team's workspace (workspaces design,
+# 12.1): the container follows the share on EVERY writer (the routes, `app/teams.py`, tests,
+# scripts), so a team's members never find a meeting readable through the team but absent from its
+# list. Clearing a share (unshare, move back) leaves the container where it is: the writers that
+# move it elsewhere (`app/meeting_teams.py`, `app/teams.py`, `app/deletion.py`) say so themselves.
+def _file_in_team(target: Meeting, value, oldvalue, initiator) -> None:
+    if value is not None:
+        target.workspace_team_id = value
+
+
+event.listen(Meeting.shared_team_id, "set", _file_in_team)
+event.listen(Meeting.owner_team_id, "set", _file_in_team)

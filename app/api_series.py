@@ -238,7 +238,7 @@ def list_series(
     (those with no known next date last, by name). The unfinished-task and open-question counts
     cover only what the caller may read. A recurring meeting appears once the calendar's event
     has a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header
-    names the workspace (404 for one the caller is not in); without it, the personal one."""
+    names the workspace (404 for one the caller is not in); without it, the default one."""
     team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs
     now = _now()
     zone_name = _zone_name(session, user)
@@ -279,7 +279,7 @@ def create_series(
 ) -> SeriesCard:
     """Make a recurring meeting by hand (a meeting is then attached with
     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the workspace (404 for one the
-    caller is not in), else the personal one. With `SERIES_FOLLOW_MEETINGS` on only an owner or
+    caller is not in), else the default one. With `SERIES_FOLLOW_MEETINGS` on only an owner or
     admin makes a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal
     one. 409 `series_limit`."""
     team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs

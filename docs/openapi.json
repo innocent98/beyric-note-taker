@@ -2380,6 +2380,20 @@
           "worker_stale": {
             "title": "Worker Stale",
             "type": "boolean"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspace_team_id": {
+            "title": "Workspace Team Id",
+            "type": "integer"
           }
         },
         "required": [
@@ -2395,6 +2409,7 @@
           "template_name",
           "created_at",
           "tasks_count",
+          "workspace_team_id",
           "failure_reason",
           "retry_block",
           "retry_block_message",
@@ -3206,6 +3221,39 @@
           "status"
         ],
         "title": "OptOutOut",
+        "type": "object"
+      },
+      "OtherWorkspace": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unread_notifications": {
+            "title": "Unread Notifications",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal",
+          "kind",
+          "unread_notifications"
+        ],
+        "title": "OtherWorkspace",
         "type": "object"
       },
       "OverrideIn": {
@@ -4449,6 +4497,16 @@
       },
       "SessionState": {
         "properties": {
+          "active_workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "authenticated": {
             "title": "Authenticated",
             "type": "boolean"
@@ -4470,6 +4528,20 @@
           "multi_team": {
             "title": "Multi Team",
             "type": "boolean"
+          },
+          "other_workspaces": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OtherWorkspace"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Workspaces"
           },
           "unread_notifications": {
             "anyOf": [
@@ -4510,6 +4582,8 @@
           "usage",
           "unread_notifications",
           "badges",
+          "active_workspace",
+          "other_workspaces",
           "multi_team"
         ],
         "title": "SessionState",
@@ -6860,6 +6934,35 @@
         ],
         "title": "WaitlistIn",
         "type": "object"
+      },
+      "WorkspaceRef": {
+        "description": "A workspace (a team) as the switcher and the toast name it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal",
+          "kind"
+        ],
+        "title": "WorkspaceRef",
+        "type": "object"
       }
     }
   },
@@ -7609,8 +7712,30 @@
     },
     "/api/ask": {
       "post": {
-        "description": "Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own\ntasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.",
+        "description": "Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own\ntasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.\nOnly the active workspace is searched (the `X-Team-Id` header, else the default workspace).",
         "operationId": "ask_question",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7691,8 +7816,30 @@
     },
     "/api/ask/scope": {
       "get": {
-        "description": "What a question searches: the ready meetings the caller may read, their decisions and\ntasks, and the question chips. No model call.",
+        "description": "What a question searches: the ready meetings of the active workspace (the `X-Team-Id`\nheader, else the default workspace) the caller may read, their decisions and tasks, and the\nquestion chips. No model call.",
         "operationId": "ask_scope",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8638,7 +8785,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -8653,7 +8800,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -8861,7 +9008,7 @@
         "operationId": "disconnect_linear",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -8876,7 +9023,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -8926,7 +9073,7 @@
         "operationId": "read_linear",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -8941,7 +9088,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -8998,7 +9145,7 @@
         "operationId": "connect_linear",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9013,7 +9160,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9132,7 +9279,7 @@
         "operationId": "linear_teams",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9147,7 +9294,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9266,7 +9413,7 @@
         "operationId": "disconnect_slack",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9281,7 +9428,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9331,7 +9478,7 @@
         "operationId": "read_slack",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9346,7 +9493,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9403,7 +9550,7 @@
         "operationId": "connect_slack",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9418,7 +9565,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9605,7 +9752,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The active team's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.\n\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is not\nin), else their default team while multi-team is on. An ordinary team lists the meetings shared\nto it or moved to it, whoever recorded them; the personal team lists only the meetings the\ncaller recorded that are neither shared nor moved. The list only narrows what the caller may\nread: a meeting opened by its link opens whatever team is active. With multi-team off and no\nheader, the caller's meetings plus any shared with their team, as before.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.",
+        "description": "The active team's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.\n\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is not\nin), else their default team while multi-team is on. An ordinary team lists the meetings shared\nto it or moved to it, whoever recorded them; the personal team lists only the meetings the\ncaller recorded that are neither shared nor moved. The list only narrows what the caller may\nread: a meeting opened by its link opens whatever team is active. With multi-team off and no\nheader, the caller's meetings plus any shared with their team, as before.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.\n\n`q` (optional, trimmed, 2 to 100 characters) is the search box: it keeps a meeting when its\ntitle contains the text (upper and lower case alike; `%` and `_` count as themselves), or,\nfor a meeting whose notes are ready, when every word of it appears in the notes or the\ntranscript (a word matches by its start, so \"pricing\" finds \"price\"). A meeting that is not\nready can match on its title only. It only narrows the list: the team, the visibility rule,\nthe dates, the order and `before_id` paging are as without it. 422 `invalid_query` for a\nvalue outside 2 to 100 characters. No model is called, so it costs nothing.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -9687,7 +9834,25 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters.",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -9702,7 +9867,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -9755,8 +9920,30 @@
         ]
       },
       "post": {
-        "description": "Send the bot to a Google Meet or Zoom link, through the same placement as every other way a\nbot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the\nrest: `user_limit` (the account is at the most bots allowed at once), `already_in_meeting` (a\nbot of the account's is already in that meeting), `meeting_has_note_taker` (another account's\nbot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a\nplacement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`\nwhen the bot host did not take the bot.",
+        "description": "Send the bot to a Google Meet or Zoom link, through the same placement as every other way a\nbot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the\nrest: `user_limit` (the account is at the most bots allowed at once), `already_in_meeting` (a\nbot of the account's is already in that meeting), `meeting_has_note_taker` (another account's\nbot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a\nplacement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`\nwhen the bot host did not take the bot. The meeting is born in the active workspace (the\n`X-Team-Id` header, else the default one): a member may record into any workspace they belong\nto, on their own hours.",
         "operationId": "create_meeting",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10179,7 +10366,7 @@
     },
     "/api/meetings/{meeting_id}/export": {
       "get": {
-        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.\n\n`language` `fr` or `es` builds it from the finished, current translation (409\n`translation_missing` when there is none: translate first); `en`, the default, is the\noriginal.\n\nBuilt when asked and never stored. One file is built at a time per server process: a second\nrequest meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's\ntitle, cleaned, in `Content-Disposition`.",
+        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF, Word, Markdown or\nplain-text file.\n\n`language` `fr` or `es` builds it from the finished, current translation (409\n`translation_missing` when there is none: translate first); `en`, the default, is the\noriginal.\n\nBuilt when asked and never stored. PDF and Word are built one at a time per server process: a\nsecond request meanwhile gets 503 `export_busy` with `Retry-After`. `md` (the notes as they\nare stored, Markdown, with the title and date above and each speaker's turn bold) and `txt`\n(the same with the marks taken off) are text made in the request itself, so they are never\nbusy. The file name is the meeting's title, cleaned, in `Content-Disposition`.",
         "operationId": "export_meeting",
         "parameters": [
           {
@@ -10199,7 +10386,9 @@
               "default": "pdf",
               "enum": [
                 "pdf",
-                "docx"
+                "docx",
+                "md",
+                "txt"
               ],
               "title": "Format",
               "type": "string"
@@ -10243,6 +10432,16 @@
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
                 "schema": {
                   "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain; charset=utf-8": {
+                "schema": {
                   "type": "string"
                 }
               }
@@ -10351,7 +10550,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -10366,7 +10565,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -10503,7 +10702,7 @@
                 }
               }
             },
-            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled`"
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`"
           },
           "422": {
             "content": {
@@ -11783,7 +11982,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -11798,7 +11997,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -11855,7 +12054,7 @@
         "operationId": "create_milestone",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -11870,7 +12069,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -11948,7 +12147,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -11963,7 +12162,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12032,7 +12231,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12047,7 +12246,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12135,7 +12334,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12150,7 +12349,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12284,7 +12483,7 @@
     },
     "/api/notifications": {
       "get": {
-        "description": "The caller's notifications, newest first. For the next page pass `before_id` =\n`next_before_id`.",
+        "description": "The active workspace's notifications, newest first (the `X-Team-Id` header, else the\npersonal workspace; 404 `not_found` for a team the caller is not in). For the next page pass\n`before_id` = `next_before_id`.",
         "operationId": "list_notifications",
         "parameters": [
           {
@@ -12315,6 +12514,26 @@
                 }
               ],
               "title": "Before Id"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -12368,8 +12587,30 @@
     },
     "/api/notifications/read-all": {
       "post": {
-        "description": "Mark all of the caller's notifications read.",
+        "description": "Mark all of the active workspace's notifications read (the other workspaces' stay unread).",
         "operationId": "read_all_notifications",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -12693,7 +12934,7 @@
         "operationId": "list_projects",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12708,7 +12949,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12765,7 +13006,7 @@
         "operationId": "create_project",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12780,7 +13021,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12858,7 +13099,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12873,7 +13114,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -12941,7 +13182,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -12956,7 +13197,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -13032,7 +13273,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -13047,7 +13288,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -13233,7 +13474,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -13248,7 +13489,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -13645,11 +13886,11 @@
     },
     "/api/series": {
       "get": {
-        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header\nnames the team (404 for one the caller is not in); without it, the default team's.",
+        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header\nnames the workspace (404 for one the caller is not in); without it, the default one.",
         "operationId": "list_series",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -13664,7 +13905,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -13717,11 +13958,11 @@
         ]
       },
       "post": {
-        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller\nis not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes\na team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409\n`series_limit`.",
+        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the workspace (404 for one the\ncaller is not in), else the default one. With `SERIES_FOLLOW_MEETINGS` on only an owner or\nadmin makes a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal\none. 409 `series_limit`.",
         "operationId": "create_series",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -13736,7 +13977,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -13805,7 +14046,7 @@
         "operationId": "list_removed_series",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -13820,7 +14061,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -14652,11 +14893,11 @@
         ]
       },
       "get": {
-        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,\nit names the user and reports their recorded hours (`usage`).\n\nThe `badges` count one team's items: the `X-Team-Id` header, else the person's default team\n(with multi-team off and no header: everything they can see, as before). A team the caller is\nnot in is NOT an error here (this call is every page's first): it counts the default team.",
+        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,\nit names the user and reports their recorded hours (`usage`).\n\nThe active workspace (`active_workspace`) is the `X-Team-Id` header's, else the person's\ndefault one (their only team, else their personal workspace: the one the web opens on, the same\nas `is_default` in `GET /api/teams`). `badges` and `unread_notifications` count that workspace\nonly, and `other_workspaces` lists the rest with their unread count (the switcher's dot). A team\nthe caller is not in is NOT an error here (this call is every page's first): it answers the\ndefault workspace. Every other route with no header acts on that same default workspace.",
         "operationId": "read_session",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -14671,7 +14912,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -14846,7 +15087,7 @@
         ]
       },
       "put": {
-        "description": "Choose the team new meetings are shared to automatically (one at most), or null for none. The\ncaller must belong to it and it must not be their personal space. It applies once, when a\nmeeting's notes are first written; a meeting already written is not touched. 409\n`multi_team_disabled` while the switch is off.",
+        "description": "Choose the team new meetings are shared to automatically (one at most), or null for none. The\ncaller must belong to it and it must not be their personal space. It applies once, when a\nmeeting's notes are first written; a meeting already written is not touched.",
         "operationId": "write_auto_share",
         "requestBody": {
           "content": {
@@ -14907,7 +15148,7 @@
                 }
               }
             },
-            "description": "`personal_team`, `multi_team_disabled`"
+            "description": "`personal_team`"
           },
           "422": {
             "content": {
@@ -15940,7 +16181,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -15955,7 +16196,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16033,7 +16274,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16048,7 +16289,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16123,7 +16364,7 @@
     },
     "/api/tasks": {
       "get": {
-        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a\nsuggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not\nin) only that team's board, its people and its counts; without it, every team's tasks the\ncaller can see, as before (`people` are then the default team's).",
+        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a\nsuggested task is in no count. Only the active workspace's board, its people and its counts:\nthe `X-Team-Id` header (404 for a team the caller is not in), else the default workspace.",
         "operationId": "list_tasks",
         "parameters": [
           {
@@ -16265,7 +16506,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16280,7 +16521,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16333,11 +16574,11 @@
         ]
       },
       "post": {
-        "description": "Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller\nis not in) or, without it, the caller's default team. Anyone on the team may. It has no\nmeeting.",
+        "description": "Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller\nis not in) or, without it, the caller's default workspace. Anyone on the team may. It has no\nmeeting.",
         "operationId": "create_task",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16352,7 +16593,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16410,6 +16651,101 @@
           }
         },
         "summary": "Create Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/export": {
+      "get": {
+        "description": "The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule\nand the same workspace scoping as `GET /api/tasks` (the `X-Team-Id` header, else the personal\nworkspace; suggested tasks left out, newest first),\nevery one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,\nDue date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date\nare filled only when the caller may read that meeting, as on the screen; the date is in the\ncaller's stored time zone (UTC when none).\n\nUTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage\nreturn gets a single quote in front so a spreadsheet shows it as text instead of running it.",
+        "operationId": "export_tasks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "const": "csv",
+              "default": "csv",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The CSV file, built for this request and not stored."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_found`: a team the caller is not in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Export Tasks",
         "tags": [
           "tasks"
         ]
@@ -16721,7 +17057,7 @@
         "operationId": "read_team",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16736,7 +17072,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16789,11 +17125,11 @@
         ]
       },
       "patch": {
-        "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team\nkeeps its name while multi-team is on: 409 `personal_team` for a `name` on it.",
+        "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team\nkeeps its name: 409 `personal_team` for a `name` on it.",
         "operationId": "update_team",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16808,7 +17144,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -16877,7 +17213,7 @@
         "operationId": "invite_people",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -16892,7 +17228,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17135,7 +17471,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -17150,7 +17486,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17221,7 +17557,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -17236,7 +17572,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17325,7 +17661,7 @@
         "operationId": "list_members",
         "parameters": [
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -17340,7 +17676,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17408,7 +17744,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -17423,7 +17759,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17502,7 +17838,7 @@
             }
           },
           {
-            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
             "in": "header",
             "name": "X-Team-Id",
             "required": false,
@@ -17517,7 +17853,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
               "title": "X-Team-Id"
             }
           }
@@ -17642,7 +17978,7 @@
         ]
       },
       "post": {
-        "description": "Make a team the caller owns. At most three teams per account besides the personal one (409\n`team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused\nthen), 422 `invalid_name` for an empty name.",
+        "description": "Make a team the caller owns. At most three teams per account besides the personal one (409\n`team_limit`), 422 `invalid_name` for an empty name.",
         "operationId": "create_team",
         "requestBody": {
           "content": {
@@ -17693,7 +18029,7 @@
                 }
               }
             },
-            "description": "`multi_team_disabled`, `team_limit`"
+            "description": "`team_limit`"
           },
           "422": {
             "content": {

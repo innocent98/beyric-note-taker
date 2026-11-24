@@ -71,10 +71,10 @@ def test_a_team_the_person_is_not_in_is_404_not_found(session, world):
         workspace_context.require(session, world.pat, 999999)
 
 
-def test_no_header_is_the_personal_workspace_even_for_a_person_in_one_team(session, world):
-    # Ada is in exactly one ordinary team (X): the old "default team" would have been X.
-    personal = teams.personal_team(session, world.ada.id)
-    assert workspace_context.require(session, world.ada, None).id == personal.id
+def test_no_header_is_the_default_workspace_never_everything(session, world):
+    # Ada is in exactly one ordinary team (X): it is her default.
+    assert workspace_context.require(session, world.ada, None).id == world.x.id
+    # Pat is in two ordinary teams: the default is the personal one.
     assert workspace_context.require(session, world.pat, None).id == (
         teams.personal_team(session, world.pat.id).id
     )
@@ -125,7 +125,7 @@ def test_the_personal_workspace_lists_only_the_meetings_filed_there(app, session
     assert ids(pat, pat_personal) == []
     assert ids(pat, world.x) == [world.in_x.id]
     ada = sign_in(app, ADA)
-    assert ids(ada) == [world.private.id]  # no header: the personal workspace, not "everything"
+    assert ids(ada) == [world.in_x.id]  # no header: her default (X), not "everything"
     assert ids(ada, world.x) == [world.in_x.id]
 
 

@@ -236,7 +236,9 @@ def test_a_meeting_given_back_by_a_deleted_team_keeps_its_tasks_and_milestones(a
         select(Milestone).where(Milestone.source_meeting_id == world.private.id)
     ).all()
     assert [m.team_id for m in proposals] == [home.id]
-    assert [t["id"] for t in sign_in(app, ADA).get("/api/tasks").json()["tasks"]] == [task.id]
+    ada = sign_in(app, ADA)
+    ada.client.headers["X-Team-Id"] = str(home.id)  # her personal board
+    assert [t["id"] for t in ada.get("/api/tasks").json()["tasks"]] == [task.id]
 
 
 # ---- 5. one meeting is never both owned by a team and shared with another ----
@@ -331,11 +333,14 @@ def test_a_notification_about_a_moved_meeting_is_hidden_from_a_recorder_who_left
     )
     session.add(Notification(user_id=world.ada.id, kind="y", title="General", dedupe_key="b"))
     session.commit()
-    assert notifications_rules.unread_count(session, world.ada) == 2
+    home = teams.personal_team(session, world.ada.id).id  # both were filed in her personal one
+    assert notifications_rules.unread_count(session, world.ada, home) == 2
     assert move(sign_in(app, ADA), world.private, world.x).status_code == 200
     ada_leaves_x(session, world)
-    assert notifications_rules.unread_count(session, world.ada) == 1
-    titles = [n.title for n in notifications_rules.list_notifications(session, world.ada, 50, None)]
+    assert notifications_rules.unread_count(session, world.ada, home) == 1
+    titles = [
+        n.title for n in notifications_rules.list_notifications(session, world.ada, home, 50, None)
+    ]
     assert titles == ["General"]
 
 

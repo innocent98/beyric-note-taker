@@ -36,7 +36,7 @@ or removed (a vocabulary term), the lowest id (the original) kept. Per-workspace
 workspace kinds and plan limits are lost; personal teams made for people who had none stay.
 
 Revision ID: 0070
-Revises: 0056
+Revises: 0057
 Create Date: 2026-11-24
 
 0070 is a placeholder number: the lead renumbers the integration branch's migrations into one chain
@@ -47,7 +47,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0070"
-down_revision = "0056"
+down_revision = "0057"
 branch_labels = None
 depends_on = None
 
@@ -172,7 +172,9 @@ def upgrade() -> None:
             f"update {table} x set team_id = " + personal.format(owner=f"x.{owner}")  # noqa: S608
         )
         op.alter_column(table, "team_id", nullable=False)
-        op.create_foreign_key(f"fk_{table}_team_id", table, "teams", ["team_id"], ["id"])
+        op.create_foreign_key(
+            f"fk_{table}_team_id", table, "teams", ["team_id"], ["id"], ondelete="CASCADE"
+        )
         op.create_index(f"ix_{table}_team_id", table, ["team_id"])
     op.create_index(
         "uq_templates_owner_team_name",

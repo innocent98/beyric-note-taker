@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import auth, services, titles
+from app import auth, services, teams, titles
 from app.bot_provider import BotProviderError
 from app.db import get_session
 from app.models import AiRun, AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
@@ -115,7 +115,9 @@ def test_a_visitor_gets_a_session_and_a_csrf_token(anon_client):
     assert anon_client.get("/api/session").json() == body
 
 
-def test_login_returns_a_fresh_csrf_token(anon, owner):
+def test_login_returns_a_fresh_csrf_token(anon, owner, session):
+    teams.ensure_team(session, owner)  # every real account has a team; a read does not make one
+    session.commit()
     before = anon.csrf
     response = anon.log_in()
     assert response.status_code == 200

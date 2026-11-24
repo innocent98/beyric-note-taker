@@ -68,6 +68,7 @@ WORKSPACE_DATA = {
     "/api/review",
     "/api/notifications",
     "/api/tasks",
+    "/api/tasks/export",
     "/api/projects",
     "/api/milestones",
     "/api/sprints",
@@ -295,9 +296,13 @@ def test_every_workspace_data_route_honours_the_header(app, session, cast):
         bare = get(pat, path)
         assert bare.status_code == 200, (path, bare.text)
         assert leaks(bare.text, "p") == [], f"{path} with no header leaks"
-        assert bare.json() == get(pat, path, cast.team["p"]).json(), (
-            f"{path}: no header != personal"
+        personal = get(pat, path, cast.team["p"])
+        same = (
+            bare.json() == personal.json()
+            if "json" in bare.headers["content-type"]
+            else bare.text == personal.text
         )
+        assert same, f"{path}: no header != personal"
         # a team the caller is not in is the same answer for every route: 404 not_found
         error_of(get(pat, path, cast.z), 404, "not_found")
         error_of(get(pat, path, NoSuchTeam), 404, "not_found")

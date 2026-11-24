@@ -91,6 +91,23 @@ describe("the Download menu", () => {
     ).toBe(false);
   });
 
+  it("also offers Markdown and Plain text, which download like the others", async () => {
+    mocks.export.mockResolvedValue({ blob: new Blob(["# Notes"], { type: "text/markdown" }), filename: "Google Meet abc-defg-hij.md" });
+    show(meeting("47-meeting-detail-ready.json"));
+    await open();
+    expect(screen.getByRole("button", { name: /Plain text Opens anywhere/ })).toBeTruthy();
+    await userEvent.click(screen.getByLabelText("Include the full transcript"));
+    await userEvent.click(screen.getByRole("button", { name: /Markdown For Notion/ }));
+    expect(mocks.export).toHaveBeenCalledWith(READY_ID, "md", true, "en");
+    await waitFor(() => expect(statusText()).toBe("Google Meet abc-defg-hij.md downloaded"));
+    expect(saved).toEqual([{ download: "Google Meet abc-defg-hij.md", href: "blob:placeholder" }]);
+    mocks.export.mockResolvedValue({ blob: new Blob(["Notes"], { type: "text/plain" }), filename: null });
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: /Plain text/ }));
+    expect(mocks.export).toHaveBeenLastCalledWith(READY_ID, "txt", true, "en");
+    await waitFor(() => expect(saved[1]?.download).toBe("Google Meet abc-defg-hij.txt"));
+  });
+
   it("downloads a PDF without the transcript, says it is preparing, then names the file", async () => {
     let finish: (file: typeof FILE) => void = () => undefined;
     mocks.export.mockReturnValue(new Promise((resolve) => (finish = resolve)));

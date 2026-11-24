@@ -182,7 +182,7 @@ def test_members_projects_and_integrations_follow_the_team_named(app, session, w
     assert members_x == {ADA, PAT} and members_y == {QUINN, PAT}
 
 
-def test_the_tasks_board_is_one_teams_with_the_header_and_all_without_it(
+def test_the_tasks_board_is_one_teams_with_the_header_and_the_default_without_it(
     app, session, template, world
 ):
     task_x = add_task(session, world.x, title="Book the room")
@@ -191,7 +191,7 @@ def test_the_tasks_board_is_one_teams_with_the_header_and_all_without_it(
     ids = lambda r: {t["id"] for t in r.json()["tasks"]}  # noqa: E731
     assert ids(get(pat, "/api/tasks", world.x)) == {task_x.id}
     assert ids(get(pat, "/api/tasks", world.y)) == {task_y.id}
-    assert ids(get(pat, "/api/tasks")) == {task_x.id, task_y.id}  # no team: as before
+    assert ids(get(pat, "/api/tasks")) == set()  # no team: the default (personal), never all
     people_y = {p["name"] for p in get(pat, "/api/tasks", world.y).json()["people"]}
     assert len(people_y) == 2
 
@@ -202,27 +202,20 @@ def test_a_task_made_with_a_team_header_belongs_to_that_team_only(app, session, 
     assert made.status_code == 201
     task = session.get(Task, made.json()["id"])
     assert task.team_id == world.y.id
-    assert any(t["id"] == task.id for t in get(quinn, "/api/tasks").json()["tasks"])
+    assert any(t["id"] == task.id for t in get(quinn, "/api/tasks", world.y).json()["tasks"])
     assert all(t["id"] != task.id for t in get(ada, "/api/tasks").json()["tasks"])
 
 
-def test_a_request_with_no_header_acts_on_the_personal_workspace_even_with_one_team(
-    app, session, world
-):
-    """Workspaces design, section 7: no header is the personal workspace, never the one ordinary
-    team a person happens to be in (the web always names its workspace)."""
-    ada = sign_in(app, ADA)  # owns X, her only ordinary team
-    personal = teams.personal_team(session, world.ada.id)
-    assert get(ada, "/api/team").json()["name"] == "My team"
+def test_the_old_frontend_with_one_team_and_no_header_is_unchanged(app, session, world):
+    ada = sign_in(app, ADA)  # owns X, her only ordinary team: the default
+    assert get(ada, "/api/team").json()["name"] == "X"
     assert get(ada, "/api/team/members").status_code == 200
     made = call(ada, "POST", "/api/tasks", body={"title": "Old client task"})
     assert made.status_code == 201
-    assert session.get(Task, made.json()["id"]).team_id == personal.id
+    assert session.get(Task, made.json()["id"]).team_id == world.x.id
     created = call(ada, "POST", "/api/series", body={"title": "Standup"})
     assert created.status_code == 201
-    assert session.get(Series, created.json()["id"]).team_id == personal.id
-    named = call(ada, "POST", "/api/tasks", world.x, {"title": "Named client task"})
-    assert session.get(Task, named.json()["id"]).team_id == world.x.id
+    assert session.get(Series, created.json()["id"]).team_id == world.x.id
 
 
 # ---- series: by their own team, listed and created per team ----
@@ -380,7 +373,7 @@ def test_leaving_the_chosen_team_ends_the_auto_share_and_the_team_default_is_unt
     # a team's own default (owners and admins) still works for someone with no choice
     world.x.share_new_meetings = True
     session.commit()
-    ada_meeting = ready(session, template)
+    ada_meeting = ready(session, template, workspace_team_id=world.x.id)  # recorded into X
     teams.apply_share_default(session, ada_meeting)
     assert ada_meeting.shared_team_id == world.x.id
 

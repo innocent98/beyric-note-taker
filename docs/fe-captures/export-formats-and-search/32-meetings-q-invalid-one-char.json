@@ -1,0 +1,26 @@
+{
+  "note": "422 `invalid_query`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?q=a",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_query",
+        "message": "Search needs 2 to 100 characters."
+      }
+    }
+  }
+}

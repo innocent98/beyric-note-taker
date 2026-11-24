@@ -40,7 +40,7 @@ from app.models import (
 )
 from app.visibility import (
     ActiveTeam,
-    active_or_personal,
+    active_or_default,
     can_read_clause,
     owns,
     readable_in,
@@ -550,7 +550,7 @@ def list_decisions(
     to `limit` meetings and whether there are more; `before_id` is the last meeting id of the
     previous page. `status` keeps only decisions with that status (a tab of the screen)."""
     shown = [
-        readable_in(user, active_or_personal(session, user, active)),
+        readable_in(user, active_or_default(session, user, active)),
         Decision.hidden_at.is_(None),
     ]
     if status is not None:
@@ -591,7 +591,7 @@ def decision_counts(
         select(Decision.status, func.count())
         .join(Meeting)
         .where(
-            readable_in(user, active_or_personal(session, user, active)),
+            readable_in(user, active_or_default(session, user, active)),
             Decision.hidden_at.is_(None),
         )
         .group_by(Decision.status)
@@ -621,7 +621,7 @@ def due_this_week(
         .select_from(Decision)
         .join(Meeting)
         .where(
-            readable_in(user, active_or_personal(session, user, active)),
+            readable_in(user, active_or_default(session, user, active)),
             Decision.hidden_at.is_(None),
             Decision.status.in_(("approved", "proposed")),
             Decision.revisit_on.between(monday, sunday),
@@ -769,7 +769,7 @@ def open_review_count(session: Session, user: User, active: ActiveTeam | None = 
         .where(
             ReviewItem.owner_user_id == user.id,
             ReviewItem.checked_at.is_(None),
-            readable_in(user, active_or_personal(session, user, active)),
+            readable_in(user, active_or_default(session, user, active)),
         )
     )
 
@@ -787,7 +787,7 @@ def list_review(
         .where(
             ReviewItem.owner_user_id == user.id,
             state,
-            readable_in(user, active_or_personal(session, user, active)),
+            readable_in(user, active_or_default(session, user, active)),
         )
         .order_by(ReviewItem.meeting_id.desc(), ReviewItem.position)
         .limit(REVIEW_LIMIT + 1)

@@ -195,6 +195,7 @@ export interface paths {
          * Ask Question
          * @description Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
          *     tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.
+         *     Only the active workspace is searched (the `X-Team-Id` header, else the default workspace).
          */
         post: operations["ask_question"];
         delete?: never;
@@ -212,8 +213,9 @@ export interface paths {
         };
         /**
          * Ask Scope
-         * @description What a question searches: the ready meetings the caller may read, their decisions and
-         *     tasks, and the question chips. No model call.
+         * @description What a question searches: the ready meetings of the active workspace (the `X-Team-Id`
+         *     header, else the default workspace) the caller may read, their decisions and tasks, and the
+         *     question chips. No model call.
          */
         get: operations["ask_scope"];
         put?: never;
@@ -678,6 +680,14 @@ export interface paths {
          *     caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
          *     day headings in, so the filter's days are always the headings' days. A stored zone wins and
          *     `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.
+         *
+         *     `q` (optional, trimmed, 2 to 100 characters) is the search box: it keeps a meeting when its
+         *     title contains the text (upper and lower case alike; `%` and `_` count as themselves), or,
+         *     for a meeting whose notes are ready, when every word of it appears in the notes or the
+         *     transcript (a word matches by its start, so "pricing" finds "price"). A meeting that is not
+         *     ready can match on its title only. It only narrows the list: the team, the visibility rule,
+         *     the dates, the order and `before_id` paging are as without it. 422 `invalid_query` for a
+         *     value outside 2 to 100 characters. No model is called, so it costs nothing.
          */
         get: operations["list_meetings"];
         put?: never;
@@ -689,7 +699,9 @@ export interface paths {
          *     bot of the account's is already in that meeting), `meeting_has_note_taker` (another account's
          *     bot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a
          *     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
-         *     when the bot host did not take the bot.
+         *     when the bot host did not take the bot. The meeting is born in the active workspace (the
+         *     `X-Team-Id` header, else the default one): a member may record into any workspace they belong
+         *     to, on their own hours.
          */
         post: operations["create_meeting"];
         delete?: never;
@@ -782,15 +794,18 @@ export interface paths {
         };
         /**
          * Export Meeting
-         * @description The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
+         * @description The notes (and, with `transcript=true`, the full transcript) as a PDF, Word, Markdown or
+         *     plain-text file.
          *
          *     `language` `fr` or `es` builds it from the finished, current translation (409
          *     `translation_missing` when there is none: translate first); `en`, the default, is the
          *     original.
          *
-         *     Built when asked and never stored. One file is built at a time per server process: a second
-         *     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
-         *     title, cleaned, in `Content-Disposition`.
+         *     Built when asked and never stored. PDF and Word are built one at a time per server process: a
+         *     second request meanwhile gets 503 `export_busy` with `Retry-After`. `md` (the notes as they
+         *     are stored, Markdown, with the title and date above and each speaker's turn bold) and `txt`
+         *     (the same with the marks taken off) are text made in the request itself, so they are never
+         *     busy. The file name is the meeting's title, cleaned, in `Content-Disposition`.
          */
         get: operations["export_meeting"];
         put?: never;
@@ -1226,8 +1241,9 @@ export interface paths {
         };
         /**
          * List Notifications
-         * @description The caller's notifications, newest first. For the next page pass `before_id` =
-         *     `next_before_id`.
+         * @description The active workspace's notifications, newest first (the `X-Team-Id` header, else the
+         *     personal workspace; 404 `not_found` for a team the caller is not in). For the next page pass
+         *     `before_id` = `next_before_id`.
          */
         get: operations["list_notifications"];
         put?: never;
@@ -1249,7 +1265,7 @@ export interface paths {
         put?: never;
         /**
          * Read All Notifications
-         * @description Mark all of the caller's notifications read.
+         * @description Mark all of the active workspace's notifications read (the other workspaces' stay unread).
          */
         post: operations["read_all_notifications"];
         delete?: never;
@@ -1553,17 +1569,17 @@ export interface paths {
          *     (those with no known next date last, by name). The unfinished-task and open-question counts
          *     cover only what the caller may read. A recurring meeting appears once the calendar's event
          *     has a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header
-         *     names the team (404 for one the caller is not in); without it, the default team's.
+         *     names the workspace (404 for one the caller is not in); without it, the default one.
          */
         get: operations["list_series"];
         put?: never;
         /**
          * Create Series
          * @description Make a recurring meeting by hand (a meeting is then attached with
-         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller
-         *     is not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes
-         *     a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409
-         *     `series_limit`.
+         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the workspace (404 for one the
+         *     caller is not in), else the default one. With `SERIES_FOLLOW_MEETINGS` on only an owner or
+         *     admin makes a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal
+         *     one. 409 `series_limit`.
          */
         post: operations["create_series"];
         delete?: never;
@@ -1769,9 +1785,12 @@ export interface paths {
          *     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
          *     it names the user and reports their recorded hours (`usage`).
          *
-         *     The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
-         *     (with multi-team off and no header: everything they can see, as before). A team the caller is
-         *     not in is NOT an error here (this call is every page's first): it counts the default team.
+         *     The active workspace (`active_workspace`) is the `X-Team-Id` header's, else the person's
+         *     default one (their only team, else their personal workspace: the one the web opens on, the same
+         *     as `is_default` in `GET /api/teams`). `badges` and `unread_notifications` count that workspace
+         *     only, and `other_workspaces` lists the rest with their unread count (the switcher's dot). A team
+         *     the caller is not in is NOT an error here (this call is every page's first): it answers the
+         *     default workspace. Every other route with no header acts on that same default workspace.
          */
         get: operations["read_session"];
         put?: never;
@@ -1814,8 +1833,7 @@ export interface paths {
          * Write Auto Share
          * @description Choose the team new meetings are shared to automatically (one at most), or null for none. The
          *     caller must belong to it and it must not be their personal space. It applies once, when a
-         *     meeting's notes are first written; a meeting already written is not touched. 409
-         *     `multi_team_disabled` while the switch is off.
+         *     meeting's notes are first written; a meeting already written is not touched.
          */
         put: operations["write_auto_share"];
         post?: never;
@@ -2142,19 +2160,47 @@ export interface paths {
          * @description The tasks the caller can see: those assigned to them, those from meetings they can read,
          *     and their team's manual tasks. Newest first; for the next page pass `before_id` =
          *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-         *     suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
-         *     in) only that team's board, its people and its counts; without it, every team's tasks the
-         *     caller can see, as before (`people` are then the default team's).
+         *     suggested task is in no count. Only the active workspace's board, its people and its counts:
+         *     the `X-Team-Id` header (404 for a team the caller is not in), else the default workspace.
          */
         get: operations["list_tasks"];
         put?: never;
         /**
          * Create Task
          * @description Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
-         *     is not in) or, without it, the caller's default team. Anyone on the team may. It has no
+         *     is not in) or, without it, the caller's default workspace. Anyone on the team may. It has no
          *     meeting.
          */
         post: operations["create_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Tasks
+         * @description The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
+         *     and the same workspace scoping as `GET /api/tasks` (the `X-Team-Id` header, else the personal
+         *     workspace; suggested tasks left out, newest first),
+         *     every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
+         *     Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
+         *     are filled only when the caller may read that meeting, as on the screen; the date is in the
+         *     caller's stored time zone (UTC when none).
+         *
+         *     UTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage
+         *     return gets a single quote in front so a spreadsheet shows it as text instead of running it.
+         */
+        get: operations["export_tasks"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2244,7 +2290,7 @@ export interface paths {
          *     Changing a sprint setting redraws the open sprints. The default applies,
          *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
          *     member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
-         *     keeps its name while multi-team is on: 409 `personal_team` for a `name` on it.
+         *     keeps its name: 409 `personal_team` for a `name` on it.
          */
         patch: operations["update_team"];
         trace?: never;
@@ -2434,8 +2480,7 @@ export interface paths {
         /**
          * Create Team
          * @description Make a team the caller owns. At most three teams per account besides the personal one (409
-         *     `team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused
-         *     then), 422 `invalid_name` for an empty name.
+         *     `team_limit`), 422 `invalid_name` for an empty name.
          */
         post: operations["create_team"];
         delete?: never;
@@ -3449,6 +3494,9 @@ export interface components {
             translations: components["schemas"]["TranslationBrief"][];
             /** Worker Stale */
             worker_stale: boolean;
+            workspace?: components["schemas"]["WorkspaceRef"] | null;
+            /** Workspace Team Id */
+            workspace_team_id: number;
         };
         /** MeetingList */
         MeetingList: {
@@ -3739,6 +3787,19 @@ export interface components {
              * @constant
              */
             status: "unsubscribed";
+        };
+        /** OtherWorkspace */
+        OtherWorkspace: {
+            /** Id */
+            id: number;
+            /** Is Personal */
+            is_personal: boolean;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Unread Notifications */
+            unread_notifications: number;
         };
         /**
          * OverrideIn
@@ -4181,6 +4242,7 @@ export interface components {
         };
         /** SessionState */
         SessionState: {
+            active_workspace: components["schemas"]["WorkspaceRef"] | null;
             /** Authenticated */
             authenticated: boolean;
             badges: components["schemas"]["BadgesOut"] | null;
@@ -4188,6 +4250,8 @@ export interface components {
             csrf_token: string;
             /** Multi Team */
             multi_team: boolean;
+            /** Other Workspaces */
+            other_workspaces: components["schemas"]["OtherWorkspace"][] | null;
             /** Unread Notifications */
             unread_notifications: number | null;
             usage: components["schemas"]["UsageOut"] | null;
@@ -4981,6 +5045,20 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /**
+         * WorkspaceRef
+         * @description A workspace (a team) as the switcher and the toast name it.
+         */
+        WorkspaceRef: {
+            /** Id */
+            id: number;
+            /** Is Personal */
+            is_personal: boolean;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -5566,7 +5644,10 @@ export interface operations {
     ask_question: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5635,7 +5716,10 @@ export interface operations {
     ask_scope: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6245,7 +6329,7 @@ export interface operations {
                 before_id?: number | null;
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6413,7 +6497,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6463,7 +6547,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6562,7 +6646,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6610,7 +6694,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6709,7 +6793,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6759,7 +6843,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6858,7 +6942,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6970,9 +7054,11 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 tz?: string | null;
+                /** @description Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters. */
+                q?: string | null;
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7021,7 +7107,10 @@ export interface operations {
     create_meeting: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7374,7 +7463,7 @@ export interface operations {
     export_meeting: {
         parameters: {
             query?: {
-                format?: "pdf" | "docx";
+                format?: "pdf" | "docx" | "md" | "txt";
                 transcript?: boolean;
                 language?: "en" | "fr" | "es";
             };
@@ -7394,6 +7483,8 @@ export interface operations {
                 content: {
                     "application/pdf": string;
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "text/markdown; charset=utf-8": string;
+                    "text/plain; charset=utf-8": string;
                 };
             };
             /** @description Not logged in */
@@ -7474,7 +7565,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -7582,7 +7673,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled` */
+            /** @description `personal_team`, `already_moved`, `meeting_not_ready` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8582,7 +8673,7 @@ export interface operations {
                 project_id?: number | null;
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -8632,7 +8723,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -8686,7 +8777,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -8745,7 +8836,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -8810,7 +8901,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -8924,7 +9015,10 @@ export interface operations {
                 limit?: number;
                 before_id?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8971,7 +9065,10 @@ export interface operations {
     read_all_notifications: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9244,7 +9341,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9294,7 +9391,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9348,7 +9445,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9409,7 +9506,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9468,7 +9565,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9606,7 +9703,7 @@ export interface operations {
                 state?: "open" | "checked";
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9928,7 +10025,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9978,7 +10075,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10032,7 +10129,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10651,7 +10748,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10900,7 +10997,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `personal_team`, `multi_team_disabled` */
+            /** @description `personal_team` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11788,7 +11885,7 @@ export interface operations {
                 project?: number | null;
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -11847,7 +11944,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -11930,7 +12027,7 @@ export interface operations {
                 before_id?: number | null;
             };
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -11980,7 +12077,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12020,6 +12117,67 @@ export interface operations {
                 };
             };
             /** @description `assignee_not_on_team` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_tasks: {
+        parameters: {
+            query?: {
+                format?: "csv";
+            };
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The CSV file, built for this request and not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: a team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -12277,7 +12435,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12327,7 +12485,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12381,7 +12539,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12571,7 +12729,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -12630,7 +12788,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -12709,7 +12867,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12759,7 +12917,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -12827,7 +12985,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -12975,7 +13133,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `multi_team_disabled`, `team_limit` */
+            /** @description `team_limit` */
             409: {
                 headers: {
                     [name: string]: unknown;

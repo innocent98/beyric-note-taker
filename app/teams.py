@@ -25,8 +25,10 @@ from app.models import (
     Team,
     TeamInvite,
     TeamMember,
+    Template,
     User,
     UserSettings,
+    VocabularyTerm,
 )
 
 
@@ -223,6 +225,24 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
                     .scalar_subquery()
                 )
             )
+            # A template a kept meeting was written with outlives its owner's account (taken out of
+            # use, `app/deletion.py`): it moves to that meeting's workspace; any other row of the
+            # team's goes. Vocabulary goes with the account.
+            kept = select(Meeting.template_id)
+            session.execute(
+                delete(Template).where(Template.team_id == team.id, Template.id.not_in(kept))
+            )
+            session.execute(
+                update(Template)
+                .where(Template.team_id == team.id)
+                .values(
+                    team_id=select(Meeting.workspace_team_id)
+                    .where(Meeting.template_id == Template.id)
+                    .limit(1)
+                    .scalar_subquery()
+                )
+            )
+            session.execute(delete(VocabularyTerm).where(VocabularyTerm.team_id == team.id))
             session.delete(team)
         else:
             # A team handed on is an ordinary team, whatever it was: the heir may already own a
