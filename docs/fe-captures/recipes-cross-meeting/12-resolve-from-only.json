@@ -1,0 +1,34 @@
+{
+  "note": "Either end of a range is enough: every meeting of that day or later (here only the one far-off meeting).",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2026-12-20"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 20,
+          "title": "Outside the range",
+          "day": "2027-01-01"
+        }
+      ],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

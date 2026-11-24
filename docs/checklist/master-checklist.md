@@ -8,7 +8,7 @@
 - [ ] S2 Documents: T7 tables in Word and PDF; T8 exporters (md, txt, csv, xlsx, docx, pdf); T9 document view and block editor
 - [ ] S3 Recipes: T10 ten starters and the library; T11 team brief and file import; T12 Make dialog and library screens
 - [ ] S4 Sharing: T13 share and visibility; T14 share screens
-- [ ] S5 Cross-meeting: T15 picker, status report, client briefing
+- [ ] S5 Cross-meeting (SOP `docs/sop/2026-11-24-recipes-cross-meeting.md`, FE guide `docs/fe-integration-guide-recipes-cross-meeting.md`, captures `docs/fe-captures/recipes-cross-meeting/`): [x] T15 picker backend (`app/recipes/picker.py`, series, project, sprint, dates, hand-picked, cap 12, unreadable left out and counted); [x] `POST /api/recipes/picker/resolve`; [x] left-out count and sentence on the draft (`picker` field); [x] cross-meeting context and sources pinned by tests (2026-11-24, PR pending); [x] `web/components/app/meeting-picker.tsx` and its vitest; [ ] one test per real starter (status report, client briefing, revision plan) after #267; [ ] mount the picker in the Make dialog after #267; [ ] browser check at 390 and 1280 px
 - [ ] S6 Board: T16 board generation, drag-and-edit view, PNG and PDF
 - [ ] S7 Integration: T17 deletion rules, stale labels, privacy sentence, FE guide, live run on his own meetings, Opus review, one PR to `main`
 - [ ] After release (his decision): onboard sales users, rate the follow-up email and proposal drafts, tune (bar in spec 5.8); privacy sentence to his lawyer

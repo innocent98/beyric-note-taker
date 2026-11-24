@@ -1,0 +1,34 @@
+{
+  "note": "Two ways named: 422 `validation_error`; name exactly one.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 1,
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "body",
+            "message": "Value error, Choose exactly one of series_id, project_id, sprint_id, a date range or meeting_ids."
+          }
+        ]
+      }
+    }
+  }
+}
