@@ -100,7 +100,7 @@ Edited in `web/components/legal/privacy-content.tsx` and `terms-content.tsx` **a
 
 Total for the 18 drafts: about 0.008 USD (estimate). Ledger: one `recipe` row per draft, status `ok`, the tokens above (`ledger_status` in `results.json`). Raw results: `docs/fe-captures/recipes/live-pass/results.json`.
 
-**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). Run `scripts/recipes_live.py` is not the tool for that: set `OPENAI_API_KEY` in the local `.env` and make each starter through the app on Adebayo's own meetings.
+**What a real run must still check (owed, needs a key):** that the real model returns the strict JSON for each of the eighteen without `model_reply` or `structure` failures (the schema is the one `ask` already uses), that it writes `[need: ...]` instead of guessing in the school recipes (dates, answers), that the proposal takes prices only from the brief, and the true latency (the worker allows 3 minutes a call). `scripts/recipes_live.py` is not the tool for that (it always uses the stand-in): set `OPENAI_API_KEY` in the local `.env` and make each starter through the app on Adebayo's own meetings.
 
 ## Export load (one-at-a-time renderer)
 
@@ -116,7 +116,7 @@ Measured with `scripts/recipes_live.py load` (developer Mac, five runs each, two
 | After the fix: the same PDF twice together | 1.46 s | 1.50 s | both 200 |
 | After the fix: two Word files together | 0.62 s | 0.64 s | both 200 |
 
-**Is the one-at-a-time renderer acceptable?** Yes, for the pilot, with the wait added: a build is 0.2 to 0.7 s, so two people exporting at the same moment wait about a second, and the 503 only returns when seven or more exports queue behind one another. The production server is smaller and shared, so treat these as lower bounds; measure on the server at the first staging run. If teams grow, the next step is a small queue or a second renderer slot, not a different design. `docs/fe-captures/recipes/live-pass/export-load.json` holds the **after** run (the before numbers are the ones in this table).
+**Is the one-at-a-time renderer acceptable?** Yes, for the pilot, with the wait added: a build is 0.2 to 0.7 s, so two people exporting at the same moment wait about a second, and the 503 only returns when about five or more exports queue behind one another. The production server is smaller and shared, so treat these as lower bounds; measure on the server at the first staging run. If teams grow, the next step is a small queue or a second renderer slot, not a different design. `docs/fe-captures/recipes/live-pass/export-load.json` holds the **after** run (the before numbers are the ones in this table).
 
 ## Operate / roll back
 
