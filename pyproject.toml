@@ -25,6 +25,8 @@ dependencies = [
     "python-docx>=1.1",
     # Text of an uploaded PDF for the team brief (app/recipes/import_child.py).
     "pypdf>=7.1",
+    # Excel export of a draft's tables (app/recipes/exporters.py).
+    "openpyxl>=3.1",
     # AES-256-GCM for the token vault (app/vault.py).
     "cryptography>=44",
 ]

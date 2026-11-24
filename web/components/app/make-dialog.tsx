@@ -129,7 +129,7 @@ export function MakeDialog({
     setBusy(true);
     setError(null);
     try {
-      const draft = await api.documents.make(
+      const draft = await api.documents.create(
         {
           ...recipeRef(recipe),
           meeting_ids: many ? meetingIds : [meetingId],

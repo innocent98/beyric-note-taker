@@ -93,7 +93,7 @@ describe("the calls", () => {
 
   it("asks for a draft with the team the dialog chose", async () => {
     const { api, calls } = setup(() => 5);
-    await api.documents.make({ recipe_key: "follow_up_email", meeting_ids: [1], options: {}, use_brief: true }, 8);
+    await api.documents.create({ recipe_key: "follow_up_email", meeting_ids: [1], options: {}, use_brief: true }, 8);
     expect(last(calls).url).toBe("/api/documents");
     expect(headers(last(calls))[TEAM_HEADER]).toBe("8");
   });

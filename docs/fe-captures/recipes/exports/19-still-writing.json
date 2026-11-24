@@ -1,0 +1,26 @@
+{
+  "note": "A draft still being written: 409 `not_ready`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/3/export?format=md",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "7b226572",
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "This draft is not ready yet."
+      }
+    }
+  }
+}

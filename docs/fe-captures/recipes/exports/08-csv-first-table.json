@@ -1,0 +1,22 @@
+{
+  "note": "CSV of the FIRST table. UTF-8 with a byte order mark (`starts_with_bytes` is `efbbbf..`); the file's text is shown in `body` with the mark as a leading U+FEFF. No formula cells here: the neutralising is shown in the second table.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=csv",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.csv\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.csv",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "efbbbf50",
+    "body": "﻿Phase,When,Owner\r\nSetup,Week 1,Ada\r\nTraining,Week 2,[need: trainer]\r\n"
+  }
+}

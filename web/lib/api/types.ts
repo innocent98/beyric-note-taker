@@ -94,6 +94,13 @@ export type TranslationLanguage = Translation["language"];
 export type Notice = Schemas["NotificationOut"];
 export type NoticeList = Schemas["NotificationList"];
 
+// A recipe draft (docs/fe-integration-guide-recipes.md): the blocks, the checks, the status.
+export type DocumentDraft = Schemas["DocumentOut"];
+export type DocumentBlock = DocumentDraft["blocks"][number];
+export type DocumentSource = Schemas["Source"];
+export type DocumentItem = Schemas["Item"];
+export type DocumentRequest = Schemas["DocumentIn"];
+export type DocumentExportFormat = "md" | "txt" | "csv" | "xlsx" | "docx" | "pdf";
 export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"]["parameters"]["query"]>["format"]>;
 export type Pilot = Schemas["PilotOut"];
 export type PilotState = Pilot["state"];
@@ -138,8 +145,7 @@ export type AskAnswer = Schemas["AskOut"];
 export type AskScope = Schemas["ScopeOut"];
 
 // Meeting recipes: the recipe library, the team brief and the brief file import
-// (docs/fe-integration-guide-recipes-library.md). `DocumentRequest` is the body of `POST /api/documents`
-// and `DocumentStarted` its 202 answer (the draft screens have their own names for the rest).
+// (docs/fe-integration-guide-recipes-library.md).
 export type Recipe = Schemas["RecipeOut"];
 export type RecipeList = Schemas["RecipeList"];
 export type RecipeInput = Schemas["RecipeIn"];
@@ -148,5 +154,3 @@ export type RecipeOption = Schemas["OptionDef"];
 export type RecipeTeam = Schemas["RecipeTeam"];
 export type Brief = Schemas["BriefOut"];
 export type BriefImported = Schemas["BriefImported"];
-export type DocumentRequest = Schemas["DocumentIn"];
-export type DocumentStarted = Schemas["DocumentOut"];

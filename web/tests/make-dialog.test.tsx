@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MakeDialog } from "@/components/app/make-dialog";
 import { ApiError } from "@/lib/api/client";
-import type { Brief, DocumentStarted, Recipe, RecipeList } from "@/lib/api/types";
+import type { Brief, DocumentDraft, Recipe, RecipeList } from "@/lib/api/types";
 import { recipesBody, recipesCapture, recipesLibraryBody } from "./helpers";
 
 // Fed the bodies captured from the running API: the list and the brief
@@ -25,7 +25,7 @@ vi.mock("@/lib/api/browser", () => ({
     recipes: { list: mocks.list },
     brief: { get: mocks.brief },
     teams: { list: mocks.teams },
-    documents: { make: mocks.make },
+    documents: { create: mocks.make },
   },
 }));
 
@@ -35,7 +35,7 @@ const personal = recipesLibraryBody<Recipe>("12-create-personal.json");
 const emptyBrief = recipesLibraryBody<Brief>("38-brief-empty.json");
 const savedBrief = recipesLibraryBody<Brief>("39-brief-put.json");
 const memberBrief = recipesLibraryBody<Brief>("40-brief-get-as-member.json");
-const started = recipesBody<DocumentStarted>("07-create.json");
+const started = recipesBody<DocumentDraft>("07-create.json");
 const overTheCap = recipesCapture("39-create-over-the-cap.json").response.body as { error: { code: string; message: string } };
 const PLAN_INACTIVE =
   "Making documents needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions.";
@@ -211,8 +211,8 @@ describe("making the draft", () => {
   });
 
   it("presses once, asks once", async () => {
-    let finish: (value: DocumentStarted) => void = () => undefined;
-    mocks.make.mockReturnValue(new Promise<DocumentStarted>((resolve) => (finish = resolve)));
+    let finish: (value: DocumentDraft) => void = () => undefined;
+    mocks.make.mockReturnValue(new Promise<DocumentDraft>((resolve) => (finish = resolve)));
     await open();
     const button = screen.getByRole("button", { name: "Make draft" });
     await userEvent.dblClick(button);

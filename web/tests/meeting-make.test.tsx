@@ -19,7 +19,7 @@ vi.mock("@/lib/api/browser", () => ({
     recipes: { list: mocks.list },
     brief: { get: mocks.brief },
     teams: { list: mocks.teams },
-    documents: { make: mocks.make },
+    documents: { create: mocks.make },
   },
 }));
 
