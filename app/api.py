@@ -25,6 +25,7 @@ from app import (
     api_ask,
     api_integrations,
     api_projects,
+    api_recipes,
     api_series,
     api_settings,
     api_shares,
@@ -1013,5 +1014,6 @@ router.include_router(api_projects.router)
 router.include_router(api_sprints.router)
 router.include_router(api_team.router)
 router.include_router(api_translation.router)
+router.include_router(api_recipes.router)
 router.include_router(api_ask.router)
 router.include_router(api_shares.router)

@@ -168,6 +168,18 @@ def _fence(text: str, tag: str) -> str:
     return _notes_fence(text, tag)
 
 
+def source_hash(meetings: list[Meeting], brief: str | None) -> str:
+    """The hash of the text a draft is made from (each meeting's notes and transcript, and the
+    brief): a draft whose hash no longer matches is labelled as older than the meeting."""
+    digest = hashlib.sha256()
+    for meeting in sorted(meetings, key=lambda m: m.id):
+        digest.update(
+            f"{meeting.id}\0{(meeting.notes or '').strip()}\0{transcript_of(meeting)}\0".encode()
+        )
+    digest.update((brief or "").strip().encode())
+    return digest.hexdigest()
+
+
 def _flat(text: str) -> str:
     return " ".join(text.split())
 
@@ -226,7 +238,6 @@ def build_context(
     corpus: list[str] = []
     quotes: dict[tuple[int, int], str] = {}
     parts: list[str] = []
-    digest = hashlib.sha256()
     for meeting in meetings:
         notes = (meeting.notes or "").strip()
         rows = _rows(meeting) if whole_transcript else []
@@ -271,7 +282,6 @@ def build_context(
         if not (rows or notes or found or mine or asked):
             continue  # nothing of this meeting to read
         parts.append(_fence("\n".join(body), "meeting"))
-        digest.update(f"{meeting.id}\0{notes}\0{transcript_of(meeting)}\0".encode())
     if not parts:
         raise GenerationFailed(EMPTY)
     text = "\n\n".join(parts)
@@ -279,13 +289,12 @@ def build_context(
     if brief:
         text += "\n\n" + _fence(brief, "brief")
         corpus.append(brief)
-        digest.update(brief.encode())
     return Context(
         text=text,
         allowed_sources=allowed,
         corpus=[c for c in corpus if c],
         quotes=quotes,
-        source_hash=digest.hexdigest(),
+        source_hash=source_hash(meetings, brief),
         meeting_ids=ids,
     )
 

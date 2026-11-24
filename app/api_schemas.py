@@ -8,6 +8,8 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
+from app.recipes.blocks import Block
+
 
 def _utc(value: datetime) -> datetime:
     return value.astimezone(UTC)  # serialised as ISO 8601 ending in "Z"
@@ -1385,3 +1387,84 @@ class LinearOut(BaseModel):
     # The Linear team the tasks go to; null when not connected.
     team_name: str | None
     can_manage: bool
+
+
+# ---- meeting recipes: drafts made from meetings (app/api_recipes.py) ----
+
+_DOC_MAX_ID = 2**31 - 1  # ids are Postgres integers (`services.MAX_ID`)
+DocumentStatus = Literal["writing", "ready", "failed"]
+RecipeOutputType = Literal["document", "email", "table", "board"]
+
+
+class DocumentIn(BaseModel):
+    """Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or
+    `recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the
+    choices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10."""
+
+    recipe_key: str | None = Field(default=None, max_length=32)
+    recipe_id: int | None = Field(default=None, ge=1, le=_DOC_MAX_ID)
+    meeting_ids: list[Annotated[int, Field(ge=1, le=_DOC_MAX_ID)]] = Field(
+        min_length=1, max_length=12
+    )
+    options: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=10)
+    use_brief: bool = True
+
+
+class DocumentPatch(BaseModel):
+    """The edited draft: every block as it now stands, and optionally a new title. A block may
+    keep the sources it has and may not gain new ones."""
+
+    blocks: list[dict]
+    title: str | None = Field(default=None, max_length=200)
+
+
+class BlankOut(BaseModel):
+    block_index: int
+    what: str
+
+
+class FlagOut(BaseModel):
+    block_index: int
+    # The figure as written in the draft.
+    text: str
+    # `figure`: not in the meeting, notes, tasks or brief. `derived`: looks worked out from figures
+    # that are there (a sum, a length of time in another unit): check it.
+    kind: Literal["figure", "derived"]
+
+
+class DocumentChecks(BaseModel):
+    blanks: list[BlankOut]
+    flags: list[FlagOut]
+
+
+class DocumentBrief(BaseModel):
+    id: int
+    title: str
+    output_type: RecipeOutputType
+    recipe_key: str | None
+    recipe_id: int | None
+    status: DocumentStatus
+    edited: bool
+    meeting_ids: list[int]
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
+
+
+class DocumentOut(DocumentBrief):
+    # Empty until `status` is "ready". Each block has a `type`; see `app/recipes/blocks.py`.
+    blocks: list[Block]
+    # Recomputed from the CURRENT blocks every time: blanks (`[need: ...]`) and figures to check.
+    checks: DocumentChecks
+    # True when a meeting's notes or transcript (or the brief) changed after the draft was made.
+    stale: bool
+    # False when none of the draft's meetings can be opened by the caller (deleted, or not theirs).
+    sources_available: bool
+    # How many chosen meetings the caller could not read or that were not ready: left out.
+    left_out_count: int
+    # Only when status is "failed": a short code and a plain sentence to show.
+    failure_code: str | None
+    failure_message: str | None
+
+
+class DocumentList(BaseModel):
+    documents: list[DocumentBrief]

@@ -32,7 +32,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app import ai_runs, entitlements, feature_gates, team_admin
+from app import ai_runs, entitlements, feature_gates, team_admin, teams
 from app.ai_versions import RECIPE_PROMPT_VERSION
 from app.ask import transcript_of
 from app.config import get_settings
@@ -50,7 +50,7 @@ MAX_ATTEMPTS = 3  # claims of one draft, counting those a dead worker never fini
 STALE_RUNNING = timedelta(minutes=10)  # one model call of up to 3 minutes, with room
 DOUBLE_SUBMIT_WINDOW = timedelta(minutes=2)
 # A draft that fails with one of these never reached the model: it is not counted.
-NOT_CALLED = ("empty", "too_long", "not_ready", "recipe_gone", "owner_gone")
+NOT_CALLED = ("empty", "too_long", "not_ready", "recipe_gone", "owner_gone", "access_gone")
 
 
 # ---- the recipe, from a starter (code constant) or a row ----
@@ -96,17 +96,22 @@ def resolve_recipe(session: Session, user: User, ref: int | str, team_id: int) -
             None,
             starter.key,
         )
-    row = session.scalars(
+    row = _usable_recipe(session, user, ref, team_id)
+    if row is None:
+        raise _not_found("recipe")
+    return Resolved(generate.spec_of(row), row.scope, row.uses_brief, row.id, row.key)
+
+
+def _usable_recipe(session: Session, user: User, recipe_id: int, team_id: int) -> Recipe | None:
+    """The recipe row, if it is not archived and is the person's own or their team's."""
+    return session.scalars(
         select(Recipe).where(
-            Recipe.id == ref,
+            Recipe.id == recipe_id,
             Recipe.archived_at.is_(None),
             (Recipe.owner_user_id == user.id) & Recipe.team_id.is_(None)
             | (Recipe.team_id == team_id),
         )
     ).first()
-    if row is None:
-        raise _not_found("recipe")
-    return Resolved(generate.spec_of(row), row.scope, row.uses_brief, row.id, row.key)
 
 
 # ---- the daily cap ----
@@ -328,9 +333,14 @@ def _read_job(session: Session, row: Document, now: datetime) -> _Job | None:
     if owner is None or owner.status == "deleted":
         _fail_before_model(session, row, now, "owner_gone")
         return None
+    # Access is checked again now, as at the request: the person may have left the team (its brief
+    # and its recipes are no longer theirs) or the recipe may have been archived since.
+    if row.team_id is not None and teams.membership(session, owner.id, row.team_id) is None:
+        _fail_before_model(session, row, now, "access_gone")
+        return None
     resolved = None
     if row.recipe_id is not None:
-        recipe = session.get(Recipe, row.recipe_id)
+        recipe = _usable_recipe(session, owner, row.recipe_id, row.team_id)
         if recipe is not None:
             resolved = Resolved(
                 generate.spec_of(recipe), recipe.scope, recipe.uses_brief, recipe.id, recipe.key
@@ -482,3 +492,77 @@ def run_loop(stop: threading.Event, *, session_factory=None, idle_seconds: float
             logger.warning("recipe pass failed (%s)", type(exc).__name__)
         if found is None:
             stop.wait(idle_seconds)
+
+
+# ---- reading a draft (the API's side) ----
+
+FAILURE_MESSAGES = {
+    "empty": "There was nothing in the meeting to write from.",
+    "too_long": "That meeting is too long to write from in one go. Try a shorter one.",
+    "model_error": "The writing service did not answer. Try again in a minute.",
+    "model_reply": "The writing service sent back something unusable. Try again.",
+    "structure": "The writing service sent back something unusable. Try again.",
+    "gave_up": "This took too long and was stopped. Try again.",
+    "not_ready": "The meeting is no longer available to write from.",
+    "recipe_gone": "That recipe no longer exists.",
+    "owner_gone": "This draft can no longer be written.",
+    "access_gone": "You no longer have access to what this draft was to be made from.",
+    "error": "Something went wrong. Try again.",
+}
+
+
+def failure_message(code: str | None) -> str | None:
+    """A plain sentence for a draft's failure code; null for a draft that did not fail."""
+    return None if code is None else FAILURE_MESSAGES.get(code, FAILURE_MESSAGES["error"])
+
+
+@dataclass
+class Reading:
+    """What the screen shows besides the blocks: the audit of the CURRENT blocks, whether the
+    meetings' text moved on, and whether any source meeting can still be opened."""
+
+    blanks: list
+    flags: list
+    stale: bool
+    sources_available: bool
+
+
+def read_meetings(session: Session, user: User, document: Document) -> list[Meeting]:
+    """The meetings of the draft that still exist and that `user` may read."""
+    ids = _meeting_set(session, document.id)
+    if not ids:
+        return []
+    return list(
+        session.scalars(visible_meetings(user).where(Meeting.id.in_(ids)).order_by(Meeting.id))
+    )
+
+
+def reading(session: Session, user: User, document: Document) -> Reading:
+    """Audit the draft as it stands now (after a person's edits too) against the meetings' text
+    and the brief, as the draft's owner would see it. Nothing is stored."""
+    from app.recipes import audit
+
+    meetings = read_meetings(session, user, document)
+    if document.status != "ready":
+        return Reading([], [], False, bool(meetings))
+    try:
+        blocks = blocks_mod.load_blocks(document.blocks)
+    except blocks_mod.BlocksInvalid:
+        blocks = []
+    brief = None
+    if document.use_brief and document.team_id is not None:
+        brief = session.scalar(select(TeamBrief.text).where(TeamBrief.team_id == document.team_id))
+    corpus: list[str] = list(filter(None, [brief]))
+    if meetings:
+        try:
+            corpus = generate.build_context(
+                session, user, meetings, whole_transcript=len(meetings) == 1, brief=brief
+            ).corpus
+        except GenerationFailed:
+            pass
+    stale = bool(
+        document.source_hash
+        and meetings
+        and generate.source_hash(meetings, brief) != document.source_hash
+    )
+    return Reading(audit.blanks(blocks), audit.audit(blocks, corpus), stale, bool(meetings))

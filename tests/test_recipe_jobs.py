@@ -471,3 +471,46 @@ def test_run_loop_survives_a_failing_pass_and_stops(monkeypatch):
     monkeypatch.setattr(stop, "wait", lambda seconds: stop.set() if len(calls) >= 2 else None)
     svc.run_loop(stop, session_factory=Factory(), idle_seconds=0)
     assert len(calls) >= 2 and DocumentMeeting is not None
+
+
+def test_a_person_who_left_the_team_or_a_recipe_archived_meanwhile_fails_before_the_model(
+    session, owner, stranger, meeting
+):
+    from app.models import Team, TeamMember
+
+    team = Team(name="Acme", owner_user_id=stranger.id)
+    session.add(team)
+    session.flush()
+    member = TeamMember(team_id=team.id, user_id=owner.id, role="member")
+    session.add_all([TeamMember(team_id=team.id, user_id=stranger.id, role="owner"), member])
+    session.add(TeamBrief(team_id=team.id, text="SECRET-PRICES", updated_by_user_id=stranger.id))
+    recipe = Recipe(
+        owner_user_id=stranger.id,
+        team_id=team.id,
+        name="Team recipe",
+        instruction="x",
+        output_type="document",
+    )
+    session.add(recipe)
+    session.commit()
+    first = ask(session, owner, [meeting.id], team_id=team.id)
+    second = ask(session, owner, [meeting.id], ref=recipe.id, team_id=team.id, options={"n": 2})
+    # the person leaves the team, and the second draft's recipe is archived, before the worker runs
+    session.delete(member)
+    recipe.archived_at = T0
+    session.commit()
+    model = good()
+    svc.process_next(session, T0, client=model)
+    svc.process_next(session, T0, client=model)
+    session.expire_all()
+    assert [session.get(Document, d).failure_code for d in (first.id, second.id)] == [
+        "access_gone",
+        "access_gone",
+    ]
+    assert model.calls == [] and runs(session) == []  # nothing was sent; nothing counts
+    # still a member, but the recipe was archived: recipe_gone
+    session.add(TeamMember(team_id=team.id, user_id=owner.id, role="member"))
+    session.commit()
+    third = ask(session, owner, [meeting.id], team_id=team.id, options={"n": 3})
+    svc.process_next(session, T0, client=model)
+    assert session.get(Document, third.id).status == "ready"  # a starter needs no recipe row
