@@ -545,6 +545,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Document
+         * @description The draft as Markdown (`md`), plain text (`txt`), CSV, Excel (`xlsx`), Word (`docx`) or PDF
+         *     (the default), from its current blocks, edits included.
+         *
+         *     `csv` and `xlsx` need a draft with a table (409 `no_table` without one): the CSV holds the
+         *     table numbered `table` (the first by default), the Excel file holds every table, one sheet
+         *     each. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run
+         *     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
+         *     name is the draft's title, cleaned.
+         */
+        get: operations["export_document"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/integrations/linear": {
         parameters: {
             query?: never;
@@ -6400,6 +6427,107 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_document: {
+        parameters: {
+            query?: {
+                format?: "md" | "txt" | "csv" | "xlsx" | "docx" | "pdf";
+                table?: number;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. Built for this request and not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "text/csv; charset=utf-8": string;
+                    "text/markdown; charset=utf-8": string;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such draft (another person's too) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the draft is still being written or failed; `no_table`: CSV and Excel need a draft with a table (and `table` must name one of them) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_failed`: the file could not be built */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_busy`: another file is being built */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_timeout`: it took too long */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };
