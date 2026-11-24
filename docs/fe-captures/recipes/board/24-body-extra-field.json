@@ -1,0 +1,36 @@
+{
+  "note": "A field that is not named in the operation: 422 `validation_error`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T19:28:08.223707Z",
+      "op": "delete_card",
+      "card": 0,
+      "sneaky": true
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "delete_card.sneaky",
+            "message": "Extra inputs are not permitted"
+          }
+        ]
+      }
+    }
+  }
+}

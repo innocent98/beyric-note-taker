@@ -1,0 +1,30 @@
+{
+  "note": "A column that already has 30 cards: 422 `column_full` (also when a card is moved INTO it from another column).",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/3/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T19:28:08.857617Z",
+      "op": "add_card",
+      "column": 0,
+      "text": "One too many"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "column_full",
+        "message": "A column holds at most 30 cards."
+      }
+    }
+  }
+}

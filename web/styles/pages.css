@@ -575,6 +575,43 @@
 .tk-owner-pill { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--warning-tint); color: var(--warning); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .tk-empty { padding: 18px 8px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); text-align: center; font-size: var(--text-xs); color: var(--text-faint); }
 
+/* ---- The board of a meeting (recipes; lead-designed, built on the Tasks board's columns and cards) ---- */
+.bd { display: flex; flex-direction: column; gap: var(--space-4); }
+.bd-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.bd-note { font-size: var(--text-sm); color: var(--text-3); }
+.bd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; }
+.bd-board-dragging { user-select: none; }
+.bd-board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); align-items: start; }
+.bd-board .tk-col { min-height: 160px; }
+@media (max-width: 640px) { .bd-board { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: minmax(0, 1fr); } }
+.bd-card { cursor: default; border-left-width: 4px; }
+.bd-kind-decision { border-left-color: var(--teal); }
+.bd-kind-action { border-left-color: var(--dot-amber); }
+.bd-kind-question { border-left-color: var(--info); }
+.bd-kind-note { border-left-color: var(--chevron); }
+.bd-chip { padding: 1px 8px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; background: var(--surface-hover); color: var(--text-2); }
+.bd-chip-decision { background: var(--teal-tint); color: var(--teal-deep); }
+.bd-chip-action { background: var(--warning-tint); color: var(--warning); }
+.bd-chip-question { background: var(--info-tint); color: var(--info); }
+.bd-grip { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-faint); cursor: grab; touch-action: none; }
+.bd-grip:hover { background: var(--surface-hover); }
+.bd-sources { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: var(--text-xs); }
+.bd-owner { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--surface-hover); color: var(--ink-2); font-size: 11px; font-weight: 600; }
+.bd-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.bd-tools .select-sm { max-width: 190px; }
+.bd-col-tools { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+.bd-add-card { align-self: flex-start; padding: 4px; }
+.bd-add-card:disabled { opacity: 0.6; cursor: not-allowed; }
+.bd-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); flex: 1; }
+.bd-name .input { flex: 1 1 140px; min-width: 0; }
+.bd-name .input, .bd-form .input { height: 36px; font-size: var(--text-sm); }
+.bd-form .textarea { min-height: 72px; font-size: var(--text-sm); }
+.bd-form { gap: var(--space-3); cursor: default; }
+.bd-label { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); font-weight: 600; color: var(--ink-2); }
+.bd-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.bd-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: var(--radius-md); background: var(--danger-tint); color: var(--danger-text); font-size: var(--text-sm); }
+.bd-confirm > span { flex: 1 1 100%; }
+
 .td-scrim { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: flex-end; background: var(--scrim-drawer); }
 .td-panel { display: flex; flex-direction: column; width: 100%; max-width: 460px; height: 100%; background: var(--surface); box-shadow: var(--shadow-drawer); }
 .td-bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-soft); }

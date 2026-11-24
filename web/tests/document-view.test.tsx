@@ -362,10 +362,9 @@ describe("Discard", () => {
 });
 
 describe("DocumentBody", () => {
-  it("renders nothing for a board yet (the board screen mounts here)", () => {
-    const { container } = render(
-      <DocumentBody doc={{ ...email(), output_type: "board" }} blocks={email().blocks} editing={false} onBlocks={() => {}} />,
-    );
-    expect(container.innerHTML).toBe("");
+  it("mounts the board screen for a board, and draws no block for it", () => {
+    render(<DocumentBody doc={{ ...email(), output_type: "board", blocks: [] }} blocks={[]} editing={false} onBlocks={() => {}} />);
+    expect(screen.getByRole("button", { name: /download png/i })).toBeTruthy(); // the board screen's bar
+    expect(document.querySelector(".doc-body")).toBeNull();
   });
 });

@@ -1,0 +1,35 @@
+{
+  "note": "An operation that does not exist: the ordinary 422 `validation_error` (the bodies are strict: an unknown field, a negative or text number, text over 2000 characters or an unknown `kind` are all refused this way).",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T19:28:08.223707Z",
+      "op": "teleport",
+      "card": 0
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "body",
+            "message": "Input tag 'teleport' found using 'op' does not match any of the expected tags: 'move_card', 'rename_column', 'add_column', 'delete_column', 'add_card', 'edit_card', 'delete_card', 'recolour'"
+          }
+        ]
+      }
+    }
+  }
+}

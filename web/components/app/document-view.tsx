@@ -69,6 +69,15 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
     setEditing(true);
   }
 
+  // A board that changed in another tab: fetch it again (a failed fetch leaves what is shown).
+  async function reload() {
+    try {
+      replace(await api.documents.get(doc.id));
+    } catch {
+      // the next change will say what is wrong
+    }
+  }
+
   async function save() {
     setBusy("save");
     setProblem(null);
@@ -219,9 +228,11 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
                 ))}
               </div>
             </details>
-            <Button kind="secondary" size="sm" type="button" onClick={startEditing}>
-              Edit
-            </Button>
+            {doc.output_type === "board" ? null : (
+              <Button kind="secondary" size="sm" type="button" onClick={startEditing}>
+                Edit
+              </Button>
+            )}
             {canRegenerate ? (
               <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => void regenerate()}>
                 <Icon name="rewrite" size={14} />
@@ -298,7 +309,14 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
               </div>
             </>
           ) : (
-            <DocumentBody doc={doc} blocks={doc.blocks} editing={false} onBlocks={() => {}} />
+            <DocumentBody
+              doc={doc}
+              blocks={doc.blocks}
+              editing={false}
+              onBlocks={() => {}}
+              onSaved={replace}
+              onStale={reload}
+            />
           )}
         </div>
       ) : null}

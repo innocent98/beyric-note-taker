@@ -474,6 +474,10 @@ def generate_blocks(
         blocks = blocks_mod.parse_blocks(
             data["blocks"], allowed_sources=context.allowed_sources, max_blocks=max_blocks
         )
+        if recipe.output_type == "board":
+            from app.recipes import board  # a board is columns of cards and nothing else
+
+            blocks = board.shape(blocks)
     except BlocksInvalid as exc:
         raise GenerationFailed(STRUCTURE, *tokens) from exc
     _requote(blocks, context.quotes)

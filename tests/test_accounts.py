@@ -754,6 +754,11 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/api/documents/{document_id}": {
                 "blocks": [{"type": "paragraph", "text": "x", "sources": []}]
             },
+            "/api/documents/{document_id}/board": {
+                "revision": "2026-11-24T12:00:00Z",
+                "op": "delete_card",
+                "card": 0,
+            },
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
             "/api/recipes/{recipe_id}": {"name": "x"},
         }
