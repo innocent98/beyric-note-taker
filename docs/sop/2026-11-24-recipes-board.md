@@ -1,6 +1,6 @@
 # SOP: Meeting recipes, slice S6 (the board)
 
-**What shipped.** The board of a meeting: a static, one-page, editable picture (columns by theme, cards with kind, owner and source), made by the `board` recipe, edited by its creator one step at a time (`PATCH /api/documents/{id}/board`), shown by a new screen component with drag (mouse and touch) and a "Move to column…" menu, downloadable as a PNG built in the browser, and renderable to PDF and Word as columns-as-sections. PR into `feature/recipes`: see the PR list on that branch (branch `feature/recipes-board`). Plan task 16; spec 5.3c and 5.4a. No migration. **Not mounted yet:** `BoardView` is exported and tested but the document page (`web/app/documents/[id]/page.tsx`) is slice S2's (PR #266); the lead mounts it after #266 merges (see Follow-ups).
+**What shipped.** The board of a meeting: a static, one-page, editable picture (columns by theme, cards with kind, owner and source), made by the `board` recipe, edited by its creator one step at a time (`PATCH /api/documents/{id}/board`), shown by a new screen component with drag (mouse and touch) and a "Move to column…" menu, downloadable as a PNG built in the browser, and renderable to PDF and Word as columns-as-sections. PR into `feature/recipes`: see the PR list on that branch (branch `feature/recipes-board`). Plan task 16; spec 5.3c and 5.4a. No migration. **Mounted (2026-11-24, after #266 merged):** `DocumentBody` (`web/components/app/document-body.tsx`) renders `BoardView` for `output_type === "board"`; the page's block Edit button is hidden for a board; `onSaved` is the page's `replace`, `onStale` refetches the draft. PDF and Word go through S2's `GET /api/documents/{id}/export` and the same `export.build_file` renderer (a board has no tables, so the table-aware parts do not apply), using `board.to_notes_document` so each card keeps its kind and owner (`app/recipes/exporters.py`, 6 lines).
 
 ## Why
 
@@ -43,6 +43,9 @@ Adebayo wanted "something similar to the whiteboard, not live, that everybody wi
 | `app/recipes/board.py` | **new**: `shape`, the strict `Op` models, `apply` (pure), `to_notes_document`, `StaleBoard`, `BoardInvalid` |
 | `app/api_recipe_board.py` | **new**: `PATCH /api/documents/{id}/board` |
 | `app/api.py` | registers the router beside `api_recipes` (2 lines) |
+| `app/recipes/exporters.py` | a board's Word and PDF use `board.to_notes_document` (6 lines) |
+| `web/components/app/document-body.tsx`, `document-view.tsx` | mount `BoardView`, hide Edit for a board, refetch on a stale board |
+| `tests/test_accounts.py` | the id guard sends the board route a valid body (CI's `test (2/4)` failure: it got 422 before 404) |
 | `app/recipes/generate.py` | calls `board.shape` for output type `board` (4 lines in `generate_blocks`) |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated (the operation bodies are in the schema as `MoveCard`, `RenameColumn`, ...) |
 | `web/lib/board.ts` | **new**: types from the schema, card numbering, `moveOp`, `menuMove`, `applyMove`, `dropTarget` |
@@ -62,13 +65,13 @@ Adebayo wanted "something similar to the whiteboard, not live, that everybody wi
 
 ## Operate / roll back
 
-No migration, no setting, no new dependency, no server job. Revert the PR; drafts already made stay valid blocks. Nothing here is visible until the lead mounts `BoardView` and S3's `board` starter exists.
+No migration, no setting, no new dependency, no server job. Revert the PR; drafts already made stay valid blocks. Nothing here is visible until S3's `board` starter exists.
 
 ## Follow-ups (for the lead and the other slices)
 
-1. **Mount `BoardView`** in `web/app/documents/[id]/page.tsx` when `doc.output_type === "board"`, once #266 has merged: `<BoardView doc={doc} canEdit={isCreator} onSaved={setDoc} onStale={reload} />` (`doc` is the `DocumentOut` the page already holds; `onSaved` takes the whole draft the route answers; `onStale` should refetch). While the board is mounted the page should hide its generic block editor for it. `canEdit` is false for anyone who is not the creator (S4's reader view).
+1. ~~Mount `BoardView`~~ done (see top). `canEdit` is still `true` on the page: slice S4 passes false for a reader of a shared board.
 2. **S3's `board` recipe** must tell the model to group the decisions, action items, open questions and key points into themes as `column` blocks, owner and sources on every card; the engine already shapes and validates the reply.
-3. **S2's exporter** may call `board.to_notes_document(doc.title, blocks, when=doc.created_at)` for `output_type == "board"` (adds the kind and "No cards."); it works today through `build_document_from_blocks` without that.
+3. ~~S2's exporter~~ done: `exporters.export` builds a board's render model with `board.to_notes_document`.
 4. **Conflicts to expect:** `web/lib/api/client.ts` and `web/lib/api/schema.d.ts` / `docs/openapi.json` (regenerate after merging); `app/api.py` (one import, one line).
 5. `app/api_recipe_board.py` imports `_out` from `app/api_recipes.py`; if S4 changes `_out`'s signature (a reader), this call follows it.
 6. A card's `Move` choice is kept per position; a card that moves away while another has a column chosen can leave that choice on the card that took its place (cosmetic, one more press needed).

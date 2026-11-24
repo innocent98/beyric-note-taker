@@ -6,7 +6,7 @@ What the **board screen** needs from the API: make a board from a meeting, show 
 
 - **The model.** A fake stood in for the OpenAI client (no key, no network). It returns the strict-JSON shape the code asks for and cites real line numbers it is shown. A real model's wording, and how well it groups a meeting into themes, will differ; the shape of every body will not. The **real** model is run in slice S7.
 - **The `board` starter.** `app/recipes/library.py` is slice S3's; the capture registered a stand-in with the same key `board`. Make a board with `{"recipe_key": "board", ...}`.
-- **PDF and Word of a board** go through slice S2's `GET /api/documents/{id}/export?format=`, which is not on this branch. The render model (`board.to_notes_document`) was built and rendered (PDF and DOCX files came out, sizes in capture `34-board-as-pdf-and-word.json`) but **not fetched over HTTP**. Until the export route calls it, S2's own renderer draws a column as a section with its cards as a list (no kind label).
+- **PDF and Word of a board** go through slice S2's `GET /api/documents/{id}/export?format=`, which is not on this branch. The render model (`board.to_notes_document`) was built and rendered (PDF and DOCX files came out, sizes in capture `34-board-as-pdf-and-word.json`) but **not fetched over HTTP**. The export route now builds a board with it (each card keeps its kind and owner); verified through the route in `tests/test_api_recipe_board.py` and in a real browser, not captured.
 - **A teammate the board is shared with** (slice S4): the route looks the draft up by its creator, so they get 404 exactly like a stranger; shape from `tests/test_api_recipe_board.py`, not captured live.
 - **Touch dragging** was not run on a real phone (see the verification table).
 
