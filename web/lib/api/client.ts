@@ -11,6 +11,9 @@ import type {
   ConnectStart,
   Decision,
   DecisionChanges,
+  DocumentDraft,
+  DocumentExportFormat,
+  DocumentRequest,
   DecisionList,
   DecisionStatus,
   EmailPreferences,
@@ -178,6 +181,8 @@ export function isTeamScoped(path: string, method = "GET"): boolean {
   const p = path.split("?", 1)[0];
   if (/^\/api\/team\/invites\/(preview|accept)$/.test(p)) return false;
   if (/^\/api\/(meetings|decisions|review|session)$/.test(p)) return method === "GET";
+  // Asking for a draft names whose brief and team recipes it reads: the tab's team (a read of a draft is not).
+  if (p === "/api/documents") return method === "POST";
   return (
     /^\/api\/team(\/|$)/.test(p) ||
     /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
@@ -420,6 +425,19 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
       // second delete of the same template is a 404.
       remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
+    },
+    // Recipe drafts (docs/fe-integration-guide-recipes.md, docs/fe-integration-guide-recipes-documents.md).
+    // `create` answers 202 `writing` (ask `get` again every 2 seconds); `edit` sends every block as it now
+    // stands (409 `writing` / `not_ready`, 422 `blocks_invalid`); `remove` is a discard (204);
+    // `export` is a file built from the saved blocks (`table` picks the table of a CSV).
+    documents: {
+      get: (id: number) => request<DocumentDraft>("GET", `/api/documents/${id}`),
+      create: (body: DocumentRequest) => request<DocumentDraft>("POST", "/api/documents", { body, write: true }),
+      edit: (id: number, body: { blocks: DocumentDraft["blocks"]; title?: string }) =>
+        request<DocumentDraft>("PATCH", `/api/documents/${id}`, { body, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/documents/${id}`, { write: true }),
+      export: (id: number, format: DocumentExportFormat, table = 0) =>
+        download(`/api/documents/${id}/export`, { format, table }),
     },
     // Ask Beyric: `scope` is the counts and the suggestion chips; `ask` answers one question (422
     // `question_invalid`, 429 `ask_limit`, 502 `ask_failed` carry a message written for the person).

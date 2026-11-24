@@ -5,7 +5,7 @@
 
 **Addendum 2026-11-24: Meeting recipes (one complete release; design approved 2026-11-24)** (integration branch `feature/recipes`; spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md`, gap analysis `docs/competitive/claude-meetings-gap-analysis-2026-11-24.md`). Nothing deploys until S7 is done; slices merge into `feature/recipes`, one PR to `main` at the end. Also in flight the same day: transcript and speaker editor, exports and meeting search (#261, #262).
 - [ ] S1 Engine (SOP `docs/sop/2026-11-24-recipes-engine.md`, FE guide `docs/fe-integration-guide-recipes.md`; PR A #264, PR B pending): [x] T1 tables and models (migrations 0060, 0061 placeholders, `make` gate, `recipe` kind, settings); [x] T2 block schema (`app/recipes/blocks.py`); [x] T3 number audit and blanks; [x] T4 generation; [x] T5 request, queue, worker, cap; [x] T6 draft API (2026-11-24, CI pending)
-- [ ] S2 Documents: T7 tables in Word and PDF; T8 exporters (md, txt, csv, xlsx, docx, pdf); T9 document view and block editor
+- [ ] S2 Documents (PR 266 into `feature/recipes`, SOP `docs/sop/2026-11-24-recipes-documents.md`): [x] T7 tables in Word and PDF (2026-11-24); [x] T8 exporters (md, txt, csv, xlsx, docx, pdf) and `GET /api/documents/{id}/export`, FE guide `docs/fe-integration-guide-recipes-documents.md`; [x] T9 document view, structured block editor, polling hook at `/documents/{id}` (2026-11-24; board seam `DocumentBody`)
 - [ ] S3 Recipes: T10 ten starters and the library; T11 team brief and file import; T12 Make dialog and library screens
 - [ ] S4 Sharing: T13 share and visibility; T14 share screens
 - [ ] S5 Cross-meeting: T15 picker, status report, client briefing

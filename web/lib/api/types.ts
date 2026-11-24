@@ -94,6 +94,13 @@ export type TranslationLanguage = Translation["language"];
 export type Notice = Schemas["NotificationOut"];
 export type NoticeList = Schemas["NotificationList"];
 
+// A recipe draft (docs/fe-integration-guide-recipes.md): the blocks, the checks, the status.
+export type DocumentDraft = Schemas["DocumentOut"];
+export type DocumentBlock = DocumentDraft["blocks"][number];
+export type DocumentSource = Schemas["Source"];
+export type DocumentItem = Schemas["Item"];
+export type DocumentRequest = Schemas["DocumentIn"];
+export type DocumentExportFormat = "md" | "txt" | "csv" | "xlsx" | "docx" | "pdf";
 export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"]["parameters"]["query"]>["format"]>;
 export type Pilot = Schemas["PilotOut"];
 export type PilotState = Pilot["state"];
