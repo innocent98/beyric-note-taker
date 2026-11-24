@@ -406,6 +406,7 @@ def test_the_team_and_its_members_as_the_screen_needs_them(
         "name": "My team",
         # a hand-built fixture team: made by `ensure_team` (flagged personal) and joined by hand
         "is_personal": False,
+        "kind": "team",
         "share_new_meetings": False,
         "reminders_on": False,
         "reminder_timing": "both",

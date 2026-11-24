@@ -53,6 +53,8 @@ from app.models import (
     Plan,
     ScheduledJoin,
     Subscription,
+    Team,
+    TeamMember,
     UsageAllocation,
     UsageEntry,
     User,
@@ -376,7 +378,13 @@ def check_join(
 ASK = "ask"  # Ask Beyric
 TRANSLATE = "translate"  # a NEW translation (an existing one is only read)
 REWRITE = "rewrite"  # rewriting the notes with a template
-FEATURES = (ASK, TRANSLATE, REWRITE)
+MAKE = "make"  # making a document from a meeting (meeting recipes)
+FEATURES = (ASK, TRANSLATE, REWRITE, MAKE)
+# The features a member may use on a workspace whose OWNER has a live plan, without paying
+# themselves (workspaces design 12.6, decided): reading a class's notes is no use to a student who
+# cannot Ask or Make from them. `translate` and `rewrite` stay the caller's own. Hours, plans and
+# the daily caps stay per person; this only widens who passes the gate on someone else's workspace.
+WORKSPACE_FEATURES = frozenset({ASK, MAKE})
 # The states of spec 2.2 in which these features work. `trial`, `pilot` and `active` do
 # everything, and `past_due` (the 3 days after a failed renewal) keeps Ask, translate and rewrite
 # (they use no recorded hours). `lapsed` and `none` (no plan, an expired plan, a used-up or expired
@@ -396,21 +404,68 @@ def state_allows(state: str, unlimited: bool = False) -> bool:
     return unlimited or state in OPEN_STATES
 
 
+def _workspace_team(session: Session, workspace) -> Team | None:
+    """The team a `workspace` argument names: a `Team`, anything with an `id` (the active
+    workspace of `app/visibility.py`), or a team id. None for no workspace or one that is gone."""
+    if workspace is None:
+        return None
+    if isinstance(workspace, Team):
+        return workspace
+    return session.get(Team, workspace if isinstance(workspace, int) else workspace.id)
+
+
+def owner_has_live_plan(session: Session, team: Team, now: datetime | None = None) -> bool:
+    """True when the person who owns `team` is on a plan now: `active` (paid, hours spent or not),
+    in the 3 grace days after a failed renewal (`past_due`), or an admin. A trial, a pilot grant,
+    packs and gifts alone are hours, not a plan, and an owner whose plan lapsed or ended covers
+    nobody. Pure reading."""
+    now = now or datetime.now(UTC)
+    owner = session.get(User, team.owner_user_id)
+    if owner is None or owner.status == "deleted":
+        return False
+    s = status(session, owner, now)
+    return s.unlimited or s.state in ("active", "past_due")
+
+
+def _covered_by_workspace(session: Session, user: User, workspace, now: datetime) -> bool:
+    """The caller is a member of `workspace` and its owner is on a plan (see `WORKSPACE_FEATURES`).
+    Membership is checked here too, whoever resolved the workspace: naming a team is never enough.
+    The caller's own personal workspace is owned by themselves, so it never covers anyone."""
+    team = _workspace_team(session, workspace)
+    if team is None or team.owner_user_id == user.id:
+        return False
+    member = session.scalar(
+        select(TeamMember.id).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
+    )
+    return member is not None and owner_has_live_plan(session, team, now)
+
+
 def gate(
     session: Session,
     user: User,
     feature: str,
     now: datetime,
     max_poll_seconds: int = 6 * 3600,
+    *,
+    workspace=None,
 ) -> GateDecision:
     """Whether `user` (the person pressing the button, not the meeting's recorder) may use
-    `feature` now, with the state that decided it. Pure reading. All three features answer alike
-    today; `feature` is checked so a typo cannot silently open or close a gate, and so a feature
-    can get its own rule later."""
+    `feature` now, with the state that decided it. Pure reading. `feature` is checked so a typo
+    cannot silently open or close a gate. `ask` and `make` also pass for a member of `workspace`
+    whose owner is on a plan (`WORKSPACE_FEATURES`; state `workspace_owner`); the other features
+    answer for the caller alone, whatever workspace is named."""
     if feature not in FEATURES:
         raise ValueError(f"unknown feature {feature!r}")
     s = status(session, user, now, max_poll_seconds)
-    return GateDecision(state_allows(s.state, s.unlimited), "unlimited" if s.unlimited else s.state)
+    if state_allows(s.state, s.unlimited):
+        return GateDecision(True, "unlimited" if s.unlimited else s.state)
+    if (
+        feature in WORKSPACE_FEATURES
+        and workspace is not None
+        and _covered_by_workspace(session, user, workspace, now)
+    ):
+        return GateDecision(True, "workspace_owner")
+    return GateDecision(False, s.state)
 
 
 def can(
@@ -419,9 +474,11 @@ def can(
     feature: str,
     now: datetime,
     max_poll_seconds: int = 6 * 3600,
+    *,
+    workspace=None,
 ) -> bool:
     """`gate(...).allowed`: the question every gated route asks (`app/feature_gates.py`)."""
-    return gate(session, user, feature, now, max_poll_seconds).allowed
+    return gate(session, user, feature, now, max_poll_seconds, workspace=workspace).allowed
 
 
 # ---- plan allowances and the workspace rule of the feature gates (workspaces design 5, 12.6) ----

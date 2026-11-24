@@ -217,19 +217,28 @@ def has_room_for_another_team(session: Session, user: User, now: datetime | None
     return allowed is None or owned_team_count(session, user) < allowed
 
 
-def create_owned_team(session: Session, user: User, name: str, now: datetime | None = None) -> Team:
+def create_owned_team(
+    session: Session, user: User, name: str, kind: str = "team", now: datetime | None = None
+) -> Team:
     """Make a team the person owns, as many as their live plan's `max_owned_teams` allows besides
     the personal one (Free 0, Starter 3, Pro 10, Scale unlimited; a trial counts as Free; being a
     member never counts): 409 `team_limit` naming the plan to upgrade to. A lapse or a downgrade
     never removes a team that exists, it only refuses this. The person's row is locked first, so
     two creates at once count one after the other. In the caller's transaction (flushes, no
-    commit)."""
+    commit). A `class` is the same team in a school's words and starts with "share new meetings
+    with the members" on (workspaces design, section 6); nothing else differs."""
     session.execute(select(User.id).where(User.id == user.id).with_for_update())
     allowed = entitlements.max_owned_teams(session, user, now)
     owned = owned_team_count(session, user)
     if allowed is not None and owned >= allowed:
         raise TeamChangeRefused(409, "team_limit", _limit_message(session, allowed, owned))
-    team = Team(owner_user_id=user.id, name=name, is_personal=False)
+    team = Team(
+        owner_user_id=user.id,
+        name=name,
+        is_personal=False,
+        kind=kind,
+        share_new_meetings=kind == "class",
+    )
     session.add(team)
     session.flush()
     session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
@@ -244,6 +253,45 @@ def doomed_teams(session: Session, user_id: int) -> list[int]:
     when that account still exists, otherwise deleted with the team)."""
     owned = session.scalars(select(Team.id).where(Team.owner_user_id == user_id))
     return [team_id for team_id in owned if not _has_other_members(session, team_id, user_id)]
+
+
+def dissolve_team(session: Session, team: Team) -> None:
+    """Delete a team whose people and meetings are already dealt with (the last member's account is
+    going, or the owner deleted it: `app/team_delete.py`). What it held (tasks, projects, series,
+    integrations, invitations, notifications, calendar rows, preferences) goes by the foreign keys.
+    Two things need care first. A meeting still filed in it (nobody should be) returns to its
+    recorder's personal workspace rather than blocking the delete on `meetings.workspace_team_id`.
+    A template a kept meeting was written with outlives the team (taken out of use if its owner is
+    gone, `app/deletion.py`): it moves to that meeting's workspace; every other row of the team's
+    goes. Vocabulary goes with the team. In the caller's transaction, no commit."""
+    session.execute(
+        update(Meeting)
+        .where(Meeting.workspace_team_id == team.id)
+        .values(
+            workspace_team_id=select(Team.id)
+            .where(
+                Team.owner_user_id == Meeting.owner_user_id,
+                Team.is_personal.is_(True),
+                Team.id != team.id,
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+    )
+    kept = select(Meeting.template_id)
+    session.execute(delete(Template).where(Template.team_id == team.id, Template.id.not_in(kept)))
+    session.execute(
+        update(Template)
+        .where(Template.team_id == team.id)
+        .values(
+            team_id=select(Meeting.workspace_team_id)
+            .where(Meeting.template_id == Template.id)
+            .limit(1)
+            .scalar_subquery()
+        )
+    )
+    session.execute(delete(VocabularyTerm).where(VocabularyTerm.team_id == team.id))
+    session.delete(team)
 
 
 def _heir(session: Session, team: Team) -> TeamMember | None:
@@ -278,42 +326,7 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
     for team in owned:
         heir = _heir(session, team)
         if heir is None:
-            # A meeting still filed in a team that goes (nobody should be: the recorders' meetings
-            # went with them or were given back) returns to its recorder's personal workspace
-            # rather than blocking the purge on `meetings.workspace_team_id`.
-            session.execute(
-                update(Meeting)
-                .where(Meeting.workspace_team_id == team.id)
-                .values(
-                    workspace_team_id=select(Team.id)
-                    .where(
-                        Team.owner_user_id == Meeting.owner_user_id,
-                        Team.is_personal.is_(True),
-                        Team.id != team.id,
-                    )
-                    .limit(1)
-                    .scalar_subquery()
-                )
-            )
-            # A template a kept meeting was written with outlives its owner's account (taken out of
-            # use, `app/deletion.py`): it moves to that meeting's workspace; any other row of the
-            # team's goes. Vocabulary goes with the account.
-            kept = select(Meeting.template_id)
-            session.execute(
-                delete(Template).where(Template.team_id == team.id, Template.id.not_in(kept))
-            )
-            session.execute(
-                update(Template)
-                .where(Template.team_id == team.id)
-                .values(
-                    team_id=select(Meeting.workspace_team_id)
-                    .where(Meeting.template_id == Template.id)
-                    .limit(1)
-                    .scalar_subquery()
-                )
-            )
-            session.execute(delete(VocabularyTerm).where(VocabularyTerm.team_id == team.id))
-            session.delete(team)
+            dissolve_team(session, team)
         else:
             # A team handed on is an ordinary team, whatever it was: the heir may already own a
             # personal team, and `uq_teams_one_personal_per_owner` must never block a deletion.

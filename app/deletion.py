@@ -168,16 +168,26 @@ def _give_back_meetings_of_doomed_teams(
             Meeting.owner_team_id.in_(doomed), Meeting.id.not_in(deleted_meeting_ids)
         )
     ):
-        recorder = session.get(User, meeting.owner_user_id)
-        meeting.owner_team_id = None
-        if recorder is not None and recorder.status != "deleted":
-            home = teams.ensure_personal_team(session, recorder)
-            meeting.workspace_team_id = home.id  # filed back in their personal workspace
-            teams.rehome_tasks(session, meeting, target=home)
-            # Flag on: its series row goes with the team (the foreign key would null it), so it
-            # follows to its recorder's personal row first.
-            series.follow_meeting(session, meeting, actor=series.SYSTEM)
+        give_back_meeting(session, meeting)
     session.flush()
+
+
+def give_back_meeting(session: Session, meeting: Meeting) -> None:
+    """A team that goes gives a meeting moved to it back to its recorder: private again, filed in
+    their personal workspace, the tasks and date proposals read from it re-filed there too. A
+    recorder whose account is gone has no one to return it to: only `owner_team_id` is cleared
+    (the caller deletes the meeting, `team_delete.delete_team`, or the foreign key does it with the
+    team). In the caller's transaction, no commit."""
+    recorder = session.get(User, meeting.owner_user_id)
+    meeting.owner_team_id = None
+    if recorder is not None and recorder.status != "deleted":
+        home = teams.ensure_personal_team(session, recorder)
+        meeting.workspace_team_id = home.id  # filed back in their personal workspace
+        meeting.shared_team_id = None
+        teams.rehome_tasks(session, meeting, target=home)
+        # Flag on: its series row goes with the team (the foreign key would null it), so it
+        # follows to its recorder's personal row first.
+        series.follow_meeting(session, meeting, actor=series.SYSTEM)
 
 
 def erase_account_row(session: Session, user: User, now: datetime) -> None:

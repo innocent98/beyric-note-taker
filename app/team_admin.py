@@ -185,12 +185,18 @@ def _refuse_taken_aliases(session: Session, target: TeamMember, aliases: list[st
 
 def remove_member(session: Session, me: TeamMember, target: TeamMember, now: datetime) -> None:
     """Remove someone, or leave (`target` is the caller). 403 `team_forbidden` when the role does
-    not allow it; the owner cannot leave while others remain (409 `owner_cannot_leave`)."""
+    not allow it; your personal space cannot be left (409 `personal_team`); the owner cannot leave
+    a team (409 `owner_cannot_leave`): delete it once nobody else is in it, or have it handed
+    over."""
+    team = session.get(Team, me.team_id)
+    if target.user_id == me.user_id and team is not None and teams.is_personal_of(team, me.user_id):
+        raise Refused(409, "personal_team", "Your personal space cannot be left.")
     if target.user_id == me.user_id and me.role == "owner":
         raise Refused(
             409,
             "owner_cannot_leave",
-            "You own this team. Ask the pilot admin to hand it to someone else before you leave.",
+            "You own this team. Ask the pilot admin to hand it to someone else before you leave, "
+            "or delete it once you are its only member.",
         )
     if not can_remove(me, target):
         raise forbidden()

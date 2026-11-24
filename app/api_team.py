@@ -63,6 +63,7 @@ def _team_out(session: Session, me: TeamMember, now: datetime) -> TeamOut:
         id=team.id,
         name=team.name,
         is_personal=teams.is_personal_of(team, me.user_id),
+        kind=team.kind,
         share_new_meetings=team.share_new_meetings,
         reminders_on=team.reminders_on,
         reminder_timing=team.reminder_timing,
