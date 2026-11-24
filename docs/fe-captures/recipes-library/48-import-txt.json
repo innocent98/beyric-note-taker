@@ -1,0 +1,31 @@
+{
+  "note": "A text file: 200 with `text`, `truncated: false`, `pages: null`. Nothing is saved: the brief below is unchanged. The person reviews and edits the text, then saves it with `PUT /api/briefs`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "terms.txt",
+        "bytes": 56,
+        "content_type": "text/plain"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "text": "Terms: pay within 14 days.\nLate fee: 2 percent a month.",
+      "truncated": false,
+      "pages": null
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "note": "`X-Team-Id` naming a team the caller is not on: 404 `not_found`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/recipes",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

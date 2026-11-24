@@ -1,0 +1,35 @@
+{
+  "note": "Not one of `document`, `email`, `table`, `board`: 422 `validation_error`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "x",
+      "instruction": "x",
+      "output_type": "video"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "output_type",
+            "message": "Input should be 'document', 'email', 'table' or 'board'"
+          }
+        ]
+      }
+    }
+  }
+}

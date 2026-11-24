@@ -275,6 +275,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/briefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Brief
+         * @description The active team's brief (`text` is empty when none was saved). Members read it too: its
+         *     prices and terms appear in the drafts they make. `X-Team-Id` names the team (404 for one the
+         *     caller is not on).
+         */
+        get: operations["read_brief"];
+        /**
+         * Write Brief
+         * @description Replace the active team's brief (owners and admins; 403 `team_forbidden` for a member).
+         *     422 `brief_too_long` over `max_chars`. The text is data: stored as typed, minus control
+         *     characters, and shown to the model only inside a fence.
+         */
+        put: operations["write_brief"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/briefs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Brief
+         * @description Read a `.docx`, `.pdf`, `.txt` or `.md` file (multipart, field `file`) into text for the
+         *     brief. The text comes back for the person to review and edit: **nothing is saved** and the file
+         *     is never stored (not on disk, not in the database). Owners and admins only (the people who can
+         *     save a brief). The text is data: if saved, the model sees it inside a fence.
+         */
+        post: operations["import_brief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar": {
         parameters: {
             query?: never;
@@ -1536,6 +1587,61 @@ export interface paths {
          *     read gets 403 `team_forbidden`; a question you cannot read is 404.
          */
         patch: operations["patch_question"];
+        trace?: never;
+    };
+    "/api/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recipes
+         * @description The starters (General and School), then the active team's recipes, then the caller's own.
+         *     `X-Team-Id` names the team (404 for one the caller is not on), else their default team.
+         *     Archived recipes are not listed.
+         */
+        get: operations["list_recipes"];
+        put?: never;
+        /**
+         * Create Recipe
+         * @description Save a recipe: the caller's own, or (`visibility: team`, owners and admins only, 403
+         *     `team_forbidden`) the active team's. Give `key` to copy a starter: whatever you leave out comes
+         *     from it. 422 `too_many_recipes` past 100 live ones.
+         */
+        post: operations["create_recipe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recipes/{recipe_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Recipe
+         * @description Change a recipe of the caller's own, or of a team they own or administer (403
+         *     `team_forbidden` for a member, who may still copy its text into a recipe of their own). Only
+         *     the fields sent change; a copy of a starter stays marked as one.
+         */
+        put: operations["update_recipe"];
+        post?: never;
+        /**
+         * Archive Recipe
+         * @description Archive a recipe (same people as `PUT`): it leaves the list and cannot be used again, and
+         *     the drafts made from it are untouched.
+         */
+        delete: operations["archive_recipe"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/review": {
@@ -3024,6 +3130,48 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** BriefImported */
+        BriefImported: {
+            /**
+             * Pages
+             * @description A PDF's page count; null for other files
+             */
+            pages: number | null;
+            /**
+             * Text
+             * @description Review and edit it, then save it with `PUT /api/briefs`
+             */
+            text: string;
+            /**
+             * Truncated
+             * @description The file held more than a brief may: the rest is cut
+             */
+            truncated: boolean;
+        };
+        /** BriefIn */
+        BriefIn: {
+            /**
+             * Text
+             * @description The whole brief; an empty text clears it
+             */
+            text: string;
+        };
+        /** BriefOut */
+        BriefOut: {
+            /** Max Chars */
+            max_chars: number;
+            /** @description Whose brief this is: the active team */
+            team: components["schemas"]["RecipeTeam"];
+            /** Text */
+            text: string;
+            /** Updated At */
+            updated_at: string | null;
+            /**
+             * Updated By
+             * @description Who saved it last; null when none was saved
+             */
+            updated_by: string | null;
+        };
         /**
          * BroughtBack
          * @description What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No
@@ -4164,6 +4312,27 @@ export interface components {
             status: "unsubscribed";
         };
         /**
+         * OptionDef
+         * @description One choice the Make dialog draws for a recipe. `choices` is empty and `default` null for
+         *     kind `text`.
+         */
+        OptionDef: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
+            /** Default */
+            default?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "choice";
+            /** Label */
+            label: string;
+        };
+        /**
          * OverrideIn
          * @description The person's switch for one meeting: true joins it, false does not, null clears the switch
          *     so the rule decides again. The field is required (null must be sent on purpose).
@@ -4335,6 +4504,130 @@ export interface components {
             carry?: boolean | null;
             /** Resolved */
             resolved?: boolean | null;
+        };
+        /**
+         * RecipeIn
+         * @description A new recipe. With `key` (a starter's key) the fields left out are taken from that starter:
+         *     this is how a starter is copied. Without it, `name` and `instruction` are needed.
+         */
+        RecipeIn: {
+            /** Instruction */
+            instruction?: string | null;
+            /**
+             * Key
+             * @description The starter this is a copy of
+             */
+            key?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: components["schemas"]["OptionDef"];
+            } | null;
+            /** Output Type */
+            output_type?: ("document" | "email" | "table" | "board") | null;
+            /** Scope */
+            scope?: ("one" | "many") | null;
+            /** Uses Brief */
+            uses_brief?: boolean | null;
+            /**
+             * Visibility
+             * @description `team`: the active team's recipe (owners and admins only)
+             * @default personal
+             * @enum {string}
+             */
+            visibility: "personal" | "team";
+        };
+        /** RecipeList */
+        RecipeList: {
+            /** Recipes */
+            recipes: components["schemas"]["RecipeOut"][];
+            /** @description The active team: whose recipes and brief these are */
+            team: components["schemas"]["RecipeTeam"];
+        };
+        /** RecipeOut */
+        RecipeOut: {
+            /**
+             * Can Edit
+             * @description False for a starter, and for a team recipe to a member
+             */
+            can_edit: boolean;
+            /**
+             * Id
+             * @description Null for a starter: name it by `key`
+             */
+            id: number | null;
+            /** Instruction */
+            instruction: string;
+            /**
+             * Key
+             * @description The starter's key, or the starter a copy came from
+             */
+            key: string | null;
+            /** Name */
+            name: string;
+            /** Options */
+            options: {
+                [key: string]: components["schemas"]["OptionDef"];
+            };
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /**
+             * Pack
+             * @description A starter's pack; null for a recipe someone wrote
+             */
+            pack: ("general" | "school") | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "one" | "many";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "starter" | "personal" | "team";
+            /** Updated At */
+            updated_at: string | null;
+            /** Uses Brief */
+            uses_brief: boolean;
+        };
+        /**
+         * RecipePatch
+         * @description Change a recipe: only the fields sent change. Who owns it (personal or team) never does.
+         */
+        RecipePatch: {
+            /** Instruction */
+            instruction?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: components["schemas"]["OptionDef"];
+            } | null;
+            /** Output Type */
+            output_type?: ("document" | "email" | "table" | "board") | null;
+            /** Scope */
+            scope?: ("one" | "many") | null;
+            /** Uses Brief */
+            uses_brief?: boolean | null;
+        };
+        /** RecipeTeam */
+        RecipeTeam: {
+            /**
+             * Can Manage
+             * @description Owner or admin of the team: may write its recipes
+             */
+            can_manage: boolean;
+            /** Id */
+            id: number;
+            /** Is Personal */
+            is_personal: boolean;
+            /** Name */
+            name: string;
         };
         /** Recolour */
         Recolour: {
@@ -6288,6 +6581,185 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_brief: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_brief: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    import_brief: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefImported"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `too_big` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `file_missing`, `unsupported`, `too_many_pages`, `no_text_layer` (a scanned PDF) or `unreadable` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `import_busy`: try again in a moment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10569,6 +11041,237 @@ export interface operations {
             };
             /** @description `not_in_series` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_recipes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_recipe: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_recipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    archive_recipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

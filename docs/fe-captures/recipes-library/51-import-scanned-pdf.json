@@ -1,0 +1,32 @@
+{
+  "note": "A PDF with no text layer (a scan): 422 `no_text_layer`. Tell the person to paste the text in.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "scan.pdf",
+        "bytes": 764,
+        "content_type": "application/pdf"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "no_text_layer",
+        "message": "There is no text we can read in that file. A scanned PDF has none: paste the text in instead."
+      }
+    }
+  }
+}

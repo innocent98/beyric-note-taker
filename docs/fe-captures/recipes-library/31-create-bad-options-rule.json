@@ -1,0 +1,35 @@
+{
+  "note": "A `choice` with no `choices` (also a repeated choice, more than six choices, more than six options, a bad key): 422 `options_invalid`; the message says which rule, in English, for the developer more than the person. Only the empty-choices case was captured here; the others are in `tests/test_recipe_library.py`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "x",
+      "instruction": "x",
+      "options": {
+        "x": {
+          "label": "X",
+          "kind": "choice",
+          "choices": []
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "options_invalid",
+        "message": "a choice offers between one and six short words"
+      }
+    }
+  }
+}

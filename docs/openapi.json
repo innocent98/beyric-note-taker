@@ -961,6 +961,102 @@
         "title": "BotNameOut",
         "type": "object"
       },
+      "BriefImported": {
+        "properties": {
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A PDF's page count; null for other files",
+            "title": "Pages"
+          },
+          "text": {
+            "description": "Review and edit it, then save it with `PUT /api/briefs`",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "The file held more than a brief may: the rest is cut",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "truncated",
+          "pages"
+        ],
+        "title": "BriefImported",
+        "type": "object"
+      },
+      "BriefIn": {
+        "properties": {
+          "text": {
+            "description": "The whole brief; an empty text clears it",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BriefIn",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "max_chars": {
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/RecipeTeam",
+            "description": "Whose brief this is: the active team"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who saved it last; null when none was saved",
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "team",
+          "text",
+          "max_chars",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
       "BroughtBack": {
         "description": "What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No\ncard is made by the call itself (a Personal card is made by the next hourly calendar sync; a\nteam's by the next time an owner or admin shares a meeting of it, or their recording is shared\nautomatically).",
         "properties": {
@@ -4124,6 +4220,48 @@
         "title": "OptOutOut",
         "type": "object"
       },
+      "OptionDef": {
+        "description": "One choice the Make dialog draws for a recipe. `choices` is empty and `default` null for\nkind `text`.",
+        "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "choice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "OptionDef",
+        "type": "object"
+      },
       "OverrideIn": {
         "additionalProperties": false,
         "description": "The person's switch for one meeting: true joins it, false does not, null clears the switch\nso the rule decides again. The field is required (null must be sent on purpose).",
@@ -4600,6 +4738,381 @@
           }
         },
         "title": "QuestionPatch",
+        "type": "object"
+      },
+      "RecipeIn": {
+        "description": "A new recipe. With `key` (a starter's key) the fields left out are taken from that starter:\nthis is how a starter is copied. Without it, `name` and `instruction` are needed.",
+        "properties": {
+          "instruction": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The starter this is a copy of",
+            "title": "Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/OptionDef"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "output_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "document",
+                  "email",
+                  "table",
+                  "board"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Type"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "one",
+                  "many"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "uses_brief": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uses Brief"
+          },
+          "visibility": {
+            "default": "personal",
+            "description": "`team`: the active team's recipe (owners and admins only)",
+            "enum": [
+              "personal",
+              "team"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "title": "RecipeIn",
+        "type": "object"
+      },
+      "RecipeList": {
+        "properties": {
+          "recipes": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeOut"
+            },
+            "title": "Recipes",
+            "type": "array"
+          },
+          "team": {
+            "$ref": "#/components/schemas/RecipeTeam",
+            "description": "The active team: whose recipes and brief these are"
+          }
+        },
+        "required": [
+          "recipes",
+          "team"
+        ],
+        "title": "RecipeList",
+        "type": "object"
+      },
+      "RecipeOut": {
+        "properties": {
+          "can_edit": {
+            "description": "False for a starter, and for a team recipe to a member",
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a starter: name it by `key`",
+            "title": "Id"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The starter's key, or the starter a copy came from",
+            "title": "Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OptionDef"
+            },
+            "title": "Options",
+            "type": "object"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "pack": {
+            "anyOf": [
+              {
+                "enum": [
+                  "general",
+                  "school"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A starter's pack; null for a recipe someone wrote",
+            "title": "Pack"
+          },
+          "scope": {
+            "enum": [
+              "one",
+              "many"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "starter",
+              "personal",
+              "team"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "uses_brief": {
+            "title": "Uses Brief",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "pack",
+          "source",
+          "name",
+          "instruction",
+          "output_type",
+          "options",
+          "scope",
+          "uses_brief",
+          "can_edit",
+          "updated_at"
+        ],
+        "title": "RecipeOut",
+        "type": "object"
+      },
+      "RecipePatch": {
+        "description": "Change a recipe: only the fields sent change. Who owns it (personal or team) never does.",
+        "properties": {
+          "instruction": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/OptionDef"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "output_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "document",
+                  "email",
+                  "table",
+                  "board"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Type"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "one",
+                  "many"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "uses_brief": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uses Brief"
+          }
+        },
+        "title": "RecipePatch",
+        "type": "object"
+      },
+      "RecipeTeam": {
+        "properties": {
+          "can_manage": {
+            "description": "Owner or admin of the team: may write its recipes",
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal",
+          "can_manage"
+        ],
+        "title": "RecipeTeam",
         "type": "object"
       },
       "Recolour": {
@@ -9068,6 +9581,275 @@
         "summary": "Google Start",
         "tags": [
           "google"
+        ]
+      }
+    },
+    "/api/briefs": {
+      "get": {
+        "description": "The active team's brief (`text` is empty when none was saved). Members read it too: its\nprices and terms appear in the drafts they make. `X-Team-Id` names the team (404 for one the\ncaller is not on).",
+        "operationId": "read_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Brief",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "put": {
+        "description": "Replace the active team's brief (owners and admins; 403 `team_forbidden` for a member).\n422 `brief_too_long` over `max_chars`. The text is data: stored as typed, minus control\ncharacters, and shown to the model only inside a fence.",
+        "operationId": "write_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Brief",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/briefs/import": {
+      "post": {
+        "description": "Read a `.docx`, `.pdf`, `.txt` or `.md` file (multipart, field `file`) into text for the\nbrief. The text comes back for the person to review and edit: **nothing is saved** and the file\nis never stored (not on disk, not in the database). Owners and admins only (the people who can\nsave a brief). The text is data: if saved, the model sees it inside a fence.",
+        "operationId": "import_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefImported"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`too_big`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`file_missing`, `unsupported`, `too_many_pages`, `no_text_layer` (a scanned PDF) or `unreadable`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`import_busy`: try again in a moment"
+          }
+        },
+        "summary": "Import Brief",
+        "tags": [
+          "recipes"
         ]
       }
     },
@@ -15069,6 +15851,319 @@
         "summary": "Patch Question",
         "tags": [
           "series"
+        ]
+      }
+    },
+    "/api/recipes": {
+      "get": {
+        "description": "The starters (General and School), then the active team's recipes, then the caller's own.\n`X-Team-Id` names the team (404 for one the caller is not on), else their default team.\nArchived recipes are not listed.",
+        "operationId": "list_recipes",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Recipes",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "post": {
+        "description": "Save a recipe: the caller's own, or (`visibility: team`, owners and admins only, 403\n`team_forbidden`) the active team's. Give `key` to copy a starter: whatever you leave out comes\nfrom it. 422 `too_many_recipes` past 100 live ones.",
+        "operationId": "create_recipe",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Create Recipe",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/recipes/{recipe_id}": {
+      "delete": {
+        "description": "Archive a recipe (same people as `PUT`): it leaves the list and cannot be used again, and\nthe drafts made from it are untouched.",
+        "operationId": "archive_recipe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Archive Recipe",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "put": {
+        "description": "Change a recipe of the caller's own, or of a team they own or administer (403\n`team_forbidden` for a member, who may still copy its text into a recipe of their own). Only\nthe fields sent change; a copy of a starter stays marked as one.",
+        "operationId": "update_recipe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Update Recipe",
+        "tags": [
+          "recipes"
         ]
       }
     },

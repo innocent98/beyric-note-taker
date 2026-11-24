@@ -1,0 +1,29 @@
+{
+  "note": "A member cannot write a team recipe: 403 `team_forbidden`.",
+  "client": "cal",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Mine for the team",
+      "instruction": "x",
+      "visibility": "team"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}
