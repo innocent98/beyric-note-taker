@@ -169,6 +169,12 @@ describe("a draft a teammate shared (read-only)", () => {
     expect(screen.getByRole("link", { name: /Back to documents/ }).getAttribute("href")).toBe("/documents?tab=shared");
   });
 
+  it("tells a reader who cannot open the meetings that they never could, not that they lost access", () => {
+    show({ ...asReader(email()), sources_available: false });
+    expect(screen.getByText(/You cannot open the meetings this draft was made from/)).toBeTruthy();
+    expect(screen.queryByText(/no longer available to you/)).toBeNull();
+  });
+
   it("downloads a file like the owner does", async () => {
     mocks.export.mockResolvedValue({ blob: new Blob(["x"]), filename: "draft.docx" });
     show(asReader(proposal()));

@@ -193,7 +193,11 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
         <Alert kind="notice">This draft is older than the meeting: the notes or transcript changed after it was made. Regenerate to make a new one from the latest.</Alert>
       ) : null}
       {ready && !doc.sources_available ? (
-        <Alert kind="notice">The meetings this draft came from are no longer available to you, so its sources cannot be opened.</Alert>
+        <Alert kind="notice">
+          {canEdit
+            ? "The meetings this draft came from are no longer available to you, so its sources cannot be opened."
+            : "You cannot open the meetings this draft was made from, so its sources are not available to you."}
+        </Alert>
       ) : null}
       {ready && doc.left_out_count > 0 ? (
         <Alert kind="notice">
