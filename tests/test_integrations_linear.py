@@ -56,6 +56,7 @@ def vault_key(monkeypatch):
 @pytest.fixture
 def team(session, owner):
     team = teams.ensure_team(session, owner)
+    team.is_personal = False  # Slack and Linear belong to a team, not a personal space
     session.commit()
     return team
 

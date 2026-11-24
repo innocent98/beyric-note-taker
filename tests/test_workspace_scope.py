@@ -139,3 +139,19 @@ def test_the_workspaces_own_default_decides_when_the_chosen_team_is_elsewhere(
     meeting = ready(session, template, owner_user_id=world.ada.id, workspace_team_id=world.x.id)
     teams.apply_share_default(session, meeting)
     assert meeting.shared_team_id == world.x.id
+
+
+# ---- a private meeting filed in a team's workspace hands nothing to the team ----
+
+
+def test_the_people_a_meetings_tasks_may_go_to_are_the_teams_only_when_it_is_shared(
+    session, template, world
+):
+    from app import workspace
+
+    private = private_in(session, template, world, world.x)  # Pat's, filed in X, shared with nobody
+    shared = ready(session, template, owner_user_id=world.pat.id, shared_team_id=world.x.id)
+    only_pat = workspace._people_who_may_read(session, private, world.x.id)
+    assert [m.user_id for m in only_pat] == [world.pat.id]
+    whole_team = workspace._people_who_may_read(session, shared, world.x.id)
+    assert {m.user_id for m in whole_team} == {world.ada.id, world.pat.id}
