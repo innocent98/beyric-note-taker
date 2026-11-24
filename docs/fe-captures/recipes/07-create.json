@@ -1,0 +1,52 @@
+{
+  "note": "Make a draft from a starter. 202 with `status: \"writing\"`, `blocks: []`; nothing has been written yet. MODEL FAKED (slow, so the next calls see `writing`).",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        1
+      ],
+      "options": {
+        "tone": "friendly",
+        "recipient": "Daniel"
+      }
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "title": "Follow-up email",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
+      "recipe_id": null,
+      "status": "writing",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T13:39:06.998047Z",
+      "updated_at": "2026-11-24T13:39:06.998047Z",
+      "blocks": [],
+      "checks": {
+        "blanks": [],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null
+    }
+  }
+}

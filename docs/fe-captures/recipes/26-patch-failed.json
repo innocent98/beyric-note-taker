@@ -1,0 +1,33 @@
+{
+  "note": "A failed draft cannot be edited: 409 `not_ready`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "x",
+          "sources": []
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "This draft failed; make a new one."
+      }
+    }
+  }
+}
