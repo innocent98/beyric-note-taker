@@ -3,6 +3,7 @@
     PYTHONPATH=. python scripts/recipes_live.py serve  ADMIN_URL [PORT]   # app + worker, for a browser
     PYTHONPATH=. python scripts/recipes_live.py pass   ADMIN_URL          # all 18 starters + the board
     PYTHONPATH=. python scripts/recipes_live.py load   ADMIN_URL          # export load, two sessions
+    PYTHONPATH=. python scripts/recipes_live.py capture ADMIN_URL         # sharing, stale, deletion exchanges
 
 `ADMIN_URL` is any Postgres server the script may create a scratch database on
 (`postgresql+psycopg://USER:PASS@HOST:PORT/postgres`). It runs the real migrations, starts the real
@@ -38,6 +39,7 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "fe-captures" / "recipes" / "live-pass"
+CAPTURES = ROOT / "docs" / "fe-captures" / "recipes" / "integration"
 DB_NAME = "notetaker_live_recipes"
 ADMIN_EMAIL = "admin@example.test"
 ADMIN_PASSWORD = "-".join(["live", "admin", "placeholder"])
@@ -467,7 +469,7 @@ def seed(engine) -> dict:
                 step="done", notes=notes, transcript=transcript, speaker_transcript=transcript,
                 created_at=datetime(2026, 11, 2, 10, 0, tzinfo=UTC) + timedelta(days=day),
                 recorded_seconds=1800, shared_team_id=team.id if shared else None, series_id=series,
-                source="calendar",
+                source="calendar", audio_deleted_at=now(),
             )  # fmt: skip
             session.add(row)
             session.commit()
@@ -518,6 +520,10 @@ def start_stack(port: int):
     prepare_database()
     settings = Settings(_env_file=None, app_env="test", session_secret="live-secret-" + "x" * 30, cookie_secure=False, database_url=scratch_url)  # fmt: skip
     app = create_app(settings)
+    # No bot provider here: every seeded meeting has its audio already removed, so deleting one never asks it.
+    from app import services
+
+    app.dependency_overrides[services.get_bot_provider] = lambda: object()
     model = LiveModel()
     generate._client = lambda: model
     stop = threading.Event()
@@ -696,8 +702,124 @@ def cmd_load() -> None:
         engine.dispose()
 
 
+class Recorder(Client):
+    """A Client that writes every exchange to `docs/fe-captures/recipes/integration/NN-name.json`."""
+
+    count = 0
+    masks: dict[str, str] = {}
+
+    def __init__(self, base: str, email: str, who: str) -> None:
+        super().__init__(base, email)
+        self.who = who
+
+    def mask(self, token: str) -> str:
+        return Recorder.masks.setdefault(token, f"<csrf-{chr(ord('A') + len(Recorder.masks))}>")
+
+    def rec(self, name, method, path, body=None, *, note="", headers=None):
+        had = dict(headers or {})
+        response = self.call(method, path, body, headers)
+        content_type = response.headers.get("content-type", "")
+        if "json" in content_type:
+            data = response.json()
+        elif "text" in content_type or "markdown" in content_type:
+            data = response.text
+        else:
+            data = (
+                f"<{len(response.content)} bytes of {content_type}>" if response.content else None
+            )
+        Recorder.count += 1
+        sent = dict(had)
+        if method != "GET":
+            sent["X-CSRF-Token"] = self.mask(self.csrf)
+        sent["Cookie"] = "session=<cookie>"
+        kept = {k: response.headers[k] for k in ("content-type", "retry-after", "content-disposition") if k in response.headers}  # fmt: skip
+        record = {
+            "note": note, "client": self.who,
+            "request": {"method": method, "path": path, "headers": sent, "body": body},
+            "response": {"status": response.status_code, "headers": kept, "body": data},
+        }  # fmt: skip
+        (CAPTURES / f"{Recorder.count:02d}-{name}.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n")  # fmt: skip
+        print(f"{Recorder.count:02d}-{name:44} {method:6} {path:38} -> {response.status_code}")
+        return response
+
+
+def cmd_capture() -> None:
+    import shutil
+
+    shutil.rmtree(CAPTURES, ignore_errors=True)
+    CAPTURES.mkdir(parents=True)
+    server, base, engine, ids, _ = start_stack(serve_port)
+    try:
+        ada = Recorder(base, "ada@example.test", "ada (creator)")
+        tunde = Recorder(base, "tunde@example.test", "tunde (teammate)")
+        eve = Recorder(base, "eve@example.test", "eve (outsider, own team)")
+
+        def make(who, body, name, note):
+            got = who.rec(name, "POST", "/api/documents", body, note=note)
+            assert got.status_code == 202, got.text
+            return wait_ready(who, got.json()["id"])
+
+        open_doc = make(ada, {"recipe_key": "proposal", "meeting_ids": [ids["sales"]]}, "make-from-a-meeting-the-team-can-read", "A draft from the sales call, which is shared with the team: teammates can open its sources.")  # fmt: skip
+        secret = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["private"]]}, "make-from-a-private-meeting", "A draft from a meeting only Ada can read.")  # fmt: skip
+        a, b = open_doc["id"], secret["id"]
+        ada.rec("owner-reads-before-sharing", "GET", f"/api/documents/{b}", note="The creator's view. `access` is `owner`, `can_edit` true, `shared_with` empty, `owner_name` null. Line sources carry `quote`.")  # fmt: skip
+        tunde.rec("teammate-before-share", "GET", f"/api/documents/{b}", note="404, not 403: a teammate cannot tell the draft exists.")  # fmt: skip
+        tunde.rec("teammate-list-shared-before-share", "GET", "/api/documents?shared=true", note="Nothing is shared yet.")  # fmt: skip
+        eve.rec("outsider-before-share", "GET", f"/api/documents/{b}", note="404 for anyone outside the team, shared or not.")  # fmt: skip
+        ada.rec("share-private-draft", "POST", f"/api/documents/{b}/share", note="Shares with the active team (the default team here; send `X-Team-Id` to name another). 200 with the whole draft: `shared_with` now lists the team.")  # fmt: skip
+        ada.rec("share-again", "POST", f"/api/documents/{b}/share", note="Asking twice changes nothing and is not an error.")  # fmt: skip
+        ada.rec("share-the-open-draft", "POST", f"/api/documents/{a}/share", note="Share the draft whose meeting the team can read.")  # fmt: skip
+        tunde.rec("teammate-reads-hidden-sources", "GET", f"/api/documents/{b}", note="THE TRAP: Tunde cannot read the private meeting. Every source of it is `{\"kind\": \"hidden\"}` (`meeting_id`, `line`, `quote`, `ref` all null), `meeting_ids` is `[]`, `sources_available` false, `left_out_count` 0, `options` empty, `can_edit` false, `access` `shared`. The draft's own words ARE visible: that is what the share dialog warns about.")  # fmt: skip
+        tunde.rec("teammate-reads-open-sources", "GET", f"/api/documents/{a}", note="Tunde CAN read the sales call: sources keep their meeting ids, lines and quotes; `meeting_ids` lists it.")  # fmt: skip
+        tunde.rec("teammate-list-shared", "GET", "/api/documents?shared=true", note="Rows carry `access: shared` and `owner_name`; `meeting_ids` only has meetings the reader may read.")  # fmt: skip
+        tunde.rec("teammate-list-own-is-empty", "GET", "/api/documents", note="The default list is the caller's OWN drafts.")  # fmt: skip
+        tunde.rec("teammate-list-both", "GET", "/api/documents?mine=true&shared=true", note="Both scopes together.")  # fmt: skip
+        ada.rec("owner-list-shows-shared-with", "GET", "/api/documents", note="The creator's list: `shared_with` shows who can read each draft.")  # fmt: skip
+        body = {"blocks": [{"type": "paragraph", "text": "tampered", "sources": []}]}
+        tunde.rec("teammate-cannot-edit", "PATCH", f"/api/documents/{b}", body, note="Every write is the creator's: 404 for a reader.")  # fmt: skip
+        tunde.rec("teammate-cannot-discard", "DELETE", f"/api/documents/{b}", note="404.")
+        tunde.rec("teammate-cannot-reshare", "POST", f"/api/documents/{b}/share", note="404.")
+        tunde.rec("teammate-cannot-unshare", "DELETE", f"/api/documents/{b}/share", note="404.")
+        tunde.rec("teammate-exports-markdown", "GET", f"/api/documents/{b}/export?format=md", note="A reader may export the text they were shared (no sources are in an export).")  # fmt: skip
+        ada.rec("unshare", "DELETE", f"/api/documents/{b}/share", note="204. Takes effect at once.")
+        tunde.rec("teammate-after-unshare", "GET", f"/api/documents/{b}", note="404 again.")
+        tunde.rec("teammate-list-after-unshare", "GET", "/api/documents?shared=true", note="The draft left the list (the other shared draft stays).")  # fmt: skip
+
+        mine = make(eve, {"recipe_key": "follow_up_email", "meeting_ids": [ids["eves"]]}, "outsider-makes-a-draft", "Eve has only her personal team.")  # fmt: skip
+        eve.rec("share-from-a-personal-space", "POST", f"/api/documents/{mine['id']}/share", note="409 `personal_team`: her own space has no one to share with. Show the server's message.")  # fmt: skip
+
+        # stale and regenerate
+        fresh = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["sprint"]]}, "make-for-stale", "A draft from the sprint planning.")  # fmt: skip
+        ada.rec("fresh-is-not-stale", "GET", f"/api/documents/{fresh['id']}", note="`stale` false.")
+        with Session(engine) as session:
+            session.execute(text("update meetings set notes = notes || E'\\n- Added after the draft was made.' where id = :i"), {"i": ids["sprint"]})  # fmt: skip
+            session.commit()
+        ada.rec("after-the-notes-changed", "GET", f"/api/documents/{fresh['id']}", note="`stale` true: label it 'older than the meeting text'. (The notes were changed straight in the database to stand for a rewrite; a transcript edit or a change of the brief does the same.)")  # fmt: skip
+        again = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["sprint"]]}, "regenerate-makes-a-new-draft", "Regenerate is a plain new POST: a NEW id; the stale draft is untouched.")  # fmt: skip
+        ada.rec("new-draft-is-fresh", "GET", f"/api/documents/{again['id']}", note="`stale` false; the old draft keeps its text.")  # fmt: skip
+
+        # deleting a meeting
+        single = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["lecture"]]}, "make-from-the-lecture", "Made from one meeting.")  # fmt: skip
+        cross = make(ada, {"recipe_key": "status_report", "meeting_ids": [ids["lecture"], ids["earlier"][0]]}, "make-from-two-meetings", "A cross-meeting draft.")  # fmt: skip
+        ada.rec("delete-a-meeting", "DELETE", f"/api/meetings/{ids['lecture']}", note="204. The drafts made from this meeting ALONE are deleted with it; a cross-meeting draft stays.")  # fmt: skip
+        ada.rec("its-single-meeting-draft-is-gone", "GET", f"/api/documents/{single['id']}", note="404.")  # fmt: skip
+        ada.rec("the-cross-meeting-draft-stays", "GET", f"/api/documents/{cross['id']}", note="Still `ready`. `meeting_ids` no longer holds the deleted meeting; a source that still names it opens a 404 on the meeting page (show 'not available').")  # fmt: skip
+        ada.rec("list-for-the-deleted-meeting", "GET", f"/api/documents?meeting_id={ids['lecture']}", note="Empty.")  # fmt: skip
+        ada.rec("document-that-never-existed", "GET", "/api/documents/999999", note="Same 404 as someone else's draft.")  # fmt: skip
+        with Session(engine) as session:
+            ledger = session.scalars(
+                select(AiRun).where(AiRun.kind == "recipe").order_by(AiRun.id)
+            ).all()
+            print(
+                f"ledger rows of kind recipe: {len(ledger)} (every attempt, deleted drafts included)"
+            )
+    finally:
+        server.should_exit = True
+        engine.dispose()
+
+
 if __name__ == "__main__":
-    if mode not in ("serve", "pass", "load") or not admin_url:
+    if mode not in ("serve", "pass", "load", "capture") or not admin_url:
         sys.exit(__doc__)
-    {"serve": cmd_serve, "pass": cmd_pass, "load": cmd_load}[mode]()
+    {"serve": cmd_serve, "pass": cmd_pass, "load": cmd_load, "capture": cmd_capture}[mode]()
     _ = date

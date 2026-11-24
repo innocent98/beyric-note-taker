@@ -1,0 +1,365 @@
+{
+  "note": "Share the draft whose meeting the team can read.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents/1/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "title": "Proposal",
+      "output_type": "document",
+      "recipe_key": "proposal",
+      "recipe_id": null,
+      "status": "ready",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T21:37:44.532458Z",
+      "updated_at": "2026-11-24T21:37:44.731829Z",
+      "access": "owner",
+      "owner_name": null,
+      "shared_with": [
+        {
+          "id": 2,
+          "name": "Acme Sales"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Background"
+        },
+        {
+          "type": "paragraph",
+          "text": "Thanks for making the time, Daniel. I wanted to go through what your team needs for onboarding.",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 1,
+              "line": 1,
+              "quote": "Thanks for making the time, Daniel. I wanted",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "What we heard"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "Of course. We run a logistics company with forty drivers and two dispatchers. Today everything is on WhatsApp and paper.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 2,
+                  "quote": "Of course. We run a logistics company with",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "Understood. What hurts most right now?",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 3,
+                  "quote": "Understood. What hurts most right now?",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "Dispatch. Drivers get the wrong route, and customers call us to ask where their delivery is.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 4,
+                  "quote": "Dispatch. Drivers get the wrong route, and customers",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Proposed solution"
+        },
+        {
+          "type": "paragraph",
+          "text": "So the first goal is route assignment and customer tracking.",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 1,
+              "line": 5,
+              "quote": "So the first goal is route assignment and",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Scope and deliverables"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "Yes. Second goal is the monthly report for our finance team, they currently build it by hand.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 6,
+                  "quote": "Yes. Second goal is the monthly report for",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "We can set up both. The onboarding package is 50,000 naira and covers setup, training for two dispatchers and a fortnight of support.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 7,
+                  "quote": "We can set up both. The onboarding package",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "That works for us. Does the price include the driver app?",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 8,
+                  "quote": "That works for us. Does the price include",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Timeline"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "Phase",
+            "When"
+          ],
+          "rows": [
+            [
+              {
+                "text": "The driver app is included for up to forty drivers. Beyond that it is 1,000 nair",
+                "sources": [
+                  {
+                    "kind": "line",
+                    "meeting_id": 1,
+                    "line": 9,
+                    "quote": "The driver app is included for up to",
+                    "ref": null
+                  }
+                ]
+              },
+              {
+                "text": "[need: when]",
+                "sources": []
+              }
+            ],
+            [
+              {
+                "text": "Fine. We have forty-two drivers at the moment, so I will need to check the extra",
+                "sources": [
+                  {
+                    "kind": "line",
+                    "meeting_id": 1,
+                    "line": 10,
+                    "quote": "Fine. We have forty-two drivers at the moment,",
+                    "ref": null
+                  }
+                ]
+              },
+              {
+                "text": "see notes",
+                "sources": []
+              }
+            ],
+            [
+              {
+                "text": "Noted. When would you like to start?",
+                "sources": [
+                  {
+                    "kind": "line",
+                    "meeting_id": 1,
+                    "line": 11,
+                    "quote": "Noted. When would you like to start?",
+                    "ref": null
+                  }
+                ]
+              },
+              {
+                "text": "[need: when]",
+                "sources": []
+              }
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Investment"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "Item",
+            "Price"
+          ],
+          "rows": [
+            [
+              {
+                "text": "Onboarding package",
+                "sources": []
+              },
+              {
+                "text": "450,000 naira",
+                "sources": []
+              }
+            ],
+            [
+              {
+                "text": "Driver app (up to 40 drivers)",
+                "sources": []
+              },
+              {
+                "text": "included",
+                "sources": []
+              }
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Terms and assumptions"
+        },
+        {
+          "type": "paragraph",
+          "text": "Of course. Will she join a short call?",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 1,
+              "line": 15,
+              "quote": "Of course. Will she join a short call?",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Next steps"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "She travels next week. I will ask her assistant for a time and come back to you.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 16,
+                  "quote": "She travels next week. I will ask her",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "Perfect. One more thing, do you need integration with your accounting software?",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 17,
+                  "quote": "Perfect. One more thing, do you need integration",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "Maybe later. For now no, but please note it as something we might want.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 18,
+                  "quote": "Maybe later. For now no, but please note",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "checks": {
+        "blanks": [
+          {
+            "block_index": 9,
+            "what": "when"
+          },
+          {
+            "block_index": 9,
+            "what": "when"
+          }
+        ],
+        "flags": [
+          {
+            "block_index": 11,
+            "text": "450,000 naira",
+            "kind": "figure"
+          }
+        ]
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null,
+      "options": {},
+      "use_brief": true,
+      "can_edit": true,
+      "left_out_message": null
+    }
+  }
+}

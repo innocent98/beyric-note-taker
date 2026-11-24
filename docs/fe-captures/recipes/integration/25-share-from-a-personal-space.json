@@ -1,0 +1,25 @@
+{
+  "note": "409 `personal_team`: her own space has no one to share with. Show the server's message.",
+  "client": "eve (outsider, own team)",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents/3/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "This is your own space, so there is no team to share with. Switch to a team first."
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "note": "404.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/6",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

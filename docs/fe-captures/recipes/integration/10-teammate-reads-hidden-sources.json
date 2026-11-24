@@ -1,0 +1,127 @@
+{
+  "note": "THE TRAP: Tunde cannot read the private meeting. Every source of it is `{\"kind\": \"hidden\"}` (`meeting_id`, `line`, `quote`, `ref` all null), `meeting_ids` is `[]`, `sources_available` false, `left_out_count` 0, `options` empty, `can_edit` false, `access` `shared`. The draft's own words ARE visible: that is what the share dialog warns about.",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 2,
+      "title": "Follow-up email",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
+      "recipe_id": null,
+      "status": "ready",
+      "edited": false,
+      "meeting_ids": [],
+      "created_at": "2026-11-24T21:37:44.875406Z",
+      "updated_at": "2026-11-24T21:37:44.992106Z",
+      "access": "shared",
+      "owner_name": "Ada Lovelace",
+      "shared_with": [],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Subject: Thanks for today, next steps",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Hi there,",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Thank you for your time today. Here is a short recap of what we covered.",
+          "sources": [
+            {
+              "kind": "hidden",
+              "meeting_id": null,
+              "line": null,
+              "quote": null,
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "hidden",
+                  "meeting_id": null,
+                  "line": null,
+                  "quote": null,
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "hidden",
+                  "meeting_id": null,
+                  "line": null,
+                  "quote": null,
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "hidden",
+                  "meeting_id": null,
+                  "line": null,
+                  "quote": null,
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Next step: [need: date of the next step]",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Kind regards",
+          "sources": []
+        }
+      ],
+      "checks": {
+        "blanks": [
+          {
+            "block_index": 4,
+            "what": "date of the next step"
+          }
+        ],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": false,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null,
+      "options": {},
+      "use_brief": false,
+      "can_edit": false,
+      "left_out_message": null
+    }
+  }
+}
