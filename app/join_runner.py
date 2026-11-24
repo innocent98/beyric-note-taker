@@ -227,6 +227,7 @@ def _note_crash(session: Session, join_id: int, now: datetime) -> None:
             alerts.notify_user(
                 session,
                 join.user_id,
+                team_id=join.team_id,
                 kind="calendar.error",
                 severity="error",
                 title="Meeting not recorded",
@@ -478,6 +479,7 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         alerts.notify_user(
             session,
             join.user_id,
+            team_id=join.team_id,
             kind="calendar.in_earlier_notes",
             severity="info",
             title="Recorded in the earlier meeting",
@@ -494,6 +496,7 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         alerts.notify_user(
             session,
             join.user_id,
+            team_id=join.team_id,
             kind="calendar.not_recorded",
             severity="error",
             title="Meeting not recorded",
@@ -812,6 +815,7 @@ def _refused(
         alerts.notify_user(
             session,
             user_id,
+            team_id=join.team_id,
             kind="calendar.no_capacity",
             severity="warning",
             title="The note taker is busy",
@@ -842,6 +846,7 @@ def _refused(
             alerts.notify_user(
                 session,
                 user_id,
+                team_id=join.team_id,
                 kind=f"calendar.{reason}",
                 severity="warning",
                 title=title,
@@ -918,6 +923,7 @@ def _send_failed(session: Session, join_id: int, now: datetime) -> JoinOutcome |
     alerts.notify_user(
         session,
         join.user_id,
+        team_id=join.team_id,
         kind="calendar.join_failed",
         severity="warning",
         title="The note taker could not start",
@@ -949,6 +955,7 @@ def _fail(
     alerts.notify_user(
         session,
         join.user_id,
+        team_id=join.team_id,
         kind=f"calendar.{reason}",
         severity="error",
         title="Meeting not recorded",

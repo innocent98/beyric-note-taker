@@ -43,7 +43,7 @@
           "platform_label": "Google Meet",
           "attendee_count": 2,
           "will_join": false,
-          "will_join_text": "Recorded in My team (personal)",
+          "will_join_text": "Off",
           "reason_text": null,
           "join_id": null,
           "can_send_now": false,

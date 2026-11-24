@@ -340,6 +340,30 @@ def test_the_runner_reads_the_rule_of_the_joins_own_workspace(session, duo):
     assert host.bots_sent == 0
 
 
+def test_a_calendar_notice_is_filed_in_the_workspace_of_its_connection(session, duo):
+    from app import calendar_states
+    from app.models import Notification
+
+    host, cal = FakeBotHost(), StubCalendar()
+    session.add(AppState(id=1, autojoin_started_at=datetime(2026, 1, 1, tzinfo=UTC)))
+    session.commit()
+    sync(session, duo.b, start_event())
+    cal.serve(start_event())
+    # the 15 minutes pass with no bot sent: "Meeting not recorded" goes to the person
+    late = NOW + HOUR + timedelta(minutes=20)
+    set_rule(session, duo, duo.luran, "all")
+    session.execute(ScheduledJoin.__table__.update().values(state="no_capacity", skip_reason=None))
+    session.commit()
+    run_due_joins(session, host, cal, now=late, settings=SETTINGS)
+    calendar_states.mark_needs_reconnect(session, duo.b, "revoked", late)
+    session.commit()
+
+    session.expire_all()
+    notes = list(session.scalars(select(Notification).where(Notification.kind.like("calendar.%"))))
+    assert {n.kind for n in notes} >= {"calendar.disconnected"}
+    assert {n.team_id for n in notes} == {duo.luran.id}  # none in the personal workspace
+
+
 def test_remove_recurring_in_one_workspace_leaves_the_other(session, duo):
     from app import series
     from app.models import SeriesIgnored

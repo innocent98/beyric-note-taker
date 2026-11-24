@@ -149,7 +149,7 @@ def test_the_workspace_that_does_not_record_a_meeting_says_where_it_is_recorded(
     }
     mine = f"{two.home.name} (personal)"  # a personal workspace is named as the switcher names it
     assert there["recorded_in_text"] == f"Recorded in {mine}. Switch here instead."
-    assert there["will_join_text"] == f"Recorded in {mine}"
+    assert there["will_join_text"] == "Off"
     assert there["can_send_now"] is False
 
 

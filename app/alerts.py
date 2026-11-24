@@ -80,9 +80,13 @@ def _write(
     body: str,
     dedupe_key: str,
     meeting_id: int | None,
+    team_id: int | None = None,
 ) -> bool:
     """Write the notification unless one with this key exists. True when this call wrote it.
-    A user who is gone (the foreign key) is logged and skipped, never raised."""
+    `team_id` files it in that workspace; without it the notification's own default applies (its
+    meeting's workspace, else the person's personal one). A user who is gone (the foreign key) is
+    logged and skipped, never raised."""
+    extra = {} if team_id is None else {"team_id": team_id}
     try:
         with session.begin_nested():
             written = session.execute(
@@ -95,6 +99,7 @@ def _write(
                     body=body,
                     meeting_id=meeting_id,
                     dedupe_key=dedupe_key,
+                    **extra,
                 )
                 .on_conflict_do_nothing(index_elements=["user_id", "dedupe_key"])
                 .returning(Notification.id)
@@ -152,12 +157,14 @@ def notify_user(
     body: str,
     dedupe_key: str,
     meeting_id: int | None = None,
+    team_id: int | None = None,
     email_template: str | None = None,
     email_payload: dict | None = None,
 ) -> None:
     """Tell one user: a bell entry, and an email when `email_template` names one (the `alert`
     template for plain text; `email_payload` is for a template that reads fields of its own, the
-    title and body otherwise). A repeated `dedupe_key` for the same user does nothing at all.
+    title and body otherwise). `team_id` files the bell entry in that workspace (a calendar notice
+    belongs to its connection's). A repeated `dedupe_key` for the same user does nothing at all.
     Raises ValueError for a caller bug (an unknown severity, a key that is empty or too long); never
     for a mail problem or a user who no longer exists."""
     _check(severity=severity, dedupe_key=dedupe_key)
@@ -170,6 +177,7 @@ def notify_user(
         body=body,
         dedupe_key=dedupe_key,
         meeting_id=meeting_id,
+        team_id=team_id,
     )
     if not written or email_template is None:
         return

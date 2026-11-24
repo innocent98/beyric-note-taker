@@ -136,7 +136,8 @@ class UpcomingEvent(BaseModel):
     # and THAT workspace records it (workspaces design 12.4): `recorded_in` names it, and
     # `recorded_in_text` is the sentence to show ("Recorded in Luran. Switch here instead."), with
     # a button that calls the override route with `true` to move it to this workspace. While it is
-    # set `will_join` is false here, because no note taker goes from this workspace.
+    # set `will_join` is false here (and `will_join_text` is `Off`), because no note taker goes from
+    # this workspace.
     recorded_in: "RecordedIn | None" = None
     recorded_in_text: str | None = None
     # Only on the answer to a switch that moved the recording here: say it where the person sees it.
@@ -520,7 +521,9 @@ def _upcoming_item(
         # Another of the person's workspaces records this meeting: this one sends no note taker.
         label = calendar_text.workspace_label(recorded_in.name, recorded_in.is_personal)
         item.will_join = False
-        item.will_join_text = f"Recorded in {label}"
+        item.will_join_text = (
+            calendar_text.OFF
+        )  # the line under the title says where it is recorded
         item.reason_text = None
         item.can_send_now = False
         item.recorded_in = RecordedIn(

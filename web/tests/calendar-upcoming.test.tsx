@@ -459,7 +459,7 @@ describe("a meeting another workspace records", () => {
     show(elsewhere);
     const row = rowOf(shared.title);
     expect(within(row).getByText(shared.recorded_in_text as string).closest("p")?.className).toBe("meta-line");
-    expect(within(row).getByText(shared.will_join_text)).toBeTruthy();
+    expect(within(row).getByText("Off")).toBeTruthy();
     expect(within(row).getByRole("button", { name: "Switch here" })).toBeTruthy();
     expect(within(row).getByRole("switch").getAttribute("aria-checked")).toBe("false");
   });
