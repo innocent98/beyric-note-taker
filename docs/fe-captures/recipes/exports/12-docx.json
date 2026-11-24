@@ -1,0 +1,70 @@
+{
+  "note": "Word, built by the render child process. Body is read back with python-docx: two real tables, header row first.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=docx",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.docx\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.docx",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "504b0304",
+    "body": {
+      "bytes": 37787,
+      "binary": true,
+      "tables": [
+        [
+          [
+            "Phase",
+            "When",
+            "Owner"
+          ],
+          [
+            "Setup",
+            "Week 1",
+            "Ada"
+          ],
+          [
+            "Training",
+            "Week 2",
+            "[need: trainer]"
+          ]
+        ],
+        [
+          [
+            "Item",
+            "Price",
+            "Note"
+          ],
+          [
+            "Onboarding",
+            "₦50,000",
+            "Paid, monthly"
+          ],
+          [
+            "Add-on, \"priority\" support",
+            "=1+1",
+            "-5% for 12 months"
+          ]
+        ]
+      ],
+      "paragraphs": [
+        "Proposal for Acme Ltd",
+        "Draft · 24 Nov 2026",
+        "Proposal for Acme Ltd",
+        "Onboarding for Acme's support team, as we discussed.",
+        "Timeline",
+        "Investment",
+        "Start date: [need: start date]"
+      ]
+    }
+  }
+}

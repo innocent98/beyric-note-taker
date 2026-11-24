@@ -1,0 +1,64 @@
+{
+  "note": "Excel: ONE SHEET PER TABLE, named from the heading above it (`Timeline`, `Investment`), header row bold and frozen. `cell_types` is only `s`: every cell is text, so `=1+1` is a string `'=1+1`, never a formula. Body is the file read back with openpyxl.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=xlsx",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.xlsx\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.xlsx",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "504b0304",
+    "body": {
+      "bytes": 5719,
+      "binary": true,
+      "sheets": {
+        "Timeline": [
+          [
+            "Phase",
+            "When",
+            "Owner"
+          ],
+          [
+            "Setup",
+            "Week 1",
+            "Ada"
+          ],
+          [
+            "Training",
+            "Week 2",
+            "[need: trainer]"
+          ]
+        ],
+        "Investment": [
+          [
+            "Item",
+            "Price",
+            "Note"
+          ],
+          [
+            "Onboarding",
+            "₦50,000",
+            "Paid, monthly"
+          ],
+          [
+            "Add-on, \"priority\" support",
+            "'=1+1",
+            "'-5% for 12 months"
+          ]
+        ]
+      },
+      "cell_types": [
+        "s"
+      ]
+    }
+  }
+}

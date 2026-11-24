@@ -1,0 +1,26 @@
+{
+  "note": "No `format`: PDF.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/pdf",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.pdf\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.pdf",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "25504446",
+    "body": {
+      "bytes": 14389,
+      "binary": true,
+      "pdf_header": "%PDF-1.7"
+    }
+  }
+}

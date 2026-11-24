@@ -1,0 +1,22 @@
+{
+  "note": "CSV of the table numbered 1 (the Investment table). `=1+1` is written `'=1+1` and `-5% for 12 months` is written `'-5% for 12 months`: a leading apostrophe on any cell that could run as a formula. The embedded quote and the comma are quoted as CSV needs.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=csv&table=1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Proposal for Acme Ltd.csv\"; filename*=UTF-8''Proposal%20for%20Acme%20Ltd.csv",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "efbbbf49",
+    "body": "﻿Item,Price,Note\r\nOnboarding,\"₦50,000\",\"Paid, monthly\"\r\n\"Add-on, \"\"priority\"\" support\",'=1+1,'-5% for 12 months\r\n"
+  }
+}
