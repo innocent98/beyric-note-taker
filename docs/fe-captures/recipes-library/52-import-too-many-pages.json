@@ -1,0 +1,32 @@
+{
+  "note": "More than 40 pages (`IMPORT_MAX_PAGES`): 422 `too_many_pages`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "long.pdf",
+        "bytes": 11015,
+        "content_type": "application/pdf"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_pages",
+        "message": "That PDF has too many pages. Paste the part you need instead."
+      }
+    }
+  }
+}

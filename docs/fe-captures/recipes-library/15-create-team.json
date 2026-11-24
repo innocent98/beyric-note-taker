@@ -1,0 +1,38 @@
+{
+  "note": "`visibility: \"team\"` makes it the active team's recipe (owner or admin only). `source` is `team`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "House proposal",
+      "instruction": "Write our proposal. Prices come from the brief.",
+      "output_type": "document",
+      "visibility": "team"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 3,
+      "key": null,
+      "pack": null,
+      "source": "team",
+      "name": "House proposal",
+      "instruction": "Write our proposal. Prices come from the brief.",
+      "output_type": "document",
+      "options": {},
+      "scope": "one",
+      "uses_brief": true,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.206559Z"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "note": "A Word file with a table: paragraphs in order, each table row on its own line with the cells joined by ` | `.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "prices.docx",
+        "bytes": 36759,
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "text": "Price list\nItem | Price\nAudit | 400 USD\nRetainer | 1,200 USD",
+      "truncated": false,
+      "pages": null
+    }
+  }
+}

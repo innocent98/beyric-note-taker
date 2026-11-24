@@ -1,0 +1,52 @@
+{
+  "note": "Copy a starter: send its `key`; anything left out (instruction, output type, options, scope, uses_brief) is taken from the starter. The copy keeps `key: \"follow_up_email\"`, is a personal recipe and is editable.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "key": "follow_up_email",
+      "name": "Our follow-up"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 2,
+      "key": "follow_up_email",
+      "pack": null,
+      "source": "personal",
+      "name": "Our follow-up",
+      "instruction": "Write the follow-up email the requester can send after this meeting. The first paragraph is `Subject: ` and a short, specific subject. Then a greeting to the person in the `recipient` choice (write `[need: recipient name]` if none was given), a line of thanks, a short recap of what was discussed, and a list of what each side agreed, each item with its owner, taken from the action items and decisions. Give a next step and a date only if the meeting set them; otherwise write `[need: next step date]`. Match the `tone` choice (friendly or formal). Never promise a price, a delivery date, a discount or a term that is not in the meeting or the brief.\n\nUse only the meeting material you are given (the transcript, notes, decisions, tasks and open questions) and the team brief when one is given. Never invent a name, number, date, price, commitment or answer. Where a fact you need is not there, write a blank such as `[need: <what is missing>]` instead of guessing.",
+      "output_type": "email",
+      "options": {
+        "recipient": {
+          "label": "Recipient or client name",
+          "kind": "text",
+          "choices": [],
+          "default": null
+        },
+        "tone": {
+          "label": "Tone",
+          "kind": "choice",
+          "choices": [
+            "Friendly",
+            "Formal"
+          ],
+          "default": "Friendly"
+        }
+      },
+      "scope": "one",
+      "uses_brief": true,
+      "can_edit": true,
+      "updated_at": "2026-11-24T14:20:27.188028Z"
+    }
+  }
+}

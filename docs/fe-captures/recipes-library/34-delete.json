@@ -1,0 +1,18 @@
+{
+  "note": "Archive: 204, no body. The recipe leaves the list; drafts made from it keep working.",
+  "client": "ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/recipes/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  }
+}

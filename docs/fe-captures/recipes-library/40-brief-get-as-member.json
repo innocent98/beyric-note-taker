@@ -1,0 +1,30 @@
+{
+  "note": "A member reads it: `team.can_manage` is false, so draw it read-only.",
+  "client": "cal",
+  "request": {
+    "method": "GET",
+    "path": "/api/briefs",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "team": {
+        "id": 2,
+        "name": "My team",
+        "is_personal": false,
+        "can_manage": false
+      },
+      "text": "Acme Design. Audits from 400 USD. Retainers from 1,200 USD a month. Pay within 14 days.",
+      "max_chars": 12000,
+      "updated_at": "2026-11-24T14:20:27.389986Z",
+      "updated_by": "Ada Lovelace"
+    }
+  }
+}

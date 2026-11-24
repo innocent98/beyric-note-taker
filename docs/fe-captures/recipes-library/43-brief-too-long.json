@@ -1,0 +1,27 @@
+{
+  "note": "Over the cap: 422 `brief_too_long`; nothing is saved. (The request text was 12001 letters x, not printed.)",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/briefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "<12001 characters of the letter x>"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "brief_too_long",
+        "message": "The brief can hold 12000 characters; this one has 12001. Shorten it."
+      }
+    }
+  }
+}
