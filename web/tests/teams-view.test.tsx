@@ -5,7 +5,7 @@ import { TeamsView, createErrorMessage } from "@/components/app/teams-view";
 import { TEAM_STORAGE_KEY } from "@/lib/active-team";
 import { ApiError } from "@/lib/api/client";
 import type { TeamList, TeamSummary } from "@/lib/api/types";
-import { teamsBody, workspacesBody } from "./helpers";
+import { teamsBody, lifecycleBody } from "./helpers";
 
 // The Teams screen (lead-designed): Pat's list from the real capture 46, creating a team (captures 48,
 // 49 and 51: 201, 422 `invalid_name`, 409 `team_limit` in the guide's words).
@@ -20,17 +20,17 @@ vi.mock("@/lib/api/browser", () => ({ api: { teams: { list: mocks.list, create: 
 
 // The rows come from Pat's list (capture 46: before the plan limit existed, so no `kind` or limit fields); the
 // plan limit, the class option and the upgrade message from the workspaces captures
-// (docs/fe-captures/workspaces/, `scripts/capture_workspaces_lifecycle.py`): Ada on the 20-hour plan (09), the
+// (docs/fe-captures/workspaces-lifecycle/, `scripts/capture_workspaces_lifecycle.py`): Ada on the 20-hour plan (09), the
 // same person at her limit (13), Pat on Free (07) and the refusals (08, 14).
 const rows46 = teamsBody<TeamList>("46-teams-list.json");
 const created = teamsBody<TeamSummary>("48-teams-create.json");
 const emptyName = teamsBody<{ error: { code: string; message: string } }>("49-teams-create-empty-name.json").error;
-const starter = workspacesBody<TeamList>("09-ada-teams-starter.json");
-const atLimit = workspacesBody<TeamList>("13-ada-teams-at-limit.json");
-const free = workspacesBody<TeamList>("07-pat-teams-free.json");
-const createdClass = workspacesBody<TeamSummary>("10-ada-create-class.json");
-const limit = workspacesBody<{ error: { code: string; message: string } }>("14-ada-create-over-limit.json").error;
-const freeLimit = workspacesBody<{ error: { code: string; message: string } }>("08-pat-create-team-free.json").error;
+const starter = lifecycleBody<TeamList>("09-ada-teams-starter.json");
+const atLimit = lifecycleBody<TeamList>("13-ada-teams-at-limit.json");
+const free = lifecycleBody<TeamList>("07-pat-teams-free.json");
+const createdClass = lifecycleBody<TeamSummary>("10-ada-create-class.json");
+const limit = lifecycleBody<{ error: { code: string; message: string } }>("14-ada-create-over-limit.json").error;
+const freeLimit = lifecycleBody<{ error: { code: string; message: string } }>("08-pat-create-team-free.json").error;
 // Pat's rows with Ada's plan state: what a Starter person's screen reads.
 const list: TeamList = {
   ...rows46,

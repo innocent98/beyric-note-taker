@@ -6,7 +6,7 @@ the frontend guide (workspaces slice W4).
 
 Same method as `capture_teams_api.py`: a scratch database with the real migrations, the real app
 under uvicorn on a free local port, httpx for every call, every exchange saved to
-`docs/fe-captures/workspaces/NN-name.json`. `FEATURE_GATES_MODE=enforce` is set for THIS run only.
+`docs/fe-captures/workspaces-lifecycle/NN-name.json`. `FEATURE_GATES_MODE=enforce` is set for THIS run only.
 
 The cast (placeholders): Ada owns team X ("Platform team") and is on the 20-hour plan (the seeded
 `plan_20h`, a subscription row the script writes); Pat is a member of X on Free and has recorded a
@@ -31,7 +31,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "docs" / "fe-captures" / "workspaces"
+OUT = ROOT / "docs" / "fe-captures" / "workspaces-lifecycle"
 DB_NAME = "notetaker_capture_workspaces"
 ADA = "owner@example.test"  # the account migration 0006 creates (a placeholder)
 PAT, QUINN = "pat@example.test", "quinn@example.test"

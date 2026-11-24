@@ -1,0 +1,39 @@
+{
+  "note": "The retrieval is real and searches this workspace's meetings only; the model is a FAKE (see this script's doc), so the sentence is not a model's.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What was said about pricing?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "answer",
+      "lead": "Here is what was said (a fake model's sentence).",
+      "points": [
+        {
+          "text": "Pricing was discussed.",
+          "cites": [
+            {
+              "meeting_id": 5,
+              "title": "Quinn shared to Y",
+              "date_label": "Tue 24 Nov",
+              "owner_name": "Quinn Example",
+              "shared": true,
+              "target": "notes",
+              "line": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

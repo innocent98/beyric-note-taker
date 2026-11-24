@@ -1,6 +1,6 @@
 # FE integration guide: workspace limits, delete, classes and the member gate (slice W4)
 
-Every body below is copied from a real response captured against the running app (`scripts/capture_workspaces_lifecycle.py`; real migrations, real app, scratch Postgres; files in `docs/fe-captures/workspaces/`). Names are placeholders (Ada, Pat, Quinn, `example.test`). Ids are the scratch database's. Where something could not be run live it is marked **NOT LIVE**.
+Every body below is copied from a real response captured against the running app (`scripts/capture_workspaces_lifecycle.py`; real migrations, real app, scratch Postgres; files in `docs/fe-captures/workspaces-lifecycle/`). Names are placeholders (Ada, Pat, Quinn, `example.test`). Ids are the scratch database's. Where something could not be run live it is marked **NOT LIVE**.
 
 ## 1. What this is, in the screen's terms
 
@@ -44,7 +44,7 @@ Every body below is copied from a real response captured against the running app
   "limit_message": "Owning a team needs a paid plan. Upgrade to the 20 hours a month plan to own up to 3 teams."
 }
 ```
-*Captured: `docs/fe-captures/workspaces/07-pat-teams-free.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/07-pat-teams-free.json` (HTTP 200).*
 
 Ada, on the 20-hour plan, owning 1 of 3:
 
@@ -81,7 +81,7 @@ Ada, on the 20-hour plan, owning 1 of 3:
   "limit_message": null
 }
 ```
-*Captured: `docs/fe-captures/workspaces/09-ada-teams-starter.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/09-ada-teams-starter.json` (HTTP 200).*
 
 **Field-nesting and null traps.** `can_create_more` is a number, or **null when the plan has no limit** (Scale, an admin). `max_owned_teams` is a number, **0 on Free**, or null for unlimited. `plan_name` is null on Free **and for a person whose plan has lapsed**. `limit_message` is null while the person may make another team; when it is a string, show it as it is (it names the plan to upgrade to) and link to the plans screen. `kind` is on every team row, the personal space included (`"team"`).
 
@@ -98,7 +98,7 @@ At the limit (three of three):
   "limit_message": "Your plan owns up to 3 teams and you have 3. Upgrade to the Pro plan to own up to 10 teams."
 }
 ```
-*(the `teams` array omitted here; captured in full at `docs/fe-captures/workspaces/13-ada-teams-at-limit.json`)*
+*(the `teams` array omitted here; captured in full at `docs/fe-captures/workspaces-lifecycle/13-ada-teams-at-limit.json`)*
 
 ## 3. `POST /api/teams` (make a team or a class)
 
@@ -118,7 +118,7 @@ At the limit (three of three):
   "kind": "class"
 }
 ```
-*Captured: `docs/fe-captures/workspaces/10-ada-create-class.json` (HTTP 201).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/10-ada-create-class.json` (HTTP 201).*
 
 The class's own page (`GET /api/team` with the class in `X-Team-Id`), note `kind` and `share_new_meetings`:
 
@@ -143,7 +143,7 @@ The class's own page (`GET /api/team` with the class in `X-Team-Id`), note `kind
   "can_change_roles": true
 }
 ```
-*Captured: `docs/fe-captures/workspaces/11-ada-class-team.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/11-ada-class-team.json` (HTTP 200).*
 
 Refusals:
 
@@ -157,7 +157,7 @@ Refusals:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/08-pat-create-team-free.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/08-pat-create-team-free.json` (HTTP 409).*
 
 - At the limit: `POST /api/teams`, body `{"name": "One too many"}`
 
@@ -169,7 +169,7 @@ Refusals:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/14-ada-create-over-limit.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/14-ada-create-over-limit.json` (HTTP 409).*
 
 - A plan that lapsed (the person still owns the teams): `POST /api/teams`, body `{"name": "Another"}`
 
@@ -181,7 +181,7 @@ Refusals:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/20-ada-create-lapsed.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/20-ada-create-lapsed.json` (HTTP 409).*
 
 - Bad `kind`: `POST /api/teams`, body `{"name": "Odd", "kind": "school"}`
 
@@ -199,7 +199,7 @@ Refusals:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/15-ada-create-bad-kind.json` (HTTP 422).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/15-ada-create-bad-kind.json` (HTTP 422).*
 
 **UX consequences the FE must surface.**
 - A lapse or a downgrade **never removes or locks a team**. After a lapse `GET /api/teams` shows `owned_teams` 3 and `max_owned_teams` 0 (capture `19-ada-teams-lapsed.json`): say nothing alarming; only the Make-a-team card is off, with `limit_message`.
@@ -221,7 +221,7 @@ Refusals, all verbatim:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/21-ada-delete-with-members.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/21-ada-delete-with-members.json` (HTTP 409).*
 
 - not the owner: `DELETE /api/teams/4`
 
@@ -233,7 +233,7 @@ Refusals, all verbatim:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/22-pat-delete-not-owner.json` (HTTP 403).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/22-pat-delete-not-owner.json` (HTTP 403).*
 
 - not in the team at all (the same answer as for a team that does not exist): `DELETE /api/teams/4`
 
@@ -245,7 +245,7 @@ Refusals, all verbatim:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/23-quinn-delete-stranger.json` (HTTP 404).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/23-quinn-delete-stranger.json` (HTTP 404).*
 
 - the personal space: `DELETE /api/teams/1`
 
@@ -257,7 +257,7 @@ Refusals, all verbatim:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/24-ada-delete-personal.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/24-ada-delete-personal.json` (HTTP 409).*
 
 After a delete, the meetings:
 
@@ -282,7 +282,7 @@ After a delete, the meetings:
   "...": "(other fields omitted from this excerpt)"
 }
 ```
-*Captured: `docs/fe-captures/workspaces/33-ada-adas-meeting-home.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/33-ada-adas-meeting-home.json` (HTTP 200).*
 
 - the meeting Pat recorded and MOVED to the team is Pat's again, in HIS personal space, private (never deleted while its recorder has an account): `GET /api/meetings/2`
 
@@ -305,7 +305,7 @@ After a delete, the meetings:
   "...": "(other fields omitted from this excerpt)"
 }
 ```
-*Captured: `docs/fe-captures/workspaces/34-pat-pats-meeting-home.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/34-pat-pats-meeting-home.json` (HTTP 200).*
 
 - the deleted team is nobody's: `GET /api/team` with `X-Team-Id: 4`
 
@@ -317,7 +317,7 @@ After a delete, the meetings:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/35-ada-team-deleted.json` (HTTP 404).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/35-ada-team-deleted.json` (HTTP 404).*
 
 **NOT LIVE:** deleting a team that holds a meeting whose recorder's account is gone (that meeting IS deleted, with its recording). It needs a bot provider; `tests/test_workspace_lifecycle.py` covers it with the fake provider. The route returns 409 `meeting_active` or 502 `recording_delete_failed` if such a meeting cannot be removed yet; retrying finishes the job (the team is still there).
 
@@ -333,7 +333,7 @@ After a delete, the meetings:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/25-pat-leave-personal.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/25-pat-leave-personal.json` (HTTP 409).*
 
 - The owner cannot leave (new words): `DELETE /api/team/members/1` with `X-Team-Id: 4`
 
@@ -345,7 +345,7 @@ After a delete, the meetings:
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/26-ada-owner-leave.json` (HTTP 409).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/26-ada-owner-leave.json` (HTTP 409).*
 
 - Removing a member (owner or admin): `DELETE /api/team/members/2` with `X-Team-Id: 4`: 204. The member **loses access at once**:
 
@@ -377,7 +377,7 @@ After a delete, the meetings:
   "...": "(other fields omitted from this excerpt)"
 }
 ```
-*Captured: `docs/fe-captures/workspaces/31-ada-pats-meeting-stays.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/31-ada-pats-meeting-stays.json` (HTTP 200).*
 
 What a leaver recorded and kept (not moved) goes to their own personal space, private (covered by `tests/test_workspace_lifecycle.py`, not captured). **NOT LIVE here: the leaver's calendar connection and scheduled joins**, which slice W3 disconnects and cancels.
 
@@ -394,7 +394,7 @@ What a leaver recorded and kept (not moved) goes to their own personal space, pr
   "points": []
 }
 ```
-*Captured: `docs/fe-captures/workspaces/16-pat-ask-in-paid-workspace.json` (HTTP 200).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/16-pat-ask-in-paid-workspace.json` (HTTP 200).*
 
 (That is the free "my tasks" answer, which sits behind the same gate; no model is called in the capture.)
 
@@ -408,7 +408,7 @@ What a leaver recorded and kept (not moved) goes to their own personal space, pr
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/17-pat-ask-in-personal-workspace.json` (HTTP 403).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/17-pat-ask-in-personal-workspace.json` (HTTP 403).*
 
 - on that same team after the owner's plan lapsed: `POST /api/ask` with `X-Team-Id: 4`, body `{"question": "What are my open tasks?"}`
 
@@ -420,7 +420,7 @@ What a leaver recorded and kept (not moved) goes to their own personal space, pr
   }
 }
 ```
-*Captured: `docs/fe-captures/workspaces/18-pat-ask-owner-lapsed.json` (HTTP 403).*
+*Captured: `docs/fe-captures/workspaces-lifecycle/18-pat-ask-owner-lapsed.json` (HTTP 403).*
 
 **What covers a member:** the workspace owner is on a plan (`active`, or the 3 grace days after a failed renewal) or is an admin. A trial or a pilot grant does not. **Daily caps are the member's own** (their own 429 `ask_limit`), never shared with the owner. `translate` and `rewrite` stay the caller's own plan: a free member still gets 403 `plan_inactive` there.
 

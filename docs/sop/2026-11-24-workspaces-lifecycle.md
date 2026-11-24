@@ -2,7 +2,7 @@
 
 **What shipped (Tasks 10, 11 and 12).** (T10) How many team workspaces a person may OWN now comes from their live plan (`Plan.max_owned_teams`: Free 0, Starter 3, Pro 10, Scale unlimited), not a constant. (T11) An owner can delete a workspace once nobody else is in it; a class is a team with `kind = class` (a school's words, sharing on by default); the personal space cannot be deleted or left. (T12) `ask` and `make` pass for a free member on a workspace whose OWNER has a plan. Branch `feature/workspaces-lifecycle`, base `feature/workspaces`. **No migration** (W1's `0070` already holds `plans.max_owned_teams` and `teams.kind`).
 
-Spec: `docs/superpowers/specs/2026-11-24-workspaces-design.md` sections 5, 6, 12.3, 12.6. Plan: `docs/superpowers/plans/2026-11-24-workspaces.md` Tasks 10 to 12. FE guide: `docs/fe-integration-guide-workspaces-lifecycle.md` (captures in `docs/fe-captures/workspaces/`).
+Spec: `docs/superpowers/specs/2026-11-24-workspaces-design.md` sections 5, 6, 12.3, 12.6. Plan: `docs/superpowers/plans/2026-11-24-workspaces.md` Tasks 10 to 12. FE guide: `docs/fe-integration-guide-workspaces-lifecycle.md` (captures in `docs/fe-captures/workspaces-lifecycle/`).
 
 ## Why
 
@@ -36,7 +36,7 @@ A constant of three owned teams ignored billing, a team could not be deleted at 
 | `app/team_delete.py` (new), `app/deletion.py` (`give_back_meeting`), `app/team_admin.py` (leave order and message) | delete and leave |
 | `app/api_teams.py`, `app/api_team.py`, `app/api_schemas.py` | `DELETE /api/teams/{id}`; `TeamList` gains `owned_teams`, `max_owned_teams`, `plan_name`, `limit_message` and `can_create_more` may be null; `kind` on `TeamSummary`, `TeamOut`, `TeamCreate` |
 | `web/lib/workspace-words.ts`, `web/components/app/teams-view.tsx`, `team-view.tsx`, `team-switcher.tsx`, `web/lib/api/client.ts` | the screens below |
-| `scripts/capture_workspaces_lifecycle.py`, `docs/fe-captures/workspaces/` | the live captures |
+| `scripts/capture_workspaces_lifecycle.py`, `docs/fe-captures/workspaces-lifecycle/` | the live captures |
 | `tests/test_workspace_limits.py`, `tests/test_workspace_lifecycle.py`, `tests/test_workspace_gate.py`, `tests/workspace_plans.py`; `web/tests/workspace-lifecycle.test.tsx`, `workspace-words.test.ts`, `teams-view.test.tsx` | the tests |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated |
 

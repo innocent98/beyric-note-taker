@@ -7,10 +7,10 @@ import { TeamView } from "@/components/app/team-view";
 import { TEAM_STORAGE_KEY } from "@/lib/active-team";
 import { ApiError } from "@/lib/api/client";
 import type { Team, TeamList, TeamMembers } from "@/lib/api/types";
-import { teamBody, teamsBody, workspacesBody } from "./helpers";
+import { teamBody, teamsBody, lifecycleBody } from "./helpers";
 
 // Deleting a workspace and a class's words (workspaces W4, lead-designed). Fed the bodies captured from the
-// running API (docs/fe-captures/workspaces/, `scripts/capture_workspaces_lifecycle.py`): the class Ada made
+// running API (docs/fe-captures/workspaces-lifecycle/, `scripts/capture_workspaces_lifecycle.py`): the class Ada made
 // (11), the refusal when someone is still in the team (21), and her teams at the limit (13).
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
   members: vi.fn(),
   removeMember: vi.fn(),
 }));
-vi.mock("@/lib/api/browser", () => ({ api: { teams: { remove: mocks.remove }, team: mocks } }));
+// `session` is the switcher's own unread read (W1): offline here, so it draws no dot of its own.
+vi.mock("@/lib/api/browser", () => ({ api: { teams: { remove: mocks.remove }, team: mocks, session: () => Promise.reject(new Error("offline")) } }));
 const nav = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, refresh: nav.refresh }),
@@ -27,9 +28,9 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const klass = workspacesBody<Team>("11-ada-class-team.json");
-const refused = workspacesBody<{ error: { code: string; message: string } }>("21-ada-delete-with-members.json").error;
-const atLimit = workspacesBody<TeamList>("13-ada-teams-at-limit.json");
+const klass = lifecycleBody<Team>("11-ada-class-team.json");
+const refused = lifecycleBody<{ error: { code: string; message: string } }>("21-ada-delete-with-members.json").error;
+const atLimit = lifecycleBody<TeamList>("13-ada-teams-at-limit.json");
 const platform = teamsBody<Team>("54-team-header-x.json"); // an ordinary team its owner is in
 const afterAda = teamBody<TeamMembers>("25-members-after-ada.json");
 const solo: TeamMembers = { members: afterAda.members.slice(0, 1), invites: [] };
@@ -113,10 +114,16 @@ describe("a class", () => {
   });
 
   it("the switcher tags it, and an ordinary team is not tagged", () => {
-    render(<TeamSwitcher teams={atLimit.teams} variant="sidebar" />);
+    render(<TeamSwitcher teams={atLimit.teams} variant="sidebar" unread={{}} />);
     const options = screen.getAllByRole("option").map((o) => o.textContent);
     expect(options).toContain("Maths 101 (class)");
     expect(options).toContain("Reading group");
     expect(options).toContain("My team (personal)");
+  });
+
+  it("keeps the unread count (W1's dots) next to the class tag", () => {
+    const klassId = atLimit.teams.find((t) => t.kind === "class")!.id;
+    render(<TeamSwitcher teams={atLimit.teams} variant="sidebar" unread={{ [klassId]: 2 }} />);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toContain("Maths 101 (class) (2 unread)");
   });
 });

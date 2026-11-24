@@ -292,11 +292,20 @@ export function teamsBody<T>(file: string): T {
   return teamsCapture(file).response.body as T;
 }
 
-// A capture of the workspace limit, lifecycle and gate (docs/fe-captures/workspaces/<file>,
-// `python scripts/capture_workspaces_lifecycle.py`): the whole exchange, or just its response body.
-export function workspacesCapture(file: string): { request: { method: string; path: string }; response: { status: number; body: unknown } } {
+// A capture from the running API for the workspaces foundation (docs/fe-captures/workspaces/<file>, `python
+// scripts/capture_workspaces.py`): the whole exchange, or the response body.
+export function workspacesCapture(file: string): { as: string; request: { method: string; path: string; headers: Record<string, string>; body: unknown }; response: { status: number; body: unknown } } {
   return JSON.parse(read(join(REPO, "docs/fe-captures/workspaces", file)));
 }
 export function workspacesBody<T>(file: string): T {
   return workspacesCapture(file).response.body as T;
+}
+
+// A capture of the workspace limit, lifecycle and gate (docs/fe-captures/workspaces-lifecycle/<file>, `python
+// scripts/capture_workspaces_lifecycle.py`): the whole exchange, or the response body.
+export function lifecycleCapture(file: string): { request: { method: string; path: string }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/workspaces-lifecycle", file)));
+}
+export function lifecycleBody<T>(file: string): T {
+  return lifecycleCapture(file).response.body as T;
 }
