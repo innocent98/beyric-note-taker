@@ -31,6 +31,128 @@
         "title": "Accepted",
         "type": "object"
       },
+      "AddCard": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "kind": {
+            "default": "note",
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "const": "add_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "column",
+          "text"
+        ],
+        "title": "AddCard",
+        "type": "object"
+      },
+      "AddColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "op": {
+            "const": "add_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "title": {
+            "maxLength": 2000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "title"
+        ],
+        "title": "AddColumn",
+        "type": "object"
+      },
       "AdminDeleting": {
         "properties": {
           "status": {
@@ -1570,6 +1692,74 @@
         "title": "DecisionTaskRef",
         "type": "object"
       },
+      "DeleteCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "op": {
+            "const": "delete_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "card"
+        ],
+        "title": "DeleteCard",
+        "type": "object"
+      },
+      "DeleteColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "op": {
+            "const": "delete_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "column"
+        ],
+        "title": "DeleteColumn",
+        "type": "object"
+      },
       "DisconnectOut": {
         "description": "`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when\nnothing was connected. `revoked` is false when the provider could not be asked to remove the\naccess (Google was unreachable, or the stored key could not be read: `reason` is null) or\ncannot be (Microsoft has no way for an app to remove its own access: `reason` is\n`provider_has_no_revoke`). The data is deleted here regardless; tell the person to also\nremove Beyric at myaccount.google.com/permissions (Google) or in their Microsoft account's\napp permissions (Microsoft). `revoked` is true when the provider confirmed, and also when\nthere was nothing left to revoke (a repeat cannot re-check an earlier failure: act on the\nfirst answer).",
         "properties": {
@@ -2030,6 +2220,81 @@
           "blocks"
         ],
         "title": "DocumentPatch",
+        "type": "object"
+      },
+      "EditCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "decision",
+                  "action",
+                  "question",
+                  "note"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "op": {
+            "const": "edit_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "op",
+          "card"
+        ],
+        "title": "EditCard",
         "type": "object"
       },
       "EmailIn": {
@@ -3514,6 +3779,54 @@
         "title": "MilestonePatch",
         "type": "object"
       },
+      "MoveCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "index": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "op": {
+            "const": "move_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "to_column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "To Column",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "op",
+          "card",
+          "to_column",
+          "index"
+        ],
+        "title": "MoveCard",
+        "type": "object"
+      },
       "MoveRequest": {
         "properties": {
           "team_id": {
@@ -4263,6 +4576,51 @@
         "title": "QuestionPatch",
         "type": "object"
       },
+      "Recolour": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "const": "recolour",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "card",
+          "kind"
+        ],
+        "title": "Recolour",
+        "type": "object"
+      },
       "RecordingAckOut": {
         "properties": {
           "recording_acknowledged": {
@@ -4424,6 +4782,46 @@
           "removed_by"
         ],
         "title": "RemovedRecurring",
+        "type": "object"
+      },
+      "RenameColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "op": {
+            "const": "rename_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "title": {
+            "maxLength": 2000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "column",
+          "title"
+        ],
+        "title": "RenameColumn",
         "type": "object"
       },
       "ResetIn": {
@@ -9986,6 +10384,138 @@
           }
         },
         "summary": "Edit Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/board": {
+      "patch": {
+        "description": "Change a board by ONE operation and answer with the whole draft as it now stands (with the\nnew `updated_at`, the `revision` for the next call). `card` numbers cards counting through the\ncolumns from 0; `index` is a place inside the target column. Marks the draft `edited`. Text is\nmade plain and cut to size as at generation; a card keeps its sources when moved or edited and\na new card has none.",
+        "operationId": "edit_board",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "add_card": "#/components/schemas/AddCard",
+                    "add_column": "#/components/schemas/AddColumn",
+                    "delete_card": "#/components/schemas/DeleteCard",
+                    "delete_column": "#/components/schemas/DeleteColumn",
+                    "edit_card": "#/components/schemas/EditCard",
+                    "move_card": "#/components/schemas/MoveCard",
+                    "recolour": "#/components/schemas/Recolour",
+                    "rename_column": "#/components/schemas/RenameColumn"
+                  },
+                  "propertyName": "op"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MoveCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RenameColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EditCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Recolour"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such draft, or not the caller's"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`stale_board` (the board changed since `revision`, or a column or card named is not there), `writing` (still being written), `not_ready` (it failed), `not_a_board`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`revision_required`, `revision_invalid`, `board_full`, `column_full`, `title_empty`, `card_empty`, `last_column`; or `validation_error` for a body that is not one of the operations"
+          }
+        },
+        "summary": "Edit Board",
         "tags": [
           "documents"
         ]

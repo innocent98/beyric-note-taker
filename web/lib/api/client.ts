@@ -83,6 +83,7 @@ import type {
   Translation,
   TranslationLanguage,
 } from "./types";
+import type { BoardDocument, BoardOp } from "../board";
 import type {
   AdminPayment,
   AdminRefund,
@@ -596,6 +597,13 @@ export function createApi(options: ApiOptions = {}) {
     questions: {
       update: (id: number, body: QuestionChanges) =>
         request<OpenQuestion>("PATCH", `/api/questions/${id}`, { body, write: true }),
+    },
+    // The board of a meeting (docs/fe-integration-guide-recipes-board.md): ONE operation per call,
+    // sent with the `updated_at` of the draft the screen last saw as its `revision`. Answers the
+    // whole draft; 409 `stale_board` means the board changed meanwhile: reload it.
+    board: {
+      edit: (id: number, revision: string, op: BoardOp) =>
+        request<BoardDocument>("PATCH", `/api/documents/${id}/board`, { body: { ...op, revision }, write: true }),
     },
     // The bell: what the app has told the user, newest first. `readAll` answers the new unread count.
     notifications: {

@@ -609,6 +609,30 @@ export interface paths {
         patch: operations["edit_document"];
         trace?: never;
     };
+    "/api/documents/{document_id}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Board
+         * @description Change a board by ONE operation and answer with the whole draft as it now stands (with the
+         *     new `updated_at`, the `revision` for the next call). `card` numbers cards counting through the
+         *     columns from 0; `index` is a place inside the target column. Marks the draft `edited`. Text is
+         *     made plain and cut to size as at generation; a card keeps its sources when moved or edited and
+         *     a new card has none.
+         */
+        patch: operations["edit_board"];
+        trace?: never;
+    };
     "/api/integrations/linear": {
         parameters: {
             query?: never;
@@ -2661,6 +2685,44 @@ export interface components {
              */
             status: "check_your_email";
         };
+        /** AddCard */
+        AddCard: {
+            /** Column */
+            column: number;
+            /** Index */
+            index?: number | null;
+            /**
+             * Kind
+             * @default note
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "add_card";
+            /** Owner */
+            owner?: string | null;
+            /** Revision */
+            revision?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** AddColumn */
+        AddColumn: {
+            /** Index */
+            index?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "add_column";
+            /** Revision */
+            revision?: string | null;
+            /** Title */
+            title: string;
+        };
         /** AdminDeleting */
         AdminDeleting: {
             /**
@@ -3218,6 +3280,30 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DeleteCard */
+        DeleteCard: {
+            /** Card */
+            card: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "delete_card";
+            /** Revision */
+            revision?: string | null;
+        };
+        /** DeleteColumn */
+        DeleteColumn: {
+            /** Column */
+            column: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "delete_column";
+            /** Revision */
+            revision?: string | null;
+        };
         /**
          * DisconnectOut
          * @description `status` is always `disconnected`: the call is safe to repeat, and also answers 200 when
@@ -3382,6 +3468,24 @@ export interface components {
             }[];
             /** Title */
             title?: string | null;
+        };
+        /** EditCard */
+        EditCard: {
+            /** Card */
+            card: number;
+            /** Kind */
+            kind?: ("decision" | "action" | "question" | "note") | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "edit_card";
+            /** Owner */
+            owner?: string | null;
+            /** Revision */
+            revision?: string | null;
+            /** Text */
+            text?: string | null;
         };
         /** EmailIn */
         EmailIn: {
@@ -3894,6 +3998,22 @@ export interface components {
             /** Project Id */
             project_id?: number | null;
         };
+        /** MoveCard */
+        MoveCard: {
+            /** Card */
+            card: number;
+            /** Index */
+            index: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "move_card";
+            /** Revision */
+            revision?: string | null;
+            /** To Column */
+            to_column: number;
+        };
         /** MoveRequest */
         MoveRequest: {
             /** Team Id */
@@ -4183,6 +4303,23 @@ export interface components {
             /** Resolved */
             resolved?: boolean | null;
         };
+        /** Recolour */
+        Recolour: {
+            /** Card */
+            card: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "recolour";
+            /** Revision */
+            revision?: string | null;
+        };
         /** RecordingAckOut */
         RecordingAckOut: {
             /** Recording Acknowledged */
@@ -4256,6 +4393,20 @@ export interface components {
             /** Removed By */
             removed_by: string | null;
             team: components["schemas"]["SeriesTeam"];
+            /** Title */
+            title: string;
+        };
+        /** RenameColumn */
+        RenameColumn: {
+            /** Column */
+            column: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "rename_column";
+            /** Revision */
+            revision?: string | null;
             /** Title */
             title: string;
         };
@@ -7030,6 +7181,77 @@ export interface operations {
                 };
             };
             /** @description `blocks_invalid` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_board: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveCard"] | components["schemas"]["RenameColumn"] | components["schemas"]["AddColumn"] | components["schemas"]["DeleteColumn"] | components["schemas"]["AddCard"] | components["schemas"]["EditCard"] | components["schemas"]["DeleteCard"] | components["schemas"]["Recolour"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such draft, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `stale_board` (the board changed since `revision`, or a column or card named is not there), `writing` (still being written), `not_ready` (it failed), `not_a_board` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `revision_required`, `revision_invalid`, `board_full`, `column_full`, `title_empty`, `card_empty`, `last_column`; or `validation_error` for a body that is not one of the operations */
             422: {
                 headers: {
                     [name: string]: unknown;
