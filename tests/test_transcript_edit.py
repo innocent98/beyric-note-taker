@@ -476,6 +476,101 @@ def test_rewriting_the_notes_after_an_edit_makes_them_current(api, session, temp
     assert restore(api, meeting).json()["notes_outdated"] is True
 
 
+REWRITTEN = (
+    "\n\n".join(
+        f"## {h}\nRewritten"
+        for h in ("Summary", "Key points", "Decisions", "Action items", "Open questions")
+    )
+    + "\n\n## Please check\nNone noted"
+)
+
+
+def rewrite(api, meeting, fake_openai) -> dict:
+    fake_openai.notes = REWRITTEN
+    response = api.post(
+        f"/api/meetings/{meeting.id}/regenerate", {"template_id": meeting.template_id}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_a_second_edit_in_a_row_leaves_the_notes_out_of_date(api, session, template):
+    meeting = meeting_of(session, template)
+    assert rename(api, meeting, "Speaker 2", "Daniel").json()["notes_outdated"] is True
+    assert edit(api, meeting, {"line": 1, "text": "Hi all."}).json()["notes_outdated"] is True
+    assert edit(api, meeting, {"line": 3, "speaker": "Cleo"}).json()["notes_outdated"] is True
+
+
+def test_editing_again_after_a_rewrite_makes_the_notes_out_of_date_again(
+    api, session, template, fake_openai
+):
+    meeting = meeting_of(session, template)
+    rename(api, meeting, "Speaker 2", "Daniel")
+    assert rewrite(api, meeting, fake_openai)["notes_outdated"] is False
+    again = edit(api, meeting, {"line": 1, "text": "Hi all."}).json()
+    assert again["notes_outdated"] is True  # the notes came from the first edit's text
+    assert rewrite(api, meeting, fake_openai)["notes_outdated"] is False
+    assert restore(api, meeting).json()["notes_outdated"] is True  # and now from words not shown
+
+
+def test_restoring_and_then_editing_keeps_the_notes_state_true(api, session, template, fake_openai):
+    meeting = meeting_of(session, template)
+    rename(api, meeting, "Speaker 2", "Daniel")
+    assert restore(api, meeting).json()["notes_outdated"] is False  # never rewritten
+    assert edit(api, meeting, {"line": 1, "text": "Hi all."}).json()["notes_outdated"] is True
+    rewrite(api, meeting, fake_openai)
+    restored = restore(api, meeting).json()
+    assert restored["notes_outdated"] is True
+    # a new edit after that restore: the notes still come from an older text
+    assert rename(api, meeting, "Ada", "Ada Obi").json()["notes_outdated"] is True
+    # a rewrite from the restored (unedited) text is current and stays so until an edit
+    assert restore(api, meeting).json()["notes_outdated"] is True
+    assert rewrite(api, meeting, fake_openai)["notes_outdated"] is False
+
+
+def test_an_edit_during_a_rewrite_leaves_the_notes_out_of_date(
+    api, session, template, fake_openai, monkeypatch
+):
+    """The rewrite reads the transcript, then waits for the model. What it records is the text it
+    sent, so an edit that lands meanwhile is not mistaken for part of the notes."""
+    from app import services
+
+    meeting = meeting_of(session, template)
+    real = services.generate_notes
+
+    def edited_while_the_model_works(source, *args, **kwargs):
+        assert source == LABELLED
+        assert edit(api, meeting, {"line": 1, "text": "Hi all."}).status_code == 200
+        return real(source, *args, **kwargs)
+
+    monkeypatch.setattr(services, "generate_notes", edited_while_the_model_works)
+    fake_openai.notes = REWRITTEN
+    response = api.post(
+        f"/api/meetings/{meeting.id}/regenerate", {"template_id": meeting.template_id}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["notes_outdated"] is True
+    assert response.json()["transcript"].startswith("[Ada]: Hi all.")
+    monkeypatch.setattr(services, "generate_notes", real)
+    assert rewrite(api, meeting, fake_openai)["notes_outdated"] is False
+
+
+def test_a_meeting_deleted_between_the_read_and_the_lock_is_a_plain_404(
+    api, session, template, monkeypatch
+):
+    from sqlalchemy.exc import NoResultFound
+
+    meeting = meeting_of(session, template)
+    version = detail(api, meeting)["transcript_version"]
+
+    def gone(session, meeting):
+        raise NoResultFound
+
+    monkeypatch.setattr(transcript_edit, "_lock_meeting", gone)
+    error_of(rename(api, meeting, "Ada", "Bo", version=version), 404, "not_found")
+    error_of(restore(api, meeting, version=version), 404, "not_found")
+
+
 def test_a_finished_translation_goes_stale_when_the_transcript_is_edited(api, session, template):
     meeting = meeting_of(session, template)
     row = MeetingTranslation(

@@ -13,6 +13,7 @@ import { SeriesPicker } from "@/components/app/series-picker";
 import { MeetingTeamCard, teamActionMessage } from "@/components/app/meeting-team-card";
 import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
+import { transcriptMessage } from "@/components/app/transcript-edit";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
   Alert,
@@ -225,7 +226,7 @@ export function MeetingView({
       setMeeting(await call());
       saved = true;
     } catch (caught) {
-      setEditError(errorMessage(caught));
+      setEditError(transcriptMessage(caught));
       if (caught instanceof ApiError && caught.status === 409) void refetch();
     }
     busyRef.current = null;
@@ -483,6 +484,7 @@ export function MeetingView({
                       ? {
                           busy: busy !== null,
                           error: editError,
+                          clearError: () => setEditError(null),
                           rename: (from, to, merge) => editTranscript(() => api.meetings.editTranscript(m.id, { version, rename: { from, to, merge } })),
                           editLine: (line, change) => editTranscript(() => api.meetings.editTranscript(m.id, { version, line, ...change })),
                         }

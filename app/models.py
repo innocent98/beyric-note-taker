@@ -804,13 +804,11 @@ class Meeting(Base):
     transcript_edited_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
-    # Whether the current `notes` were written from an edited transcript. Together with
-    # `transcript_original is not None` (the shown text is edited) it says whether the notes match
-    # the shown text: they do not when exactly one of the two is true
-    # (`transcript_edit.notes_outdated`).
-    notes_from_edited_transcript: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=sa.false()
-    )
+    # The version (`transcript_text.version_of`) of the exact text the current `notes` were written
+    # from, set by the owner's rewrite from the text it sent to the model. Null = the notes were
+    # written by the pipeline or the rebuild script from the transcript as it was before any edit
+    # (`transcript_edit.notes_outdated` compares it with the shown text).
+    notes_source_version: Mapped[str | None] = mapped_column(String(16))
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

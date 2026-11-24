@@ -30,7 +30,7 @@
       "status_tone": "success",
       "template_id": 2,
       "template_name": "Client call",
-      "created_at": "2026-11-24T13:04:00.704055Z",
+      "created_at": "2026-11-24T13:45:04.496687Z",
       "tasks_count": 0,
       "failure_reason": null,
       "bot_invite_email": null,
@@ -65,7 +65,7 @@
       "can_edit_transcript": true,
       "transcript_version": "37d2764977c0f9c6",
       "transcript_edited": true,
-      "transcript_edited_at": "2026-11-24T13:04:00.850360Z",
+      "transcript_edited_at": "2026-11-24T13:45:04.636347Z",
       "transcript_edited_by": "owner",
       "notes_outdated": true,
       "translations": [

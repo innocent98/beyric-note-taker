@@ -452,6 +452,20 @@ def test_apply_rewrites_the_notes_from_the_new_transcript(session, meeting, back
     assert notes_run.prompt_version.endswith("+rebuild")  # still a "notes" call for the cost report
 
 
+def test_apply_records_the_text_the_notes_were_written_from(session, meeting, backups, capsys):
+    """An earlier owner's rewrite had recorded another text; the rebuilt notes are current."""
+    from app import transcript_edit
+    from app.transcript_text import version_of
+
+    meeting.notes_source_version = version_of("an older text")
+    session.commit()
+    code, _, _ = apply(session, meeting, backups, capsys)
+    assert code == 0
+    row = stored(session, meeting)
+    assert row.notes_source_version == version_of(row.speaker_transcript)
+    assert transcript_edit.notes_outdated(row) is False
+
+
 def test_apply_asks_for_the_owners_vocabulary_like_the_live_path_does(
     session, meeting, backups, capsys, monkeypatch
 ):

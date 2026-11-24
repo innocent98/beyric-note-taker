@@ -145,6 +145,9 @@ All 200 with the whole meeting. **Send only what changed** (the page's Save does
 | The edit would change the rows (cannot happen from the page; a typed text that would turn a nameless first line into a speaker) | 422 | `invalid_edit` | `That text cannot be saved on this line.` (a line) or `That name cannot be saved.` (a rename) | not captured live (tests) |
 | Bad body | 422 | `validation_error` | `Some fields are missing or not valid.` plus `fields` | #19 |
 | The worker holds the row | 409 | `meeting_busy` | same shape; try again in a moment | not captured live (needs a race) |
+| The meeting was deleted a moment ago | 404 | `not_found` | `No such meeting` | not captured live (needs a race; `tests/test_transcript_edit.py`) |
+
+**Show these refusals in the API's words.** The page's generic error helper hides the text of every 422 and 404; the editor's refusals above are written for the person, so the page shows their `message` (the `transcriptMessage` function in `web/components/app/transcript-edit.tsx`).
 
 **On a 409 read the meeting again** (`GET /api/meetings/{id}`): the new `transcript_version` is what
 the next attempt sends, and the page then shows the text the other editor left. The page does this on
@@ -197,7 +200,8 @@ Write these as the page's behaviour, not as trivia:
 2. **`notes_outdated` follows the notes, not only the edit.** #05: true after the rename. #36 (rewrite
    notes): false, because the notes were then written from the edited text. #38 (Restore original
    after that rewrite): **true again**, because the notes now come from words that are no longer shown.
-   Restoring before any rewrite makes it false again.
+   Restoring before any rewrite makes it false again. #41 (rewrite from the restored text): false;
+   #43 (an edit after that rewrite): **true again**, however many times it was rewritten before.
 3. **Tasks and decisions** keep the quote the model gave. After a line's words are fixed, a quote that
    is no longer in the transcript has **no line**: a task's `quote_line` and `quote_speaker` are `null`
    and a decision's `line` is `null`, so there is no "Show in transcript" link (the quote text itself
@@ -237,7 +241,7 @@ meeting is active does not apply (an editable meeting is `ready`).
 | A reader gets 403 `team_forbidden`; a stranger gets 404 | verified live (#25, #26, #27) |
 | A team admin edits a team-owned meeting; a plain member cannot | verified live (#30, #31, #32) |
 | Not ready 409; no speaker names 422 | verified live (#33, #35) |
-| `notes_outdated` through edit, rewrite and restore | verified live (#05, #36, #37, #38) |
+| `notes_outdated` through edit, rewrite, restore and an edit after a rewrite | verified live (#05, #36, #37, #38, #41, #43) |
 | Translation goes `stale` after an edit | verified live (#21) |
 | Restore, and a second restore | verified live (#38, #40) |
 | `speaker_not_found`, `empty_text`, `invalid_edit`, `meeting_busy` | **not live**: shapes from `tests/test_transcript_edit.py` and the code (`meeting_busy` needs a race) |

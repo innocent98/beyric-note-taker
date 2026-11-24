@@ -94,6 +94,7 @@ from app.pipeline import (
     join_retry_at,
 )
 from app.services import Refused, get_bot_provider, get_openai_client
+from app.transcript_text import version_of
 
 REFRESH_SECONDS = 30  # how often the Jinja page refreshes while a meeting is active
 LIST_DEFAULT, LIST_MAX = 50, 100
@@ -449,7 +450,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         transcript=meeting.speaker_transcript or meeting.transcript or None,
         can_edit_transcript=owner and ready,
         transcript_version=(
-            transcript_edit.version_of(transcript_edit.shown_text(meeting))
+            version_of(transcript_edit.shown_text(meeting))
             if transcript_edit.shown_text(meeting)
             else None
         ),

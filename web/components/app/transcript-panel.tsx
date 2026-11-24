@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LineEditor, RenameForm, type TranscriptEditor } from "@/components/app/transcript-edit";
 import { Alert, IconButton } from "@/components/ui";
 import { initials } from "@/lib/format";
@@ -31,6 +31,22 @@ export function TranscriptPanel({
 }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  // Closing a form (Save, Cancel, Escape) gives focus back to the control that opened it.
+  const back = useRef<string | null>(null);
+  useEffect(() => {
+    if (back.current !== null && renaming === null && editing === null) {
+      document.getElementById(back.current)?.focus();
+      back.current = null;
+    }
+  }, [renaming, editing]);
+  const closeRename = (name: string) => {
+    back.current = `rename-btn-${encodeURIComponent(name)}`;
+    setRenaming(null);
+  };
+  const closeLine = (line: number) => {
+    back.current = `edit-line-${line}`;
+    setEditing(null);
+  };
   const lines = parseTranscript(text);
   const speakers = [...new Set(lines.map((l) => l.speaker).filter((s): s is string => s !== null))];
   return (
@@ -42,16 +58,17 @@ export function TranscriptPanel({
             Fix a speaker or a line. Lines can&apos;t be added, removed or split. The notes are not rewritten until you choose
             Rewrite notes.
           </p>
-          {editor.error ? <Alert kind="error">{editor.error}</Alert> : null}
+          {editor.error && renaming === null && editing === null ? <Alert kind="error">{editor.error}</Alert> : null}
           <div className="transcript-speakers" role="group" aria-label="Speakers">
             {speakers.map((name) =>
               renaming === name ? (
-                <RenameForm key={name} speaker={name} speakers={speakers} editor={editor} onClose={() => setRenaming(null)} />
+                <RenameForm key={name} speaker={name} speakers={speakers} editor={editor} onClose={(after) => closeRename(after ?? name)} />
               ) : (
                 <span className="transcript-speaker" key={name}>
                   {name}
                   <button
                     type="button"
+                    id={`rename-btn-${encodeURIComponent(name)}`}
                     className="det-link det-link-quiet"
                     aria-label={`Rename speaker ${name}`}
                     disabled={editor.busy}
@@ -78,7 +95,7 @@ export function TranscriptPanel({
             text={line.text}
             speakers={speakers}
             editor={editor}
-            onClose={() => setEditing(null)}
+            onClose={() => closeLine(index + 1)}
           />
         ) : (
           <p className="transcript-text">{line.text}</p>
@@ -87,6 +104,7 @@ export function TranscriptPanel({
           editor && !open ? (
             <IconButton
               icon="pencil"
+              id={`edit-line-${index + 1}`}
               label={`Edit line ${index + 1}`}
               tooltip="Edit line"
               disabled={editor.busy}

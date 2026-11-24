@@ -405,6 +405,22 @@ def run(server_base, engine) -> None:
         },
         note="Nothing left to restore: 409 `nothing_to_restore`.",
     )
+    owner.call(
+        "rewrite-notes-again",
+        "POST",
+        path + "/regenerate",
+        body={"template_id": template_id},
+        note="Rewrite notes again, now from the restored original text: `notes_outdated` is false.",
+    )
+    again = owner.call("detail-before-second-edit", "GET", path).json()["transcript_version"]
+    edit(
+        owner,
+        "edit-after-rewrite",
+        mid,
+        again,
+        {"line": 2, "text": "I can ship the beta on Wednesday."},
+        "An edit AFTER a rewrite: the notes are out of date again (`notes_outdated` true).",
+    )
 
 
 if __name__ == "__main__":

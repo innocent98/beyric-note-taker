@@ -8,14 +8,14 @@ and "Restore original" puts it back and clears all three edit columns.
 * `transcript_original`: null until the first edit; then the text the displayed column held.
 * `transcript_edited_at` / `transcript_edited_by_user_id`: when and by whom the last edit was made
   (the user is nulled if the account is deleted).
-* `notes_from_edited_transcript`: whether the CURRENT notes were written from an edited text. With
-  `transcript_original` (set = the shown text is edited) it says whether the notes match the
-  shown text: they differ when exactly one of the two is true. False for every meeting already in
-  the table, which is right: none was edited.
+* `notes_source_version`: the version (a 16-character hash) of the exact text the CURRENT notes
+  were written from, set when the owner rewrites the notes and by the rebuild script. Null for
+  every meeting already in the table, which is right: their notes were written from the transcript
+  as it is before any edit. "The notes are out of date" is this against the shown text.
 
-All four are nullable or defaulted, so the upgrade is instant and nothing changes for anyone until
-a person edits a transcript. Downgrade drops them: edits stay in the text, the original is lost
-(restore the original first if it matters).
+All four are nullable, so the upgrade is instant and nothing changes for anyone until a person
+edits a transcript. Downgrade drops them: edits stay in the text, the original is lost (restore the
+original first if it matters).
 
 Revision ID: 0057
 Revises: 0056
@@ -47,19 +47,11 @@ def upgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.add_column(
-        "meetings",
-        sa.Column(
-            "notes_from_edited_transcript",
-            sa.Boolean(),
-            server_default=sa.false(),
-            nullable=False,
-        ),
-    )
+    op.add_column("meetings", sa.Column("notes_source_version", sa.String(16), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("meetings", "notes_from_edited_transcript")
+    op.drop_column("meetings", "notes_source_version")
     op.drop_constraint("fk_meetings_transcript_edited_by_user_id", "meetings", type_="foreignkey")
     op.drop_column("meetings", "transcript_edited_by_user_id")
     op.drop_column("meetings", "transcript_edited_at")

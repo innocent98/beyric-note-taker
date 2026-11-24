@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Alert, Button, Field, SelectField, TextareaField } from "@/components/ui";
+import { ApiError, errorMessage } from "@/lib/api/client";
 
 // The transcript editor's two small forms (lead-designed: the designer's files have no editor).
 // What a save does is the API's (docs/fe-integration-guide-transcript-edit.md): a name is cleaned
@@ -10,9 +11,52 @@ import { Alert, Button, Field, SelectField, TextareaField } from "@/components/u
 export const MAX_NAME = 80;
 export const MAX_LINE = 5000;
 
+// The name as the server will save it (`app/notes.py` `clean_name`): control characters and line
+// breaks become spaces, format characters go, `[ ] : < >` go, whitespace is collapsed, 80 at most.
+// The merge question and the "did the speaker change" test are asked of THIS, not of the raw text
+// ("Ana:" is saved as "Ana", so it is the speaker Ana).
+export function cleanName(raw: string): string {
+  const spaced = raw.replace(/\p{Cf}/gu, "").replace(/[\p{Cc}\p{Zl}\p{Zp}\s]/gu, " ");
+  return spaced
+    .replace(/[[\]:<>]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, MAX_NAME)
+    .trim();
+}
+
+// The words for a refused edit. `errorMessage` hides the text of every 422 and 404 (developer text
+// elsewhere in the API), but the editor's refusals are written for the person (the codes below, in
+// docs/fe-integration-guide-transcript-edit.md section 3), so they are shown as the API wrote them.
+const SHOWN_CODES = new Set([
+  "speaker_not_found",
+  "invalid_name",
+  "empty_text",
+  "no_change",
+  "line_out_of_range",
+  "no_speakers",
+  "invalid_edit",
+  "not_ready",
+  "transcript_changed",
+  "speaker_exists",
+  "nothing_to_restore",
+  "team_forbidden",
+  "meeting_busy",
+]);
+
+export function transcriptMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (SHOWN_CODES.has(error.code)) return error.message;
+    if (error.status === 404) return "This meeting is not available any more.";
+  }
+  return errorMessage(error);
+}
+
 export type TranscriptEditor = {
   busy: boolean;
   error: string | null;
+  clearError: () => void;
   // Each answers true when the edit was saved (the form then closes) and false when it was not (the
   // form stays open, `error` says why).
   rename: (from: string, to: string, merge: boolean) => Promise<boolean>;
@@ -29,22 +73,30 @@ export function RenameForm({
   speaker: string;
   speakers: string[];
   editor: TranscriptEditor;
-  onClose: () => void;
+  // `focusName`: the speaker's name after a save (the Rename button to give focus back to).
+  onClose: (focusName?: string) => void;
 }) {
   const [to, setTo] = useState(speaker);
   const [merging, setMerging] = useState(false);
-  const name = to.trim();
+  const name = cleanName(to);
   const exists = name !== speaker && speakers.includes(name);
 
   async function save(merge: boolean) {
-    if (await editor.rename(speaker, name, merge)) onClose();
+    if (await editor.rename(speaker, name, merge)) onClose(name);
     else setMerging(false);
+  }
+  function cancel() {
+    editor.clearError();
+    onClose();
   }
 
   return (
     <form
       className="transcript-edit-form"
       aria-label={`Rename speaker ${speaker}`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !editor.busy) cancel();
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         if (exists && !merging) setMerging(true);
@@ -64,8 +116,9 @@ export function RenameForm({
           setMerging(false);
         }}
       />
+      {editor.error ? <Alert kind="error">{editor.error}</Alert> : null}
       {merging ? (
-        <Alert kind="notice">
+        <Alert kind="notice" role="alert">
           {name} is already in this meeting. Merge {speaker} into {name}? Every line from both will be labelled {name}.
         </Alert>
       ) : null}
@@ -73,7 +126,7 @@ export function RenameForm({
         <Button size="sm" disabled={editor.busy || name === "" || name === speaker}>
           {editor.busy ? "Saving..." : merging ? `Merge into ${name}` : "Rename"}
         </Button>
-        <Button kind="secondary" size="sm" type="button" disabled={editor.busy} onClick={onClose}>
+        <Button kind="secondary" size="sm" type="button" disabled={editor.busy} onClick={cancel}>
           Cancel
         </Button>
       </div>
@@ -102,7 +155,7 @@ export function LineEditor({
   const [draft, setDraft] = useState(text);
   const [who, setWho] = useState(speaker ?? "");
   const [other, setOther] = useState("");
-  const typedName = other.trim();
+  const typedName = cleanName(other);
   const newSpeaker = who === SOMEONE_ELSE ? typedName : who;
   const textChanged = draft.trim() !== "" && draft.split(/\s+/).join(" ").trim() !== text.split(/\s+/).join(" ").trim();
   const speakerChanged = newSpeaker !== "" && newSpeaker !== (speaker ?? "");
@@ -119,11 +172,18 @@ export function LineEditor({
     if (speakerChanged) change.speaker = newSpeaker;
     if (await editor.editLine(line, change)) onClose();
   }
+  function cancel() {
+    editor.clearError();
+    onClose();
+  }
 
   return (
     <form
       className="transcript-edit-form"
       aria-label={`Edit line ${line}`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !editor.busy) cancel();
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         if (ready) void save();
@@ -160,11 +220,12 @@ export function LineEditor({
           onChange={(event) => setOther(event.target.value)}
         />
       ) : null}
+      {editor.error ? <Alert kind="error">{editor.error}</Alert> : null}
       <div className="transcript-edit-row">
         <Button size="sm" disabled={editor.busy || !ready}>
           {editor.busy ? "Saving..." : "Save line"}
         </Button>
-        <Button kind="secondary" size="sm" type="button" disabled={editor.busy} onClick={onClose}>
+        <Button kind="secondary" size="sm" type="button" disabled={editor.busy} onClick={cancel}>
           Cancel
         </Button>
       </div>

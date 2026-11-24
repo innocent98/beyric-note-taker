@@ -108,6 +108,70 @@ describe("rename a speaker", () => {
   });
 });
 
+describe("the forms", () => {
+  async function openRename() {
+    await openTranscript(before());
+    await userEvent.click(screen.getByRole("button", { name: "Edit transcript" }));
+    await userEvent.click(screen.getByRole("button", { name: "Rename speaker Speaker 2" }));
+    const box = screen.getByLabelText("New name for Speaker 2");
+    await userEvent.clear(box);
+    return box;
+  }
+
+  it("asks about the merge for the name the server will save, not the raw text", async () => {
+    mocks.editTranscript.mockResolvedValue(edited());
+    const box = await openRename();
+    await userEvent.type(box, "  Ben Sample: ");
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    expect(mocks.editTranscript).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(/Ben Sample is already in this meeting/);
+    await userEvent.click(screen.getByRole("button", { name: "Merge into Ben Sample" }));
+    expect(mocks.editTranscript).toHaveBeenCalledWith(before().id, {
+      version: before().transcript_version,
+      rename: { from: "Speaker 2", to: "Ben Sample", merge: true },
+    });
+  });
+
+  it("closes on Escape and gives focus back to the Rename button", async () => {
+    const box = await openRename();
+    await userEvent.type(box, "Dan");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByLabelText("New name for Speaker 2")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Rename speaker Speaker 2" }));
+  });
+
+  it("gives focus back to the pencil after Cancel, Escape and a save", async () => {
+    mocks.editTranscript.mockResolvedValue(edited());
+    await openTranscript(before());
+    await userEvent.click(screen.getByRole("button", { name: "Edit transcript" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit line 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit line 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit line 2" }));
+    await userEvent.keyboard("{Escape}");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit line 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit line 2" }));
+    await userEvent.type(screen.getByLabelText("Words of line 2"), " Now.");
+    await userEvent.click(screen.getByRole("button", { name: "Save line" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit line 2" })));
+  });
+
+  it("shows a refusal inside the form that asked, announced, not above the speaker list", async () => {
+    mocks.editTranscript.mockRejectedValue(new ApiError(422, "no_change", "Nothing changed on this line."));
+    await openTranscript(before());
+    await userEvent.click(screen.getByRole("button", { name: "Edit transcript" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit line 3" }));
+    await userEvent.type(screen.getByLabelText("Words of line 3"), " Really.");
+    await userEvent.click(screen.getByRole("button", { name: "Save line" }));
+    const form = screen.getByRole("form", { name: "Edit line 3" });
+    const alert = await within(form).findByRole("alert");
+    expect(alert.textContent).toContain("Nothing changed on this line.");
+    expect(screen.getAllByRole("alert")).toHaveLength(1); // not repeated above the speaker list
+    await userEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("Nothing changed on this line.")).toBeNull(); // Cancel clears it
+  });
+});
+
 describe("fix or move one line", () => {
   it("sends only what changed on the line", async () => {
     mocks.editTranscript.mockResolvedValue(edited());
@@ -162,6 +226,18 @@ describe("fix or move one line", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save line" }));
     expect(await screen.findByText(/The transcript changed since you opened it/)).toBeTruthy();
     await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(before().id));
+  });
+});
+
+describe("refusals are shown in the API's words", () => {
+  it("shows the text of a 422 or 404, which the generic helper would hide", async () => {
+    mocks.editTranscript.mockRejectedValueOnce(new ApiError(404, "not_found", "No such meeting"));
+    await openTranscript(before());
+    await userEvent.click(screen.getByRole("button", { name: "Edit transcript" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit line 1" }));
+    await userEvent.type(screen.getByLabelText("Words of line 1"), " More.");
+    await userEvent.click(screen.getByRole("button", { name: "Save line" }));
+    expect(await screen.findByText("This meeting is not available any more.")).toBeTruthy();
   });
 });
 

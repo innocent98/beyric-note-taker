@@ -11,7 +11,12 @@ alembic_config = migrations.alembic_config
 owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
-NEW = ("transcript_original", "transcript_edited_at", "transcript_edited_by_user_id")
+NEW = (
+    "transcript_original",
+    "transcript_edited_at",
+    "transcript_edited_by_user_id",
+    "notes_source_version",
+)
 
 
 def columns(engine) -> dict:
@@ -59,16 +64,14 @@ def test_0057_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_re
     command.upgrade(cfg, "0057")
     cols = columns(engine)
     assert all(name in cols and cols[name]["nullable"] for name in NEW)
-    flag = cols["notes_from_edited_transcript"]
-    assert flag["nullable"] is False
     with engine.connect() as conn:
         row = conn.execute(
             text(
                 "select transcript_original, transcript_edited_at, transcript_edited_by_user_id, "
-                "notes_from_edited_transcript, speaker_transcript from meetings"
+                "notes_source_version, speaker_transcript from meetings"
             )
         ).one()
-    assert tuple(row) == (None, None, None, False, "[Ada]: hi")  # nothing changes for old rows
+    assert tuple(row) == (None, None, None, None, "[Ada]: hi")  # nothing changes for old rows
     foreign = inspect(engine).get_foreign_keys("meetings")
     edited_by = [f for f in foreign if f["constrained_columns"] == ["transcript_edited_by_user_id"]]
     assert edited_by and edited_by[0]["options"].get("ondelete") == "SET NULL"
@@ -89,7 +92,6 @@ def test_0057_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_re
 
     command.downgrade(cfg, "0056")
     assert not set(NEW) & set(columns(engine))
-    assert "notes_from_edited_transcript" not in columns(engine)
     command.upgrade(cfg, "head")
     assert set(NEW) <= set(columns(engine))
     engine.dispose()
