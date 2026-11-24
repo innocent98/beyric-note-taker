@@ -1,0 +1,23 @@
+{
+  "note": "The active team's tasks, newest first. The titles that begin with = and @ have a single quote in front; the one with a comma and the one with quotes are quoted CSV.",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks/export?format=csv",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": "attachment; filename=\"tasks-2026-11-24.csv\"; filename*=UTF-8''tasks-2026-11-24.csv",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "starts_with_utf8_bom": true,
+    "body_text": "Title,Status,Assignee,Due date,Project,Sprint,Meeting title,Meeting date\r\n\"Send the copy, with a comma\",To do,Ada Example,,,,Weekly pricing sync,2026-11-03\r\n'@SUM(1+1),Done,Ada Example,2026-11-01,,,,\r\n\"'=HYPERLINK(\"\"http://example.test\"\",\"\"Click me\"\")\",To do,,,,,Weekly pricing sync,2026-11-03\r\nOrder the launch cake,To do,,,,,,\r\nFinish payment checkout,In progress,Ada Example,2026-11-20,Client Portal,Sprint 4,Weekly pricing sync,2026-11-03\r\n"
+  }
+}

@@ -670,6 +670,31 @@ def test_a_task_and_a_decision_with_an_old_quote_still_load_without_a_link(
     assert decisions[0]["quote"] == "I can ship it on Friday" and decisions[0]["line"] is None
 
 
+# ---- search and Ask read the column that is edited ----
+
+
+def test_an_edited_transcript_is_found_by_the_list_search_and_by_ask(api, session, template, owner):
+    """The search index (`meeting_search_text(notes, speaker_transcript, transcript)`) and Ask's
+    candidates read the labelled copy, then the plain one: the column the editor writes."""
+    meeting = meeting_of(session, template)
+    found = lambda word: [  # noqa: E731
+        m["id"] for m in api.get(f"/api/meetings?q={word}").json()["meetings"]
+    ]
+    asked = lambda word: [  # noqa: E731
+        m.id for m in ask.candidates(session, owner, [word], None, None, False)[0]
+    ]
+    assert found("daniel") == [] and asked("daniel") == []
+    rename(api, meeting, "Speaker 2", "Daniel")
+    session.expire_all()
+    assert found("daniel") == [meeting.id] and asked("daniel") == [meeting.id]
+    edit(api, meeting, {"line": 1, "text": "Welcome, everybody; the pelican has landed."})
+    session.expire_all()
+    assert found("pelican") == [meeting.id] and asked("pelican") == [meeting.id]
+    restore(api, meeting)
+    session.expire_all()
+    assert found("pelican") == [] and found("daniel") == []
+
+
 # ---- every writer of the transcript columns ----
 
 

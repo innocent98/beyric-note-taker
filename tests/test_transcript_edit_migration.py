@@ -1,4 +1,4 @@
-"""Migration 0057: the transcript editor's columns on `meetings`. Runs the real migration on the
+"""Migration 0058: the transcript editor's columns on `meetings`. Runs the real migration on the
 scratch database, like the other migration tests."""
 
 from alembic import command
@@ -23,18 +23,18 @@ def columns(engine) -> dict:
     return {c["name"]: c for c in inspect(engine).get_columns("meetings")}
 
 
-def test_0057_is_the_only_head_and_follows_0056(scratch_url):
+def test_0058_is_the_only_head_and_follows_0057(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
-    assert script.get_revision("0057").down_revision == "0056"
+    assert script.get_revision("0058").down_revision == "0057"
 
 
-def test_0057_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_removes_them(
+def test_0058_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_removes_them(
     scratch_url,
 ):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
-    command.upgrade(cfg, "0056")
+    command.upgrade(cfg, "0057")
     assert not set(NEW) & set(columns(engine))
     with engine.begin() as conn:
         conn.execute(
@@ -61,7 +61,7 @@ def test_0057_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_re
             {"u": uid, "t": tid},
         )
 
-    command.upgrade(cfg, "0057")
+    command.upgrade(cfg, "0058")
     cols = columns(engine)
     assert all(name in cols and cols[name]["nullable"] for name in NEW)
     with engine.connect() as conn:
@@ -90,7 +90,7 @@ def test_0057_adds_the_columns_untouched_for_every_meeting_and_the_round_trip_re
             conn.execute(text("select transcript_edited_by_user_id from meetings")).scalar() is None
         )
 
-    command.downgrade(cfg, "0056")
+    command.downgrade(cfg, "0057")
     assert not set(NEW) & set(columns(engine))
     command.upgrade(cfg, "head")
     assert set(NEW) <= set(columns(engine))

@@ -17,16 +17,16 @@ All four are nullable, so the upgrade is instant and nothing changes for anyone 
 edits a transcript. Downgrade drops them: edits stay in the text, the original is lost (restore the
 original first if it matters).
 
-Revision ID: 0057
-Revises: 0056
+Revision ID: 0058
+Revises: 0057
 Create Date: 2026-11-24
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0057"
-down_revision = "0056"
+revision = "0058"
+down_revision = "0057"
 branch_labels = None
 depends_on = None
 

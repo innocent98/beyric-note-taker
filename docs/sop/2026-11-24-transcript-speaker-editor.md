@@ -1,6 +1,6 @@
 # SOP: Transcript and speaker editor
 
-**What shipped.** On the meeting page's transcript tab, the person who may change the meeting can press **Edit transcript** and then **rename a speaker everywhere** ("Speaker 2" becomes "Daniel"; a name already in the meeting merges the two, after a confirm), **fix the words of one line**, and **move one line to another speaker**. **Restore original** puts the transcript back. Two routes (`PATCH /api/meetings/{id}/transcript`, `POST /api/meetings/{id}/transcript/restore`), four columns on `meetings` (migration `0057`), a notice on the page when the notes are older than the edit. Branch `feature/transcript-speaker-editor`; PR: see the checklist entry. Alembic head: **0057** (the search-index PR also uses 0057: whichever merges second renumbers its migration to 0058).
+**What shipped.** On the meeting page's transcript tab, the person who may change the meeting can press **Edit transcript** and then **rename a speaker everywhere** ("Speaker 2" becomes "Daniel"; a name already in the meeting merges the two, after a confirm), **fix the words of one line**, and **move one line to another speaker**. **Restore original** puts the transcript back. Two routes (`PATCH /api/meetings/{id}/transcript`, `POST /api/meetings/{id}/transcript/restore`), four columns on `meetings` (migration `0058`), a notice on the page when the notes are older than the edit. Branch `feature/transcript-speaker-editor`; PR: see the checklist entry. Alembic head: **0058** (it was 0057 until the search-index PR #262 took that number and merged first; this one was renumbered on top of it).
 
 ## Why
 
@@ -75,7 +75,7 @@ Also checked: `app/speaker_correction.py` (pure functions, no assignment: its re
 
 | Path | Change |
 |---|---|
-| `alembic/versions/0057_transcript_edit.py` | `meetings.transcript_original` (text), `transcript_edited_at` (timestamptz), `transcript_edited_by_user_id` (FK users, `ON DELETE SET NULL`), `notes_source_version` (varchar(16), nullable) |
+| `alembic/versions/0058_transcript_edit.py` | `meetings.transcript_original` (text), `transcript_edited_at` (timestamptz), `transcript_edited_by_user_id` (FK users, `ON DELETE SET NULL`), `notes_source_version` (varchar(16), nullable) |
 | `app/models.py` | the four columns on `Meeting` |
 | `app/transcript_edit.py` (new) | `rename_speaker`, `edit_line`, `_same_shape`, `clean_line`, `version_of`, `notes_outdated`, `editable_meeting`, `rename`, `change_line`, `restore` |
 | `app/notes.py` | `clean_name` (the cleaning `_speaker` already did, now shared) |
@@ -110,7 +110,7 @@ Local, scratch Postgres 16 in a throwaway container on port 5440 (removed afterw
 - See who edited what: `SELECT id, transcript_edited_at, transcript_edited_by_user_id FROM meetings WHERE transcript_original IS NOT NULL;`
 - Undo one person's edit by hand (the Restore button does the same): `UPDATE meetings SET speaker_transcript = transcript_original, transcript_original = NULL, transcript_edited_at = NULL, transcript_edited_by_user_id = NULL WHERE id = <id>;` (use `transcript` instead of `speaker_transcript` for the rare meeting whose labelled copy is empty).
 - Let the rebuild script run on an edited meeting: restore the original first (the button or the SQL above); the script never overrides an edit.
-- Roll back: `alembic downgrade 0056` drops the four columns. **The edits stay in the text; the originals are lost**, so restore the originals first if they matter. Code from before the columns ignores them.
+- Roll back: `alembic downgrade 0057` drops the four columns. **The edits stay in the text; the originals are lost**, so restore the originals first if they matter. Code from before the columns ignores them.
 
 ## Follow-ups
 

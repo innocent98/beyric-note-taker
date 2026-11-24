@@ -40,6 +40,8 @@
 }
 .dl-tile-pdf { background: var(--danger-tint); color: var(--danger); }
 .dl-tile-docx { background: var(--info-tint); color: var(--info); }
+.dl-tile-md { background: var(--success-tint); color: var(--success); }
+.dl-tile-txt { background: var(--warning-tint); color: var(--warning); }
 .dl-text { display: flex; flex-direction: column; }
 .dl-label { font-size: var(--text-base); font-weight: 550; }
 .dl-sub { color: var(--text-3); font-size: var(--text-xs); }

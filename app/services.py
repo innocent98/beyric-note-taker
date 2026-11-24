@@ -33,6 +33,7 @@ from app import (
     edge,
     entitlements,
     feature_gates,
+    meeting_search,
     passwords,
     placement,
     timezones,
@@ -426,6 +427,25 @@ def parse_day(text_value: str | None, which: str) -> date | None:
     return day
 
 
+KEYWORDS_MIN, KEYWORDS_MAX = 2, 100
+
+
+def parse_keywords(text_value: str | None) -> str | None:
+    """The text typed in the Meetings list's search box, trimmed; None for no search. One character
+    or more than 100 (or only spaces) is a 422 `invalid_query` in plain words, so a mistake in
+    the address never silently shows every meeting."""
+    if text_value is None:
+        return None
+    text = " ".join(text_value.split())
+    if not KEYWORDS_MIN <= len(text) <= KEYWORDS_MAX:
+        raise Refused(
+            422,
+            "invalid_query",
+            f"Search needs {KEYWORDS_MIN} to {KEYWORDS_MAX} characters.",
+        )
+    return text
+
+
 def pick_zone(stored: str | None, asked: str | None) -> str | None:
     """The zone a list filter's days are in: the person's stored one when they have chosen one on
     Settings, else the `tz` the page asked with (the browser's own zone, which is the zone the
@@ -471,12 +491,19 @@ def list_meetings(
     created_from: datetime | None = None,
     created_before: datetime | None = None,
     active: visibility.ActiveTeam | None = None,
+    keywords: str | None = None,
 ) -> list[Meeting]:
     """Newest first, through the same visibility rule as every other read, narrowed to the active
     team's list when `active` is given (`visibility.readable_in`). `created_from`
     (inclusive) and `created_before` (exclusive) are instants on `created_at`, the timestamp the
-    list and its day headings use; `day_range_utc` makes them from two calendar days."""
-    query = select(Meeting).where(visibility.readable_in(user, active))
+    list and its day headings use; `day_range_utc` makes them from two calendar days. `keywords`
+    (already checked by `parse_keywords`) narrows it to the meetings whose title, notes or
+    transcript match (`meeting_search.keyword_clause`); it only ever removes rows from what the
+    rule above allows."""
+    readable = visibility.readable_in(user, active)
+    query = select(Meeting).where(readable)
+    if keywords:
+        query = query.where(meeting_search.keyword_clause(keywords, readable))
     query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
