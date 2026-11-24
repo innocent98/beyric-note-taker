@@ -2240,6 +2240,9 @@ class Document(Base):
     failure_code: Mapped[str | None] = mapped_column(String(32))
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The `ai_runs` row written when the draft was asked for (`pending` until the worker settles
+    # it): the daily cap counts it from then on. No foreign key: the ledger outlives the draft.
+    ledger_run_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

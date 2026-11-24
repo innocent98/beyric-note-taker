@@ -23,6 +23,7 @@ from app.pipeline import (
     delete_fetched_copies,
     run_shadow_checks,
 )
+from app.recipes import service as recipe_service
 
 logger = logging.getLogger("app.worker")
 CLEANUP_EVERY_SECONDS = 3600
@@ -156,6 +157,17 @@ def start_translation_thread(stop: threading.Event) -> threading.Thread:
     return thread
 
 
+def start_recipe_thread(stop: threading.Event) -> threading.Thread:
+    """Drafts made from meetings (`app/recipes/service.py`) run in a thread of their own: one is a
+    model call of up to minutes, which must not hold up the polling of live meetings or the
+    translations. The thread ends when `stop` is set, after its current call."""
+    thread = threading.Thread(
+        target=recipe_service.run_loop, args=(stop,), name="recipes", daemon=True
+    )
+    thread.start()
+    return thread
+
+
 def run_shadow_loop(stop: threading.Event) -> None:
     """Runs the queued shadow checks (`pipeline.run_shadow_checks`) one after another, in a thread
     of its own: a check is a whole OpenAI transcription, and neither the notes nor the polling of
@@ -189,6 +201,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     interval = get_settings().poll_interval_seconds
     translator = start_translation_thread(stop)
+    recipes = start_recipe_thread(stop)
     start_shadow_thread(stop)
     last_cleanup = 0.0
     cursor = 0
@@ -211,6 +224,7 @@ def main() -> None:
         else:
             cursor = found
     translator.join(timeout=30)
+    recipes.join(timeout=30)
     logger.info("worker stopped")
 
 

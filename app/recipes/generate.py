@@ -107,9 +107,15 @@ them to null."""
 
 
 class GenerationFailed(Exception):
-    def __init__(self, code: str):
+    """`code` is a short word. `input_tokens` and `output_tokens` are what a reply that came back
+    but could not be used already cost (None when no reply came)."""
+
+    def __init__(
+        self, code: str, input_tokens: int | None = None, output_tokens: int | None = None
+    ):
         super().__init__(code)
         self.code = code
+        self.input_tokens, self.output_tokens = input_tokens, output_tokens
 
 
 @dataclass
@@ -448,19 +454,19 @@ def generate_blocks(
     tokens = (getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None))
     choice = response.choices[0]
     if choice.finish_reason != "stop":
-        raise GenerationFailed(MODEL_REPLY)
+        raise GenerationFailed(MODEL_REPLY, *tokens)
     try:
         data = json.loads(choice.message.content or "")
     except ValueError as exc:
-        raise GenerationFailed(MODEL_REPLY) from exc
+        raise GenerationFailed(MODEL_REPLY, *tokens) from exc
     if not isinstance(data, dict) or not isinstance(data.get("blocks"), list):
-        raise GenerationFailed(MODEL_REPLY)
+        raise GenerationFailed(MODEL_REPLY, *tokens)
     try:
         blocks = blocks_mod.parse_blocks(
             data["blocks"], allowed_sources=context.allowed_sources, max_blocks=max_blocks
         )
     except BlocksInvalid as exc:
-        raise GenerationFailed(STRUCTURE) from exc
+        raise GenerationFailed(STRUCTURE, *tokens) from exc
     _requote(blocks, context.quotes)
     title = blocks_mod.plain(data.get("title"), 80) or recipe.name
     return GenerationResult(blocks, title, tokens[0], tokens[1])
