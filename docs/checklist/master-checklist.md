@@ -27,7 +27,11 @@
   - [ ] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`)
 - [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7)
 - [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
-- [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)
+- [x] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12) (branch `feature/workspaces-lifecycle`, SOP `docs/sop/2026-11-24-workspaces-lifecycle.md`, FE guide `docs/fe-integration-guide-workspaces-lifecycle.md`, 36 live captures `docs/fe-captures/workspaces/`; no migration; verified locally and in a real browser at 390 and 1280 px, CI and the `make` gate pending)
+  - [x] T10 Plan limit: `Plan.max_owned_teams` through the live plan (Free 0, Starter 3, Pro 10, Scale unlimited; a trial is Free; members never count; a lapse or downgrade never removes a team; hand-overs checked); Make-a-team card shows the allowance and the upgrade message
+  - [x] T11 Delete a workspace (owner, nobody else in it; meetings go home or are deleted when the recorder is gone), leave and removal rules, personal space protected, classes (`kind`, share default on, one `workspaceWords` helper)
+  - [x] T12 Feature-gate rule for members: `ask` and `make` pass on a workspace whose owner has a plan; `translate` and `rewrite` caller-only; caps per caller; all three modes
+  - [ ] Pass `workspace=` in `recipes/service.py` when the recipes release merges (one line)
 - [ ] W5 Rehearsal on production-shaped data, Opus permission review, FE guide, renumber migrations, ONE PR to `main` (T13)
 
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
