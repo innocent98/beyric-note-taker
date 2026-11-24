@@ -13,6 +13,7 @@ import type { Api } from "@/lib/api/client";
 import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { isFiltered, readRange, type DayRange } from "@/lib/date-range";
+import { readSearch } from "@/lib/meeting-search";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
 // and the owner's Meetings page for the owner (never indexed). GET /api/session says which. The owner
@@ -42,11 +43,14 @@ export default async function HomePage({
   // filter only reads `searchParams` and the list only knows its own `basePath`, so it moves with the
   // page if the Meetings page ever gets an address of its own.
   const params = (await searchParams) ?? {};
-  const { range, notice, zone } = readRange(params);
+  const { range, notice: rangeNotice, zone } = readRange(params);
+  // The keyword search is in the address too (`?q=`, lead-designed); a damaged value is ignored with a line.
+  const { q, notice: searchNotice } = readSearch(params);
+  const notice = rangeNotice ?? searchNotice;
   // The list follows the active team (`?team=`, else the default team; lead-designed, owner's request 2026-11-14):
   // a team lists the meetings shared or moved to it, the personal space the ones only the person has.
   const { api } = await resolveTeam("/", params);
-  return <MeetingsPage api={api} range={range} notice={notice} zone={zone} />;
+  return <MeetingsPage api={api} range={range} q={q} notice={notice} zone={zone} />;
 }
 
 // The calendar is optional on this page: while the server has it off (404 `calendar_unavailable`)
@@ -72,14 +76,14 @@ async function getNotRecorded(api: Api): Promise<NotRecordedItem[]> {
 // zone from the page that built the link); with none in the address it is UTC for this first render and
 // the browser replaces the address with its own zone at once (see MeetingList). A stored zone wins on
 // the server, so `tz` is only sent when there is none.
-async function MeetingsPage({ api, range, notice, zone }: { api: Api; range: DayRange; notice: string | null; zone: string | null }) {
+async function MeetingsPage({ api, range, q, notice, zone }: { api: Api; range: DayRange; q: string | null; notice: string | null; zone: string | null }) {
   const stored = await getTimeZone();
   const tz = stored === null && isFiltered(range) ? (zone ?? undefined) : undefined;
   const firstPage = () =>
-    api.meetings.list({ from: range.from ?? undefined, to: range.to ?? undefined, tz }).catch((error: unknown) => {
+    api.meetings.list({ from: range.from ?? undefined, to: range.to ?? undefined, tz, q: q ?? undefined }).catch((error: unknown) => {
       // A zone name the browser knows and the server does not (rare): the list in UTC days beats an error page.
       if (tz !== undefined && error instanceof ApiError && error.status === 422) {
-        return api.meetings.list({ from: range.from ?? undefined, to: range.to ?? undefined });
+        return api.meetings.list({ from: range.from ?? undefined, to: range.to ?? undefined, q: q ?? undefined });
       }
       throw error;
     });
@@ -107,7 +111,7 @@ async function MeetingsPage({ api, range, notice, zone }: { api: Api; range: Day
         <NewMeetingForm templates={templates} busy={busy} />
         <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
         <RecurringCards multiTeam={session?.multi_team ?? false} />
-        <MeetingList initial={list} templates={templates} range={range} rangeNotice={notice} rangeZone={zone} basePath="/" />
+        <MeetingList initial={list} templates={templates} range={range} q={q} rangeNotice={notice} rangeZone={zone} basePath="/" />
       </div>
     </AppShell>
   );

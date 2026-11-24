@@ -8,16 +8,16 @@ This number is a placeholder (renumbered when `feature/recipes` is rebased onto 
 
 Downgrade drops the column.
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0060
+Revises: 0059
 Create Date: 2026-11-24
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0061"
-down_revision = "0060"
+revision = "0060"
+down_revision = "0059"
 branch_labels = None
 depends_on = None
 

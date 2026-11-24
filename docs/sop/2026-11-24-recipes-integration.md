@@ -126,7 +126,7 @@ Measured with `scripts/recipes_live.py load` (developer Mac, five runs each, two
 ## Operate / roll back
 
 - **Nothing deploys until the one PR from `feature/recipes` to `main`.** There is no feature flag: the screens appear when the code deploys. The gate for making documents follows the same `FEATURE_GATES_MODE` as Ask: `off` (everyone), `shadow` (logs), `enforce` (a person without a live plan or trial gets 403 `plan_inactive`). Billing is live on the server, so confirm the mode there. Other switches: `RECIPE_DAILY_LIMIT` (default 20; `0` refuses everyone), `RECIPE_MODEL` (default `gpt-6-luna`), `BRIEF_MAX_CHARS` 12000, `DRAFT_MAX_BLOCKS` 60, `IMPORT_MAX_BYTES` 5 MB, `IMPORT_MAX_PAGES` 40.
-- **Server steps before it reaches `main`:** the nginx import location from S3 (one hand edit; see `docs/sop/2026-11-24-recipes-library.md`); new dependencies `openpyxl` and `pypdf` come with the image build. Migrations `0060` and `0061` here are **placeholders**: renumber to follow `main`'s head (`0058`) and the workspaces release.
+- **Server steps before it reaches `main`:** the nginx import location from S3 (one hand edit; see `docs/sop/2026-11-24-recipes-library.md`); new dependencies `openpyxl` and `pypdf` come with the image build. Migrations are `0059` and `0060`, one chain after `main`'s `0058` (renumbered from the placeholders `0060` and `0061`); if the workspaces release lands first, renumber again.
 - **Roll back:** `alembic downgrade` to the revision before the recipes tables (deletes every draft, share, recipe and brief and the `recipe` ledger rows), or revert the merge; nothing else depends on them. Stopping sharing for everyone: `delete from document_shares` (access ends at once).
 
 ## Follow-ups

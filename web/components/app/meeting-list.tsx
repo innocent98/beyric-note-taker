@@ -13,6 +13,7 @@ import { useStoredTimeZone } from "@/components/app/time-zone-context";
 import { TEAM_PARAM, parseTeamId, withTeam } from "@/lib/active-team";
 import { NO_RANGE, isFiltered, rangeHeading, rangeQuery, type DayRange } from "@/lib/date-range";
 import { dayKey, groupByDay } from "@/lib/day-groups";
+import { addSearch, searchHeading } from "@/lib/meeting-search";
 import { browserTimeZone, plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
@@ -47,6 +48,7 @@ export function MeetingList({
   initial,
   templates,
   range = NO_RANGE,
+  q = null,
   rangeNotice = null,
   rangeZone = null,
   basePath = "/",
@@ -54,6 +56,8 @@ export function MeetingList({
   initial: MeetingListData;
   templates: Template[];
   range?: DayRange;
+  // The keyword search (`?q=`, lead-designed; lib/meeting-search.ts): the server already narrowed `initial` to it.
+  q?: string | null;
   rangeNotice?: string | null;
   rangeZone?: string | null;
   basePath?: string;
@@ -62,7 +66,7 @@ export function MeetingList({
   const stored = useStoredTimeZone();
   // Older pages belong to the range they were fetched for: another range starts again from the
   // server's first page, with no effect to reset anything.
-  const rangeId = rangeQuery(range, rangeZone);
+  const rangeId = addSearch(rangeQuery(range, rangeZone), q);
   const [paged, setPaged] = useState<{ rangeId: string; older: MeetingSummary[]; hasMore: boolean; before: number | null } | null>(null);
   const current = paged && paged.rangeId === rangeId ? paged : null;
   const older = current?.older ?? [];
@@ -115,14 +119,14 @@ export function MeetingList({
   // is UTC during the first render in the browser (to match the server's), so the browser's own zone
   // is read directly here, in an effect, which only ever runs in the browser.
   const corrected = useRef(false);
-  const addressKey = rangeQuery(range, rangeZone);
+  const addressKey = addSearch(rangeQuery(range, rangeZone), q);
   useEffect(() => {
     if (stored || !filtered || corrected.current) return;
     const zone = browserTimeZone();
     if (zone === rangeZone) return;
     corrected.current = true;
-    router.replace(keepTeam(`${basePath}${rangeQuery(range, zone)}`), { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressKey stands for range and rangeZone
+    router.replace(keepTeam(`${basePath}${addSearch(rangeQuery(range, zone), q)}`), { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressKey stands for range and rangeZone (and q)
   }, [stored, filtered, addressKey, basePath, router]);
 
   async function loadOlder() {
@@ -130,7 +134,7 @@ export function MeetingList({
     setLoading(true);
     setFailed(false);
     try {
-      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined, tz: filtered ? askZone : undefined });
+      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined, tz: filtered ? askZone : undefined, q: q ?? undefined });
       setPaged({
         rangeId,
         older: [...older, ...page.meetings],
@@ -144,12 +148,17 @@ export function MeetingList({
   }
 
   function applyRange(next: DayRange) {
-    router.push(keepTeam(`${basePath}${rangeQuery(next, askZone ?? null)}`), { scroll: false });
+    router.push(keepTeam(`${basePath}${addSearch(rangeQuery(next, askZone ?? null), q)}`), { scroll: false });
+  }
+
+  // The search keeps the dates and their zone, and starts again from the first page.
+  function applySearch(next: string | null) {
+    router.push(keepTeam(`${basePath}${addSearch(rangeQuery(range, askZone ?? null), next)}`), { scroll: false });
   }
 
   const head = (
     <div className="card-head">
-      <h2 suppressHydrationWarning>{rangeHeading(range, today)}</h2>
+      <h2 suppressHydrationWarning>{q ? searchHeading(range, today, q) : rangeHeading(range, today)}</h2>
       <span className="meta">
         {plural(meetings.length, "meeting")}
         {hasMore ? "+" : ""}
@@ -159,7 +168,7 @@ export function MeetingList({
 
   return (
     <>
-    {meetings.length > 0 || filtered ? <MeetingFilter range={range} today={today} onApply={applyRange} /> : null}
+    {meetings.length > 0 || filtered || q ? <MeetingFilter range={range} q={q} today={today} onApply={applyRange} onSearch={applySearch} /> : null}
     {rangeNotice ? <Alert kind="notice">{rangeNotice}</Alert> : null}
     <Card flush>
       {meetings.length > 0 ? (
@@ -216,6 +225,13 @@ export function MeetingList({
               {failed ? <span className="meta">Could not load older meetings. Try again.</span> : null}
             </div>
           ) : null}
+        </>
+      ) : q ? (
+        <>
+          {head}
+          <EmptyState title="No meetings match.">
+            Nothing has all of those words in its title, notes or transcript. Try fewer or different words, or clear the search to see every meeting.
+          </EmptyState>
         </>
       ) : filtered ? (
         <>

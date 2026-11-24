@@ -1,6 +1,6 @@
 # SOP: Meeting recipes, slice S1 (the engine)
 
-**What shipped.** The engine under every other recipes slice: storage, the block schema, the number audit, the model call, the queue and worker with the daily cap, and the draft API (`POST/GET/PATCH/DELETE /api/documents`). PR A (tables, models, gate, block schema): [#264](https://github.com/innocent98/beyric-note-taker/pull/264); PR B (audit, generation, queue and worker, API, docs): see the PR list on `feature/recipes`. Nothing here is user-visible by itself: no screen calls it yet. Spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md` (tasks 1 to 6). Migrations `0060` and `0061` are **placeholders**: the lead renumbers them into one chain when `feature/recipes` is rebased onto `main`.
+**What shipped.** The engine under every other recipes slice: storage, the block schema, the number audit, the model call, the queue and worker with the daily cap, and the draft API (`POST/GET/PATCH/DELETE /api/documents`). PR A (tables, models, gate, block schema): [#264](https://github.com/innocent98/beyric-note-taker/pull/264); PR B (audit, generation, queue and worker, API, docs): see the PR list on `feature/recipes`. Nothing here is user-visible by itself: no screen calls it yet. Spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md` (tasks 1 to 6). Migrations `0059` and `0060` (renumbered from the placeholders `0060` and `0061` when `feature/recipes` took `main`, whose head was `0058`; the chain is `0058` then `0059` then `0060`). If another release (workspaces) lands first, renumber again.
 
 ## Why
 
@@ -35,8 +35,8 @@ Adebayo wants a meeting to become the documents a team needs next (follow-up ema
 
 | Path | Change |
 |---|---|
-| `alembic/versions/0060_recipes_core.py` | tables `recipes`, `documents`, `document_meetings`, `document_shares`, `team_briefs`; widens `ck_ai_runs_kind` with `recipe`. Downgrade deletes `recipe` ledger rows, drops the tables |
-| `alembic/versions/0061_recipes_ledger_link.py` | `documents.ledger_run_id` (no FK: the ledger outlives the draft) |
+| `alembic/versions/0059_recipes_core.py` | tables `recipes`, `documents`, `document_meetings`, `document_shares`, `team_briefs`; widens `ck_ai_runs_kind` with `recipe`. Downgrade deletes `recipe` ledger rows, drops the tables |
+| `alembic/versions/0060_recipes_ledger_link.py` | `documents.ledger_run_id` (no FK: the ledger outlives the draft) |
 | `app/models.py` | `Recipe`, `Document`, `DocumentMeeting`, `DocumentShare`, `TeamBrief`; `AI_RUN_KINDS` + `recipe`; `DOCUMENT_STATUSES`, `RECIPE_OUTPUT_TYPES`, `RECIPE_SCOPES` |
 | `app/recipes/blocks.py` | the schema, `parse_blocks`, `dump_blocks`, `load_blocks`, `texts`, `to_markdown`, `to_text` |
 | `app/recipes/audit.py` | `audit`, `blanks`, `normalise_figures`, `Flag`, `Blank` |

@@ -1,0 +1,27 @@
+{
+  "note": "Nor restore: 403.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/transcript/restore",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "b9ed480a17efee24"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only the owner of this meeting can edit its transcript."
+      }
+    }
+  }
+}

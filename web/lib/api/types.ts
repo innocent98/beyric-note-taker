@@ -10,6 +10,7 @@ export type Usage = Schemas["UsageOut"];
 export type MeetingSummary = Schemas["MeetingSummary"];
 export type MeetingList = Schemas["MeetingList"];
 export type Meeting = Schemas["MeetingDetail"];
+export type TranscriptEdit = Schemas["TranscriptEdit"];
 export type NewMeeting = Schemas["NewMeeting"];
 export type Template = Schemas["TemplateOut"];
 export type TemplateInput = Schemas["TemplateIn"];

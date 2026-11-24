@@ -1,0 +1,26 @@
+{
+  "note": "Same moment: PDF and Word still answer 503 `export_busy`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "retry-after": "5"
+    },
+    "body": {
+      "error": {
+        "code": "export_busy",
+        "message": "Another file is being prepared. Try again in a few seconds."
+      }
+    }
+  }
+}

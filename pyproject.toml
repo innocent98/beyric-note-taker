@@ -59,6 +59,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/test_integrations_linear.py" = ["F811"]
 "tests/test_api_tasks.py" = ["F811"]
 "tests/test_team.py" = ["F811"]
+"tests/test_transcript_edit.py" = ["F811"]
 "tests/test_hours_enforce.py" = ["F811"]
 "tests/test_billing_mismatch.py" = ["F811"]
 # The capture script's notes are prose that ends up in the FE guide: one string per note.

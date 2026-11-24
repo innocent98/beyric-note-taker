@@ -137,6 +137,47 @@ class Base(DeclarativeBase):
     pass
 
 
+# The accents and other combining marks folded away before words are matched, as
+# `app.extraction.normalise` folds the words a person types (it does NFKD and drops the combining
+# marks): the Latin, Greek and Cyrillic diacritics and their supplements, which is what French,
+# Spanish, Portuguese and Yoruba names ("équipe", "Ọlá") carry. A mark outside these blocks (Hebrew
+# points, Arabic vowel signs, Indic signs) is not folded in the stored text, though `normalise` does
+# drop it from a typed word: such a word will not match.
+SEARCH_FOLD_MARKS = r"[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]"
+
+# The text of a meeting that search reads, as one `tsvector`: its notes plus its transcript (the
+# speaker-labelled one when there is one), accents folded the way `normalise` folds a typed word.
+# ONE function for every reader (Ask Beyric's `candidates`, the Meetings list's search box:
+# `app/meeting_search.py`), and the GIN index on `meetings` is built on a call to it, so Postgres
+# can use that index only when a query calls exactly
+# `meeting_search_text(notes, speaker_transcript, transcript)`. It must be IMMUTABLE for an index
+# to use it (`concat_ws` is not; `normalize(text, NFKD)`, `regexp_replace` and `to_tsvector` with a
+# named configuration are; the `unaccent` extension is not). Keep it a single SQL statement so
+# Postgres inlines it. Migration 0057 holds its own frozen copy of this text.
+MEETING_SEARCH_TEXT_SQL = r"""
+CREATE OR REPLACE FUNCTION meeting_search_text(
+    notes text, speaker_transcript text, transcript text
+) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+    SELECT to_tsvector(
+        'simple',
+        regexp_replace(
+            normalize(
+                coalesce(notes, '') || ' ' ||
+                    coalesce(nullif(speaker_transcript, ''), transcript, ''),
+                NFKD
+            ),
+            '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]',
+            '',
+            'g'
+        )
+    )
+$$
+"""
+# The tests build the schema with `create_all`, not the migrations: the function has to exist
+# before the index that calls it is made.
+sa.event.listen(Base.metadata, "before_create", sa.DDL(MEETING_SEARCH_TEXT_SQL))
+
+
 class User(Base):
     """An account. Emails are stored lower-cased (the check keeps it so), which makes the plain
     unique constraint a unique-on-lower(email) one."""
@@ -746,6 +787,11 @@ class Meeting(Base):
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
         Index(
+            "ix_meetings_search_text",
+            sa.text("meeting_search_text(notes, speaker_transcript, transcript)"),
+            postgresql_using="gin",
+        ),
+        Index(
             "ix_meetings_series_id",
             "series_id",
             postgresql_where=sa.text("series_id is not null"),
@@ -799,6 +845,22 @@ class Meeting(Base):
     # saved and for meetings made before this column existed (they were all `own`).
     transcript_source: Mapped[str | None] = mapped_column(String(16))
     speaker_transcript: Mapped[str | None] = mapped_column(Text)
+    # A person's edits to the transcript (`app/transcript_edit.py`). The edit changes the displayed
+    # column (`speaker_transcript`, else `transcript`; every reader falls back the same way).
+    # `transcript_original` holds that column's text from before the FIRST edit, once; it is null
+    # for a transcript nobody edited, and "Restore original" puts it back and nulls all three
+    # edit columns. Machinery that rewrites a transcript
+    # (`scripts/rebuild_meeting_from_evidence.py`) skips a meeting where this is set.
+    transcript_original: Mapped[str | None] = mapped_column(Text)
+    transcript_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcript_edited_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # The version (`transcript_text.version_of`) of the exact text the current `notes` were written
+    # from, set by the owner's rewrite from the text it sent to the model. Null = the notes were
+    # written by the pipeline or the rebuild script from the transcript as it was before any edit
+    # (`transcript_edit.notes_outdated` compares it with the shown text).
+    notes_source_version: Mapped[str | None] = mapped_column(String(16))
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

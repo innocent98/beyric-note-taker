@@ -93,6 +93,7 @@ from app.models import (  # noqa: E402
     TrackerIssue,
 )
 from app.notes import UNKNOWN_SPEAKER, NotesFailed, generate_notes  # noqa: E402
+from app.transcript_text import version_of  # noqa: E402
 
 REBUILT = "skribby-rebuilt"  # `meetings.transcript_source` (String(16)) after a rebuild
 # Added to the prompt version of the notes call this script makes (`ai_runs.prompt_version`), so the
@@ -180,6 +181,13 @@ def _check_state(meeting: Meeting) -> None:
         raise Refused(
             f"meeting {meeting.id} is not finished (its status is {meeting.status}): it is being "
             "recorded or processed, or it failed. Wait until it says ready."
+        )
+    if meeting.transcript_original is not None:
+        raise Refused(
+            f"SKIPPED meeting {meeting.id}: a person edited its transcript in the app "
+            f"({meeting.transcript_edited_at:%Y-%m-%d %H:%M} UTC). Rebuilding would overwrite "
+            "their edits. In the app, press Restore original on the meeting first if the "
+            "rebuild is what is wanted."
         )
     if meeting.extraction_status == "running":
         raise Refused(
@@ -725,6 +733,9 @@ def _apply(session: Session, meeting_id: int, plan: Plan, *, force, folder, clie
     meeting.speakers_incomplete = not found.complete
     meeting.transcript_source = REBUILT
     meeting.notes = new_notes
+    # The notes were written from exactly this text: they are current, whatever an earlier rewrite
+    # of the owner's had recorded (`transcript_edit.notes_outdated`).
+    meeting.notes_source_version = version_of(text_)
     run = ai_runs.record_usage(
         session,
         meeting.id,
@@ -814,6 +825,9 @@ def restore(path: Path, *, apply: bool, force: bool, out=print) -> int:
         meeting.speakers_incomplete = bool(data.get("speakers_incomplete"))
         meeting.transcript_source = data["transcript_source"]
         meeting.notes = data["notes"]
+        # What the backup's notes were written from is not in the backup: none recorded means "the
+        # transcript as it is", which is right for an unedited meeting (the only kind this reaches).
+        meeting.notes_source_version = None
         workspace.mark_pending(meeting, quiet=True)
         session.commit()
         out(f"RESTORED meeting {meeting_id}. The lists are read again by the worker, quietly.")

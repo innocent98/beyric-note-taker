@@ -94,6 +94,7 @@ import type {
   Term,
   Translation,
   TranslationLanguage,
+  TranscriptEdit,
 } from "./types";
 import type { BoardDocument, BoardOp } from "../board";
 import type {
@@ -202,6 +203,7 @@ export function isTeamScoped(path: string, method = "GET"): boolean {
     /^\/api\/(recipes|briefs)(\/|$)/.test(p) ||
     (p === "/api/documents" && method === "POST") ||
     /^\/api\/(tasks|series)$/.test(p) ||
+    p === "/api/tasks/export" ||
     p === "/api/series/removed" ||
     /^\/api\/meetings\/\d+\/milestones$/.test(p)
   );
@@ -377,8 +379,9 @@ export function createApi(options: ApiOptions = {}) {
     meetings: {
       // `from` and `to` (YYYY-MM-DD, both included, the caller's own days) keep a range
       // (docs/fe-integration-guide-owner-app.md 5.1a); with neither the list is as it always was. `tz` is
-      // the zone of those days when the caller has none stored (the browser's own).
-      list: (query: { limit?: number; before_id?: number; from?: string; to?: string; tz?: string } = {}) =>
+      // the zone of those days when the caller has none stored (the browser's own). `q` (2 to 100 characters) is
+      // the keyword search (docs/fe-integration-guide-owner-app.md 5.1b): title, notes and transcript.
+      list: (query: { limit?: number; before_id?: number; from?: string; to?: string; tz?: string; q?: string } = {}) =>
         request<MeetingList>("GET", "/api/meetings", { query }),
       get: (id: number) => request<Meeting>("GET", `/api/meetings/${id}`),
       create: (body: NewMeeting) => request<Meeting>("POST", "/api/meetings", { body, write: true }),
@@ -410,6 +413,12 @@ export function createApi(options: ApiOptions = {}) {
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),
       regenerate: (id: number, template_id: number) =>
         request<Meeting>("POST", `/api/meetings/${id}/regenerate`, { body: { template_id }, write: true }),
+      // The transcript editor (docs/fe-integration-guide-transcript-edit.md): one edit, then the
+      // whole meeting back. `version` is the meeting's `transcript_version` from the page being edited.
+      editTranscript: (id: number, body: TranscriptEdit) =>
+        request<Meeting>("PATCH", `/api/meetings/${id}/transcript`, { body, write: true }),
+      restoreTranscript: (id: number, version: string) =>
+        request<Meeting>("POST", `/api/meetings/${id}/transcript/restore`, { body: { version }, write: true }),
       // The notes as a PDF or Word file, built when asked and not stored (GET .../export).
       // `language` fr or es builds it from the finished translation (409 translation_missing
       // otherwise); `en` is the original.
@@ -532,6 +541,9 @@ export function createApi(options: ApiOptions = {}) {
           team,
         }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
+      // The active team's tasks as a CSV file (LEAD-DESIGNED control, docs/fe-integration-guide-tasks.md "CSV
+      // export"): every task of the board, built when asked and not stored.
+      exportCsv: () => download("/api/tasks/export", { format: "csv" }),
       create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
       update: (id: number, body: TaskChanges) =>
         request<Task>("PATCH", `/api/tasks/${id}`, { body, write: true }),

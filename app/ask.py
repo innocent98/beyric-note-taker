@@ -33,7 +33,7 @@ from openai import OpenAI
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import ai_runs, entitlements, feature_gates, timezones, titles
+from app import ai_runs, entitlements, feature_gates, meeting_search, timezones, titles
 from app import tasks as task_rules
 from app.ai_versions import ASK_PROMPT_VERSION
 from app.config import get_settings
@@ -470,15 +470,8 @@ def candidates(
         base = base.where(Meeting.created_at >= start, Meeting.created_at < end)
     found: list[Meeting] = []
     if stems:
-        doc = func.to_tsvector(
-            "simple",
-            func.concat_ws(
-                " ",
-                Meeting.notes,
-                func.coalesce(func.nullif(Meeting.speaker_transcript, ""), Meeting.transcript),
-            ),
-        )
-        query = func.to_tsquery("simple", " | ".join(f"{s}:*" for s in stems))
+        doc = meeting_search.document()
+        query = meeting_search.prefix_query(stems)
         found = list(
             session.scalars(
                 base.where(doc.op("@@")(query))

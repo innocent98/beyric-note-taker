@@ -740,6 +740,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/translations": {"language": "fr"},
             "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
             "/move": {"team_id": 1},
+            "/transcript": {"version": "0" * 16, "line": 1, "text": "x"},
+            "/transcript/restore": {"version": "0" * 16},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
             "/api/decisions/{decision_id}": {"status": "rejected"},

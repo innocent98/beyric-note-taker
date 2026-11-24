@@ -3120,6 +3120,11 @@
             "title": "Can Delete",
             "type": "boolean"
           },
+          "can_edit_transcript": {
+            "default": false,
+            "title": "Can Edit Transcript",
+            "type": "boolean"
+          },
           "can_end": {
             "title": "Can End",
             "type": "boolean"
@@ -3249,6 +3254,11 @@
               }
             ],
             "title": "Notes Html"
+          },
+          "notes_outdated": {
+            "default": false,
+            "title": "Notes Outdated",
+            "type": "boolean"
           },
           "open_questions": {
             "default": [],
@@ -3447,6 +3457,45 @@
               }
             ],
             "title": "Transcript"
+          },
+          "transcript_edited": {
+            "default": false,
+            "title": "Transcript Edited",
+            "type": "boolean"
+          },
+          "transcript_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Edited At"
+          },
+          "transcript_edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Edited By"
+          },
+          "transcript_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Version"
           },
           "translations": {
             "items": {
@@ -6835,6 +6884,35 @@
         "title": "Source",
         "type": "object"
       },
+      "SpeakerRename": {
+        "additionalProperties": false,
+        "description": "Every line labelled exactly `from` becomes `to`. When `to` is already a speaker of the\nmeeting the two become one: that needs `merge: true` (else 409 `speaker_exists`).",
+        "properties": {
+          "from": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "From",
+            "type": "string"
+          },
+          "merge": {
+            "default": false,
+            "title": "Merge",
+            "type": "boolean"
+          },
+          "to": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "SpeakerRename",
+        "type": "object"
+      },
       "SprintClosed": {
         "properties": {
           "closed": {
@@ -8290,6 +8368,86 @@
           "meetings"
         ],
         "title": "TopicOut",
+        "type": "object"
+      },
+      "TranscriptEdit": {
+        "additionalProperties": false,
+        "description": "One edit of the transcript. `version` is the `transcript_version` of the page the person\nedited from (409 `transcript_changed` when the transcript has changed since). Send exactly one\nof: `rename`; or `line` (the 1-based row of the page) with `text`, `speaker` or both.",
+        "properties": {
+          "line": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "rename": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerRename"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "TranscriptEdit",
+        "type": "object"
+      },
+      "TranscriptRestore": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "TranscriptRestore",
         "type": "object"
       },
       "TranslationBrief": {
@@ -12729,7 +12887,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The active team's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.\n\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is not\nin), else their default team while multi-team is on. An ordinary team lists the meetings shared\nto it or moved to it, whoever recorded them; the personal team lists only the meetings the\ncaller recorded that are neither shared nor moved. The list only narrows what the caller may\nread: a meeting opened by its link opens whatever team is active. With multi-team off and no\nheader, the caller's meetings plus any shared with their team, as before.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.",
+        "description": "The active team's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.\n\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is not\nin), else their default team while multi-team is on. An ordinary team lists the meetings shared\nto it or moved to it, whoever recorded them; the personal team lists only the meetings the\ncaller recorded that are neither shared nor moved. The list only narrows what the caller may\nread: a meeting opened by its link opens whatever team is active. With multi-team off and no\nheader, the caller's meetings plus any shared with their team, as before.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.\n\n`q` (optional, trimmed, 2 to 100 characters) is the search box: it keeps a meeting when its\ntitle contains the text (upper and lower case alike; `%` and `_` count as themselves), or,\nfor a meeting whose notes are ready, when every word of it appears in the notes or the\ntranscript (a word matches by its start, so \"pricing\" finds \"price\"). A meeting that is not\nready can match on its title only. It only narrows the list: the team, the visibility rule,\nthe dates, the order and `before_id` paging are as without it. 422 `invalid_query` for a\nvalue outside 2 to 100 characters. No model is called, so it costs nothing.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -12808,6 +12966,24 @@
                 }
               ],
               "title": "Tz"
+            }
+          },
+          {
+            "description": "Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keywords: keep the meetings whose title contains the text, or whose notes or transcript contain every word of it. 2 to 100 characters.",
+              "title": "Q"
             }
           },
           {
@@ -13303,7 +13479,7 @@
     },
     "/api/meetings/{meeting_id}/export": {
       "get": {
-        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.\n\n`language` `fr` or `es` builds it from the finished, current translation (409\n`translation_missing` when there is none: translate first); `en`, the default, is the\noriginal.\n\nBuilt when asked and never stored. One file is built at a time per server process: a second\nrequest meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's\ntitle, cleaned, in `Content-Disposition`.",
+        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF, Word, Markdown or\nplain-text file.\n\n`language` `fr` or `es` builds it from the finished, current translation (409\n`translation_missing` when there is none: translate first); `en`, the default, is the\noriginal.\n\nBuilt when asked and never stored. PDF and Word are built one at a time per server process: a\nsecond request meanwhile gets 503 `export_busy` with `Retry-After`. `md` (the notes as they\nare stored, Markdown, with the title and date above and each speaker's turn bold) and `txt`\n(the same with the marks taken off) are text made in the request itself, so they are never\nbusy. The file name is the meeting's title, cleaned, in `Content-Disposition`.",
         "operationId": "export_meeting",
         "parameters": [
           {
@@ -13323,7 +13499,9 @@
               "default": "pdf",
               "enum": [
                 "pdf",
-                "docx"
+                "docx",
+                "md",
+                "txt"
               ],
               "title": "Format",
               "type": "string"
@@ -13367,6 +13545,16 @@
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
                 "schema": {
                   "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain; charset=utf-8": {
+                "schema": {
                   "type": "string"
                 }
               }
@@ -14619,6 +14807,192 @@
         "summary": "Extract Tasks",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/transcript": {
+      "patch": {
+        "description": "Edit the transcript of a `ready` meeting: rename a speaker everywhere (`rename`), or change\none line's words and/or speaker (`line`, the 1-based row of the page, with `text` and/or\n`speaker`). The number and order of lines never change. The original is kept once, before the\nfirst edit (`POST .../transcript/restore` puts it back). Nothing is rewritten: the response has\n`notes_outdated: true` until the owner rewrites the notes. Who may: whoever may delete the\nmeeting (its recorder; a team's owner and admins); 403 `team_forbidden` for a reader, 404 when\nthe caller cannot read it. 409 `not_ready`, `transcript_changed` (the `version` is old),\n`speaker_exists` (renaming into an existing speaker needs `merge: true`), `meeting_busy`; 422\n`no_speakers`, `speaker_not_found`, `invalid_name`, `empty_text`, `no_change`,\n`line_out_of_range`, `invalid_edit`.",
+        "operationId": "edit_transcript",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`: the caller can read the meeting but may not change it"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Edit Transcript",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/transcript/restore": {
+      "post": {
+        "description": "Put back the transcript as it was before the first edit and forget the edits. 409\n`nothing_to_restore` when it was never edited; the other refusals are those of the edit.",
+        "operationId": "restore_transcript",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptRestore"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token, or `team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Restore Transcript",
+        "tags": [
+          "meetings"
         ]
       }
     },
@@ -19941,6 +20315,101 @@
           }
         },
         "summary": "Create Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/export": {
+      "get": {
+        "description": "The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule\nand the same `X-Team-Id` scoping as `GET /api/tasks` (suggested tasks left out, newest first),\nevery one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,\nDue date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date\nare filled only when the caller may read that meeting, as on the screen; the date is in the\ncaller's stored time zone (UTC when none).\n\nUTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage\nreturn gets a single quote in front so a spreadsheet shows it as text instead of running it.",
+        "operationId": "export_tasks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "const": "csv",
+              "default": "csv",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The CSV file, built for this request and not stored."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_found`: a team the caller is not in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Export Tasks",
         "tags": [
           "tasks"
         ]

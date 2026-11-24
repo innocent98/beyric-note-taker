@@ -1,0 +1,29 @@
+{
+  "note": "A meeting they cannot read is not found: 404, the same as one that does not exist.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/meetings/2/transcript",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "version": "0000000000000000",
+      "line": 1,
+      "text": "x"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

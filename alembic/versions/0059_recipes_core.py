@@ -12,8 +12,8 @@ when it is rebased onto `main`).
 Downgrade deletes the `recipe` ledger rows first (the old constraint would refuse them), then drops
 the tables; every draft, share, recipe and brief is lost.
 
-Revision ID: 0060
-Revises: 0056
+Revision ID: 0059
+Revises: 0058
 Create Date: 2026-11-24
 """
 
@@ -31,8 +31,8 @@ _KINDS_NEW = (
 )
 _OUTPUT_TYPES = "output_type in ('document', 'email', 'table', 'board')"
 
-revision = "0060"
-down_revision = "0056"
+revision = "0059"
+down_revision = "0058"
 branch_labels = None
 depends_on = None
 
