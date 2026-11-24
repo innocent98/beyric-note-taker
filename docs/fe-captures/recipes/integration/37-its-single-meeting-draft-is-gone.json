@@ -3,7 +3,7 @@
   "client": "ada (creator)",
   "request": {
     "method": "GET",
-    "path": "/api/documents/6",
+    "path": "/api/documents/7",
     "headers": {
       "Cookie": "session=<cookie>"
     },

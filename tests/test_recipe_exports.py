@@ -344,3 +344,38 @@ def test_a_busy_or_failed_render_answers_with_the_project_error_shape(
 
     monkeypatch.setattr(export, "build_file", broken)
     error_of(api.get(url(doc, "docx")), 500, "export_failed")
+
+
+def test_an_excel_sheet_is_never_called_history_or_another_reserved_name():
+    for name in ("History", "history", "HISTORY"):
+        assert exporters._sheet_name(name, 2, set()) == "Table 2"
+    assert exporters._sheet_name("Histories", 2, set()) == "Histories"
+
+
+def test_a_table_under_the_heading_history_is_exported_with_a_safe_sheet_name(api, session, owner):
+    from openpyxl import load_workbook
+
+    doc = saved(
+        session,
+        owner,
+        Document(
+            owner_user_id=owner.id,
+            title="Log",
+            output_type="document",
+            status="ready",
+            blocks=[
+                b.dump_blocks([b.Heading(level=2, text="History")])[0],
+                *b.dump_blocks(
+                    [
+                        b.Table(
+                            columns=["When", "What"], rows=[[b.Cell(text="Mon"), b.Cell(text="x")]]
+                        )
+                    ]
+                ),
+            ],
+        ),
+    )
+    response = api.get(url(doc, "xlsx"))
+    assert response.status_code == 200
+    names = load_workbook(io.BytesIO(response.content)).sheetnames
+    assert names == ["Table 1"]

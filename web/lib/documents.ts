@@ -247,6 +247,6 @@ export function sharedWithPhrase(shared: DocumentDraft["shared_with"]): string |
 // What the share dialog says when sharing or stopping failed: the server's own sentence for the two
 // refusals written for the person (`not_ready`, `personal_team`), a plain generic line for anything else.
 export function shareErrorMessage(error: unknown, action: "share" | "unshare"): string {
-  if (error instanceof ApiError && (error.code === "personal_team" || error.code === "not_ready")) return error.message;
+  if (error instanceof ApiError && (error.code === "personal_team" || error.code === "not_ready" || error.code === "team_left")) return error.message;
   return action === "share" ? "We could not share this draft. Try again." : "We could not stop sharing this draft. Try again.";
 }

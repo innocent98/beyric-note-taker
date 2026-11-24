@@ -3,15 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import type { DocumentDraft, RecipeTeam } from "@/lib/api/types";
+import type { DocumentDraft } from "@/lib/api/types";
 import { shareErrorMessage, sharedWithPhrase } from "@/lib/documents";
 
 // "Share with team": the lead-designed dialog behind the Share button of the draft's toolbar (the designer's
 // files draw nothing of recipes). It uses the Make dialog's frame. A draft is private to its creator until
-// shared, read-only, with the active team (the team the Make dialog names: the tab's team, as the brief
-// answers it); teammates read the text even where they cannot open the meetings it came from, which the dialog
-// says first. A shared draft shows who it is shared with and Stop sharing, which ends the access for every team
-// at once. `onChanged` takes the draft as it now stands; the dialog closes after a change.
+// shared, read-only, with THE TEAM IT WAS MADE IN (`doc.team`; never the tab's team). Teammates read the draft's
+// title and text even where they cannot open the meetings it came from, which the dialog says first, and a
+// reader who cannot read every source meeting is shown a generic title instead of the real one. When the
+// server says the draft cannot be shared (`share_blocked`: made in the person's own space, or its team left)
+// the dialog shows that sentence and offers no Share. A shared draft shows who it is shared with and Stop
+// sharing, which ends the access for every team at once. `onChanged` takes the draft as it now stands.
 export function DocumentShareDialog({
   open,
   doc,
@@ -24,9 +26,6 @@ export function DocumentShareDialog({
   onChanged: (next: DocumentDraft) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [team, setTeam] = useState<RecipeTeam | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState<"share" | "unshare" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const asking = useRef(false);
@@ -35,8 +34,6 @@ export function DocumentShareDialog({
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) {
-      setTeam(null);
-      setLoadError(false);
       setBusy(null);
       setError(null);
       asking.current = false;
@@ -49,30 +46,18 @@ export function DocumentShareDialog({
     }
   }, [open]);
 
-  // The team the draft would be shared with: the one the Make dialog names (the tab's team, else the person's
-  // default), from the brief's answer, which carries it.
-  useEffect(() => {
-    if (!open) return;
-    let live = true;
-    api.brief
-      .get()
-      .then((found) => live && setTeam(found.team))
-      .catch(() => live && setLoadError(true));
-    return () => {
-      live = false;
-    };
-  }, [open, reload]);
-
+  const team = doc.team ?? null;
+  const blocked = doc.share_blocked ?? null;
   const sharedLine = sharedWithPhrase(doc.shared_with);
   const sharedAlready = (doc.shared_with ?? []).some((t) => t.id === team?.id);
 
   async function share() {
-    if (!team || asking.current) return;
+    if (!team || blocked || asking.current) return;
     asking.current = true;
     setBusy("share");
     setError(null);
     try {
-      onChanged(await api.documents.share(doc.id, team.id));
+      onChanged(await api.documents.share(doc.id));
       onClose();
     } catch (caught) {
       setError(shareErrorMessage(caught, "share"));
@@ -123,22 +108,9 @@ export function DocumentShareDialog({
           <div className="tm-dialog-body">
             {sharedLine ? <p className="sh-shared">{sharedLine}</p> : null}
             <p>Teammates will read this draft even if they cannot open the meeting.</p>
+            <p className="field-hint">The draft&apos;s title and text can reveal what was said in it. A teammate who cannot open all its meetings sees a generic title instead of this one.</p>
             <p className="field-hint">They cannot edit it. You can stop sharing at any time, and they lose access at once.</p>
-            {loadError ? (
-              <Alert kind="error">
-                We could not find out which team this would be shared with.{" "}
-                <Button
-                  kind="quiet"
-                  type="button"
-                  onClick={() => {
-                    setLoadError(false);
-                    setReload((n) => n + 1);
-                  }}
-                >
-                  Try again
-                </Button>
-              </Alert>
-            ) : null}
+            {blocked ? <Alert kind="notice">{blocked}</Alert> : null}
             {error ? <Alert kind="error">{error}</Alert> : null}
           </div>
           <div className="sh-foot">
@@ -153,7 +125,7 @@ export function DocumentShareDialog({
                 </Button>
               ) : null}
               {sharedAlready ? null : (
-                <Button size="md" type="button" disabled={busy !== null || !team} onClick={() => void share()}>
+                <Button size="md" type="button" disabled={busy !== null || !team || blocked !== null} onClick={() => void share()}>
                   {busy === "share" ? "Sharing..." : team ? `Share with ${team.name}` : "Share with team"}
                 </Button>
               )}

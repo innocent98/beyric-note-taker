@@ -1,5 +1,5 @@
 {
-  "note": "409 `personal_team`: her own space has no one to share with. Show the server's message.",
+  "note": "409 `personal_team`: the draft was made in her personal space, which has no team to share it with. Show the server's message (the same sentence is in `share_blocked` on the draft).",
   "client": "eve (outsider, own team)",
   "request": {
     "method": "POST",
@@ -18,7 +18,7 @@
     "body": {
       "error": {
         "code": "personal_team",
-        "message": "This is your own space, so there is no team to share with. Switch to a team first."
+        "message": "This draft was made in your own space. Make it in a team workspace to share it with that team."
       }
     }
   }

@@ -76,9 +76,13 @@ def _csv(table: b.Table) -> bytes:
     return out.getvalue().encode("utf-8-sig")
 
 
+# Excel refuses a sheet called "History" (any case): it is the name of its own change-log sheet.
+_SHEET_RESERVED = {"history"}
+
+
 def _sheet_name(heading: str | None, number: int, taken: set[str]) -> str:
     name = _SHEET_BAD.sub("", heading or "").strip().strip("'")[:_SHEET_CHARS].strip()
-    if not name or name.lower() in taken:
+    if not name or name.lower() in taken or name.lower() in _SHEET_RESERVED:
         name = f"Table {number}"
     taken.add(name.lower())
     return name

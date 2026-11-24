@@ -27,8 +27,8 @@
           "meeting_ids": [
             9
           ],
-          "created_at": "2026-11-24T21:37:44.875406Z",
-          "updated_at": "2026-11-24T21:37:44.992106Z",
+          "created_at": "2026-11-24T22:00:21.266421Z",
+          "updated_at": "2026-11-24T22:00:21.396397Z",
           "access": "owner",
           "owner_name": null,
           "shared_with": [
@@ -36,7 +36,11 @@
               "id": 2,
               "name": "Acme Sales"
             }
-          ]
+          ],
+          "team": {
+            "id": 2,
+            "name": "Acme Sales"
+          }
         },
         {
           "id": 1,
@@ -49,8 +53,8 @@
           "meeting_ids": [
             1
           ],
-          "created_at": "2026-11-24T21:37:44.532458Z",
-          "updated_at": "2026-11-24T21:37:44.731829Z",
+          "created_at": "2026-11-24T22:00:20.955484Z",
+          "updated_at": "2026-11-24T22:00:21.167163Z",
           "access": "owner",
           "owner_name": null,
           "shared_with": [
@@ -58,7 +62,11 @@
               "id": 2,
               "name": "Acme Sales"
             }
-          ]
+          ],
+          "team": {
+            "id": 2,
+            "name": "Acme Sales"
+          }
         }
       ]
     }

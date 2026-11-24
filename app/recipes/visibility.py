@@ -100,6 +100,19 @@ def redact(blocks: list[blocks_mod.Block], readable: set[int]) -> list[blocks_mo
 
 
 def shared_team_ids(session: Session, doc: Document) -> list[int]:
+    """The teams the draft is shared with AND that the share still reaches: its sharer is still a
+    member. (`leave` also deletes the share; this keeps the owner's "Shared with" list true even for
+    a row that survived some other way.)"""
     return sorted(
-        session.scalars(select(DocumentShare.team_id).where(DocumentShare.document_id == doc.id))
+        session.scalars(
+            select(DocumentShare.team_id)
+            .join(
+                TeamMember,
+                and_(
+                    TeamMember.team_id == DocumentShare.team_id,
+                    TeamMember.user_id == DocumentShare.shared_by_user_id,
+                ),
+            )
+            .where(DocumentShare.document_id == doc.id)
+        )
     )

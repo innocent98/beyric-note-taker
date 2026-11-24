@@ -1468,6 +1468,9 @@ class DocumentBrief(BaseModel):
     owner_name: str | None = None
     # The teams the creator shared it with (read only by the creator; empty for a reader).
     shared_with: list[SharedTeam] = Field(default_factory=list)
+    # The team the draft was made in (the creator's view; null for a reader or a draft made in the
+    # person's own space with no team record). A draft is shared with this team only.
+    team: SharedTeam | None = None
 
 
 class DocumentOut(DocumentBrief):
@@ -1489,6 +1492,9 @@ class DocumentOut(DocumentBrief):
     use_brief: bool
     # False for a reader of a shared draft: edit, share, discard and regenerate are the creator's.
     can_edit: bool = True
+    # For the creator of a ready draft: a plain sentence saying why Share cannot be used now (made
+    # in the personal space, the creator left its team), else null. Show it and disable Share.
+    share_blocked: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

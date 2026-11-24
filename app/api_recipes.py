@@ -31,7 +31,16 @@ from app.api_schemas import (
     SharedTeam,
 )
 from app.db import get_session
-from app.models import Document, DocumentMeeting, DocumentShare, Meeting, Team, User
+from app.models import (
+    AiRun,
+    Document,
+    DocumentMeeting,
+    DocumentShare,
+    Meeting,
+    Recipe,
+    Team,
+    User,
+)
 from app.recipes import blocks as blocks_mod
 from app.recipes import service
 from app.recipes import visibility as doc_visibility
@@ -49,30 +58,75 @@ def _meeting_ids(session: Session, document_id: int) -> list[int]:
     )
 
 
+def _recipe_name(session: Session, doc: Document) -> str:
+    if doc.recipe_id is not None:
+        name = session.scalar(select(Recipe.name).where(Recipe.id == doc.recipe_id))
+        if name:
+            return name
+    starter = service.starter_for(doc.recipe_key) if doc.recipe_key else None
+    return starter.name if starter is not None else doc.output_type.capitalize()
+
+
+def _generic_title(session: Session, doc: Document) -> str:
+    """ "Proposal, 24 Nov": what a reader who cannot read every source meeting is shown instead of
+    the model's title, which can carry the title of a meeting they may not know exists."""
+    when = doc.created_at
+    return f"{_recipe_name(session, doc)}, {when.day} {when.strftime('%b')}"
+
+
+def _share_refusal(session: Session, user: User, doc: Document) -> services.Refused | None:
+    """Why `doc` cannot be shared right now, or None. A draft is shared with the team it was made
+    in, never another: the brief and the meetings it used belong to that team."""
+    if doc.status != "ready":
+        return services.Refused(409, "not_ready", "Only a finished draft can be shared.")
+    team = session.get(Team, doc.team_id) if doc.team_id is not None else None
+    if team is None or teams.is_personal_of(team, user.id):
+        return services.Refused(
+            409,
+            "personal_team",
+            "This draft was made in your own space. Make it in a team workspace to share it with "
+            "that team.",
+        )
+    if teams.membership(session, user.id, team.id) is None:
+        return services.Refused(
+            409,
+            "team_left",
+            "You are no longer in the team this draft was made in, so it cannot be shared.",
+        )
+    return None
+
+
 def _brief(session: Session, user: User, doc: Document) -> DocumentBrief:
     """A draft as a list row. For a reader of a shared draft the meeting ids are only the ones they
-    may read, and the creator's name is shown; the teams it was shared with are the creator's."""
+    may read, the creator's name is shown, and the title is generic unless they can read every
+    source meeting. The teams it was shared with, and the team it was made in, are the creator's."""
     ids = _meeting_ids(session, doc.id)
     mine = doc.owner_user_id == user.id
     shared_with: list[SharedTeam] = []
     owner_name = None
+    team = None
+    title = doc.title
     if mine:
         team_ids = doc_visibility.shared_team_ids(session, doc)
-        if team_ids:
-            shared_with = [
-                SharedTeam(id=t.id, name=t.name)
-                for t in session.scalars(
-                    select(Team).where(Team.id.in_(team_ids)).order_by(Team.id)
-                )
-            ]
+        wanted = set(team_ids)
+        if doc.team_id is not None:
+            wanted.add(doc.team_id)
+        found = {
+            t.id: SharedTeam(id=t.id, name=t.name)
+            for t in session.scalars(select(Team).where(Team.id.in_(wanted)).order_by(Team.id))
+        }
+        shared_with = [found[i] for i in team_ids if i in found]
+        team = found.get(doc.team_id) if doc.team_id is not None else None
     else:
         readable = doc_visibility.readable_sources(session, user, doc)
+        if len(readable) < len(ids):
+            title = _generic_title(session, doc)
         ids = [i for i in ids if i in readable]
         owner = session.get(User, doc.owner_user_id)
         owner_name = meeting_visibility.former_or_name(owner) if owner is not None else None
     return DocumentBrief(
         id=doc.id,
-        title=doc.title,
+        title=title,
         output_type=doc.output_type,
         recipe_key=doc.recipe_key,
         recipe_id=doc.recipe_id,
@@ -84,27 +138,26 @@ def _brief(session: Session, user: User, doc: Document) -> DocumentBrief:
         access="owner" if mine else "shared",
         owner_name=owner_name,
         shared_with=shared_with,
+        team=team,
     )
 
 
 def _out(session: Session, user: User, doc: Document) -> DocumentOut:
-    """The draft as `user` may see it. For the creator: everything. For a reader of a shared draft
-    (`access: "shared"`): the text and its checks, with every source of a meeting they cannot read
-    hidden, no left-out count and none of the creator's choices. The checks and `stale` are worked
-    out as the creator would see them (they say something about the draft's own text, not about the
-    meetings' words), so a reader is not told "check this" about a figure from a meeting they
-    cannot open."""
+    """The draft as `user` may see it. Every source of a meeting `user` cannot read (a reader who
+    was never allowed it, or the creator who has lost access to it or whose meeting was deleted) is
+    `{"kind": "hidden"}`. The checks and `stale` are worked out from what `user` can read, as `user`
+    would see them; a reader who cannot read every source meeting gets `stale: false` (their
+    partial text could only differ). A reader also gets no left-out count and none of the creator's
+    choices."""
     mine = doc.owner_user_id == user.id
-    viewer = user if mine else session.get(User, doc.owner_user_id)
-    seen = service.reading(session, viewer, doc)
+    seen = service.reading(session, user, doc)
     ready = doc.status == "ready"
     failed = doc.status == "failed"
     blocks = blocks_mod.load_blocks(doc.blocks) if ready else []
-    sources_available = seen.sources_available
-    if not mine:
-        readable = doc_visibility.readable_sources(session, user, doc)
-        blocks = doc_visibility.redact(blocks, readable)
-        sources_available = bool(readable)
+    readable = doc_visibility.readable_sources(session, user, doc)
+    blocks = doc_visibility.redact(blocks, readable)
+    all_ids = _meeting_ids(session, doc.id)
+    stale = seen.stale and (mine or len(readable) == len(all_ids))
     return DocumentOut(
         **_brief(session, user, doc).model_dump(),
         blocks=blocks,
@@ -114,14 +167,21 @@ def _out(session: Session, user: User, doc: Document) -> DocumentOut:
                 FlagOut(block_index=f.block_index, text=f.text, kind=f.kind) for f in seen.flags
             ],
         ),
-        stale=seen.stale,
-        sources_available=sources_available,
+        stale=stale,
+        sources_available=bool(readable),
         left_out_count=doc.left_out_count if mine else 0,
         failure_code=doc.failure_code if failed else None,
         failure_message=service.failure_message(doc.failure_code) if failed else None,
         options=(doc.options or {}) if mine else {},
         use_brief=doc.use_brief if mine else False,
         can_edit=mine,
+        share_blocked=(
+            (lambda refusal: refusal.message if refusal else None)(
+                _share_refusal(session, user, doc)
+            )
+            if mine and ready
+            else None
+        ),
     )
 
 
@@ -298,7 +358,8 @@ def list_documents(
         404: {"model": ErrorResponse},
         409: {
             "model": ErrorResponse,
-            "description": "`writing`: the draft is still being written; `not_ready`: it failed",
+            "description": "`writing`: the draft is still being written; `not_ready`: it failed; "
+            "`use_board`: a board is edited through `PATCH .../board`",
         },
         422: {"model": ErrorResponse, "description": "`blocks_invalid`"},
     },
@@ -312,10 +373,17 @@ def edit_document(
     """Save the edited draft: send every block as it now stands. Text is cleaned and bounded as
     at generation; a block keeps the sources it had and cannot gain new ones. Marks the draft
     `edited`. The `checks` in the answer are recomputed from what was saved. Refused while the
-    draft is still `writing` (409 `writing`) and for one that `failed` (409 `not_ready`)."""
+    draft is still `writing` (409 `writing`), for one that `failed` (409 `not_ready`) and for a
+    board (409 `use_board`: `PATCH .../board` has the revision check and the row lock)."""
     doc = document_or_404(session, user, document_id)
     if doc.status == "writing":
         raise services.Refused(409, "writing", "This draft is still being written.")
+    if doc.output_type == "board":
+        raise services.Refused(
+            409,
+            "use_board",
+            "A board is changed one step at a time. Use the board's own screen to edit it.",
+        )
     if doc.status != "ready":
         raise services.Refused(409, "not_ready", "This draft failed; make a new one.")
     try:
@@ -346,9 +414,20 @@ def delete_document(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    """Discard a draft (also cancels one still being written; the model call it may have made is
-    still counted against the day's 20)."""
-    session.delete(document_or_404(session, user, document_id))
+    """Discard a draft. One still being written is cancelled. If the worker has not picked it up
+    yet no model was called, so its place in the day's limit is given back; once the worker has
+    started it, the call may have been made and still counts."""
+    doc = document_or_404(session, user, document_id)
+    # Lock the row: the worker claims with `FOR UPDATE SKIP LOCKED`, so it either already has the
+    # draft (started_at is set, below) or skips it until this transaction ends.
+    session.refresh(doc, with_for_update=True)
+    if doc.status == "writing" and doc.started_at is None and doc.ledger_run_id is not None:
+        session.execute(
+            delete(AiRun).where(
+                AiRun.id == doc.ledger_run_id, AiRun.kind == "recipe", AiRun.status == "pending"
+            )
+        )
+    session.delete(doc)
     session.commit()
     return Response(status_code=204)
 
@@ -360,35 +439,29 @@ def delete_document(
         404: {"model": ErrorResponse},
         409: {
             "model": ErrorResponse,
-            "description": "`not_ready`: only a finished draft can be shared; `personal_team`: "
-            "the active team is the caller's own space, which has no one to share with",
+            "description": "`not_ready`: only a finished draft can be shared; `personal_team`: the "
+            "draft was made in the creator's own space, so there is no team to share it with; "
+            "`team_left`: the creator is no longer in the team the draft was made in",
         },
     },
 )
 def share_document(
     document_id: int,
-    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> DocumentOut:
-    """Share the draft, read-only, with the active team (`X-Team-Id`, else the caller's default
-    team): every current member can then open it, and see its text, but not the meetings it was
-    drafted from (a source they cannot read shows as hidden). Only the creator may; asking twice
-    changes nothing. Leaving the team, or `DELETE .../share`, ends the access at once."""
+    """Share the draft, read-only, with **the team it was made in** (`team` on the draft; never
+    another, whatever `X-Team-Id` says): every current member can then open it and read its text and
+    title, but not the meetings it was drafted from (a source they cannot read shows as hidden, and
+    a reader who cannot read every source meeting sees a generic title). Only the creator may;
+    asking twice changes nothing. Leaving the team, or `DELETE .../share`, ends access at once."""
     doc = document_or_404(session, user, document_id)
-    if doc.status != "ready":
-        raise services.Refused(409, "not_ready", "Only a finished draft can be shared.")
-    member = team_admin.my_membership(session, user, team_id)
-    team = session.get(Team, member.team_id)
-    if teams.is_personal_of(team, user.id):
-        raise services.Refused(
-            409,
-            "personal_team",
-            "This is your own space, so there is no team to share with. Switch to a team first.",
-        )
+    refusal = _share_refusal(session, user, doc)
+    if refusal is not None:
+        raise refusal
     session.execute(
         insert(DocumentShare)
-        .values(document_id=doc.id, team_id=team.id, shared_by_user_id=user.id)
+        .values(document_id=doc.id, team_id=doc.team_id, shared_by_user_id=user.id)
         .on_conflict_do_nothing(constraint="uq_document_shares_document_team")
     )
     session.commit()

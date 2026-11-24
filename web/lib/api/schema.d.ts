@@ -650,8 +650,9 @@ export interface paths {
         post?: never;
         /**
          * Delete Document
-         * @description Discard a draft (also cancels one still being written; the model call it may have made is
-         *     still counted against the day's 20).
+         * @description Discard a draft. One still being written is cancelled. If the worker has not picked it up
+         *     yet no model was called, so its place in the day's limit is given back; once the worker has
+         *     started it, the call may have been made and still counts.
          */
         delete: operations["delete_document"];
         options?: never;
@@ -661,7 +662,8 @@ export interface paths {
          * @description Save the edited draft: send every block as it now stands. Text is cleaned and bounded as
          *     at generation; a block keeps the sources it had and cannot gain new ones. Marks the draft
          *     `edited`. The `checks` in the answer are recomputed from what was saved. Refused while the
-         *     draft is still `writing` (409 `writing`) and for one that `failed` (409 `not_ready`).
+         *     draft is still `writing` (409 `writing`), for one that `failed` (409 `not_ready`) and for a
+         *     board (409 `use_board`: `PATCH .../board` has the revision check and the row lock).
          */
         patch: operations["edit_document"];
         trace?: never;
@@ -728,10 +730,11 @@ export interface paths {
         put?: never;
         /**
          * Share Document
-         * @description Share the draft, read-only, with the active team (`X-Team-Id`, else the caller's default
-         *     team): every current member can then open it, and see its text, but not the meetings it was
-         *     drafted from (a source they cannot read shows as hidden). Only the creator may; asking twice
-         *     changes nothing. Leaving the team, or `DELETE .../share`, ends the access at once.
+         * @description Share the draft, read-only, with **the team it was made in** (`team` on the draft; never
+         *     another, whatever `X-Team-Id` says): every current member can then open it and read its text and
+         *     title, but not the meetings it was drafted from (a source they cannot read shows as hidden, and
+         *     a reader who cannot read every source meeting sees a generic title). Only the creator may;
+         *     asking twice changes nothing. Leaving the team, or `DELETE .../share`, ends access at once.
          */
         post: operations["share_document"];
         /**
@@ -3607,6 +3610,7 @@ export interface components {
              * @enum {string}
              */
             status: "writing" | "ready" | "failed";
+            team?: components["schemas"]["SharedTeam"] | null;
             /** Title */
             title: string;
             /**
@@ -3705,6 +3709,8 @@ export interface components {
             recipe_id: number | null;
             /** Recipe Key */
             recipe_key: string | null;
+            /** Share Blocked */
+            share_blocked?: string | null;
             /** Shared With */
             shared_with?: components["schemas"]["SharedTeam"][];
             /** Sources Available */
@@ -3716,6 +3722,7 @@ export interface components {
              * @enum {string}
              */
             status: "writing" | "ready" | "failed";
+            team?: components["schemas"]["SharedTeam"] | null;
             /** Title */
             title: string;
             /**
@@ -7824,7 +7831,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `writing`: the draft is still being written; `not_ready`: it failed */
+            /** @description `writing`: the draft is still being written; `not_ready`: it failed; `use_board`: a board is edited through `PATCH .../board` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8019,10 +8026,7 @@ export interface operations {
     share_document: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 document_id: number;
             };
@@ -8066,7 +8070,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `not_ready`: only a finished draft can be shared; `personal_team`: the active team is the caller's own space, which has no one to share with */
+            /** @description `not_ready`: only a finished draft can be shared; `personal_team`: the draft was made in the creator's own space, so there is no team to share it with; `team_left`: the creator is no longer in the team the draft was made in */
             409: {
                 headers: {
                     [name: string]: unknown;

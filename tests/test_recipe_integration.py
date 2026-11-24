@@ -127,8 +127,11 @@ def test_a_cross_meeting_draft_whose_other_meeting_goes_reads_not_available(api,
     api.delete(f"/api/meetings/{second.id}")
     got = api.get(url(cross)).json()
     assert got["meeting_ids"] == [first.id]
-    # the source still names the deleted meeting; opening it is a 404 on the meeting page
-    assert got["blocks"][0]["sources"][0]["meeting_id"] == second.id and got["sources_available"]
+    # the deleted meeting's source is hidden for the creator too: no id, line or quote, no dead link
+    assert got["blocks"][0]["sources"] == [
+        {"kind": "hidden", "meeting_id": None, "line": None, "quote": None, "ref": None}
+    ]
+    assert got["sources_available"] is True  # the first meeting can still be opened
     assert api.get(f"/api/meetings/{second.id}").status_code == 404
 
 
@@ -292,3 +295,61 @@ def test_the_daily_cap_counts_each_regeneration(api, session, template, monkeypa
         error_of(make(api, meeting), 429, "recipe_limit")
     finally:
         get_settings.cache_clear()
+
+
+# ---- discarding a draft before the worker picked it up (spec 5.6) ----
+
+
+def _limit_of(monkeypatch, n):
+    from tests.test_web import make_settings
+
+    settings = make_settings(recipe_daily_limit=n)
+    monkeypatch.setattr(svc, "get_settings", lambda: settings)
+
+
+def _recipe_rows(session):
+    from app.models import AiRun
+
+    session.expire_all()
+    return session.scalars(select(AiRun).where(AiRun.kind == "recipe")).all()
+
+
+def test_discarding_a_draft_nobody_started_gives_its_place_in_the_day_back(
+    api, session, template, monkeypatch
+):
+    _limit_of(monkeypatch, 1)
+    meeting = meeting_of(session, template)
+    doc_id = make(api, meeting).json()["id"]
+    assert len(_recipe_rows(session)) == 1  # asked for: counted from now on
+    assert api.delete(url(doc_id)).status_code == 204  # discarded before the worker claimed it
+    assert _recipe_rows(session) == []  # no model was called: nothing to count
+    assert make(api, meeting).status_code == 202  # the one place is free again
+
+
+def test_discarding_a_draft_the_worker_already_started_still_counts(
+    api, session, template, monkeypatch
+):
+    _limit_of(monkeypatch, 1)
+    meeting = meeting_of(session, template)
+    doc_id = make(api, meeting).json()["id"]
+    work(session)  # claimed, called the model, settled
+    assert api.delete(url(doc_id)).status_code == 204
+    assert [r.status for r in _recipe_rows(session)] == ["ok"]
+    error_of(make(api, meeting), 429, "recipe_limit")
+
+
+def test_a_draft_claimed_but_not_finished_keeps_its_place_when_discarded(
+    api, session, template, monkeypatch
+):
+    from datetime import UTC, datetime
+
+    from app.models import Document
+
+    _limit_of(monkeypatch, 1)
+    meeting = meeting_of(session, template)
+    doc_id = make(api, meeting).json()["id"]
+    session.get(Document, doc_id).started_at = datetime.now(UTC)  # the worker has it
+    session.commit()
+    assert api.delete(url(doc_id)).status_code == 204
+    assert len(_recipe_rows(session)) == 1  # the call may be running: it counts
+    error_of(make(api, meeting), 429, "recipe_limit")

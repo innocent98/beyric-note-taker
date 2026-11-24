@@ -7,7 +7,7 @@ One guide for the whole release: make a document from a meeting, wait for it, ed
 | Part | Read | Real captures |
 |---|---|---|
 | The draft API (make, poll, read, list, edit, discard) | this file, sections 1 to 5 | `docs/fe-captures/recipes/` (44 exchanges, `scripts/capture_recipes.py`) |
-| **Sharing, what a reader sees, stale, deleting a meeting** | this file, "Sharing and the reader's view" and "When a meeting changes or goes" | `docs/fe-captures/recipes/integration/` (37 exchanges, `scripts/recipes_live.py capture`) |
+| **Sharing, what a reader sees, stale, deleting a meeting** | this file, "Sharing and the reader's view" and "When a meeting changes or goes" | `docs/fe-captures/recipes/integration/` (40 exchanges, `scripts/recipes_live.py capture`) |
 | Exports (Word, PDF, Markdown, text, CSV, Excel) and the document screen | `docs/fe-integration-guide-recipes-documents.md` | `docs/fe-captures/recipes/exports/` |
 | The eighteen starters, recipes, the team brief, file import | `docs/fe-integration-guide-recipes-library.md` | `docs/fe-captures/recipes-library/` |
 | The meeting picker and cross-meeting drafts | `docs/fe-integration-guide-recipes-cross-meeting.md` | `docs/fe-captures/recipes-cross-meeting/` |
@@ -361,16 +361,18 @@ Refusals:
 
 ## Sharing and the reader's view
 
-A person can share a **ready** draft, read-only, with the **active team** (the `X-Team-Id` header, else their default team). Every current member of that team can then open it. Nobody else can. This is the contract the share dialog and the Documents page are built on.
+A person can share a **ready** draft, read-only, with **the team it was made in** (`team` on the draft). Every current member of that team can then open it. Nobody else can. This is the contract the share dialog and the Documents page are built on.
 
-### The two rules the screen must not break
+### The rules the screen must not break
 
-1. **Sharing a draft shares its words, never its meetings.** The draft's text is visible to every teammate even if they cannot open the meeting it was made from. The share dialog must say so: **"Teammates will read this draft even if they cannot open the meeting."**
-2. **Access is looked up on every request.** Stop sharing, or a reader leaving the team, or the creator leaving the team, ends access at once: the reader's next request is a 404. Handle a 404 on a draft the person had open.
+1. **Sharing a draft shares its words and its title, never its meetings.** The draft's text and title are visible to every teammate even if they cannot open the meeting it was made from, and both can reveal what was said. The share dialog must say so: **"Teammates will read this draft even if they cannot open the meeting."** plus that the title and text can reveal what was said, and that a teammate who cannot open all its meetings sees a generic title.
+2. **A draft is shared with the team it was made in, only.** `POST .../share` takes no team and ignores `X-Team-Id`. A draft made in the person's own (personal) space cannot be shared; neither can one whose creator has left its team. The draft says so in advance: **`share_blocked`** is a plain sentence (or null) on the creator's full draft: show it and disable Share.
+3. **Access is looked up on every request.** Stopping the share, a reader leaving the team, or the creator leaving the team ends access at once, and a share never comes back if the creator later joins again (leaving deletes their shares). Handle a 404 on a draft the person had open.
+4. **Every person's view is redacted by what they can read.** For anyone (the creator too) a source of a meeting they cannot read is `{"kind": "hidden"}`.
 
 ### 6. `POST /api/documents/{id}/share` and `DELETE /api/documents/{id}/share`
 
-Creator only (another person's draft, including a reader's attempt, is a 404). Needs `X-CSRF-Token`. The share goes to the active team. Asking twice changes nothing.
+Creator only (another person's draft, including a reader's attempt, is a 404). Needs `X-CSRF-Token`; no team in the request. Asking twice changes nothing.
 
 *Share* (capture `07-share-private-draft.json`): `POST /api/documents/2/share` as ada (creator) → **200**
 
@@ -388,8 +390,8 @@ Shares with the active team (the default team here; send `X-Team-Id` to name ano
   "meeting_ids": [
     9
   ],
-  "created_at": "2026-11-24T21:37:44.875406Z",
-  "updated_at": "2026-11-24T21:37:44.992106Z",
+  "created_at": "2026-11-24T22:00:21.266421Z",
+  "updated_at": "2026-11-24T22:00:21.396397Z",
   "access": "owner",
   "owner_name": null,
   "shared_with": [
@@ -398,6 +400,10 @@ Shares with the active team (the default team here; send `X-Team-Id` to name ano
       "name": "Acme Sales"
     }
   ],
+  "team": {
+    "id": 2,
+    "name": "Acme Sales"
+  },
   "blocks": [
     {
       "type": "paragraph",
@@ -440,6 +446,7 @@ Shares with the active team (the default team here; send `X-Team-Id` to name ano
   "options": {},
   "use_brief": true,
   "can_edit": true,
+  "share_blocked": null,
   "left_out_message": null
 }
 ```
@@ -457,30 +464,34 @@ Asking twice changes nothing and is not an error.
       "name": "Acme Sales"
     }
   ],
+  "team": {
+    "id": 2,
+    "name": "Acme Sales"
+  },
   "access": "owner"
 }
 ```
 
 `DELETE` answers **204** with no body and removes the share for every team at once; asking again is also 204 *(capture `21-unshare.json`)*.
 
-Errors: **409 `not_ready`** (only a finished draft can be shared; message "Only a finished draft can be shared." — **not run live**, the draft finishes within a poll in the capture environment; verified in `tests/test_recipe_visibility.py::test_only_a_finished_draft_in_a_real_team_can_be_shared`) and **409 `personal_team`**:
+Errors, all **409** with the project error shape: `not_ready` ("Only a finished draft can be shared." — **not run live**, verified in `tests/test_recipe_visibility.py`), `team_left` ("You are no longer in the team this draft was made in, so it cannot be shared." — **not run live**, same file) and `personal_team`:
 
-*Share from a personal space* (capture `25-share-from-a-personal-space.json`): `POST /api/documents/3/share` as eve (outsider, own team) → **409**
+*Share a draft made in a personal space* (capture `25-share-from-a-personal-space.json`): `POST /api/documents/3/share` as eve (outsider, own team) → **409**
 
-409 `personal_team`: her own space has no one to share with. Show the server's message.
+409 `personal_team`: the draft was made in her personal space, which has no team to share it with. Show the server's message (the same sentence is in `share_blocked` on the draft).
 
 ```json
 {
   "error": {
     "code": "personal_team",
-    "message": "This is your own space, so there is no team to share with. Switch to a team first."
+    "message": "This draft was made in your own space. Make it in a team workspace to share it with that team."
   }
 }
 ```
 
 ### 7. What a teammate reads: `GET /api/documents/{id}` as a reader
 
-New fields on **every** draft and list row (the creator's own drafts carry them too): `access` (`"owner"` or `"shared"`), `owner_name` (the creator's name for a shared draft, `"Former member"` once their account is gone, null for your own), `shared_with` (list of `{id, name}`: who the creator shared it with; **always empty for a reader**) and, on the full draft, `can_edit` (false for a reader).
+New fields on **every** draft and list row: `access` (`"owner"` or `"shared"`), `owner_name` (the creator's name for a shared draft, `"Former member"` once their account is gone, null for your own), `shared_with` (list of `{id, name}`: the teams the creator shared it with; **always empty for a reader**) and `team` (`{id, name}`: the team the draft was made in; creator's view, null for a reader). On the full draft also `can_edit` (false for a reader) and `share_blocked` (string or null, the creator's ready drafts only).
 
 *Before it is shared* (capture `04-teammate-before-share.json`): `GET /api/documents/2` as tunde (teammate) → **404**
 
@@ -502,18 +513,19 @@ THE TRAP: Tunde cannot read the private meeting. Every source of it is `{"kind":
 ```json
 {
   "id": 2,
-  "title": "Follow-up email",
+  "title": "Follow-up email, 24 Nov",
   "output_type": "email",
   "recipe_key": "follow_up_email",
   "recipe_id": null,
   "status": "ready",
   "edited": false,
   "meeting_ids": [],
-  "created_at": "2026-11-24T21:37:44.875406Z",
-  "updated_at": "2026-11-24T21:37:44.992106Z",
+  "created_at": "2026-11-24T22:00:21.266421Z",
+  "updated_at": "2026-11-24T22:00:21.396397Z",
   "access": "shared",
   "owner_name": "Ada Lovelace",
   "shared_with": [],
+  "team": null,
   "blocks": [
     {
       "type": "paragraph",
@@ -546,7 +558,13 @@ THE TRAP: Tunde cannot read the private meeting. Every source of it is `{"kind":
         "what": "date of the next step"
       }
     ],
-    "flags": []
+    "flags": [
+      {
+        "block_index": 3,
+        "text": "9 million dollars",
+        "kind": "figure"
+      }
+    ]
   },
   "stale": false,
   "sources_available": false,
@@ -556,15 +574,17 @@ THE TRAP: Tunde cannot read the private meeting. Every source of it is `{"kind":
   "options": {},
   "use_brief": false,
   "can_edit": false,
+  "share_blocked": null,
   "left_out_message": null
 }
 ```
 
 Read this response carefully:
 
-- `blocks[].sources` entries for a meeting the reader may not read are **`{"kind": "hidden", ...}`** with `meeting_id`, `line`, `quote` and `ref` all **null**. `kind: "hidden"` exists only in what a reader is sent; it is never stored and an edit cannot write it. Render it as a "not available" chip and **never build a link from it** (`meeting_id` is null).
+- `blocks[].sources` entries for a meeting the reader may not read are **`{"kind": "hidden", ...}`** with `meeting_id`, `line`, `quote` and `ref` all **null**. `kind: "hidden"` exists only in what a person is sent; it is never stored and an edit cannot write it. Render it as a "not available" chip and **never build a link from it** (`meeting_id` is null).
+- **`title` is generic** ("Follow-up email, 24 Nov": the recipe name and the day it was made) for a reader who cannot read EVERY source meeting, because the model's title can carry a hidden meeting's title. The creator, and a reader who can read all the sources, get the real title. The same rule applies to the title in the list rows.
 - `meeting_ids` holds **only the meetings the reader may read** (here `[]`). `sources_available` is false when that list is empty. `left_out_count` is 0, `options` is `{}` and `use_brief` is false for a reader: those are the creator's choices.
-- The text is all there, blanks included (`checks` is worked out as the creator would see it, so a reader is not told "check this" about a figure that came from a meeting they cannot open). `stale` is the creator's value too.
+- `checks` (blanks and flagged figures) is worked out from what the reader can read: a figure that only a hidden meeting contains **is flagged "check this" for the reader**. `stale` is **false** for a reader who cannot read every source meeting (they cannot tell).
 - `can_edit` is false: hide Edit, Share, Regenerate and Discard. Copy, Open in mail app and Download still work (a reader may export the draft's text, `GET .../export` answers 200 *(capture `20-teammate-exports-markdown.json`)*; an export never contains sources).
 
 *A reader who CAN read the meeting* (capture `11-teammate-reads-open-sources.json`): `GET /api/documents/1` as tunde (teammate) → **200**
@@ -583,11 +603,12 @@ Tunde CAN read the sales call: sources keep their meeting ids, lines and quotes;
   "meeting_ids": [
     1
   ],
-  "created_at": "2026-11-24T21:37:44.532458Z",
-  "updated_at": "2026-11-24T21:37:44.731829Z",
+  "created_at": "2026-11-24T22:00:20.955484Z",
+  "updated_at": "2026-11-24T22:00:21.167163Z",
   "access": "shared",
   "owner_name": "Ada Lovelace",
   "shared_with": [],
+  "team": null,
   "blocks": [
     {
       "type": "paragraph",
@@ -643,11 +664,14 @@ Tunde CAN read the sales call: sources keep their meeting ids, lines and quotes;
   "options": {},
   "use_brief": false,
   "can_edit": false,
+  "share_blocked": null,
   "left_out_message": null
 }
 ```
 
-Sources then keep their `meeting_id`, `line` and `quote`, exactly as the creator sees them.
+Sources then keep their `meeting_id`, `line` and `quote`, exactly as the creator sees them, and the title is the real one.
+
+**The creator's own view is redacted the same way.** If the creator has lost access to a meeting (it was unshared from the team, they left the team) or it was deleted, its sources come back as `hidden` for them too (see the cross-meeting capture in "Deleting a meeting" below): show "not available", never a link. `meeting_ids` for the creator still lists the draft's existing meetings.
 
 ### 8. The list, with and without sharing
 
@@ -660,18 +684,19 @@ Rows carry `access: shared` and `owner_name`; `meeting_ids` only has meetings th
   "documents": [
     {
       "id": 2,
-      "title": "Follow-up email",
+      "title": "Follow-up email, 24 Nov",
       "output_type": "email",
       "recipe_key": "follow_up_email",
       "recipe_id": null,
       "status": "ready",
       "edited": false,
       "meeting_ids": [],
-      "created_at": "2026-11-24T21:37:44.875406Z",
-      "updated_at": "2026-11-24T21:37:44.992106Z",
+      "created_at": "2026-11-24T22:00:21.266421Z",
+      "updated_at": "2026-11-24T22:00:21.396397Z",
       "access": "shared",
       "owner_name": "Ada Lovelace",
-      "shared_with": []
+      "shared_with": [],
+      "team": null
     }
   ]
 }
@@ -696,18 +721,19 @@ Both scopes together.
   "documents": [
     {
       "id": 2,
-      "title": "Follow-up email",
+      "title": "Follow-up email, 24 Nov",
       "output_type": "email",
       "recipe_key": "follow_up_email",
       "recipe_id": null,
       "status": "ready",
       "edited": false,
       "meeting_ids": [],
-      "created_at": "2026-11-24T21:37:44.875406Z",
-      "updated_at": "2026-11-24T21:37:44.992106Z",
+      "created_at": "2026-11-24T22:00:21.266421Z",
+      "updated_at": "2026-11-24T22:00:21.396397Z",
       "access": "shared",
       "owner_name": "Ada Lovelace",
-      "shared_with": []
+      "shared_with": [],
+      "team": null
     }
   ]
 }
@@ -731,8 +757,8 @@ The creator's list: `shared_with` shows who can read each draft.
       "meeting_ids": [
         9
       ],
-      "created_at": "2026-11-24T21:37:44.875406Z",
-      "updated_at": "2026-11-24T21:37:44.992106Z",
+      "created_at": "2026-11-24T22:00:21.266421Z",
+      "updated_at": "2026-11-24T22:00:21.396397Z",
       "access": "owner",
       "owner_name": null,
       "shared_with": [
@@ -740,13 +766,17 @@ The creator's list: `shared_with` shows who can read each draft.
           "id": 2,
           "name": "Acme Sales"
         }
-      ]
+      ],
+      "team": {
+        "id": 2,
+        "name": "Acme Sales"
+      }
     }
   ]
 }
 ```
 
-Rows for a reader carry `meeting_ids` cut to the meetings they may read and `owner_name`. A draft that stopped being shared, or whose team the reader left, is simply **absent** from `?shared=true` *(capture `23-teammate-list-after-unshare.json`)*. `?meeting_id=N` with `shared=true` never lists a shared draft of a meeting the caller cannot read.
+Rows for a reader carry `meeting_ids` cut to the meetings they may read, `owner_name` and the generic title where it applies. A draft that stopped being shared, or whose team the reader left, is simply **absent** from `?shared=true` *(capture `23-teammate-list-after-unshare.json`)*. `?meeting_id=N` with `shared=true` never lists a shared draft of a meeting the caller cannot read.
 
 ### Every write is the creator's
 
@@ -761,6 +791,23 @@ A reader's `PATCH`, `DELETE`, `POST .../share`, `DELETE .../share` and the board
   "error": {
     "code": "not_found",
     "message": "No such document."
+  }
+}
+```
+
+### A board is saved only through its own route
+
+`PATCH /api/documents/{id}` on a **board** is refused with **409 `use_board`** ("A board is changed one step at a time. Use the board's own screen to edit it."): the board route carries the revision check and the row lock, and a whole-document save from an old screen could undo a move. The board screen never calls the plain save.
+
+*Plain save of a board* (capture `32-plain-save-of-a-board-is-refused.json`): `PATCH /api/documents/6` as ada (creator) → **409**
+
+409 `use_board`: a board is changed one step at a time through `PATCH /api/documents/{id}/board` (it carries the revision check). The plain whole-document save would let a stale screen undo a move.
+
+```json
+{
+  "error": {
+    "code": "use_board",
+    "message": "A board is changed one step at a time. Use the board's own screen to edit it."
   }
 }
 ```
@@ -806,11 +853,15 @@ Regenerate is a plain new POST: a NEW id; the stale draft is untouched.
 
 *Not run live: a transcript edit through the transcript editor and a change of the brief (both are the same hash on the server, covered in `tests/test_recipe_integration.py`; the transcript editor is on `main`, not on this branch). Speaker corrections change the transcript text, so they also mark a draft stale.*
 
+### Discarding a draft
+
+`DELETE /api/documents/{id}` is 204. A draft the worker has **not started yet** gives its place in the day's limit back (no model was called); once the worker has started it, the attempt still counts. *(Not captured: the worker starts within a poll in the capture environment; verified in `tests/test_recipe_integration.py`.)*
+
 ### Deleting a meeting
 
 `DELETE /api/meetings/{id}` deletes the drafts **made from that meeting alone**; a cross-meeting draft stays as long as at least one of its meetings does. Tell the person before they confirm (the meeting page's confirmation does: "This also deletes the 2 documents made only from it. A document made from several meetings stays; its link to this meeting will read not available.").
 
-*Delete the meeting* (capture `33-delete-a-meeting.json`): `DELETE /api/meetings/3` as ada (creator) → **204**
+*Delete the meeting* (capture `36-delete-a-meeting.json`): `DELETE /api/meetings/3` as ada (creator) → **204**
 
 204. The drafts made from this meeting ALONE are deleted with it; a cross-meeting draft stays.
 
@@ -818,7 +869,7 @@ Regenerate is a plain new POST: a NEW id; the stale draft is untouched.
 null
 ```
 
-*Its single-meeting draft* (capture `34-its-single-meeting-draft-is-gone.json`): `GET /api/documents/6` as ada (creator) → **404**
+*Its single-meeting draft* (capture `37-its-single-meeting-draft-is-gone.json`): `GET /api/documents/7` as ada (creator) → **404**
 
 404.
 
@@ -831,22 +882,31 @@ null
 }
 ```
 
-*The cross-meeting draft* (capture `35-the-cross-meeting-draft-stays.json`): `GET /api/documents/7` as ada (creator) → **200**
+*The cross-meeting draft* (capture `38-the-cross-meeting-draft-stays.json`): `GET /api/documents/8` as ada (creator) → **200**
 
 Still `ready`. `meeting_ids` no longer holds the deleted meeting; a source that still names it opens a 404 on the meeting page (show 'not available').
 
 ```json
 {
-  "id": 7,
+  "id": 8,
   "status": "ready",
   "meeting_ids": [
     4
   ],
-  "sources_available": true
+  "sources_available": true,
+  "a source that pointed at the deleted meeting, as the creator now sees it (on a bullet item)": [
+    {
+      "kind": "hidden",
+      "meeting_id": null,
+      "line": null,
+      "quote": null,
+      "ref": null
+    }
+  ]
 }
 ```
 
-*The list for the deleted meeting* (capture `36-list-for-the-deleted-meeting.json`): `GET /api/documents?meeting_id=3` as ada (creator) → **200**
+*The list for the deleted meeting* (capture `39-list-for-the-deleted-meeting.json`): `GET /api/documents?meeting_id=3` as ada (creator) → **200**
 
 Empty.
 
@@ -856,7 +916,7 @@ Empty.
 }
 ```
 
-A source on the surviving draft may still name the deleted meeting; opening it gives the meeting page's own 404, so show such a chip as "not available" when the meeting is not in `meeting_ids`. The ledger keeps the cost of the deleted drafts (`ai_runs` rows are never removed with a draft) and they still count toward the day's limit.
+A source on the surviving draft that pointed at the deleted meeting comes back `hidden` (see above): show it as "not available". The ledger keeps the cost of the deleted drafts (`ai_runs` rows are never removed with a draft) and they still count toward the day's limit, except a draft discarded before the worker started it.
 
 ## Errors the FE must handle
 
@@ -875,7 +935,9 @@ Every error is `{"error": {"code", "message"}}`; show `message` as is.
 | `POST`, the day's limit reached | 429 | `recipe_limit` | You have made 6 documents today. Try again tomorrow.
 | `POST`, no live plan or trial (enforce mode only) | 403 | `plan_inactive` | the text in the notes above | **not run live** |
 | `GET`/`PATCH`/`DELETE`/`POST share`/`DELETE share` another person's draft, or none; a reader's write; a reader after unshare or after leaving the team | 404 | `not_found` | No such document. |
-| `POST .../share` from the person's own space | 409 | `personal_team` | This is your own space, so there is no team to share with. Switch to a team first. |
+| `POST .../share` of a draft made in the person's own space | 409 | `personal_team` | This draft was made in your own space. Make it in a team workspace to share it with that team. |
+| `POST .../share` when the creator left the draft's team | 409 | `team_left` | You are no longer in the team this draft was made in, so it cannot be shared. | **not run live** |
+| `PATCH` of a board | 409 | `use_board` | A board is changed one step at a time. Use the board's own screen to edit it. |
 | `POST .../share` while the draft is not ready | 409 | `not_ready` | Only a finished draft can be shared. | **not run live** |
 | `PATCH` while writing | 409 | `writing` | This draft is still being written.
 | `PATCH` a failed draft | 409 | `not_ready` | This draft failed; make a new one.
@@ -905,7 +967,8 @@ Codes the server uses (the message for each is the sentence in `app/recipes/serv
 - `sources` is on paragraphs, bullet **items** and table **cells** (inside each cell object), never on the bullets block or the table block itself, and not on headings.
 - A table cell is `{text, sources}`, not a string; `columns` **is** a list of strings.
 - `quote` and `ref` are present and may be null; a `meeting` or `task` source has `line: null`.
-- `access`, `owner_name`, `shared_with` are on **both** the list row and the full draft; `can_edit` is **only** on the full draft.
+- `access`, `owner_name`, `shared_with`, `team` are on **both** the list row and the full draft; `can_edit` and `share_blocked` are **only** on the full draft.
+- `title` is not always the model's title: for a reader who cannot read every source meeting it is "<recipe>, <day month>".
 - `shared_with` is the creator's view: it is `[]` for a reader even though the draft is shared with them.
 - A `hidden` source has `meeting_id: null`: any code that reads `source.meeting_id` must cope with null.
 - `meeting_ids` is **not** the draft's full meeting list for a reader: it is the readable part.
@@ -956,11 +1019,16 @@ A draft can stay `writing` if the worker is down; it is retried up to three time
 | `X-Team-Id` choosing the brief and team recipes | Wrong team 404 verified live (34); team recipes and the brief: see the library guide |
 | Share, share again, unshare (200, 200, 204) | **Verified live** (integration 07, 08, 21) |
 | A reader: 404 before the share, hidden sources, readable sources, lists, export, writes 404, 404 after unshare, outsider 404 | **Verified live** (integration 04, 06, 10 to 23) |
-| `personal_team` 409 | **Verified live** (integration 25) |
+| `personal_team` 409 (draft made in a personal space), `share_blocked` | **Verified live** (integration 25); `share_blocked` and `team_left` verified in `tests/test_recipe_visibility.py` |
+| A share goes to the draft's own team whatever team is active; a share does not come back after leave and rejoin | **Not run live**; `tests/test_recipe_visibility.py` (mutation-checked) |
+| The creator's own view redacts sources of a meeting they lost or that was deleted | **Verified live** for a deleted meeting (integration 38); lost access in `tests/test_recipe_visibility.py` |
+| Generic title, reader `stale` false and checks from the readable view | **Verified live** (integration 10, 12: private meeting); readable case in `tests/test_recipe_visibility.py` |
+| `use_board` 409 on a plain save of a board | **Verified live** (integration 32); a stale save cannot undo a move in `tests/test_api_recipe_board.py` |
+| Discard before the worker starts gives the day's place back | **Not run live**; `tests/test_recipe_integration.py` (three tests) |
 | `not_ready` 409 on share | **Not run live**; `tests/test_recipe_visibility.py` |
 | Leaving the team ends a reader's access; the creator leaving ends the team's | **Not run live** (not captured; the membership is removed in the database in the tests); `tests/test_recipe_visibility.py` (two tests, mutation-checked) |
 | A reader's board edit is 404 | **Not run live**; `tests/test_recipe_visibility.py` |
 | `stale` after a notes change; regenerate makes a new draft | **Verified live** (integration 26 to 30) |
 | `stale` after a transcript edit or a brief change | **Not run live**; `tests/test_recipe_integration.py` |
-| Deleting a meeting: single-meeting draft gone, cross-meeting draft stays, list empty | **Verified live** (integration 31 to 36) |
+| Deleting a meeting: single-meeting draft gone, cross-meeting draft stays, list empty | **Verified live** (integration 34 to 39) |
 | Account deletion removes drafts made only from the person's meetings | **Not run live**; `tests/test_recipe_integration.py::test_purging_an_account_runs_the_same_cleanup` |

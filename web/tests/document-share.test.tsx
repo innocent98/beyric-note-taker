@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   export: vi.fn(),
   share: vi.fn(),
   unshare: vi.fn(),
-  brief: vi.fn(),
   push: vi.fn(),
   save: vi.fn(),
   boardEdit: vi.fn(),
@@ -39,13 +38,13 @@ vi.mock("@/lib/api/browser", () => ({
       share: mocks.share,
       unshare: mocks.unshare,
     },
-    brief: { get: mocks.brief },
     board: { edit: mocks.boardEdit },
   },
 }));
 vi.mock("@/lib/save-file", () => ({ saveBlob: mocks.save }));
 
-const PERSONAL = "This is your own space, so there is no team to share with. Switch to a team first.";
+const PERSONAL = "This draft was made in your own space. Make it in a team workspace to share it with that team.";
+const LEFT = "You are no longer in the team this draft was made in, so it cannot be shared.";
 const NOT_READY = "Only a finished draft can be shared.";
 const SALES = { id: 7, name: "Sales team" };
 
@@ -54,13 +53,13 @@ const board = () => recipesBody<DocumentDraft>("board/04-get-board.json");
 const proposal = () => recipesBody<DocumentDraft>("exports/24-the-draft.json");
 const sharedWith = (draft: DocumentDraft, teams = [SALES]): DocumentDraft => ({ ...draft, shared_with: teams });
 const asReader = (draft: DocumentDraft): DocumentDraft => ({ ...draft, access: "shared", can_edit: false, owner_name: "Ada Obi", shared_with: [] });
-const show = (draft: DocumentDraft) => render(<DocumentView initial={draft} />);
+// A draft read back as its creator has the team it was made in and no reason against sharing it.
+const show = (draft: DocumentDraft) => render(<DocumentView initial={{ team: SALES, share_blocked: null, ...draft }} />);
 const button = (name: string | RegExp) => screen.getByRole("button", { name });
 const dialog = () => within(screen.getByRole("dialog"));
 
 beforeEach(() => {
   Object.values(mocks).forEach((fn) => fn.mockReset());
-  mocks.brief.mockResolvedValue({ team: { id: 7, name: "Sales team", is_personal: false, can_manage: true }, text: "" });
   HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
     this.setAttribute("open", "");
   };
@@ -77,6 +76,8 @@ describe("the share dialog", () => {
     const d = dialog();
     expect(d.getByText("Teammates will read this draft even if they cannot open the meeting.")).toBeTruthy();
     expect(d.getByText(/They cannot edit it\. You can stop sharing at any time/)).toBeTruthy();
+    expect(d.getByText(/title and text can reveal what was said in it/)).toBeTruthy();
+    expect(d.getByText(/generic title instead of this one/)).toBeTruthy();
     expect(await d.findByRole("button", { name: "Share with Sales team" })).toBeTruthy();
     expect(d.queryByRole("button", { name: "Stop sharing" })).toBeNull();
   });
@@ -95,7 +96,7 @@ describe("the share dialog", () => {
     show(email());
     await userEvent.click(button("Share with team"));
     await userEvent.click(await dialog().findByRole("button", { name: "Share with Sales team" }));
-    expect(mocks.share).toHaveBeenCalledWith(email().id, 7);
+    expect(mocks.share).toHaveBeenCalledWith(email().id);
     await waitFor(() => expect(button("Shared")).toBeTruthy());
     expect(screen.queryByRole("button", { name: "Share with team" })).toBeNull();
     expect(screen.getByText("Shared with Sales team")).toBeTruthy();
@@ -145,14 +146,22 @@ describe("the share dialog", () => {
     expect(screen.getAllByText("Shared with Sales team").length).toBe(2); // still shared: the toolbar line and the dialog's
   });
 
-  it("cannot share until it knows the team, and says so when it could not find out", async () => {
-    mocks.brief.mockRejectedValueOnce(new TypeError("offline"));
-    show(email());
+  it("shows the server's reason and offers no Share when the draft cannot be shared", async () => {
+    show({ ...email(), share_blocked: PERSONAL });
     await userEvent.click(button("Share with team"));
-    expect(await dialog().findByText(/could not find out which team/)).toBeTruthy();
-    expect((dialog().getByRole("button", { name: "Share with team" }) as HTMLButtonElement).disabled).toBe(true);
-    await userEvent.click(dialog().getByRole("button", { name: "Try again" }));
-    expect(await dialog().findByRole("button", { name: "Share with Sales team" })).toBeTruthy();
+    expect(dialog().getByText(PERSONAL)).toBeTruthy();
+    expect((dialog().getByRole("button", { name: "Share with Sales team" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(dialog().getByRole("button", { name: "Share with Sales team" }));
+    expect(mocks.share).not.toHaveBeenCalled();
+  });
+
+  it("names the team the draft was made in, not the tab's, and shows the 'left the team' sentence from the server", async () => {
+    show({ ...email(), team: { id: 9, name: "Support" } });
+    await userEvent.click(button("Share with team"));
+    mocks.share.mockRejectedValueOnce(new ApiError(409, "team_left", LEFT));
+    await userEvent.click(dialog().getByRole("button", { name: "Share with Support" }));
+    expect((await dialog().findByRole("alert")).textContent).toContain(LEFT);
+    expect(mocks.share).toHaveBeenCalledWith(email().id);
   });
 });
 

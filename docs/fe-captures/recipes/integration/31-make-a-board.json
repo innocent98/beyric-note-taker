@@ -1,5 +1,5 @@
 {
-  "note": "Made from one meeting.",
+  "note": "A board draft.",
   "client": "ada (creator)",
   "request": {
     "method": "POST",
@@ -9,9 +9,9 @@
       "Cookie": "session=<cookie>"
     },
     "body": {
-      "recipe_key": "follow_up_email",
+      "recipe_key": "board",
       "meeting_ids": [
-        3
+        1
       ]
     }
   },
@@ -22,20 +22,24 @@
     },
     "body": {
       "id": 6,
-      "title": "Follow-up email",
-      "output_type": "email",
-      "recipe_key": "follow_up_email",
+      "title": "Board",
+      "output_type": "board",
+      "recipe_key": "board",
       "recipe_id": null,
       "status": "writing",
       "edited": false,
       "meeting_ids": [
-        3
+        1
       ],
-      "created_at": "2026-11-24T21:37:46.369845Z",
-      "updated_at": "2026-11-24T21:37:46.369845Z",
+      "created_at": "2026-11-24T22:00:22.413319Z",
+      "updated_at": "2026-11-24T22:00:22.413319Z",
       "access": "owner",
       "owner_name": null,
       "shared_with": [],
+      "team": {
+        "id": 2,
+        "name": "Acme Sales"
+      },
       "blocks": [],
       "checks": {
         "blanks": [],
@@ -47,8 +51,9 @@
       "failure_code": null,
       "failure_message": null,
       "options": {},
-      "use_brief": true,
+      "use_brief": false,
       "can_edit": true,
+      "share_blocked": null,
       "left_out_message": null
     }
   }

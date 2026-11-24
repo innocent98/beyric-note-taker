@@ -1,5 +1,5 @@
 {
-  "note": "A cross-meeting draft.",
+  "note": "Made from one meeting.",
   "client": "ada (creator)",
   "request": {
     "method": "POST",
@@ -9,10 +9,9 @@
       "Cookie": "session=<cookie>"
     },
     "body": {
-      "recipe_key": "status_report",
+      "recipe_key": "follow_up_email",
       "meeting_ids": [
-        3,
-        4
+        3
       ]
     }
   },
@@ -23,21 +22,24 @@
     },
     "body": {
       "id": 7,
-      "title": "Status report",
-      "output_type": "document",
-      "recipe_key": "status_report",
+      "title": "Follow-up email",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
       "recipe_id": null,
       "status": "writing",
       "edited": false,
       "meeting_ids": [
-        3,
-        4
+        3
       ],
-      "created_at": "2026-11-24T21:37:46.576133Z",
-      "updated_at": "2026-11-24T21:37:46.576133Z",
+      "created_at": "2026-11-24T22:00:22.617603Z",
+      "updated_at": "2026-11-24T22:00:22.617603Z",
       "access": "owner",
       "owner_name": null,
       "shared_with": [],
+      "team": {
+        "id": 2,
+        "name": "Acme Sales"
+      },
       "blocks": [],
       "checks": {
         "blanks": [],
@@ -51,6 +53,7 @@
       "options": {},
       "use_brief": true,
       "can_edit": true,
+      "share_blocked": null,
       "left_out_message": null
     }
   }

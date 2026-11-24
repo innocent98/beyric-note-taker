@@ -367,3 +367,21 @@ def test_a_board_exports_to_pdf_and_word_through_the_documents_export_route(api,
     edit(api, doc_id, op="rename_column", column=0, title="Costs")
     again = api.get(f"/api/documents/{doc_id}/export?format=docx")
     assert "Costs" in "\n".join(p.text for p in Docx(io.BytesIO(again.content)).paragraphs)
+
+
+def test_the_plain_save_refuses_a_board_so_a_stale_save_cannot_undo_a_move(api, session, template):
+    _, doc_id = make_board(api, session, template)
+    old = get(api, doc_id)
+    moved = edit(api, doc_id, op="move_card", card=1, to_column=2, index=0)
+    assert moved.status_code == 200
+    stale_save = api.call(
+        "PATCH",
+        f"/api/documents/{doc_id}",
+        {"blocks": [{"type": "paragraph", "text": "x", "sources": []}]},
+    )
+    error = error_of(stale_save, 409, "use_board")
+    assert "one step at a time" in error["message"]
+    # the old blocks sent back as a whole would have undone the move: they are refused too
+    stale_whole = api.call("PATCH", f"/api/documents/{doc_id}", {"blocks": old["blocks"]})
+    error_of(stale_whole, 409, "use_board")
+    assert column_cards(get(api, doc_id)) == column_cards(moved.json())

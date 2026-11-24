@@ -786,7 +786,7 @@ def cmd_capture() -> None:
         tunde.rec("teammate-list-after-unshare", "GET", "/api/documents?shared=true", note="The draft left the list (the other shared draft stays).")  # fmt: skip
 
         mine = make(eve, {"recipe_key": "follow_up_email", "meeting_ids": [ids["eves"]]}, "outsider-makes-a-draft", "Eve has only her personal team.")  # fmt: skip
-        eve.rec("share-from-a-personal-space", "POST", f"/api/documents/{mine['id']}/share", note="409 `personal_team`: her own space has no one to share with. Show the server's message.")  # fmt: skip
+        eve.rec("share-from-a-personal-space", "POST", f"/api/documents/{mine['id']}/share", note="409 `personal_team`: the draft was made in her personal space, which has no team to share it with. Show the server's message (the same sentence is in `share_blocked` on the draft).")  # fmt: skip
 
         # stale and regenerate
         fresh = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["sprint"]]}, "make-for-stale", "A draft from the sprint planning.")  # fmt: skip
@@ -797,6 +797,13 @@ def cmd_capture() -> None:
         ada.rec("after-the-notes-changed", "GET", f"/api/documents/{fresh['id']}", note="`stale` true: label it 'older than the meeting text'. (The notes were changed straight in the database to stand for a rewrite; a transcript edit or a change of the brief does the same.)")  # fmt: skip
         again = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["sprint"]]}, "regenerate-makes-a-new-draft", "Regenerate is a plain new POST: a NEW id; the stale draft is untouched.")  # fmt: skip
         ada.rec("new-draft-is-fresh", "GET", f"/api/documents/{again['id']}", note="`stale` false; the old draft keeps its text.")  # fmt: skip
+
+        # a board is edited only through its own route
+        board = make(ada, {"recipe_key": "board", "meeting_ids": [ids["sales"]]}, "make-a-board", "A board draft.")  # fmt: skip
+        ada.rec("plain-save-of-a-board-is-refused", "PATCH", f"/api/documents/{board['id']}", {"blocks": board["blocks"]}, note="409 `use_board`: a board is changed one step at a time through `PATCH /api/documents/{id}/board` (it carries the revision check). The plain whole-document save would let a stale screen undo a move.")  # fmt: skip
+
+        # discarding before and after the worker starts
+        ada.rec("discard-a-board", "DELETE", f"/api/documents/{board['id']}", note="204.")  # fmt: skip
 
         # deleting a meeting
         single = make(ada, {"recipe_key": "follow_up_email", "meeting_ids": [ids["lecture"]]}, "make-from-the-lecture", "Made from one meeting.")  # fmt: skip

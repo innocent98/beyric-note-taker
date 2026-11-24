@@ -286,13 +286,172 @@ def test_a_reader_can_export_the_text_they_were_shared(api, reader, session, tem
     assert SECRET_TITLE not in response.text
 
 
-def test_the_checks_a_reader_sees_are_the_creators_not_a_guess_from_hidden_meetings(
+def test_a_reader_who_cannot_read_every_meeting_gets_checks_from_what_they_can_read(
     api, reader, session, template, team
 ):
     meeting, doc_id = sourced_draft(api, session, template, team, meeting_shared=False)
     share(api, doc_id)
-    # 50,000 is in the meeting the reader cannot read: it is not flagged "check this" for them.
-    assert reader.get(url(doc_id)).json()["checks"]["flags"] == []
+    # 50,000 is in the meeting the reader cannot read: from their redacted view it is not found
+    # anywhere, so it is flagged "check this" for them (and not for the creator).
+    assert api.get(url(doc_id)).json()["checks"]["flags"] == []
+    flags = reader.get(url(doc_id)).json()["checks"]["flags"]
+    assert [f["text"] for f in flags] == ["50,000 naira"]
+
+
+def test_stale_is_false_for_a_reader_with_a_hidden_source_and_true_when_they_read_all(
+    api, reader, session, template, team
+):
+    meeting, doc_id = sourced_draft(api, session, template, team, meeting_shared=False)
+    share(api, doc_id)
+    meeting.notes = "## Summary\nThe plan changed: 80,000 naira."
+    session.commit()
+    assert api.get(url(doc_id)).json()["stale"] is True
+    assert reader.get(url(doc_id)).json()["stale"] is False  # a hidden meeting: say nothing
+    meeting.shared_team_id = team.id  # now the reader can read the meeting
+    session.commit()
+    assert reader.get(url(doc_id)).json()["stale"] is True
+
+
+def test_a_reader_who_cannot_read_every_meeting_sees_a_generic_title(
+    api, reader, session, template, team
+):
+    from datetime import datetime
+
+    meeting, doc_id = sourced_draft(api, session, template, team, meeting_shared=False)
+    share(api, doc_id)
+    mine = api.get(url(doc_id)).json()
+    assert mine["title"] == "Thanks for today"  # the model's own title, for the creator
+    when = datetime.fromisoformat(mine["created_at"].replace("Z", "+00:00"))
+    expected = f"Follow-up email, {when.day} {when.strftime('%b')}"
+    seen = reader.get(url(doc_id)).json()
+    assert seen["title"] == expected
+    row = reader.get("/api/documents?shared=true").json()["documents"][0]
+    assert row["title"] == expected
+    meeting.shared_team_id = team.id
+    session.commit()
+    assert reader.get(url(doc_id)).json()["title"] == "Thanks for today"  # reads every source
+
+
+# ---- a share must not come back (leaving and rejoining the team) ----
+
+
+def test_a_share_does_not_come_back_when_its_creator_leaves_and_rejoins(
+    api, session, template, team, teammate, app
+):
+    from datetime import UTC, datetime
+
+    maker = sign_in(app, TEAMMATE_EMAIL)  # the teammate makes and shares; the owner reads
+    meeting = meeting_of(session, template, title=SECRET_TITLE)
+    meeting.shared_team_id = team.id
+    session.commit()
+    doc_id = make(maker, meeting).json()["id"]
+    work(session)
+    assert share(maker, doc_id).status_code == 200
+    assert api.get(url(doc_id)).status_code == 200
+
+    teams.leave(session, teammate, datetime.now(UTC), team_id=team.id)
+    session.commit()
+    assert session.scalars(select(DocumentShare)).all() == []  # the share went with the membership
+    session.add(TeamMember(team_id=team.id, user_id=teammate.id, role="member"))
+    session.commit()  # they join again
+    error_of(api.get(url(doc_id)), 404, "not_found")
+    assert api.get("/api/documents?shared=true").json()["documents"] == []
+    assert maker.get(url(doc_id)).json()["shared_with"] == []
+
+
+def test_the_creators_shared_with_list_ignores_a_share_nobody_can_reach(
+    api, session, template, team
+):
+    _, doc_id = sourced_draft(api, session, template, team, meeting_shared=True)
+    share(api, doc_id)
+    assert api.get(url(doc_id)).json()["shared_with"][0]["id"] == team.id
+    # a row that survived some other way (the sharer is no longer in the team)
+    session.execute(TeamMember.__table__.delete().where(TeamMember.team_id == team.id))
+    session.commit()
+    assert api.get(url(doc_id)).json()["shared_with"] == []
+
+
+# ---- the creator's own view is redacted too ----
+
+
+def test_a_creator_who_lost_access_to_the_meeting_sees_hidden_sources(
+    api, session, template, team, teammate, app
+):
+    maker = sign_in(app, TEAMMATE_EMAIL)
+    meeting = meeting_of(session, template, title=SECRET_TITLE)
+    meeting.shared_team_id = team.id
+    session.commit()
+    doc_id = make(maker, meeting).json()["id"]
+    work(session, [para("The fee is 50,000 naira.", [line(meeting.id, 2)])])
+    assert maker.get(url(doc_id)).json()["blocks"][0]["sources"][0]["kind"] == "line"
+    meeting.shared_team_id = None  # the owner takes the meeting back from the team
+    session.commit()
+    got = maker.get(url(doc_id))
+    assert got.json()["blocks"][0]["sources"] == [
+        {"kind": "hidden", "meeting_id": None, "line": None, "quote": None, "ref": None}
+    ]
+    assert got.json()["sources_available"] is False and got.json()["access"] == "owner"
+    assert SECRET_TITLE not in got.text and "Daniel" not in got.text.split('"blocks"')[0]
+
+
+# ---- a draft is shared with the team it was made in, and only that one ----
+
+
+def test_a_share_goes_to_the_drafts_own_team_whatever_team_is_active(
+    api, session, template, team, owner
+):
+    from app.models import Team
+
+    other = Team(owner_user_id=owner.id, name="Second team", is_personal=False)
+    session.add(other)
+    session.flush()
+    session.add(TeamMember(team_id=other.id, user_id=owner.id, role="owner"))
+    session.commit()
+    meeting = meeting_of(session, template)
+    made = api.call(
+        "POST",
+        "/api/documents",
+        {"recipe_key": "follow_up_email", "meeting_ids": [meeting.id]},
+    )
+    doc_id = made.json()["id"]
+    work(session)
+    api.client.headers["X-Team-Id"] = str(other.id)  # the person has switched to the other team
+    try:
+        got = api.call("POST", url(doc_id) + "/share")
+    finally:
+        del api.client.headers["X-Team-Id"]
+    assert got.status_code == 200
+    assert got.json()["shared_with"] == [{"id": team.id, "name": team.name}]
+    assert got.json()["team"] == {"id": team.id, "name": team.name}
+    assert [s.team_id for s in session.scalars(select(DocumentShare))] == [team.id]
+
+
+def test_a_draft_made_in_the_personal_space_cannot_be_shared(api, session, template, team):
+    team.is_personal = True  # the owner's own space
+    session.commit()
+    meeting = meeting_of(session, template)
+    doc_id = make(api, meeting).json()["id"]
+    work(session)
+    got = api.get(url(doc_id)).json()
+    message = (
+        "This draft was made in your own space. Make it in a team workspace to share it with "
+        "that team."
+    )
+    assert got["share_blocked"] == message
+    error = error_of(share(api, doc_id), 409, "personal_team")
+    assert error["message"] == message
+    assert session.scalars(select(DocumentShare)).all() == []
+
+
+def test_a_draft_whose_creator_left_its_team_cannot_be_shared(api, session, template, team, owner):
+    meeting = meeting_of(session, template)
+    doc_id = make(api, meeting).json()["id"]
+    work(session)
+    assert api.get(url(doc_id)).json()["share_blocked"] is None
+    session.execute(TeamMember.__table__.delete().where(TeamMember.user_id == owner.id))
+    session.commit()
+    assert "no longer in the team" in api.get(url(doc_id)).json()["share_blocked"]
+    error_of(share(api, doc_id), 409, "team_left")
 
 
 def test_can_read_document_matches_the_routes(api, reader, session, template, team, owner):

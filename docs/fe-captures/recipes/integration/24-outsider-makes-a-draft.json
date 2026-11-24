@@ -31,11 +31,15 @@
       "meeting_ids": [
         10
       ],
-      "created_at": "2026-11-24T21:37:45.415755Z",
-      "updated_at": "2026-11-24T21:37:45.415755Z",
+      "created_at": "2026-11-24T22:00:21.751220Z",
+      "updated_at": "2026-11-24T22:00:21.751220Z",
       "access": "owner",
       "owner_name": null,
       "shared_with": [],
+      "team": {
+        "id": 4,
+        "name": "My team"
+      },
       "blocks": [],
       "checks": {
         "blanks": [],
@@ -49,6 +53,7 @@
       "options": {},
       "use_brief": true,
       "can_edit": true,
+      "share_blocked": null,
       "left_out_message": null
     }
   }
