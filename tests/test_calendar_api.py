@@ -178,6 +178,7 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
             "Joining all meetings except unanswered invites from outside your organisation"
         ),
         "join_unanswered": False,
+        "skip_one_on_ones": False,
         "calendar_template_id": None,
         "auto_join_paused": False,
         "auto_join_paused_text": None,
@@ -402,7 +403,7 @@ def test_every_reason_the_rules_can_give_has_plain_words_and_no_code():
 
 def test_the_labels_are_the_designers_three_and_the_rule_decides_which(web):
     # Off: the person could switch it on. Cannot join: nothing they switch changes it.
-    off = {"rule_none", "not_organizer", "not_accepted", "override_off"}
+    off = {"rule_none", "not_organizer", "not_accepted", "one_on_one", "override_off"}
     for reason in REASONS:
         if reason == "ok":
             continue
@@ -542,3 +543,37 @@ def test_the_rule_comes_back_with_its_words(web, session, owner, linked, rule, w
     session.commit()
     body = web.get(URL).json()
     assert (body["rule"], body["rule_text"]) == (rule, words)
+
+
+@pytest.mark.parametrize(
+    ("rule", "unanswered", "skip", "words"),
+    [
+        ("all", True, False, "Joining all meetings"),
+        (
+            "all",
+            False,
+            False,
+            "Joining all meetings except unanswered invites from outside your organisation",
+        ),
+        ("all", True, True, "Joining all meetings except meetings with only two people invited"),
+        (
+            "all",
+            False,
+            True,
+            "Joining all meetings except unanswered invites from outside your organisation"
+            " and meetings with only two people invited",
+        ),
+        ("organizer", False, False, "Joining meetings you organise"),
+        ("organizer", True, False, "Joining meetings you organise"),
+        (
+            "organizer",
+            False,
+            True,
+            "Joining meetings you organise, except meetings with only two people invited",
+        ),
+        ("none", False, False, "Auto-join is off"),
+        ("none", True, True, "Auto-join is off"),
+    ],
+)
+def test_the_rule_label_names_only_the_exceptions_that_are_in_force(rule, unanswered, skip, words):
+    assert calendar_text.rule_text(rule, unanswered, skip) == words

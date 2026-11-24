@@ -1,0 +1,37 @@
+{
+  "note": "The joins the sync made with the box off: all five events have one.",
+  "content": {
+    "joins": [
+      {
+        "event": "1:1 with Sam",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Mentoring chat",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Design review",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Just me on the list",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Focus block (no invite list)",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      }
+    ]
+  }
+}

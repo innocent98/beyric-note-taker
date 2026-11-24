@@ -33,8 +33,15 @@ def make(**fields) -> ParsedEvent:
     return replace(BASE, **fields)
 
 
-def settings(rule="all", teams=False, join_unanswered=False) -> JoinSettings:
-    return JoinSettings(rule=rule, teams_join_enabled=teams, join_unanswered=join_unanswered)
+def settings(
+    rule="all", teams=False, join_unanswered=False, skip_one_on_ones=False
+) -> JoinSettings:
+    return JoinSettings(
+        rule=rule,
+        teams_join_enabled=teams,
+        join_unanswered=join_unanswered,
+        skip_one_on_ones=skip_one_on_ones,
+    )
 
 
 # ---- the decision table (spec 7.5) ----
@@ -240,6 +247,144 @@ def test_for_user_reads_the_stored_box_and_a_missing_row_means_off():
     # A stand-in that predates the column (or a test double) reads as off.
     old = SimpleNamespace(auto_join_rule="organizer")
     assert JoinSettings.for_user(old, teams_join_enabled=False) == JoinSettings("organizer", False)
+
+
+# ---- "Skip one-on-one meetings" (`skip_one_on_ones`) ----
+#
+# Written as its own function, not a copy of the code under test: a ticked box skips an event with
+# exactly two people invited, below everything the event itself forbids and below the person's own
+# switch for the meeting, and above the unanswered-invite wait.
+
+COUNTS = [0, 1, 2, 3, 10]
+
+
+def expected_with_the_skip(rule, count, box, override, response, organizer):
+    if response == "declined":
+        return (False, "declined")
+    if override is False:
+        return (False, "override_off")
+    if override is True:
+        return (True, "ok")
+    if rule == "none":
+        return (False, "rule_none")
+    if rule == "organizer" and organizer is not True:
+        return (False, "not_organizer")
+    if box and count == 2:
+        return (False, "one_on_one")
+    unanswered = response == "needsAction" or (response is None and organizer is False)
+    if rule == "all" and unanswered and organizer is not True:
+        return (False, "not_accepted")  # a stranger's invite (same_org is False in these cases)
+    return (True, "ok")
+
+
+@pytest.mark.parametrize(
+    ("rule", "count", "box", "override", "response", "organizer"),
+    list(
+        itertools.product(
+            RULES,
+            COUNTS,
+            [True, False],
+            OVERRIDES,
+            ["accepted", "needsAction", "declined"],
+            ORGANIZERS,
+        )
+    ),
+)
+def test_the_skip_one_on_ones_truth_table(rule, count, box, override, response, organizer):
+    event = make(
+        attendee_count=count,
+        self_response=response,
+        organizer_self=organizer,
+        organizer_same_org=False,
+    )
+    got = will_join(event, override, settings(rule, skip_one_on_ones=box), now=NOW)
+    assert got == JoinDecision(
+        *expected_with_the_skip(rule, count, box, override, response, organizer)
+    )
+
+
+@pytest.mark.parametrize("rule", ["all", "organizer"])
+def test_a_ticked_box_skips_exactly_two_people_invited(rule):
+    on = settings(rule, skip_one_on_ones=True)
+    assert will_join(make(attendee_count=2), None, on, now=NOW) == JoinDecision(False, "one_on_one")
+    for count in (0, 1, 3, 4, 12):  # no list (solo), only me, and every bigger meeting
+        assert will_join(make(attendee_count=count), None, on, now=NOW) == JoinDecision(True, "ok")
+
+
+def test_the_box_off_is_the_default_and_changes_nothing():
+    assert JoinSettings(rule="all", teams_join_enabled=False).skip_one_on_ones is False
+    for count in COUNTS:
+        got = will_join(make(attendee_count=count), None, settings("all"), now=NOW)
+        assert got == JoinDecision(True, "ok")
+
+
+def test_the_persons_own_switch_for_one_meeting_beats_the_skip_both_ways():
+    on = settings("all", skip_one_on_ones=True)
+    pair = make(attendee_count=2)
+    assert will_join(pair, True, on, now=NOW) == JoinDecision(True, "ok")
+    assert will_join(pair, False, on, now=NOW) == JoinDecision(False, "override_off")
+    big = make(attendee_count=5)
+    assert will_join(big, False, on, now=NOW) == JoinDecision(False, "override_off")
+    assert will_join(pair, None, on, now=NOW).reason == "one_on_one"  # the switch cleared again
+
+
+def test_the_skip_never_lifts_what_the_event_itself_forbids_and_does_not_hide_it():
+    on = settings("all", skip_one_on_ones=True)
+    forbidden = [
+        ({"self_response": "declined"}, "declined"),
+        ({"status": "cancelled"}, "cancelled"),
+        ({"all_day": True}, "all_day"),
+        ({"platform": None}, "no_link"),
+        ({"platform": "teams"}, "teams_unsupported"),
+        ({"event_type": "focusTime"}, "event_type"),
+        ({"ends_at": BASE.starts_at + timedelta(hours=7)}, "too_long"),
+        ({"starts_at": NOW - timedelta(hours=2), "ends_at": NOW}, "ended"),
+    ]
+    for fields, reason in forbidden:
+        event = make(attendee_count=2, **fields)
+        assert will_join(event, None, on, now=NOW) == JoinDecision(False, reason)
+
+
+def test_the_skip_does_nothing_under_none_and_the_other_reasons_keep_their_place():
+    pair = make(attendee_count=2, organizer_self=False)
+    assert will_join(pair, None, settings("none", skip_one_on_ones=True), now=NOW).reason == (
+        "rule_none"
+    )
+    # Under `organizer` the event is first "not yours"; your own two-person meeting is skipped.
+    assert will_join(pair, None, settings("organizer", skip_one_on_ones=True), now=NOW).reason == (
+        "not_organizer"
+    )
+    mine = make(attendee_count=2, organizer_self=True)
+    assert will_join(mine, None, settings("organizer", skip_one_on_ones=True), now=NOW).reason == (
+        "one_on_one"
+    )
+
+
+def test_a_two_person_unanswered_stranger_invite_says_one_on_one_not_not_accepted():
+    # Ticking "join invites I haven't answered" cannot help while the skip is on, so the row must
+    # not point at that setting.
+    invite = make(
+        attendee_count=2,
+        organizer_self=False,
+        self_response="needsAction",
+        organizer_same_org=False,
+    )
+    both = settings("all", skip_one_on_ones=True)
+    assert will_join(invite, None, both, now=NOW).reason == "one_on_one"
+    assert will_join(invite, None, replace(both, join_unanswered=True), now=NOW).reason == (
+        "one_on_one"
+    )
+    assert will_join(invite, None, settings("all"), now=NOW).reason == "not_accepted"
+
+
+def test_for_user_reads_the_stored_skip_and_a_stand_in_without_the_column_means_off():
+    from types import SimpleNamespace
+
+    row = SimpleNamespace(auto_join_rule="all", join_unanswered=False, skip_one_on_ones=True)
+    assert JoinSettings.for_user(row, teams_join_enabled=False).skip_one_on_ones is True
+    assert JoinSettings.for_user(None, teams_join_enabled=False).skip_one_on_ones is False
+    old = SimpleNamespace(auto_join_rule="all", join_unanswered=True)
+    assert JoinSettings.for_user(old, teams_join_enabled=False).skip_one_on_ones is False
 
 
 # ---- what an override can never beat ----

@@ -181,6 +181,12 @@ the list.
 > ("Waiting for you to accept the invite") now ends "... Settings can join these too." Everything else in
 > them is unchanged.
 
+> **Changed 2026-11-24 (PR "Skip one-on-one meetings"):** `GET /api/calendar` and every answer of
+> `PUT /api/calendar/settings` now also carry a boolean **`skip_one_on_ones`** (right after
+> `join_unanswered`), and `rule_text` can name a second exception (section 3c, real bodies in
+> `docs/fe-captures/skip-one-on-ones/`, cited **#sNN**). The older folders lack the field. A new reason,
+> "Skipped because only two people are invited. Settings can join these too.", joins the `Off` reasons.
+
 ### The rule (#09, #10, #11)
 
 `rule` is `all`, `organizer` or `none`; `rule_text` is the designer's label for the Meetings page
@@ -202,6 +208,7 @@ when you turn it on"). It is changed with `PUT /api/calendar/settings` (section 
 | `last_error` | The last failure in plain words, or `null` after a success |
 | `rule`, `rule_text` | The auto-join rule and its label (always present). For `all`: "Joining all meetings" when `join_unanswered` is true, else "Joining all meetings except unanswered invites from outside your organisation" (#u05, #u07) |
 | `join_unanswered` | Boolean, **always present** since 2026-11-21: the tick on "Also join invites I haven't answered yet". `false` for everyone until they tick it. Stored whatever the rule is, but it only does anything under `all` (section 3b) |
+| `skip_one_on_ones` | Boolean, **always present** since 2026-11-24: the tick on "Skip one-on-one meetings". `false` for everyone until they tick it. Stored whatever the rule is; it does something under `all` and `organizer`, nothing under `none` (section 3c) |
 | `calendar_template_id` | The person's own template chosen for calendar meetings, or `null` for the default. **Always present.** Sign-up gives every account its General copy, so for real accounts it is a number (`1` in #05, #09); `null` appears only after the person is sent back to the default (#w10) |
 | `upcoming[].id` | The event's id: what the switch sends (`PUT /api/calendar/events/{id}/override`) |
 | `upcoming[].starts_at`, `ends_at` | UTC, `Z` suffix, whole seconds |
@@ -300,7 +307,8 @@ and 403 `csrf_rejected` without the header (#w39). Captured by `scripts/capture_
 ### `PUT /api/calendar/settings`: the rule and the template
 
 Body: any of `{"rule": "all" | "organizer" | "none"}`, `{"calendar_template_id": <id> | null}` and
-`{"join_unanswered": true | false}` (section 3b). **A field left out stays as it is.** At least one is
+`{"join_unanswered": true | false}` (section 3b) and `{"skip_one_on_ones": true | false}` (section 3c).
+**A field left out stays as it is.** At least one is
 required. The answer is the **whole state** (the same body as
 `GET /api/calendar`), so redraw the Settings card and anything that reads `rule`, `rule_text`,
 `calendar_template_id` or `upcoming` from it.
@@ -497,7 +505,7 @@ changes nothing (#u09).
 
 | Body | Response (verbatim) |
 |---|---|
-| `{"join_unanswered": null}` (#u14) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send at least one of rule, join_unanswered or calendar_template_id"}]}}` |
+| `{"join_unanswered": null}` (#u14) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send at least one of rule, join_unanswered or calendar_template_id"}]}}` (as captured on 2026-11-21; since 2026-11-24 the message also names `skip_one_on_ones`, see section 3c) |
 | `{"join_unanswered": "yes"}` (#u15) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "join_unanswered", "message": "Input should be a valid boolean"}]}}` |
 | `{"join_unanswered": true, "join_everything": true}` (#u16) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "join_everything", "message": "Extra inputs are not permitted"}]}}` |
 | `{}` (#u17) | the same body as the first row |
@@ -512,6 +520,135 @@ The 401, 403 and 404 `calendar_unavailable` answers are the ones in section 3a; 
   Print `rule_text` as it comes.
 - **Turning the box off cancels the joins it had made** for meetings that have not started: rows flip back
   to `Off` in the answer. Do not keep showing "Will join" from an older list.
+
+## 3c. "Skip one-on-one meetings" (`skip_one_on_ones`)
+
+**What it is, in the person's terms.** A checkbox that stops the note taker joining a meeting with **only two
+people invited** (the person and one other). It is a **per-person choice, off for everyone until they tick
+it**, and it narrows two of the three rules: "All meetings with a video link" and "Only meetings I organise".
+Under "Only when I turn it on" nothing joins by itself, so the box does nothing there. **The count is people
+invited, not people who turn up**: a meeting with two invitees is skipped even if a third person joins the
+call later, and a meeting of three invitees is joined even if only two show up. A meeting with **no invite
+list** (`attendee_count` 0, a solo event) or **only the person on the list** (`attendee_count` 1) is **not** a
+one-on-one and is joined as usual. A per-meeting switch still beats the box in both directions, and
+everything the event itself forbids (declined, no link, cancelled, all-day, too long, over) is unchanged.
+Captured by `scripts/capture_skip_one_on_ones.py` into `docs/fe-captures/skip-one-on-ones/NN-*.json`
+(**#sNN**), real app, real Postgres, real HTTP, the events through the real sync job over a fake Google, so
+**no real Google calendar was read** and no bot was sent. **Outlook was not exercised live at all** (see the
+verification table). The timestamps carry `+01:00` because the scratch Postgres ran on a Mac in that zone.
+
+### Reading it
+
+`GET /api/calendar` with the box never ticked (#s05), trimmed to the changed fields and four of the five rows
+(the real body has every field of section 2 for each row; see `05-state-default.json`). Every meeting is
+`Will join`, the two with `attendee_count` 2 included:
+
+```json
+{
+  "rule": "all",
+  "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
+  "join_unanswered": false,
+  "skip_one_on_ones": false,
+  "upcoming": [
+    {"id": 1, "title": "1:1 with Sam", "attendee_count": 2, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 1},
+    {"id": 3, "title": "Design review", "attendee_count": 3, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 3},
+    {"id": 4, "title": "Just me on the list", "attendee_count": 1, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 4},
+    {"id": 5, "title": "Focus block (no invite list)", "attendee_count": 0, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 5}
+  ]
+}
+```
+
+### Writing it
+
+`PUT /api/calendar/settings` with `{"skip_one_on_ones": true}` (#s07). Same CSRF header as every write. The
+answer is the **whole state**; redraw from it:
+
+```json
+{
+  "rule": "all",
+  "rule_text": "Joining all meetings except unanswered invites from outside your organisation and meetings with only two people invited",
+  "join_unanswered": false,
+  "skip_one_on_ones": true,
+  "upcoming": [
+    {"id": 1, "title": "1:1 with Sam", "attendee_count": 2, "will_join": false, "will_join_text": "Off", "reason_text": "Skipped because only two people are invited. Settings can join these too.", "join_id": 1},
+    {"id": 3, "title": "Design review", "attendee_count": 3, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 3},
+    {"id": 4, "title": "Just me on the list", "attendee_count": 1, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 4},
+    {"id": 5, "title": "Focus block (no invite list)", "attendee_count": 0, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 5}
+  ]
+}
+```
+
+**Field-nesting trap:** a skipped row still has a `join_id` (the join exists, `cancelled`), and `can_send_now`
+is `false` and `not_recorded_text` is `null` on it. Do not read `join_id` as "will join": read `will_join`.
+
+What the server did before it answered (#s06, #s08, #s11, #s18 are the stored joins): ticking **cancelled** the
+joins of the two meetings that had not started, with `skip_reason` `one_on_one` (#s08), and left the other
+three alone. Clearing the box **revived** the same rows to `scheduled` (#s18) for meetings that have not
+started. Like a change to `join_unanswered`, and unlike a rule change, it **keeps the person's per-meeting
+switches**. A meeting whose bot is already in is never touched. Sending the value that is already stored
+changes nothing (#s09).
+
+### The per-meeting switch beats the box (`PUT /api/calendar/events/{id}/override`)
+
+Switch a skipped meeting **on** (#s10): the server answers with the row, `Will join`, and makes the join again:
+
+```json
+{"id": 1, "title": "1:1 with Sam", "starts_at": "2026-11-24T15:01:00+01:00", "ends_at": "2026-11-24T15:31:00+01:00", "platform": "google_meet", "platform_label": "Google Meet", "attendee_count": 2, "will_join": true, "will_join_text": "Will join", "reason_text": null, "join_id": 1, "can_send_now": false, "not_recorded_text": null}
+```
+
+Switch a three-person meeting **off** (#s12): `"will_join": false, "will_join_text": "Off", "reason_text": "You switched this meeting off"`.
+Clear the switch on the skipped meeting (#s13, `{"override": null}`): back to `Off` with "Skipped because only two
+people are invited. Settings can join these too.", and the join is `cancelled` again.
+
+### Rules for the box on the Settings card
+
+- Draw it under "Also join invites I haven't answered yet" as the checkbox "Skip one-on-one meetings". The
+  help line says what each state means (on: "the note taker skips meetings with only two people invited").
+  **Say "only two people invited" in the UI, never "one-on-one with a person who accepted"**: the count is
+  invitees, a room or a group address counts as one invitee.
+- **It does nothing under `none`.** Draw it **disabled** there (still showing the stored value) with "Only
+  used with All meetings with a video link or Only meetings I organise". The server keeps the value across a
+  rule change: after `{"rule": "organizer"}` the answer still says `skip_one_on_ones: true` and `rule_text`
+  "Joining meetings you organise, except meetings with only two people invited" (#s14); after `{"rule":
+  "none"}` it says `skip_one_on_ones: true` and `rule_text` "Auto-join is off" (#s15); back under `all` it
+  counts again (#s16).
+- The two boxes combine in `rule_text`: unanswered off and skip on gives "... except unanswered invites from
+  outside your organisation and meetings with only two people invited" (#s07); unanswered on and skip on gives
+  "Joining all meetings except meetings with only two people invited" (a unit test, not a capture). Print
+  `rule_text` as it comes, and build the first rule's sentence on the card the same way (the web app does).
+- Send `{"skip_one_on_ones": <the new value>}` alone when the box is pressed; never send `null` (422).
+
+### Errors (all 422, nothing stored)
+
+| Body | Response (verbatim) |
+|---|---|
+| `{"skip_one_on_ones": null}` (#s20) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "body", "message": "Value error, send at least one of rule, join_unanswered, skip_one_on_ones or calendar_template_id"}]}}` |
+| `{"skip_one_on_ones": "yes"}` (#s21) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "skip_one_on_ones", "message": "Input should be a valid boolean"}]}}` |
+| `{"skip_one_on_ones": true, "skip_everything": true}` (#s22) | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "skip_everything", "message": "Extra inputs are not permitted"}]}}` |
+| `{}` (#s23) | the same body as the first row |
+
+The 401, 403 and 404 `calendar_unavailable` answers are the ones in section 3a; they were not captured again.
+
+### The "Not recorded" list and Send now
+
+A skipped one-on-one is a **cancelled** join, the person's own choice, like a meeting they switched off. It is
+**never on the "Not recorded" list** and has **no Send now** (`can_send_now` false). The way to record one anyway is
+its switch on the Upcoming list. `GET /api/not-recorded` (#s19) answered `{"items": []}`: every event in the capture
+is still in the future, so that capture cannot show the point by itself; the claim against started meetings is
+proved by a test (`test_a_skipped_one_on_one_is_not_on_the_not_recorded_list_and_cannot_be_sent_now`).
+
+### UX consequences to surface
+
+- **A meeting the person expects to be recorded can be skipped.** The count is **invited people**: a one-on-one
+  that also has a room resource, a group address or a co-host on the invite has three or more and is joined; a
+  three-person invite where one person declined is still three and is joined. The row says why when it is
+  skipped; always show `reason_text` (visible text, as in section 3b).
+- **The Upcoming header label changes with the box** (`rule_text`). Print it as it comes. On a phone it wraps to
+  two or three lines.
+- **Turning the box on cancels joins already planned** for two-person meetings that have not started: rows flip to
+  `Off` in the answer. Do not keep showing "Will join" from an older list.
+- **A two-person meeting that is already under way** when the box is cleared joins only if it is within the
+  15 minutes after its start (the same window every meeting has).
 
 ## 4. Polling
 
@@ -566,6 +703,10 @@ a minute; an automatic refresh is a later improvement.
 | `join_unanswered` read, ticked, ticked again, kept across a rule change, cleared; the joins made and cancelled by it; 422 for `null`, a non-boolean, an unknown field and an empty body (#u05 to #u18) | verified live against the running app, Google faked; the stored `scheduled_joins` after each write are in the captures |
 | `join_unanswered` truth table (every rule x organiser x response x same-organisation x box x switch), the re-run on change, the runner's re-check at send time, the migration round trip | verified by the pytest suite against a real Postgres (see the SOP `docs/sop/2026-11-21-join-unanswered-invites.md`) |
 | The older bodies in `calendar-state/` and `calendar-settings/` | **stale in one way**: no `join_unanswered`, and `rule_text` "Joining all meetings" for `all` (see the note in section 2) |
+| `skip_one_on_ones` read, ticked, ticked again, kept across rule changes (`organizer`, `none`, back to `all`), cleared; the joins cancelled and revived by it; the switch beating it both ways; 422 for `null`, a non-boolean, an unknown field and an empty body; `GET /api/not-recorded` (#s05 to #s24) | verified live against the running app, Google faked; the events went through the real sync job, no bot was sent. The Not recorded capture is empty because every event is in the future |
+| `skip_one_on_ones` truth table (rule x count 0/1/2/3/10 x box x switch x response x organiser), both providers' counts to the rule, the re-run on change, the runner's re-check at send time, a skipped one-on-one not on Not recorded and not sendable, the migration round trip | verified by the pytest suite against a real Postgres |
+| Outlook's invite count (one attendee plus the organiser is 2) | **not verified**: only the documented Graph shape in `tests/fixtures/graph/` was used (the organiser-adds-one reading is still the M0 assumption) |
+| The older bodies in `calendar-state/`, `calendar-settings/` and `join-unanswered/` | **stale in one way**: no `skip_one_on_ones` |
 | An unanswered invite from a real stranger on a real Google calendar, the bot being admitted | **not verified**: needs a real calendar and a real meeting |
 | A real Google calendar, a real consent screen (including the wording of Google's own unverified-app warning, which the page describes but has not seen), real `hd` and scope names | **not verified**: needs Adebayo's Gmail test account (checklist C3 and C5 live steps) |
 

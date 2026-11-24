@@ -705,3 +705,17 @@ def test_a_graph_batch_becomes_rows_and_joins_through_apply_batch(session, micro
     assert joined == {rows["e-zoom"].id}
     assert rows["e-teams"].platform == "teams"
     assert rows["e-stranger"].self_response == "needsAction"
+
+
+def test_an_outlook_one_on_one_counts_two_and_is_skipped_when_ticked():
+    """`skip_one_on_ones` on Graph: one attendee plus the organiser is 2, the same as Google's two
+    people. No attendees is a solo event (0) and is not skipped. The organiser-adds-one reading is
+    still ASSUMED until the M0 capture, so this shows the rule on the documented shape only."""
+    ticked = JoinSettings(rule="all", teams_join_enabled=False, skip_one_on_ones=True)
+    pair = parsed("zoom_in_body")
+    assert pair.attendee_count == 2
+    assert will_join(pair, None, ticked, now=NOW).reason == "one_on_one"
+    people = [{"emailAddress": {"address": f"p{i}@example.test"}} for i in range(2)]
+    assert will_join(parsed("zoom_in_body", attendees=people), None, ticked, now=NOW).join is True
+    solo = parsed("zoom_in_body", attendees=[])
+    assert will_join(solo, None, ticked, now=NOW).join is True

@@ -1,0 +1,117 @@
+{
+  "note": "Clear the box: the two meetings are `Will join` again.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "skip_one_on_ones": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "account_email": "grace@example.test",
+      "provider": "google",
+      "last_sync_at": "2026-11-24T13:01:43.531496+01:00",
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
+      "join_unanswered": false,
+      "skip_one_on_ones": false,
+      "calendar_template_id": 1,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "microsoft_enabled": false,
+      "bot_invite_email": null,
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "1:1 with Sam",
+          "starts_at": "2026-11-24T15:01:00+01:00",
+          "ends_at": "2026-11-24T15:31:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 1,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 2,
+          "title": "Mentoring chat",
+          "starts_at": "2026-11-24T17:01:00+01:00",
+          "ends_at": "2026-11-24T17:31:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 2,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 3,
+          "title": "Design review",
+          "starts_at": "2026-11-24T18:01:00+01:00",
+          "ends_at": "2026-11-24T18:31:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 3,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 3,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 4,
+          "title": "Just me on the list",
+          "starts_at": "2026-11-24T19:01:00+01:00",
+          "ends_at": "2026-11-24T19:31:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 1,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 4,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 5,
+          "title": "Focus block (no invite list)",
+          "starts_at": "2026-11-24T21:01:00+01:00",
+          "ends_at": "2026-11-24T21:31:00+01:00",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 0,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 5,
+          "can_send_now": false,
+          "not_recorded_text": null
+        }
+      ]
+    }
+  }
+}

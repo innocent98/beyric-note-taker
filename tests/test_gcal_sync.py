@@ -414,6 +414,94 @@ def test_a_declined_stranger_invite_never_joins_even_with_the_box_ticked(session
     assert joins(session) == []
 
 
+def guests(*emails: str) -> dict:
+    """An invite list with the signed-in user (organising) and these other guests."""
+    people = [{"email": "me@example.test", "self": True, "responseStatus": "accepted"}]
+    people += [{"email": email, "responseStatus": "accepted"} for email in emails]
+    return {"attendees": people}
+
+
+def test_the_skip_leaves_out_a_two_person_meeting_and_nothing_else(session, world):
+    """`raw_event` invites the user and one colleague: a one-on-one, which the box leaves out; one
+    guest more, the user alone on the list, and no list at all (a solo event) are all joined."""
+    world.user_settings.skip_one_on_ones = True
+    session.commit()
+    pair = raw_event("evt-pair", code="aaa-aaaa-aaa", start=NOW + HOUR)
+    three = raw_event(
+        "evt-three", code="bbb-bbbb-bbb", start=NOW + 2 * HOUR, **guests("a@x.test", "b@x.test")
+    )
+    only_me = raw_event("evt-me", code="ccc-cccc-ccc", start=NOW + 3 * HOUR, **guests())
+    solo = raw_event("evt-solo", code="ddd-dddd-ddd", start=NOW + 4 * HOUR)
+    del solo["attendees"]
+    apply(session, world, batch(pair, three, only_me, solo))
+    by_id = {e.source_event_id: e for e in events(session)}
+    assert [by_id[k].attendee_count for k in ("evt-pair", "evt-three", "evt-me", "evt-solo")] == [
+        2,
+        3,
+        1,
+        0,
+    ]
+    made = {j.calendar_event_id for j in joins(session)}
+    assert made == {by_id[k].id for k in ("evt-three", "evt-me", "evt-solo")}
+
+
+def test_without_the_tick_a_two_person_meeting_joins_as_before(session, world):
+    apply(session, world, batch(raw_event()))
+    assert only_join(session).state == "scheduled"
+
+
+def test_the_persons_switch_for_a_two_person_meeting_beats_the_skip_in_the_sync(session, world):
+    world.user_settings.skip_one_on_ones = True
+    session.commit()
+    apply(session, world, batch(raw_event()))
+    (event,) = events(session)
+    assert joins(session) == []
+    event.override = True
+    session.commit()
+    apply(session, world, batch(raw_event()))
+    assert only_join(session).state == "scheduled"
+    event.override = False
+    session.commit()
+    world.user_settings.skip_one_on_ones = False
+    session.commit()
+    apply(session, world, batch(raw_event()))
+    assert only_join(session).state == "cancelled"  # switched off by hand: off, tick or not
+
+
+def test_a_meeting_growing_from_two_to_three_people_is_joined_and_back_to_two_is_cancelled(
+    session, world
+):
+    world.user_settings.skip_one_on_ones = True
+    session.commit()
+    apply(session, world, batch(raw_event()))
+    assert joins(session) == []
+    apply(session, world, batch(raw_event(**guests("a@x.test", "b@x.test"))))
+    assert only_join(session).state == "scheduled"
+    apply(session, world, batch(raw_event()))
+    cancelled = only_join(session)
+    assert (cancelled.state, cancelled.skip_reason) == ("cancelled", "one_on_one")
+
+
+def test_clearing_the_skip_re_runs_the_stored_events(session, world):
+    world.user_settings.skip_one_on_ones = True
+    session.commit()
+    apply(session, world, batch(raw_event()))
+    (event,) = events(session)
+    assert joins(session) == []
+    world.user_settings.skip_one_on_ones = False
+    session.commit()
+    result = rerun_rules(
+        session, world.conn, world.user_settings, [event], now=NOW, settings=SETTINGS
+    )
+    assert result.created == 1 and only_join(session).state == "scheduled"
+    world.user_settings.skip_one_on_ones = True
+    session.commit()
+    result = rerun_rules(
+        session, world.conn, world.user_settings, [event], now=NOW, settings=SETTINGS
+    )
+    assert result.cancelled == 1 and only_join(session).skip_reason == "one_on_one"
+
+
 def test_an_unanswered_invite_from_the_users_own_workspace_joins(session):
     world = make_world(session, hosted_domain="acme.example")
     invite = raw_event(
