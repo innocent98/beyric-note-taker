@@ -1333,6 +1333,8 @@ Re-derive with `python scripts/capture_meetings_date_filter.py postgresql+psycop
 | Empty result | 200 with `meetings: []`, `has_more: false`, `next_before_id: null` (capture `27`), never a 404 |
 | Cost | A database search over the notes and transcripts, no model, no usage charge. See the SOP for how long it takes on thousands of meetings |
 
+**Words the search box ignores (so they match titles only).** The notes-and-transcript part drops filler and question words before it searches: `summary`, `summarize`, `summarise`, `recap`, `list`, `show`, `find`, `make`, `made`, `happened`, `latest`, `recent`, `meeting` and `meetings`, the weekday names (`monday` to `sunday`), `today`, `tomorrow`, `yesterday`, `week`, `last`, `next` and the usual small words (`the`, `and`, `of`, `about`...), and any word that is under two characters after stemming. A search made only of such words matches **titles only** and a search like `pricing summary` is searched as `pricing`. Do not tell a person that a word they typed was searched in the notes if it is on this list (the source is `STOP` in `app/words.py`).
+
 **One item of the list** (the shape is the list's own, unchanged; capture `23`, first of four):
 
 ```json

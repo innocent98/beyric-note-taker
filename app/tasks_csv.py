@@ -27,15 +27,22 @@ STATUS_LABELS = {"todo": "To do", "doing": "In progress", "done": "Done"}
 # A cell that begins with one of these is a formula to Excel, Sheets and Numbers. The titles are
 # written by a model from what people said in a call, and the names by the people themselves, so
 # any of them can begin this way.
-_FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+_FORMULA_STARTS = ("=", "+", "-", "@")
+# Tab and carriage return are neutralised wherever the cell starts with them; the four above also
+# after leading white space (a spreadsheet reads " =1+1" as a formula too).
+_ALWAYS_STARTS = ("\t", "\r")
 
 
 def safe_cell(value: object) -> str:
     """The cell as text, with a single quote in front when a spreadsheet would run it as a formula
-    (the OWASP rule for CSV injection). The quote stays visible in the cell when the file is opened
-    in Excel or Sheets: that is the price of never running someone else's text as a formula."""
+    (the OWASP rule for CSV injection): it starts with `=`, `+`, `-` or `@` once leading white
+    space is ignored, or with a tab or a carriage return. The quote stays visible in the cell when
+    the file is opened in Excel or Sheets: that is the price of never running someone else's text
+    as a formula."""
     text = "" if value is None else str(value)
-    return f"'{text}" if text.startswith(_FORMULA_STARTS) else text
+    if text.startswith(_ALWAYS_STARTS) or text.lstrip().startswith(_FORMULA_STARTS):
+        return f"'{text}"
+    return text
 
 
 def build_csv(rows: Iterable[Iterable[object]]) -> bytes:

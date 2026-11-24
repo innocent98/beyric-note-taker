@@ -349,6 +349,21 @@ def test_a_name_or_meeting_title_that_looks_like_a_formula_is_quoted_too(
     assert row[2] == "'=cmd|' /C calc'!A0" and row[6] == "'@home"
 
 
+def test_leading_white_space_does_not_hide_a_formula():
+    for text in (
+        ' =HYPERLINK("http://evil.example","x")',
+        "  +1+1",
+        " \u00a0-2+3",  # a space and a no-break space
+        "\u2003@SUM(A1)",  # an em space
+        " \t=1",
+        "\n=1",
+    ):
+        assert safe_cell(text) == f"'{text}", repr(text)
+    assert safe_cell("  Order cake") == "  Order cake"
+    assert safe_cell(" a=b") == " a=b"
+    assert safe_cell("   ") == "   "
+
+
 def test_safe_cell_leaves_ordinary_text_alone():
     for text in ("Finish checkout", "2026-11-20", "a=b", "x-y", "", "100%"):
         assert safe_cell(text) == text
