@@ -47,7 +47,7 @@ Web only. Revert the PR; nothing is stored. A tab with an old remembered workspa
 
 ## Follow-ups (suggestions, not done)
 
-- The recipe list is long and the person's own recipes sit at the bottom. Options: show My recipes and Team recipes first, or collapse the starters. A design call.
-- The "Team brief" box is titled "Team brief" even in a personal workspace ("My team"). A personal label would read better.
+- ~~The recipe list is long and the person's own recipes sit at the bottom.~~ Done in `docs/sop/2026-11-25-recipes-page-simple.md`.
+- ~~The "Team brief" box is titled "Team brief" even in a personal workspace.~~ Done in the same SOP ("My brief" / "Workspace brief").
 - Series pages (`/series/[id]`) are opened by id like a meeting; they were not changed here and their server read is not workspace-aware either. Check whether its first read needs a workspace sync.
 - The page-level state in Tasks, Projects, Templates and Vocabulary views may also survive a "follow" without a key; not checked.

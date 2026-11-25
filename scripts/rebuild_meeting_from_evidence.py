@@ -255,7 +255,10 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
     segments, correction = skribby._labelled(
         body, own_names, by_elimination, events, by_timeline, by_correction
     )
-    found = transcript_source.candidate(segments, skribby._last_segment_end(body))
+    tags = skribby._resolve_tags(body["transcript"], own_names, by_elimination, events, by_timeline)
+    found = transcript_source.candidate(
+        segments, skribby._last_segment_end(body), skribby.holds_other_speakers(tags)
+    )
     why_not = transcript_source.fallback_reason(
         found, meeting.recorded_seconds or 0, pipeline.MIN_WORDS
     )
@@ -268,9 +271,7 @@ def load(session: Session, meeting_id: int, now: datetime) -> Plan:
         meeting,
         evidence=row,
         candidate=found,
-        tags=skribby._resolve_tags(
-            body["transcript"], own_names, by_elimination, events, by_timeline
-        ),
+        tags=tags,
         segments=len(items),
         kept_until=kept_until,
         correction=correction,

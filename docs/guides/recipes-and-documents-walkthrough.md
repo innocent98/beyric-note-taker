@@ -9,66 +9,86 @@ Where something could not be tried, it says so.
 - A **recipe** is a written instruction that tells Beyric what to make from a meeting: a follow-up
   email, a proposal, a status report. A recipe also says the kind of result (**Output**: Document,
   Email, Table or Board), whether it uses one meeting or several (**Made from**), whether it may use
-  the team brief, and the questions to ask each time (**Choices**, for example "Tone: Friendly or
+  the brief, and the questions to ask each time (**Choices**, for example "Tone: Friendly or
   Formal").
 - A **draft** is what Beyric writes when you press Make. Drafts are listed on the **Documents** page.
 
-Every workspace is separate. The Team brief, the team recipes and the drafts you see are the ones of
+Every workspace is separate. The workspace brief, the team recipes and the drafts you see are the ones of
 the workspace named in the box at the top of the left sidebar. Switch the box and the pages change
 with it.
 
-## The Team brief
+## The Recipes page, top to bottom
 
-![Recipes page: the Team brief box and the list of starters](img/01-recipes-team-brief.jpg)
+![Recipes page, as it was: a long brief box, then twenty names](img/before-recipes-1-top.jpg)
 
-The **Team brief** is one box of text about your business: services, prices, terms, house style.
-Beyric may use it, besides the meeting, when it writes a draft. Each workspace has its own brief.
+*Before (the page as it was): the brief box first, then a list of twenty ready-made recipes, with "My
+recipes" and "Team recipes" hidden at the bottom.*
 
-- Everyone in the workspace can **read** it. Only an **owner or admin** can change it (a member sees
-  "Only an owner or admin of the team can change the brief.", screenshot 10).
+![Recipes page now: My recipes, Team recipes, Ready-made recipes (shut), then the brief](img/after-recipes-1-top.jpg)
+
+*Now.* The page says in one line what a recipe is ("A recipe tells Beyric what to write from a
+meeting. Pick one, or make your own."). Down the left:
+
+| Block | What is in it | Empty state |
+|---|---|---|
+| **My recipes** | Recipes only you can use (your copies and the ones you wrote) | "Only you can use these. Nothing here yet: open a ready-made recipe and press Use this recipe, or write your own." and one button, **Browse ready-made recipes** |
+| **Team recipes** | Recipes saved for everyone in this workspace. Only shown in a team workspace, or once there is one. Only an owner or admin can change them. | "Recipes saved for everyone on <workspace>. None yet: save one and it shows here." (a member is told "an owner or admin can save one") |
+| **Ready-made recipes** | The 18 recipes that come with Beyric (General and School). **Shut** until you press "Show the 18 ready-made recipes"; once open there is a search box. | |
+
+On the right, until you pick something, a short note says what to do. The **brief** sits under the
+recipes, not above them.
+
+![The ready-made recipes, opened, with the search box](img/after-recipes-2-ready-made-open.jpg)
+
+### The brief
+
+The brief is one box of text about your business: services, prices, terms, house style. It is
+called **Workspace brief** in a team workspace and **My brief** in your own space ("My team
+(personal)"), and says "Facts about your business that Beyric can use when it writes". Beyric may use
+it, besides the meeting, when it writes a draft. Each workspace has its own brief.
+
+- Everyone in a team workspace can **read** it. Only an **owner or admin** can change it (a member
+  sees "Only an owner or admin of the team can change the brief."). In your own space only you can
+  read it.
 - A draft uses it only when the box "Use the brief of ..." is ticked in the Make window.
 
-![A member sees the brief but cannot change it](img/10-recipes-brief-read-only-member.jpg)
+![My brief, in the personal workspace](img/after-recipes-5-personal-workspace.jpg)
 
-## The list of recipes, and why "My recipes" and "Team recipes" seem to be missing
+### Use a ready-made recipe
 
-The list on the left of the Recipes page has up to four groups, in this order:
+Open one from the list. The right side now **describes** it, in words, instead of showing greyed-out
+fields:
 
-| Group | What is in it | Can you change it? |
-|---|---|---|
-| **General**, **School** | The starters that come with Beyric (about twenty) | No. Copy one first. |
-| **Team recipes** | Recipes saved for everyone in this workspace | Only an owner or admin |
-| **My recipes** | Recipes only you can use | Yes |
+![A ready-made recipe, described](img/after-recipes-3-ready-made-recipe.jpg)
 
-A group **only appears once it has something in it**. A new workspace shows only the starters, and
-they are many, so Team recipes and My recipes sit right at the **bottom of the list**: scroll the
-list. (This change adds a short line at the bottom of the list that says so, screenshot 09.)
+- **What it does**: the first sentence of its instruction. **Read the whole instruction** opens the
+  rest.
+- **What you get**: "Makes an email from one meeting." (a document, an email, a table or a board; one
+  meeting or several).
+- **Beyric will ask you**: its choices, for example "Recipient or client name, Tone (Friendly or
+  Formal)".
+- **Facts it can use**: your meeting, and the workspace brief (or "my brief") if there is one.
 
-![The bottom of the list: a team recipe, and the line that says where My recipes will appear](img/09-recipes-hint-for-member.jpg)
+Press **Use this recipe**. One click makes **your own copy**, named "My <recipe name>", opens it
+for changes under **My recipes** and says "This is your own copy. Change anything below, or leave it
+as it is: it is ready to use when you press Make on a meeting." Nothing else is needed: the copy is
+saved already. (Seen live: the copy was in the list and in the Make window straight away.)
 
-### Why the fields look greyed out
+![Your own copy, open for changes](img/after-recipes-4-own-copy.jpg)
 
-Click a starter and the right-hand side shows its Output, Made from, "Use the team brief" and
-Choices **greyed out**, with this line at the top: "A starter cannot be changed. Make a copy and the
-copy is yours to change." Nothing is broken: a starter is read-only.
-
-![A starter: everything is read-only](img/02-recipes-starter-read-only.jpg)
-
-### Make a copy and save it
-
-1. Click a starter, then press **Make a copy to change** (the green button at the bottom of the right
-   side).
-2. The copy opens with "(copy)" after its name and every field open for you to change.
-3. Change the name and the instruction as you like. "Who can use it" says **Only me** or **Everyone
-   on <workspace>**. (Only an owner or admin is offered the second.)
-4. Press **Save**. It says "Saved" and the recipe now sits under **My recipes** (screenshots 03, 04).
-
-![The copy, open for changes](img/03-recipes-copy-editable.jpg)
-![After saving: under My recipes](img/04-recipes-my-recipes-group.jpg)
+- To change it, edit the name or the instruction and press **Save**. It is only for you.
+- **Change it before saving** (the quiet button next to Use this recipe) opens the copy *unsaved*,
+  as before. This is the way to make a recipe **Everyone on <workspace>** instead of **Only me**
+  (only an owner or admin is offered that).
+- The same buttons appear on a team recipe a member reads: "Use this recipe" makes the member's own
+  copy.
 
 Seen on the test copy: a recipe saved as **Only me** also shows in your other workspaces (your own
-recipes follow you). **Not tried:** saving a copy as "Everyone on the workspace" from a fresh copy
-(the team recipe in the screenshots was already there); the list shows it under Team recipes.
+recipes follow you). **Not tried:** saving a copy as "Everyone on the workspace" from a fresh copy;
+the list shows it under Team recipes.
+
+On a phone (390 px wide) the list, the right side and the brief stack one under another, with no
+sideways scroll (`img/after-recipes-6-phone.jpg`).
 
 ## Make, on a meeting
 
@@ -77,12 +97,18 @@ shows:
 
 - **Team**: the workspace whose recipes and brief are used ("Its recipes and its brief are the ones
   used.").
-- The recipes to pick from (the same groups as the Recipes page).
-- The recipe's **Choices** (here Recipient or client name, and Tone: Friendly or Formal).
-- **Use the brief of <workspace>** with its size. Untick it to leave the brief out.
+- **My recipes** first, then **Team recipes**, each as a small card. The ready-made recipes are
+  behind **Ready-made recipes (18)**, shut as soon as you have a recipe of your own or your team's.
+  The recipe you made last in this browser is already chosen, even a ready-made one (it then shows
+  its group open). With none of your own, the ready-made ones are open as before.
+- The recipe's **Choices** (here Tone: Friendly or Formal, and Recipient or client name).
+- **Use the brief of <workspace>** with its size, or "<workspace> has no brief yet. Write one".
 - **Make draft.**
 
-![The Make window](img/05-make-dialog.jpg)
+![The Make window: your own recipe first, the ready-made ones behind a link](img/after-make-window.jpg)
+
+*Before:* the 18 ready-made recipes came first and the person's own at the bottom (screenshot from
+the first version of this guide: `img/before-make-dialog.jpg`).
 
 Here the fields are **not** greyed out: Output and Made from are decided by the recipe, so only the
 Choices and the brief tick are yours.

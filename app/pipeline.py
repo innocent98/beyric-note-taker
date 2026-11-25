@@ -1105,7 +1105,11 @@ def _step_transcribing(session: Session, meeting: Meeting, provider, openai_clie
             looked = _skribby_segments(provider, meeting)
             fetched = looked is not None
             segments, last_end, evidence = looked or ([], None, None)
-            found = transcript_source.candidate(segments, last_end)
+            found = transcript_source.candidate(
+                segments,
+                last_end,
+                skribby.holds_other_speakers((evidence or {}).get("tags")),
+            )
             why_not = transcript_source.fallback_reason(found, recording.seconds, MIN_WORDS)
             if why_not is None:
                 # Skribby's transcript is the transcript: our transcription and the model-based

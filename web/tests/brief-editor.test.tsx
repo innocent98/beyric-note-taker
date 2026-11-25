@@ -32,18 +32,26 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const box = () => screen.getByLabelText("Team brief") as HTMLTextAreaElement;
+const box = () => screen.getByLabelText(/^(My|Workspace) brief$/) as HTMLTextAreaElement;
 const file = (name = "prices.docx") => new File(["x"], name);
 const choose = (f: File) => userEvent.upload(screen.getByLabelText("Choose a file to import"), f);
 
 describe("the brief", () => {
   it("shows the brief, whose it is, who may read it, and how much of the cap is used", () => {
     render(<BriefEditor initial={saved} />);
-    expect(screen.getByRole("heading", { name: "Team brief" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "My brief" })).toBeTruthy();
     expect(box().value).toBe(saved.text);
     expect(screen.getByText(`${saved.text.length} of 12,000 characters`)).toBeTruthy();
-    expect(screen.getByText(/Everyone on My team can read this/)).toBeTruthy();
+    expect(screen.getByText(/Only you can read this/)).toBeTruthy();
+    expect(screen.getByText(/Facts about your business that Beyric can use/)).toBeTruthy();
     expect(screen.getByText(/Last saved by Ada Lovelace/)).toBeTruthy();
+  });
+
+  it("is the workspace's brief, read by everyone in it, outside a person's own space", () => {
+    render(<BriefEditor initial={asMember} />);
+    expect(screen.getByRole("heading", { name: "Workspace brief" })).toBeTruthy();
+    expect(screen.getByText(new RegExp(`Everyone on ${asMember.team.name} can read this`))).toBeTruthy();
+    expect(screen.queryByText(/Only you can read this/)).toBeNull();
   });
 
   it("saves the edited text and says so", async () => {

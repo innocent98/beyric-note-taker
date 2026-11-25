@@ -332,3 +332,8 @@ The "at least one other tag Skribby named" condition above is unchanged for this
 `how: one_to_one` (`docs/sop/2026-11-25-speaker-naming-one-to-one.md`), which asks for the same sole-candidate evidence
 of every tag plus Meet's participant list. The older test "two unnamed tags with a sole candidate each stay unnamed" now
 covers two tags that share their candidate; two different candidates are named `one_to_one`.
+
+## Update 2026-11-25 (later)
+
+The name must now be listed on 80% of the tag's segments (`MIN_LISTED_SHARE`), at least 3 of them, not every one
+(`docs/sop/2026-11-25-speaker-naming-relaxed.md`). The anchor (a tag Skribby named) is unchanged.

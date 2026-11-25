@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BriefEditor } from "@/components/app/brief-editor";
 import { RecipeEditor, type EditorMode } from "@/components/app/recipe-editor";
-import { Button, Card, Icon, PageHead } from "@/components/ui";
+import { GateText } from "@/components/billing/gate-text";
+import { Alert, Button, Card, Icon, PageHead } from "@/components/ui";
 import type { Brief, Recipe, RecipeList } from "@/lib/api/types";
-import { groupRecipes } from "@/lib/recipes";
+import { groupRecipes, recipeMatches } from "@/lib/recipes";
 
-type Selected = { kind: "recipe"; value: string } | { kind: "new"; seed?: Recipe; n: number };
+type Selected = { kind: "recipe"; value: string } | { kind: "new"; seed?: Recipe; n: number } | null;
 type Message = { kind: "saved" | "error"; text: string } | null;
 
 // Below the two-column layout the editor sits under the list: bring it into view when something is chosen.
@@ -25,16 +26,23 @@ function ordered(all: Recipe[]): Recipe[] {
   return [...g.general, ...g.school, ...g.team, ...g.mine];
 }
 
-// The Recipes page: the team's brief, then the library: the starters (General and School), the team's recipes
-// and the person's own, with the editor beside the list (the Templates screen's shape). LEAD-DESIGNED, not in the
-// designer's files. It is about one team (`?team=`, else the tab's): `initial.team` says which and what the person
-// may change.
+// The Recipes page. LEAD-DESIGNED, not in the designer's files. It leads with what the person can already use: their
+// own recipes and their workspace's, each with a line that says what it is while it is empty. The ready-made recipes
+// (the starters, about twenty) sit below under one heading, shut until asked for and searchable, so the page is not a
+// wall of names. A ready-made recipe opens as a plain description with one button, "Use this recipe", that makes the
+// person's own copy; the editor shows only recipes the person may change. The workspace brief comes after the recipes.
+// It is about one workspace (`?team=`, else the tab's): `initial.team` says which and what the person may change.
 export function RecipesView({ initial, brief }: { initial: RecipeList; brief: Brief }) {
   const [recipes, setRecipes] = useState(initial.recipes);
-  const [selected, setSelected] = useState<Selected>({ kind: "recipe", value: valueOf(initial.recipes[0]) });
+  const [selected, setSelected] = useState<Selected>(null);
   const [message, setMessage] = useState<Message>(null);
+  const [startersOpen, setStartersOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const team = initial.team;
   const groups = groupRecipes(recipes);
+  const searching = query.trim() !== "";
+  const showStarters = startersOpen || searching;
+  const starters = [...groups.general, ...groups.school];
 
   const choose = (value: string) => {
     setSelected({ kind: "recipe", value });
@@ -46,20 +54,21 @@ export function RecipesView({ initial, brief }: { initial: RecipeList; brief: Br
     setMessage(null);
     showEditor();
   };
-  const first = (list: Recipe[]) => valueOf(ordered(list)[0]);
-  const current = selected.kind === "recipe" ? (recipes.find((r) => valueOf(r) === selected.value) ?? null) : null;
+  const current = selected?.kind === "recipe" ? (recipes.find((r) => valueOf(r) === selected.value) ?? null) : null;
 
-  const mode: EditorMode =
-    selected.kind === "new"
+  const mode: EditorMode | null =
+    selected?.kind === "new"
       ? { kind: "new", seed: selected.seed }
       : current && current.can_edit
         ? { kind: "edit", recipe: current }
-        : { kind: "view", recipe: current ?? recipes[0] };
+        : current
+          ? { kind: "view", recipe: current }
+          : null;
   const copiedFrom =
     current && current.source !== "starter" && current.key ? (recipes.find((r) => r.source === "starter" && r.key === current.key)?.name ?? null) : null;
 
   const item = (r: Recipe) => (
-    <button key={valueOf(r)} type="button" className="pick" aria-current={selected.kind === "recipe" && selected.value === valueOf(r)} onClick={() => choose(valueOf(r))}>
+    <button key={valueOf(r)} type="button" className="pick" aria-current={selected?.kind === "recipe" && selected.value === valueOf(r)} onClick={() => choose(valueOf(r))}>
       <span className="pick-name">{r.name}</span>
       <span className="pick-preview">
         {OUTPUT[r.output_type]}
@@ -67,72 +76,126 @@ export function RecipesView({ initial, brief }: { initial: RecipeList; brief: Br
       </span>
     </button>
   );
-  const group = (title: string, list: Recipe[]) =>
+  const group = (title: string, list: Recipe[], empty: ReactNode) => (
+    <div className="pick-group" key={title}>
+      <h3 className="nav-label">{title}</h3>
+      {list.length > 0 ? list.map(item) : empty}
+    </div>
+  );
+  const subgroup = (title: string, list: Recipe[]) =>
     list.length === 0 ? null : (
-      <div className="pick-group" key={title}>
-        <h3 className="nav-label">{title}</h3>
+      <div key={title}>
+        <h4 className="pick-sub">{title}</h4>
         {list.map(item)}
       </div>
     );
 
-  // The groups with nothing in them are left out, so the person cannot tell where theirs will appear: say so.
-  const hints = [
-    groups.team.length === 0 && !team.is_personal ? `Team recipes appear here once an owner or admin of ${team.name} saves one for everyone.` : null,
-    groups.mine.length === 0 ? 'My recipes appear here, under the starters, once you copy a starter ("Make a copy to change") or press New recipe.' : null,
-  ].filter((text): text is string => text !== null);
+  const editorKey = selected?.kind === "new" ? `new-${selected.n}` : selected ? selected.value : "none";
+  const matching = (list: Recipe[]) => list.filter((r) => recipeMatches(r, query));
+  const found = matching(starters).length;
 
   return (
     <div className="stack-md">
-      <PageHead title="Recipes" subtitle="What Beyric can make from a meeting. Copy one and change it, or write your own.">
+      <PageHead title="Recipes" subtitle="A recipe tells Beyric what to write from a meeting. Pick one, or make your own.">
         <Button size="md" type="button" onClick={() => chooseNew()}>
           <Icon name="plus" size={14} />
           New recipe
         </Button>
       </PageHead>
-      <BriefEditor initial={brief} />
       <div className="split">
         <section className="card split-list" aria-label="Recipes">
-          {group("General", groups.general)}
-          {group("School", groups.school)}
-          {group("Team recipes", groups.team)}
-          {group("My recipes", groups.mine)}
-          {hints.map((text) => (
-            <p className="field-hint pick-hint" key={text}>
-              {text}
-            </p>
-          ))}
+          {group(
+            "My recipes",
+            groups.mine,
+            <div className="pick-empty">
+              <p className="field-hint">Only you can use these. Nothing here yet: open a ready-made recipe and press Use this recipe, or write your own.</p>
+              <Button kind="secondary" size="sm" type="button" onClick={() => setStartersOpen(true)}>
+                Browse ready-made recipes
+              </Button>
+            </div>,
+          )}
+          {groups.team.length > 0 || !team.is_personal
+            ? group(
+                "Team recipes",
+                groups.team,
+                <p className="field-hint pick-empty">
+                  Recipes saved for everyone on {team.name}. None yet: {team.can_manage ? "save one and it shows here" : "an owner or admin can save one"}.
+                </p>,
+              )
+            : null}
+          <div className="pick-group">
+            <h3 className="nav-label">Ready-made recipes</h3>
+            <button type="button" className="pick pick-toggle" aria-expanded={showStarters} onClick={() => setStartersOpen(!startersOpen)} disabled={searching}>
+              <span className="pick-name">
+                {showStarters ? "Hide the ready-made recipes" : `Show the ${starters.length} ready-made recipes`}
+              </span>
+              <span className="pick-preview">Written by Beyric. Use one and it becomes yours to change.</span>
+            </button>
+            {showStarters ? (
+              <>
+                <div className="pick-search">
+                  <input
+                    type="search"
+                    className="input"
+                    aria-label="Search the ready-made recipes"
+                    placeholder="Search, for example email"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </div>
+                {subgroup("General", matching(groups.general))}
+                {subgroup("School", matching(groups.school))}
+                {found === 0 ? <p className="field-hint pick-empty">No ready-made recipe matches “{query.trim()}”.</p> : null}
+              </>
+            ) : null}
+          </div>
         </section>
         <Card>
-          <RecipeEditor
-            key={selected.kind === "new" ? `new-${selected.n}` : selected.value}
-            mode={mode}
-            team={team}
-            copiedFrom={copiedFrom}
-            message={message}
-            onMessage={setMessage}
-            onCopy={(recipe) => chooseNew(recipe)}
-            onSaved={(saved) => {
-              setRecipes((all) => {
-                const rest = all.filter((r) => r.id !== saved.id);
-                return ordered([...rest, saved]);
-              });
-              setSelected({ kind: "recipe", value: valueOf(saved) });
-              setMessage({ kind: "saved", text: "Saved" });
-            }}
-            onArchived={(id) => {
-              const rest = recipes.filter((r) => r.id !== id);
-              setRecipes(rest);
-              setSelected({ kind: "recipe", value: first(rest) });
-              setMessage(null);
-            }}
-            onGone={(id) => {
-              const rest = recipes.filter((r) => r.id !== id);
-              setRecipes(rest);
-              setSelected({ kind: "recipe", value: first(rest) });
-            }}
-          />
+          {mode === null ? (
+            <div className="recipe-intro stack-md" id="recipe-editor">
+              {message?.kind === "error" ? (
+                <Alert kind="error">
+                  <GateText message={message.text} />
+                </Alert>
+              ) : null}
+              <h2 className="brief-title">Pick a recipe</h2>
+              <p>A recipe is a set of instructions: what to write (an email, a proposal, a report) and what to ask you first. Open one in the list to see what it makes.</p>
+              <p className="field-hint">
+                Press <strong>Use this recipe</strong> on a ready-made one to get your own copy, or <strong>New recipe</strong> to write one from scratch. To use a recipe, open a
+                meeting and press <strong>Make</strong>.
+              </p>
+            </div>
+          ) : (
+            <RecipeEditor
+              key={editorKey}
+              mode={mode}
+              team={team}
+              copiedFrom={copiedFrom}
+              message={message}
+              onMessage={setMessage}
+              onCopy={(recipe) => chooseNew(recipe)}
+              onSaved={(saved, note) => {
+                setRecipes((all) => {
+                  const rest = all.filter((r) => r.id !== saved.id);
+                  return ordered([...rest, saved]);
+                });
+                setSelected({ kind: "recipe", value: valueOf(saved) });
+                setMessage({ kind: "saved", text: note ?? "Saved" });
+              }}
+              onArchived={(id) => {
+                setRecipes(recipes.filter((r) => r.id !== id));
+                setSelected(null);
+                setMessage(null);
+              }}
+              onGone={(id) => {
+                setRecipes(recipes.filter((r) => r.id !== id));
+                setSelected(null);
+              }}
+            />
+          )}
         </Card>
       </div>
+      <BriefEditor initial={brief} />
     </div>
   );
 }

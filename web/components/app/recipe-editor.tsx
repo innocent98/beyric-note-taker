@@ -6,11 +6,12 @@ import { Alert, Button, Field, Icon, SelectField, TextareaField } from "@/compon
 import { api } from "@/lib/api/browser";
 import { ApiError } from "@/lib/api/client";
 import type { Recipe, RecipeOption, RecipeTeam } from "@/lib/api/types";
-import { recipeErrorMessage, slug } from "@/lib/recipes";
+import { briefWords, firstSentence, makesSentence, recipeErrorMessage, slug } from "@/lib/recipes";
 
 export const NAME_MAX = 100;
 export const INSTRUCTION_MAX = 4000;
 export const MAX_CHOICES = 6;
+const COPY_READY = "This is your own copy. Change anything below, or leave it as it is: it is ready to use when you press Make on a meeting.";
 const GONE = "That recipe is gone. It may have been archived in another tab.";
 
 export type EditorMode =
@@ -50,8 +51,8 @@ function toOptions(rows: Row[]): Record<string, RecipeOption> {
 type Fields = { name: string; instruction: string; output_type: Recipe["output_type"]; scope: Recipe["scope"]; uses_brief: boolean };
 
 // The recipe editor beside the list. LEAD-DESIGNED (the designer's files draw none of recipes), laid out like the
-// Templates editor. A starter, and a team recipe read by a member, are shown whole and read-only with a way to copy
-// them. `new` is blank or a copy of a starter (`seed`); an owner or admin may make it the team's.
+// Templates editor. A starter, and a team recipe read by a member, are described in words with "Use this recipe" (the
+// person's own copy in one click) or "Change it before saving". `new` is blank or a copy of a starter (`seed`); an owner or admin may make it the team's.
 export function RecipeEditor({
   mode,
   team,
@@ -67,14 +68,13 @@ export function RecipeEditor({
   team: RecipeTeam;
   copiedFrom?: string | null;
   message: { kind: "saved" | "error"; text: string } | null;
-  onSaved: (recipe: Recipe) => void;
+  onSaved: (recipe: Recipe, note?: string) => void;
   onArchived: (id: number) => void;
   onGone: (id: number) => void;
   onCopy: (recipe: Recipe) => void;
   onMessage: (message: { kind: "saved" | "error"; text: string } | null) => void;
 }) {
   const source = mode.kind === "new" ? mode.seed : mode.recipe;
-  const readOnly = mode.kind === "view";
   const [fields, setFields] = useState<Fields>({
     name: mode.kind === "new" && source ? `${source.name} (copy)` : (source?.name ?? ""),
     instruction: source?.instruction ?? "",
@@ -109,7 +109,7 @@ export function RecipeEditor({
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (busy || readOnly || !complete) return;
+    if (busy || !complete) return;
     setBusy(true);
     onMessage(null);
     try {
@@ -153,12 +153,90 @@ export function RecipeEditor({
     setBusy(false);
   }
 
-  const note =
-    mode.kind !== "view"
-      ? null
-      : mode.recipe.source === "starter"
-        ? "A starter cannot be changed. Make a copy and the copy is yours to change."
-        : "Only an owner or admin of the team can change it. Make a copy to change it for yourself.";
+  // "Use this recipe": the person's own copy in one click, opened for changes. It is named "My ..." so it can be told
+  // from the ready-made one in the Make window.
+  async function makeMine(recipe: Recipe) {
+    if (busy) return;
+    setBusy(true);
+    onMessage(null);
+    try {
+      const made = await api.recipes.create({
+        ...(recipe.key ? { key: recipe.key } : {}),
+        name: `My ${recipe.name}`.slice(0, NAME_MAX),
+        instruction: recipe.instruction,
+        output_type: recipe.output_type,
+        options: recipe.options,
+        scope: recipe.scope,
+        uses_brief: recipe.uses_brief,
+        visibility: "personal",
+      });
+      onSaved(made, COPY_READY);
+    } catch (caught) {
+      onMessage({ kind: "error", text: recipeErrorMessage(caught) });
+    }
+    setBusy(false);
+  }
+
+  const words = briefWords(team);
+  const copyNote = message?.kind === "saved" && message.text === COPY_READY ? message.text : null;
+
+  // A ready-made recipe, or a team recipe read by a member: described in words, not as greyed-out fields.
+  if (mode.kind === "view") {
+    const r = mode.recipe;
+    const asks = Object.values(r.options);
+    return (
+      <section id="recipe-editor" className="split-form recipe-preview" aria-label="Recipe">
+        {message?.kind === "error" ? (
+          <Alert kind="error">
+            <GateText message={message.text} />
+          </Alert>
+        ) : null}
+        <div>
+          <h2 className="brief-title">{r.name}</h2>
+          <p className="field-hint">
+            {r.source === "starter" ? "A ready-made recipe from Beyric." : `A recipe for everyone on ${team.name}. Only an owner or admin can change it.`}
+          </p>
+        </div>
+        <dl className="recipe-facts">
+          <div>
+            <dt>What it does</dt>
+            <dd>{firstSentence(r.instruction)}</dd>
+          </div>
+          <div>
+            <dt>What you get</dt>
+            <dd>{makesSentence(r)}</dd>
+          </div>
+          {asks.length > 0 ? (
+            <div>
+              <dt>Beyric will ask you</dt>
+              <dd>{asks.map((o) => (o.kind === "choice" && o.choices.length > 0 ? `${o.label} (${o.choices.join(" or ")})` : o.label)).join(", ")}</dd>
+            </div>
+          ) : null}
+          {r.uses_brief ? (
+            <div>
+              <dt>Facts it can use</dt>
+              <dd>Your meeting, and {words.the} if there is one.</dd>
+            </div>
+          ) : null}
+        </dl>
+        <details className="recipe-more">
+          <summary>Read the whole instruction</summary>
+          <p className="recipe-instruction">{r.instruction}</p>
+        </details>
+        <div className="form-foot recipe-use">
+          <p className="field-hint">Makes your own copy. You can change it, and it is there when you press Make on a meeting.</p>
+          <div className="recipe-use-actions">
+            <Button type="button" size="md" disabled={busy} onClick={() => void makeMine(r)}>
+              {busy ? "Making your copy..." : "Use this recipe"}
+            </Button>
+            <Button kind="quiet" type="button" disabled={busy} onClick={() => onCopy(r)}>
+              Change it before saving
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <form id="recipe-editor" className="split-form" aria-label="Recipe" onSubmit={(event) => void save(event)}>
@@ -167,14 +245,13 @@ export function RecipeEditor({
           <GateText message={message.text} />
         </Alert>
       ) : null}
-      {note ? <p className="field-hint">{note}</p> : null}
+      {copyNote ? <Alert kind="info">{copyNote}</Alert> : null}
       {copiedFrom ? <p className="field-hint">Copied from {copiedFrom}.</p> : null}
       <Field
         id="recipe-name"
         label="Name"
         required
         maxLength={NAME_MAX}
-        readOnly={readOnly}
         value={fields.name}
         onChange={(event) => set("name", event.target.value)}
       />
@@ -185,7 +262,6 @@ export function RecipeEditor({
         rows={9}
         required
         maxLength={INSTRUCTION_MAX}
-        readOnly={readOnly}
         value={fields.instruction}
         onChange={(event) => set("instruction", event.target.value)}
       />
@@ -193,7 +269,6 @@ export function RecipeEditor({
         <SelectField
           id="recipe-output"
           label="Output"
-          disabled={readOnly}
           value={fields.output_type}
           options={[
             ["document", "Document"],
@@ -206,7 +281,6 @@ export function RecipeEditor({
         <SelectField
           id="recipe-scope"
           label="Made from"
-          disabled={readOnly}
           value={fields.scope}
           options={[
             ["one", "One meeting"],
@@ -219,11 +293,10 @@ export function RecipeEditor({
         <input
           type="checkbox"
           className="sh-box"
-          disabled={readOnly}
           checked={fields.uses_brief}
           onChange={(event) => set("uses_brief", event.target.checked)}
         />
-        Use the team brief
+        Use {words.the}
       </label>
       <div className="field">
         <span className="field-label">Choices</span>
@@ -236,7 +309,6 @@ export function RecipeEditor({
               hideLabel
               placeholder="e.g. Tone"
               maxLength={60}
-              readOnly={readOnly}
               value={row.label}
               onChange={(event) => setRow(index, { label: event.target.value })}
             />
@@ -244,7 +316,6 @@ export function RecipeEditor({
               id={`choice-${index}-kind`}
               label={`Choice ${index + 1} kind`}
               hideLabel
-              disabled={readOnly}
               value={row.kind}
               options={[
                 ["text", "Text"],
@@ -258,39 +329,34 @@ export function RecipeEditor({
                 label={`Choice ${index + 1} words`}
                 hideLabel
                 placeholder="Friendly, Formal"
-                readOnly={readOnly}
                 value={row.words}
                 onChange={(event) => setRow(index, { words: event.target.value })}
               />
             ) : null}
-            {readOnly ? null : (
-              <button
-                type="button"
-                className="recipe-choice-remove"
-                aria-label={`Remove choice ${index + 1}`}
-                onClick={() => setRows((all) => all.filter((_, i) => i !== index))}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            )}
+            <button
+              type="button"
+              className="recipe-choice-remove"
+              aria-label={`Remove choice ${index + 1}`}
+              onClick={() => setRows((all) => all.filter((_, i) => i !== index))}
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
         ))}
         {wordless ? <span className="field-hint">Give each word choice at least one word, separated by commas.</span> : null}
         {unnamed ? <span className="field-hint">Name every choice.</span> : null}
-        {readOnly ? null : (
-          <div>
-            <Button
-              kind="secondary"
-              size="sm"
-              type="button"
-              disabled={rows.length >= MAX_CHOICES}
-              onClick={() => setRows((all) => [...all, { key: null, label: "", kind: "text", words: "", keep: null }])}
-            >
-              <Icon name="plus" size={14} />
-              Add a choice
-            </Button>
-          </div>
-        )}
+        <div>
+          <Button
+            kind="secondary"
+            size="sm"
+            type="button"
+            disabled={rows.length >= MAX_CHOICES}
+            onClick={() => setRows((all) => [...all, { key: null, label: "", kind: "text", words: "", keep: null }])}
+          >
+            <Icon name="plus" size={14} />
+            Add a choice
+          </Button>
+        </div>
       </div>
       {mode.kind === "new" && team.can_manage ? (
         <fieldset className="field recipe-who">
@@ -313,13 +379,6 @@ export function RecipeEditor({
           ) : null}
         </fieldset>
       ) : null}
-      {readOnly ? (
-        <div className="form-foot">
-          <Button type="button" size="md" onClick={() => onCopy(mode.recipe)}>
-            Make a copy to change
-          </Button>
-        </div>
-      ) : (
         <div className="form-foot tpl-foot">
           <div className="tpl-foot-left">
             {mode.kind !== "edit" ? null : confirming ? (
@@ -347,7 +406,6 @@ export function RecipeEditor({
             </Button>
           </div>
         </div>
-      )}
     </form>
   );
 }

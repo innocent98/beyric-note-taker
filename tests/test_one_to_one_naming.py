@@ -100,21 +100,26 @@ def test_three_tags_for_three_people_are_named_too():
 
 def test_with_elimination_off_nothing_is_named_but_would_be_is_recorded():
     tags = resolve(two_people(), elimination=False)
-    assert tags["0"] == {"name": "", "how": "unknown", "note": "elimination_off", "would_be": ADA}
-    assert tags["1"] == {"name": "", "how": "unknown", "note": "elimination_off", "would_be": BO}
+    # `via` tells the timeline rule that the off switch holds this pick back for it too
+    off = {"name": "", "how": "unknown", "note": "elimination_off", "via": "one_to_one"}
+    assert tags["0"] == {**off, "would_be": ADA}
+    assert tags["1"] == {**off, "would_be": BO}
 
 
 # ---- shapes that must stay unnamed ----
 
 
 def test_three_voices_merged_into_two_tags_stay_unnamed_meeting_32_shape():
-    # Cy spoke 60 s inside Ada's tag; Skribby lists one name per tag; Meet lit Cy but no tag is his
+    # Cy spoke 60 s inside Ada's tag (60 of 362 s lit, 17%: over the share a stray voice may have);
+    # Skribby lists one name per tag; Meet lit Cy but no tag is his. Refused with `extra_speaker`,
+    # and the timeline's candidate-only mode does not get round the veto, switch on or off
     table = {"0": ([150.0, 0.0, 60.0], 260.0), "1": ([2.0, 150.0, 0.0], 170.0)}
     items, events = timeline_case(table, people=(ADA, BO, CY))
-    tags = resolve(items, events)
-    assert named(tags) == {"0": "", "1": ""}
-    assert tags["0"]["one_to_one"] == tags["1"]["one_to_one"] == "extra_speaker"
-    assert tags["0"]["how"] == "unknown"
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == tags["1"]["one_to_one"] == "extra_speaker"
+        assert tags["0"]["how"] == "unknown"
 
 
 def test_a_merged_tag_that_lists_both_people_stays_unnamed():
@@ -153,8 +158,16 @@ def test_a_tag_with_fewer_than_three_segments_blocks_the_meeting():
     assert named(resolve(items)) == {"0": ADA, "1": BO}  # three is enough
 
 
-def test_a_name_missing_from_one_segment_of_a_tag_blocks_the_meeting():
+def test_a_name_missing_from_one_segment_of_five_is_still_enough():
+    # four of five segments list the name: 80%, the least that stands for a tag (was: all of them)
     items = two_people()
+    items[2]["potential_speaker_names"] = []
+    assert named(resolve(items)) == {"0": ADA, "1": BO}
+
+
+def test_a_name_missing_from_two_segments_of_five_blocks_the_meeting():
+    items = two_people()
+    items[1]["potential_speaker_names"] = []
     items[2]["potential_speaker_names"] = []
     assert named(resolve(items)) == {"0": "", "1": ""}
 
@@ -178,12 +191,14 @@ def test_a_meeting_where_skribby_named_a_tag_goes_by_the_older_rules():
 
 
 def test_a_candidate_who_is_not_in_the_call_names_nothing():
-    # the call has Ada and Cy; the tags list Ada and Bo, who is not there
+    # the call has Ada and Cy; the tags list Ada and Bo, who is not there: nothing is named, with
+    # the timeline rule on or off (a name with no support at all)
     table = {"0": ([200.0, 3.0], 220.0), "1": ([2.0, 150.0], 170.0)}
     items, events = timeline_case(table, people=(ADA, CY))
-    tags = resolve(items, events)
-    assert named(tags) == {"0": "", "1": ""}
-    assert tags["0"]["one_to_one"] == "not_in_call"
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == tags["1"]["one_to_one"] == "not_in_call"
 
 
 def test_meet_clearly_putting_a_tag_under_someone_else_names_nothing_contradicted():
@@ -325,22 +340,49 @@ def test_a_candidate_list_over_the_length_cap_blocks_the_meeting():
 
 
 @pytest.mark.parametrize(
-    ("seconds", "named_both"), [(9.0, True), (9.9, True), (10.0, False), (30.0, False)]
+    ("seconds", "named_both", "small"),
+    [(9.0, True, False), (9.9, True, False), (10.0, True, True), (39.0, True, True)]
+    + [(40.0, False, False), (90.0, False, False)],
 )
-def test_a_third_voice_of_ten_seconds_or_more_is_a_veto_under_ten_is_a_cough(seconds, named_both):
-    # Cy is in the call and speaks `seconds` under no tag at all; the floor is
-    # `meet_timeline.MIN_EXTRA_SECONDS`, well under the timeline rule's 30 s
+def test_a_third_voice_is_a_veto_only_over_ten_seconds_and_a_tenth_of_the_lit_time(
+    seconds, named_both, small
+):
+    # Cy is in the call and speaks `seconds` under no tag at all. Under `MIN_EXTRA_SECONDS` it is a
+    # cough (no note). From there a small share (Ada 202 s, Bo 153 s lit: 10% of all lit time is
+    # 39.4 s) names the tags and says `extra_speaker_small`; a larger one refuses
     items, events = timeline_case(SMALL, people=(ADA, BO, CY), extra={CY: seconds})
-    tags = resolve(items, events)
+    tags = resolve(items, events, timeline=False)
     assert (named(tags) == {"0": ADA, "1": BO}) is named_both
-    if not named_both:
+    if named_both:
+        assert tags["0"]["how"] == tags["1"]["how"] == "one_to_one"
+        assert (tags["0"]["note"] == tags["1"]["note"] == "extra_speaker_small") is small
+    else:
         assert tags["0"]["one_to_one"] == "extra_speaker"
 
 
-def test_a_merged_third_voice_of_about_thirty_seconds_in_a_tag_is_a_veto():
+def test_a_merged_third_voice_of_about_thirty_seconds_in_a_tag_is_named_with_a_note():
+    # meeting 32's third voice was about 30 s of a long call: 29 of 331 s lit here (8.8%), so the
+    # two tags are named and carry the note (an accepted wrong-line cost, see the SOP)
     table = {"0": ([150.0, 0.0, 29.0], 260.0), "1": ([2.0, 150.0, 0.0], 170.0)}
     items, events = timeline_case(table, people=(ADA, BO, CY))
-    assert resolve(items, events)["0"]["one_to_one"] == "extra_speaker"
+    tags = resolve(items, events)
+    assert named(tags) == {"0": ADA, "1": BO}
+    assert tags["0"]["note"] == tags["1"]["note"] == "extra_speaker_small"
+    assert skribby.holds_other_speakers(tags)
+
+
+def test_meeting_46s_numbers_name_both_tags_and_keep_the_note():
+    # Adebayo 682.3 s, Oluwaseyi 240.7 s, a third person 34.1 s (3.6% of 957.1 s lit): the same
+    # shares at half the seconds, so no single lit stretch is over `MAX_SPAN_SECONDS`
+    ada, bo, extra = 341.15, 120.35, 17.05
+    table = {"0": ([ada - 1, 3.0, 0.0], 360.0), "1": ([1.0, bo - 3, 0.0], 130.0)}
+    items, events = timeline_case(table, people=(ADA, BO, CY), extra={CY: extra})
+    assert round(extra / (ada + bo + extra), 3) == 0.036
+    tags = resolve(items, events)
+    assert named(tags) == {"0": ADA, "1": BO}
+    assert {t["how"] for t in tags.values()} == {"one_to_one"}
+    assert {t["note"] for t in tags.values()} == {"extra_speaker_small"}
+    assert skribby.holds_other_speakers(tags)
 
 
 def test_the_shifted_reading_alone_can_veto():
@@ -363,6 +405,7 @@ def test_the_shifted_reading_alone_can_veto():
         None,
         "contradicted",
         "",
+        False,
     )
 
 
