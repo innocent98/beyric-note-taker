@@ -29,6 +29,32 @@ order matters, and money is only ever moved by a row we made first:
    hours of grace (the period's leftover hours stay usable until its end, no new hours), each
    failure schedules the next attempt, the last one sends the last-day notice.
 
+**An attempt whose outcome cannot be found never freezes the plan, and never doubles a charge**
+(review S1 and its delta review). Four cases:
+
+- the provider says the call made no charge for a reason about the card or the request
+  (`NothingMoved`: a 4xx, an input check) and holds nothing under our reference: the attempt FAILED
+  at once (`_charge_refused`: payment `failed`, the clock moves);
+- the call was refused for a reason that is ours or the provider's, not the person's
+  (`ChargeBlocked`: our key missing, refused or restricted, a rate limit): NOT their failure. The
+  payment is closed (`failed`, no slot, tagged `blocked-<reference>`), the grace opens for an
+  `active` plan (`CHARGE_BLOCKED`) with no mail and no retry spent, the grace is extended so the
+  person has `BLOCKED_GRACE` after the last block (never more than `BLOCKED_GRACE_CAP` past its
+  normal end), the charge is held back `BLOCKED_RETRY`, and the admins are told. The first REAL
+  failure afterwards is an ordinary attempt (its mail, its retry slots). The last day of the
+  extension is announced with the usual last-day notice, and past the cap the ordinary lapse
+  comes: the code never counts a block as a failed attempt, it only holds and extends;
+- the call got no answer and the lookup by our reference cannot find it, or the provider keeps
+  saying `pending` with no page for the payer: the attempt waits `UNRESOLVED_AFTER`, then COUNTS as
+  a failed attempt for the clock only (`_note_unresolved` tells the admins; grace, mails, the retry
+  slots and the lapse run);
+- **its payment stays `pending`**: the charge may exist, and a second charge for the same period
+  could debit the person twice. So every later pass asks the provider about it FIRST
+  (`_settle_open_payments`): found paid, it is settled and nothing more is charged; still unknown,
+  the slot is counted but NOT charged, and the pay link makes no second page (502, retry), until
+  the provider can say. A late webhook settles it too. The plan then runs out its grace and lapses
+  at the normal moment; the admins were told at six hours to look the reference up.
+
 A subscription with no usable saved card, or whose billing country now routes elsewhere, makes no
 charge: its attempt is a recorded failure, and the person pays through `pay_link` (the provider's
 own page, on the route they are on now). The grace and the lapse run on the clock either way.
@@ -47,7 +73,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -56,7 +82,7 @@ from app.billing import cutover, invoices, plans, refunds, routing, settle, stat
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
-from app.billing.types import OutcomeUnknown, ProviderError, RetryLater
+from app.billing.types import ChargeBlocked, NothingMoved, OutcomeUnknown, ProviderError, RetryLater
 from app.config import Settings
 from app.models import (
     BillingEvent,
@@ -81,6 +107,12 @@ FAILED_LOOKBACK = timedelta(days=7)
 MIN_RETRY_GAP = timedelta(hours=1)  # a late pass never fires two attempts back to back
 NO_LINK_GRACE = timedelta(minutes=10)  # a pay-link row still waiting for its page is not abandoned
 UNRESOLVED_AFTER = timedelta(hours=6)
+BLOCKED_RETRY = timedelta(minutes=30)  # a charge our key or a rate limit refused is tried again
+# Our outage must not cost the person their plan: after the LAST block they keep at least this long
+# to be charged again, and the grace is never pushed further than the cap past its normal end.
+BLOCKED_GRACE = timedelta(hours=24)
+BLOCKED_GRACE_CAP = timedelta(days=7)
+PAGE_HOLDS_CHARGE = timedelta(hours=2)  # a pay-link page this young holds the saved-card retry
 
 
 def run(session: Session, now: datetime, settings: Settings) -> None:
@@ -241,7 +273,10 @@ def _attempt(
     if outcome == "wait":
         session.commit()  # nothing changed, except perhaps an admin alert that must be kept
         return
-    if outcome == "open_link":  # a charge is waiting for the payer: its slot counts, no new charge
+    if outcome in ("open_link", "gave_up"):
+        # open_link: a charge is waiting for the payer, its slot counts, no new charge.
+        # gave_up: the charge of this slot could not be found for `UNRESOLVED_AFTER`: the slot
+        # counts as a failed attempt for the clock, and NOTHING is charged (the charge may exist).
         return _fail(session, sub.id, cycle, n, now)
 
     price = plans.renewal_price(session, sub, now)
@@ -291,11 +326,24 @@ def _attempt(
 
     try:
         tx = adapter.charge_saved_method(token, amount, currency, reference, payer_email=email)
+    except ChargeBlocked as blocked:
+        # Our key or a rate limit refused it: nothing was charged and it says nothing about the
+        # person, so it is not their failed attempt (see the module note).
+        return _charge_blocked(session, payment_id, sub_id, cycle, now, blocked)
+    except NothingMoved as refused:
+        # The provider refused the call (or it was never made): no charge exists, unless an
+        # earlier call under this reference made one, so it is asked once. Nothing found means
+        # the attempt failed: there is nothing for a later pass to wait for.
+        try:
+            tx = lookup_by_reference(adapter, reference)
+        except ProviderError:
+            return _charge_refused(session, payment_id, sub_id, cycle, n, now, refused)
     except (OutcomeUnknown, ProviderError):
         # Unknown outcome: the money may have moved (Flutterwave says so with `OutcomeUnknown`;
         # Paystack's adapter says it with a plain `ProviderError`, so both are treated alike). Ask
-        # by our reference; if even that fails the payment stays pending and the next pass
-        # settles it before anything is charged again.
+        # by our reference; if even that fails the payment stays pending, the next pass settles it
+        # before anything is charged again, and `_settle_open_payments` gives it up after
+        # `UNRESOLVED_AFTER`, so the plan is never frozen on it.
         try:
             tx = lookup_by_reference(adapter, reference)
         except ProviderError:
@@ -354,13 +402,150 @@ def _settle_charge(session: Session, adapter, payment_id: int, tx, now: datetime
     return "paid" if session.get(Payment, payment_id).status == "succeeded" else "unknown"
 
 
+def _charge_refused(
+    session: Session,
+    payment_id: int,
+    sub_id: int,
+    cycle: datetime,
+    n: int,
+    now: datetime,
+    refused: NothingMoved,
+) -> None:
+    """The saved-card charge call was refused and the provider holds nothing under our reference:
+    the attempt failed. The payment is closed (`failed`: a webhook for it would still settle it),
+    the admins are told once (a refusal that repeats for everyone is a key or an adapter problem),
+    and the status machine moves, so the person gets the grace, the mail and the pay link."""
+    closed = session.execute(
+        update(Payment)
+        .where(Payment.id == payment_id, Payment.status == "pending")
+        .values(status="failed")
+    ).rowcount
+    session.commit()
+    if not closed:  # a webhook decided this payment meanwhile: it is not ours to fail
+        return
+    logger.warning("renewal payment %s: charge refused (%s)", payment_id, type(refused).__name__)
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_charge_refused:{payment_id}",
+        "A renewal charge was refused by the provider",
+        f"Renewal payment {payment_id}: the provider refused the saved-card charge, so nothing was "
+        "charged. The attempt counts as failed and the person has the 3 days of grace. If this "
+        "repeats for other people, look at the provider keys and the provider's dashboard.",
+    )
+    session.commit()
+    _fail(session, sub_id, cycle, n, now)
+
+
+def _charge_blocked(
+    session: Session,
+    payment_id: int,
+    sub_id: int,
+    cycle: datetime,
+    now: datetime,
+    blocked: ChargeBlocked,
+) -> None:
+    """The charge call was refused for a reason that is ours or the provider's (our key, a rate
+    limit): not the person's failed attempt. The payment row is kept as history, `failed`, told
+    apart from a pay-link page by its `provider_tx_id` (`blocked-<reference>`, like the `refused-`
+    ids of Flutterwave) and with no slot (`attempt` null) so the retry can use it.
+
+    The subscription is not failed (no mail, no retry spent) but is protected: an `active` row
+    opens its grace (the leftover hours stay usable and Pay now works), and the grace is extended
+    so the person always has `BLOCKED_GRACE` after the last block, up to `BLOCKED_GRACE_CAP` past
+    its normal end; the charge is held back `BLOCKED_RETRY`. Past the cap the ordinary lapse
+    comes, as the admin alert says. The alert is sent once every six hours per provider."""
+    closed = session.execute(
+        update(Payment)
+        .where(Payment.id == payment_id, Payment.status == "pending")
+        .values(
+            status="failed",
+            attempt=None,
+            provider_tx_id=func.substr(func.concat("blocked-", Payment.reference), 1, 128),
+        )
+    ).rowcount
+    if closed:
+        sub = session.scalars(
+            select(Subscription)
+            .where(Subscription.id == sub_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one_or_none()
+        if sub is not None and sub.status in states.LIVE and sub.current_period_end == cycle:
+            _hold_for_block(session, sub, cycle, now)
+        provider = session.scalar(select(Payment.provider).where(Payment.id == payment_id))
+        logger.warning(
+            "renewal payment %s: charge blocked (%s)", payment_id, type(blocked).__name__
+        )
+        subscriptions._tell_admins(
+            session,
+            f"admin.billing_charge_blocked:{provider}:{now:%Y-%m-%d}-{now.hour // 6}",
+            "Renewal charges are being refused by the provider",
+            f"The {provider} provider refused a saved-card renewal charge (payment {payment_id}) "
+            "for a reason that is ours or theirs, not the customer's: a missing, refused or "
+            "restricted key, or a rate limit. Nothing was charged and the customer was not told "
+            "of a failure. The charge is tried again every 30 minutes, and the customer's grace "
+            "is extended while this lasts, for up to 7 days past its normal end; after that the "
+            "plan lapses. Check the provider keys, their permissions and the provider's dashboard.",
+        )
+    session.commit()
+
+
+def _hold_for_block(session: Session, sub: Subscription, cycle: datetime, now: datetime) -> None:
+    """Protect a person whose charge OUR side blocked (see `_charge_blocked`): open the grace if
+    it is not open, extend it by the blocked time within the cap, and hold the next charge."""
+    transition = states.apply(sub.status, states.CHARGE_BLOCKED)
+    if transition is None:
+        return
+    sub.status = transition.status
+    sub.updated_at = now
+    if states.OPEN_GRACE in transition.effects:
+        _open_grace(session, sub, cycle)
+    ceiling = states.grace_end(cycle) + BLOCKED_GRACE_CAP
+    wanted = min(now + BLOCKED_GRACE, ceiling)
+    if sub.grace_ends_at is None or wanted > sub.grace_ends_at:
+        _set_grace_end(session, sub, wanted)
+    sub.next_charge_at = now + BLOCKED_RETRY
+    if now + BLOCKED_GRACE >= ceiling:
+        # The last day of the extension: the person is told, with the existing last-day notice
+        # (once per period: the same dedupe key as the day-2 failure's), before the plan can lapse.
+        _notify(
+            session, sub, "billing.last_day", "Last day to pay for your plan", LAST_DAY_BODY, cycle
+        )
+
+
+def _note_unresolved(session: Session, payment: Payment, why: str, now: datetime) -> bool:
+    """A renewal charge nobody could find for `UNRESOLVED_AFTER`: tell the admins (once) and say
+    whether the attempt now counts as a failed one for the clock. The payment is left `pending`:
+    the charge may exist, so nothing is charged again for the period while it is unresolved, and
+    it is asked about at every pass (`_settle_open_payments`). Returns False when the payment is
+    no longer pending (a webhook settled it while we waited on the provider): not ours to count."""
+    session.refresh(payment)  # read it as it is now, not as it was before the provider was asked
+    if payment.status != "pending":
+        session.commit()
+        return False
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_unresolved_charge:{payment.id}:{now:%Y-%m-%d}",  # again each day
+        "A renewal charge has no known outcome",
+        f"Renewal payment {payment.id} was sent to the provider more than six hours ago and {why}. "
+        "The attempt now counts as failed for the clock: the person has the 3 days of grace. "
+        "Nothing is charged again for this period while it is unresolved, and it is asked about "
+        "again at every pass. Look it up by reference in the provider's dashboard: if it was paid "
+        "it is settled when the provider reports it.",
+    )
+    session.commit()
+    return True
+
+
 def _settle_open_payments(
     session: Session, sub: Subscription, now: datetime, settings: Settings
 ) -> str:
     """Resolve renewal payments of this period that are still `pending`. Returns `paid` (one
     settled: the subscription moved on), `open_link` (a charge waits for the payer's own link),
-    `wait` (the provider could not be asked, or a charge is in flight: try again next pass) or
-    `none`."""
+    `gave_up` (a charge in flight that nobody could find, or that stayed `pending` with nothing for
+    the payer, for `UNRESOLVED_AFTER`: still `pending`, never charged again, but counted as a
+    failed attempt for the clock), `wait` (the provider could not be asked, or a charge is in
+    flight: try again next pass) or `none`."""
     pending = session.scalars(
         select(Payment)
         .where(
@@ -376,6 +561,10 @@ def _settle_open_payments(
         # A hosted checkout made for the payer (`attempt` is null: the pay link) is not a charge in
         # flight: it is settled if the provider says it was paid, and otherwise ignored.
         in_flight = payment.attempt is not None
+        # A young hosted page: the person is probably paying it right now (see below).
+        holds_charge = (
+            not in_flight and bool(payment.pay_url) and payment.created_at > now - PAGE_HOLDS_CHARGE
+        )
         adapter = provider_named(payment.provider, settings)
         if adapter is None:
             result = "wait" if in_flight else result
@@ -384,20 +573,18 @@ def _settle_open_payments(
             tx = lookup_by_reference(adapter, payment.reference)
         except ProviderError:
             # No answer. "The provider is down" and "the charge call never left, so the provider
-            # has nothing under our reference" look the same, so we cannot tell and we wait; a
-            # human is told once it has been unresolved for six hours.
+            # has nothing under our reference" look the same, so we cannot tell and we wait, but
+            # not for ever: after six hours it is given up (the admins are told).
             if not in_flight:
+                if holds_charge and result == "none":
+                    result = "wait"  # a page with no record yet (nobody has tried to pay it)
                 continue
-            result = "wait"
-            if payment.created_at <= now - UNRESOLVED_AFTER:
-                subscriptions._tell_admins(
-                    session,
-                    f"admin.billing_unresolved_charge:{payment.id}",
-                    "A renewal charge has no known outcome",
-                    f"Renewal payment {payment.id} was sent to the provider more than six hours "
-                    "ago and the provider cannot say what became of it. Look it up by reference "
-                    "in the provider's dashboard.",
-                )
+            if payment.created_at <= now - UNRESOLVED_AFTER and _note_unresolved(
+                session, payment, "the provider cannot say what became of it", now
+            ):
+                result = "gave_up" if result == "none" else result
+            else:
+                result = "wait"
             continue
         if tx.status == "successful":
             try:
@@ -423,21 +610,26 @@ def _settle_open_payments(
             settle.settle_transaction(session, adapter, payment.id, tx, now)
             session.commit()
         elif not in_flight:
+            # A hosted page nobody has paid (yet): normally ignored, but a young one means the
+            # person is probably paying it right now, so the saved card is not charged beside it
+            # (both succeeding is a refund by hand). Two hours at most: an abandoned page holds
+            # nothing. The slot is not spent while waiting.
+            if holds_charge and result == "none":
+                result = "wait"
             continue
         elif payment.pay_url and result != "wait":
             result = "open_link"
+        elif (
+            not payment.pay_url
+            and payment.created_at <= now - UNRESOLVED_AFTER
+            and _note_unresolved(
+                session, payment, "has stayed pending with no page for the payer", now
+            )
+        ):
+            # a charge the provider keeps reporting as pending with nothing for the payer to do
+            result = "gave_up" if result in ("none", "open_link") else result
         else:
             result = "wait"
-            if not payment.pay_url and payment.created_at <= now - UNRESOLVED_AFTER:
-                # a charge the provider keeps reporting as pending with nothing for the payer to do
-                subscriptions._tell_admins(
-                    session,
-                    f"admin.billing_unresolved_charge:{payment.id}",
-                    "A renewal charge has stayed pending",
-                    f"Renewal payment {payment.id} has been pending at the provider for more "
-                    "than six hours with no page for the payer. Look it up by reference in the "
-                    "provider's dashboard.",
-                )
     return result
 
 
@@ -482,6 +674,37 @@ def _record_failed_attempt(
         pass  # the slot already has its row
 
 
+def _open_grace(session: Session, sub: Subscription, cycle: datetime) -> None:
+    """The grace opens: until the due moment + 72 h. The period's leftover hours stay usable until
+    it ends (spec 3.3): they ended at the due moment, the grace gives them back, and nothing new is
+    ever added here."""
+    sub.grace_ends_at = states.grace_end(cycle)
+    session.execute(
+        update(HourGrant)
+        .where(
+            HourGrant.subscription_id == sub.id,
+            HourGrant.kind == "plan_period",
+            HourGrant.expires_at == cycle,
+        )
+        .values(expires_at=sub.grace_ends_at)
+    )
+
+
+def _set_grace_end(session: Session, sub: Subscription, new_end: datetime) -> None:
+    """Move the end of an open grace (an outage of ours extends it) and its leftover hours."""
+    old_end = sub.grace_ends_at
+    sub.grace_ends_at = new_end
+    session.execute(
+        update(HourGrant)
+        .where(
+            HourGrant.subscription_id == sub.id,
+            HourGrant.kind == "plan_period",
+            HourGrant.expires_at == old_end,
+        )
+        .values(expires_at=new_end)
+    )
+
+
 def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime) -> None:
     """Attempt `n` did not pay: move the status machine under the lock. Applied once (a second
     worker, or a second pass, finds the attempt already counted), and not at all when the
@@ -504,24 +727,27 @@ def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime)
     if transition is None:
         session.rollback()
         return
+    after_block = (
+        sub.status == states.PAST_DUE and n == 0
+    )  # the grace a block opened, no retry used
     sub.retry_count = n + 1
     sub.status = transition.status
     sub.updated_at = now
     if states.OPEN_GRACE in transition.effects:
-        sub.grace_ends_at = states.grace_end(cycle)
-        # The period's leftover hours stay usable until the grace ends (spec 3.3). They ended at
-        # the due moment; the grace gives them back, and nothing new is ever added here.
-        session.execute(
-            update(HourGrant)
-            .where(
-                HourGrant.subscription_id == sub.id,
-                HourGrant.kind == "plan_period",
-                HourGrant.expires_at == cycle,
-            )
-            .values(expires_at=sub.grace_ends_at)
-        )
+        _open_grace(session, sub, cycle)
+    if after_block:
+        # The first real failure after a block (`CHARGE_BLOCKED` opened the grace and spent no
+        # retry): the failed mail promises 3 days and a retry each day, counted from NOW, so the
+        # grace is re-anchored on this failure (still within the cap past its normal end).
+        wanted = min(now + states.GRACE, states.grace_end(cycle) + BLOCKED_GRACE_CAP)
+        if sub.grace_ends_at is None or wanted > sub.grace_ends_at:
+            _set_grace_end(session, sub, wanted)
     if states.SCHEDULE_NEXT_ATTEMPT in transition.effects:
-        sub.next_charge_at = max(states.attempt_time(cycle, n + 1), now + MIN_RETRY_GAP)
+        if sub.grace_ends_at is not None and sub.grace_ends_at > states.grace_end(cycle):
+            # a grace a block moved: the dunning is counted from the failures, a day apart
+            sub.next_charge_at = now + states.ATTEMPT_OFFSETS[1]
+        else:
+            sub.next_charge_at = max(states.attempt_time(cycle, n + 1), now + MIN_RETRY_GAP)
     if states.STOP_ATTEMPTS in transition.effects:
         sub.next_charge_at = None
     if states.NOTIFY_FAILED in transition.effects:
@@ -809,6 +1035,7 @@ def _open_page(
                 chosen = chosen or payment
                 continue
             session.rollback()
+            _tell_payer_blocked(session, payment, now)
             raise subscriptions.Refused(
                 502,
                 "provider_error",
@@ -844,12 +1071,32 @@ def _open_page(
             chosen = chosen or payment
         else:
             session.rollback()
+            _tell_payer_blocked(session, payment, now)
             raise subscriptions.Refused(
                 409,
                 "payment_in_progress",
                 "A payment is already being processed. Wait a moment and check again.",
             )
     return chosen
+
+
+def _tell_payer_blocked(session: Session, payment: Payment, now: datetime) -> None:
+    """A person pressed Pay now and cannot be given a page because a charge of this period may
+    exist and cannot be checked (the dead end the reminder mails lead into: they say open Billing
+    and pay). Silent for a charge younger than `UNRESOLVED_AFTER` (ordinary waiting); older, the
+    admins are told, once a day per payment, so the dead end is never left to the person alone."""
+    if payment.created_at > now - UNRESOLVED_AFTER:
+        return
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_payer_blocked:{payment.id}:{now:%Y-%m-%d}",
+        "A person cannot pay: an earlier charge cannot be checked",
+        f"Someone pressed Pay now on their overdue plan and was refused, because renewal payment "
+        f"{payment.id} may have been charged and the provider cannot say. Look it up by reference "
+        "in the provider's dashboard: if it was paid it is settled when the provider reports it; "
+        "if it was not, nothing else can open a page for them until it is closed.",
+    )
+    session.commit()
 
 
 def pay_link(

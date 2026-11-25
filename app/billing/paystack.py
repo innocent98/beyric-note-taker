@@ -56,8 +56,10 @@ from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
     BillingError,
+    ChargeBlocked,
     Checkout,
     IgnoredEvent,
+    NothingMoved,
     OutcomeUnknown,
     ProviderError,
     ProviderEvent,
@@ -97,7 +99,7 @@ _REFUND_EVENTS = ("refund.failed", "refund.pending", "refund.processed", "refund
 _DISPUTE_EVENTS = ("charge.dispute.create", "charge.dispute.remind", "charge.dispute.resolve")
 
 
-class NotConfigured(ProviderError):
+class NotConfigured(ChargeBlocked):
     """No usable key: nothing was sent. Raised before any connection is opened."""
 
 
@@ -379,14 +381,17 @@ class PaystackProvider:
         reference is ours and unique, so the caller resolves it with `verify_reference` before
         charging again (a repeat is refused as a duplicate reference). A caller must still settle
         the result through `settle`'s rules before it grants anything."""
+        # `NothingMoved` (a `ProviderError`): the call was refused before it was made, or Paystack
+        # refused it with a 4xx, so no charge exists and the caller need not wait for a lookup to
+        # find one. A timeout, a 5xx or an answer it cannot read stay a plain `ProviderError`.
         if currency not in self.currencies:
-            raise ProviderError("Paystack takes naira only")
+            raise NothingMoved("Paystack takes naira only")
         if not _whole_number(amount_minor) or amount_minor <= 0:
-            raise ProviderError("the amount must be a positive whole number of kobo")
+            raise NothingMoved("the amount must be a positive whole number of kobo")
         if not _text(token) or not _REFERENCE.fullmatch(reference or ""):
-            raise ProviderError("a saved card token and a usable reference are needed")
+            raise NothingMoved("a saved card token and a usable reference are needed")
         if not _text(payer_email):
-            raise ProviderError("Paystack charges a saved card only with the email that made it")
+            raise NothingMoved("Paystack charges a saved card only with the email that made it")
         data = self._call(
             "POST",
             "/transaction/charge_authorization",
@@ -397,6 +402,8 @@ class PaystackProvider:
                 "currency": currency,
                 "reference": reference,
             },
+            refused=NothingMoved,
+            blocked=ChargeBlocked,
         )
         if data.get("paused") is True:  # the card must be authorized again by the payer
             if data.get("reference") != reference:
@@ -452,14 +459,24 @@ class PaystackProvider:
         return str(refund_id)
 
     def _call(
-        self, method: str, path: str, body: dict | None = None, *, money: bool = False
+        self,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        *,
+        money: bool = False,
+        refused: type[ProviderError] = ProviderError,
+        blocked: type[ProviderError] = ProviderError,
     ) -> dict:
         """One call to Paystack; returns its `data` object. Raises `NotConfigured` before any
         connection when the key is missing or of the wrong kind, and `ProviderError` for a
         transport failure, a timeout, any non-success answer or an answer that is not Paystack's
         shape. With `money=True` (a call that moves money: the refund) a lost answer is
         `OutcomeUnknown` instead: a timeout, a transport failure, a 5xx, a 409 conflict, an answer
-        that is not Paystack's shape. No message holds the key, an address, a body or an email."""
+        that is not Paystack's shape. `refused` is what a 4xx answer raises (the charge passes
+        `NothingMoved`: Paystack said no before doing anything) and `blocked` what a 401 and a 429
+        raise (the charge passes `ChargeBlocked`: our key, or a rate limit, not the customer). No
+        message holds the key, an address, a body or an email."""
         lost = OutcomeUnknown if money else ProviderError
         wanted = "sk_live_" if self._live else "sk_test_"
         if not self._secret_key:
@@ -489,24 +506,30 @@ class PaystackProvider:
             raise lost("Paystack did not answer in time") from None
         except httpx.HTTPError as exc:  # its text can hold the address: only the type is kept
             raise lost(f"the Paystack request failed ({type(exc).__name__})") from None
-        return _data(response, lost)
+        return _data(response, lost, refused, blocked)
 
 
-def _data(response: httpx.Response, lost: type[BillingError] = ProviderError) -> dict:
+def _data(
+    response: httpx.Response,
+    lost: type[BillingError] = ProviderError,
+    refused: type[ProviderError] = ProviderError,
+    blocked: type[ProviderError] = ProviderError,
+) -> dict:
     """The `data` of a Paystack answer. `lost` is what a missing or unreadable answer is: a
-    `ProviderError` for a read, `OutcomeUnknown` for a call that moves money."""
+    `ProviderError` for a read, `OutcomeUnknown` for a call that moves money. `refused` is what a
+    4xx raises and `blocked` what a 401 and a 429 raise: Paystack answered and did nothing."""
     code = response.status_code
-    if code == 401:
-        raise ProviderError("Paystack refused the secret key (401)")
+    if code in (401, 403):  # a refused key, a key without the permission, a server address
+        raise blocked(f"Paystack refused the secret key ({code})")  # Paystack does not allow: ours
     if code == 429:
-        raise ProviderError(f"Paystack answered {code}")  # rate limited: not processed
+        raise blocked(f"Paystack answered {code}")  # rate limited: not processed
     if code >= 500:
         raise lost(f"Paystack answered {code}")
     if code == 409 and lost is OutcomeUnknown:
         # a refund with this reference already exists: an earlier try went through
         raise lost("Paystack says a refund with this reference already exists")
     if code >= 400:
-        raise ProviderError(f"Paystack refused the request ({code}){_reason(response)}")
+        raise refused(f"Paystack refused the request ({code}){_reason(response)}")
     if code not in (200, 201):
         raise lost(f"Paystack answered with an unexpected status ({code})")
     try:

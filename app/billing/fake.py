@@ -21,7 +21,9 @@ from collections.abc import Mapping
 
 from app.billing.types import (
     BadEvent,
+    ChargeBlocked,
     Checkout,
+    NothingMoved,
     OutcomeUnknown,
     ProviderError,
     ProviderEvent,
@@ -54,7 +56,8 @@ class FakeProvider:
         self.refund_calls: list[tuple[str, int, str]] = []  # every call, with its reference
         self.refund_error: Exception | None = None
         self.refund_acts_on_error: bool = False
-        self.charge_outcome = "successful"  # or "failed", "pending", "error"
+        # "successful", or "failed", "pending", "queued", "error", "unknown", "refused", "blocked"
+        self.charge_outcome = "successful"
         self.payer_action_url = "https://fake.test/3ds/open-charge"
         self.charge_token: str | None = None  # a token the charges' transactions carry back
 
@@ -181,6 +184,10 @@ class FakeProvider:
         self.charges.append((token, amount_minor, currency, reference))
         if self.charge_outcome == "error":
             raise ProviderError("the charge call got no answer")
+        if self.charge_outcome == "blocked":  # our key or a rate limit: not the customer's failure
+            raise ChargeBlocked("the provider refused our key or rate limited us")
+        if self.charge_outcome == "refused":  # a 4xx, a missing key: the call made no charge
+            raise NothingMoved("the provider refused the charge call")
         if self.charge_outcome == "unknown":  # the newer contract: a money call with no answer
             raise OutcomeUnknown("the charge call got no answer")
         if self.charge_outcome == "queued":  # accepted, nothing for the payer to do, no verdict yet

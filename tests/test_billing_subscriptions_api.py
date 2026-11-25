@@ -424,3 +424,28 @@ def test_the_payment_history_is_the_callers_own_newest_first(session, engine, ad
     assert [p["kind"] for p in body] == ["pack", "plan"]  # newest first
     assert [p["status"] for p in body] == ["pending", "succeeded"]
     assert body[0]["pay_url"] is not None and body[1]["pay_url"] is None  # only a pending one
+
+
+def test_a_pack_checkout_is_refused_while_a_refund_of_the_plan_is_unsettled(
+    session, web, ada, providers
+):
+    """Review N1 over HTTP: the answer a screen gets is the same 409 `refund_pending` the other
+    charges on the plan give. Its body is the capture in `docs/fe-captures/billing-grant-owner/`."""
+    from app.billing import refunds
+    from app.billing.types import OutcomeUnknown
+
+    buy(session, ada, providers)
+    payment = session.scalars(select(Payment).where(Payment.kind == "plan")).one()
+    boss = make_user(session, "admin@example.test", admin=True)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    refunds.request(session, payment.id, "first_plan_7d", boss, None, settings(), now())
+    checkouts = len(providers.usd.checkouts)
+
+    out = ada.post(f"{API}/checkout", {"kind": "pack", "code": "pack10"})
+
+    body = error(out, 409, "refund_pending")
+    assert body["message"] == (
+        "A refund of your plan is being processed, so the plan cannot be changed or paid "
+        "until it is done."
+    )
+    assert len(providers.usd.checkouts) == checkouts
