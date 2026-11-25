@@ -26,7 +26,9 @@
   - [x] T4 Web: header everywhere, auto-switch with toast, switcher unread dots (PR B; looked at in a real browser at 1280 and 390 px; SOP section "Task 4")
   - [x] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`, `docs/fe-captures/workspaces/`)
 - [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7)
-- [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
+- [x] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9) (branch `feature/workspaces-calendar`, SOP `docs/sop/2026-11-24-workspaces-calendar.md`, migration `0075` placeholder, FE guide `docs/fe-integration-guide-workspaces-calendar.md`; nothing verified against a real Google or Microsoft calendar)
+  - [x] T8 connections keyed `(user, workspace, provider)`, connect and callback return per workspace, reference-counted revoke, leave and removal disconnect
+  - [x] T9 chooser `app/calendar_arbitration.py` under a per-person lock, `recorded_in` Upcoming row with Switch here, recurring per workspace, calendar GETs out of `PENDING_SLICE`
 - [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)
 - [ ] W5 Rehearsal on production-shaped data, Opus permission review, FE guide, renumber migrations, ONE PR to `main` (T13)
 
