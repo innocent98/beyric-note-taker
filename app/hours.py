@@ -123,7 +123,7 @@ def reconcile_backlog(session: Session, user: User, now: datetime) -> int:
             func.max(HourGrant.expires_at),
             func.count().filter(HourGrant.expires_at.is_(None)),
         ).where(
-            entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+            entitlements.my_grants(user),
             HourGrant.kind.in_(entitlements.BACKLOG_KINDS),
         )
     ).one()
@@ -136,7 +136,7 @@ def reconcile_backlog(session: Session, user: User, now: datetime) -> int:
     query = (
         select(UsageEntry)
         .where(
-            entitlements.mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+            usage.owned_entries(user),
             UsageEntry.counted_at > since,
             ~select(UsageAllocation.id)
             .where(UsageAllocation.usage_entry_id == UsageEntry.id)
@@ -170,7 +170,7 @@ def _cap_baseline(session: Session, user: User) -> int:
     pilots = list(
         session.scalars(
             select(HourGrant).where(
-                entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+                entitlements.my_grants(user),
                 HourGrant.kind == "pilot",
             )
         )
@@ -180,7 +180,7 @@ def _cap_baseline(session: Session, user: User) -> int:
     since = min(g.starts_at for g in pilots)
     before = session.scalar(
         select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-            entitlements.mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+            usage.owned_entries(user),
             UsageEntry.counted_at <= since,
         )
     )
@@ -203,7 +203,7 @@ def sync_cap_gift(session: Session, user: User) -> int:
     _lock_person(session, user)
     gifted = session.scalar(
         select(func.coalesce(func.sum(HourGrant.seconds), 0)).where(
-            entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+            entitlements.my_grants(user),
             HourGrant.kind == "admin_gift",
             HourGrant.reason == CAP_GIFT_REASON,
         )
