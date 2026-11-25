@@ -122,7 +122,8 @@ def speaking_intervals(
             continue
         events = [e for e in person.get("events") or [] if isinstance(e, dict)]
         stamped = sorted(
-            (t, e.get("type")) for e in events if (t := seconds(e.get("timestamp"))) is not None
+            ((t, e.get("type")) for e in events if (t := seconds(e.get("timestamp"))) is not None),
+            key=lambda pair: pair[0],  # by time only: a missing or odd `type` is never compared
         )
         named.setdefault(key, (shown, []))[1].extend(stamped)
     if not named:
@@ -130,7 +131,7 @@ def speaking_intervals(
     result: dict[str, list[tuple[float, float]]] = {}
     for shown, stamped in named.values():
         opened, spans = None, []
-        for t, kind in sorted(stamped):
+        for t, kind in sorted(stamped, key=lambda pair: pair[0]):
             if kind == "started-speaking" and opened is None:
                 opened = t
             elif kind in ("stopped-speaking", "left") and opened is not None:

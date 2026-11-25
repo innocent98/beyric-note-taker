@@ -364,3 +364,31 @@ def test_the_shifted_reading_alone_can_veto():
         "contradicted",
         "",
     )
+
+
+@pytest.mark.parametrize("odd", [None, 5, ["x"], {"a": 1}])
+def test_two_events_at_the_same_instant_with_an_odd_type_do_not_break_the_read(odd):
+    # `speaking_intervals` used to sort `(time, type)` pairs: equal times then compared the types,
+    # and a missing or non-string type raised TypeError, which would have stopped the whole
+    # transcript fetch, not just the naming
+    items, events = timeline_case()
+    stamp = events["participants"][0]["events"][0]["timestamp"]
+    events["participants"][0]["events"] += [
+        {"type": odd, "timestamp": stamp},
+        {"timestamp": stamp},
+        {"type": "started-speaking", "timestamp": stamp},
+    ]
+    assert meet_timeline.speaking_intervals(events)[ADA]  # the sort itself does not raise
+    assert meet_timeline.read(items, events, lambda n: (n, n)).refused is None
+    tags = resolve(items, events)  # does not raise
+    assert named(tags) == {"0": ADA, "1": BO}
+
+
+def test_a_timeline_that_cannot_be_read_at_all_is_no_events_not_a_failure(monkeypatch):
+    def boom(*args, **kwargs):
+        raise TypeError("unreadable")
+
+    monkeypatch.setattr(meet_timeline, "read", boom)
+    items, events = timeline_case()
+    tags = resolve(items, events)  # naming goes on without Meet; the transcript is still saved
+    assert named(tags) == {"0": ADA, "1": BO}  # by shape alone, as without events

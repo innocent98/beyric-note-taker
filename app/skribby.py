@@ -589,7 +589,14 @@ def _timeline_reading(value: list[dict], events: dict | None) -> meet_timeline.R
         {"tag": _tag(item.get("speaker")), "start": item.get("start"), "end": item.get("end")}
         for item in value
     ]
-    return meet_timeline.read(items, events, group, tag_of=lambda item: item["tag"])
+    try:
+        return meet_timeline.read(items, events, group, tag_of=lambda item: item["tag"])
+    except Exception as exc:  # events are another service's data: never let them stop a transcript
+        logger.warning(
+            "skribby: Meet's speaker events could not be read (%s); naming goes on without them",
+            type(exc).__name__,
+        )
+        return meet_timeline.Reading(refused="no_events")
 
 
 def _name_by_timeline(
