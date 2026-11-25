@@ -53,7 +53,7 @@ main merges only on his typed word, sessions open PRs but never merge).
    strong Opus review of every permission path; write `docs/fe-integration-guide-workspaces.md` (real captured responses only);
    SOPs, master checklist, handoff. Then ONE PR to `main`. Do not merge it.
 2. After his typed "merge #N": watch the deploy (migrations run on deploy, about 20 min, rerun if cancelled by the step limit), give him the server check.
-3. Known follow-ups from reviewers: notifications keep their birth workspace after share, move or leave; confirm a leaver loses calendar joins (W3 should cover it).
+3. Known follow-ups from reviewers: ~~notifications keep their birth workspace after share, move or leave~~ (fixed in the W5 PR, `teams.refile_notifications`); ~~confirm a leaver loses calendar joins~~ (confirmed and tested in the W5 PR).
 4. Parked: CRM (ask pilot users), Google verification, Microsoft publisher verification, lawyer items, billing review.
 
 ### How we work here
