@@ -97,8 +97,9 @@ def test_the_policy_says_what_is_read_from_outlook_and_how_to_disconnect(anon_cl
     )
     assert "We do not create, change or delete calendar events." in page
     assert (
-        "You can disconnect Outlook in the app, which deletes the calendar data we hold and our "
-        "stored Microsoft access credential. Microsoft does not let us withdraw that permission "
+        "You can disconnect Outlook in the app, which deletes the calendar data we hold for that "
+        "workspace and our stored Microsoft access credential for it; leaving the workspace does "
+        "the same. Microsoft does not let us withdraw that permission "
         "for you: to remove Beyric from your Microsoft account, remove it in your Microsoft "
         "account's app permissions." in page
     )
@@ -201,3 +202,45 @@ def test_the_policy_names_the_vendors_that_receive_the_recording_and_says_what_t
     assert "The software that joins meetings is run by Skribby, not by us." in page
     assert "Copies held by Skribby, ElevenLabs and OpenAI" in page
     assert "ElevenLabs meeting audio, and Resend" in page
+
+
+def test_the_pages_say_what_a_workspace_holds_who_sees_it_and_what_leaving_and_deleting_do(
+    anon_client,
+):
+    """Workspaces release: the wording is true of what the code does (docs/sop/2026-11-25-workspaces-
+    release.md lists each claim with the test that proves the behaviour). No promise to tell people
+    about a change: the product decision is that policy changes are not notified."""
+    privacy = text(anon_client, PRIVACY)
+    for claim in (
+        "Your account has a personal workspace that only you can use.",
+        "Each workspace keeps its own meetings, tasks, notifications, note templates, vocabulary, "
+        "calendar connection and settings",
+        "Ask Beyric searches only the meetings of that workspace that you may read.",
+        "Your name, email address, password, plan and recording hours belong to you, not to a "
+        "workspace.",
+        "you can choose Keep private on any meeting, and then only you can read it",
+        "Meetings recorded before 25 November 2026 stay exactly as they were",
+        "If you leave a team or an owner or admin removes you, you lose access to its workspace "
+        "at once",
+        "what you recorded there and kept as your own goes back to your personal workspace, "
+        "private to you",
+        "The owner of a team workspace can delete it once nobody else is in it.",
+        "the note taker joins it once",
+        "Google access itself is revoked only when none of your other workspaces still uses the "
+        "same account.",
+        "its tasks, projects, recurring meetings, integrations and settings are deleted with it",
+    ):
+        assert claim in privacy, claim
+    terms = text(anon_client, TERMS)
+    for claim in (
+        "A workspace keeps its own meetings, templates, vocabulary, calendar connection and "
+        "settings",
+        "How many team workspaces you can own depends on your plan",
+        "being a member of someone else's is free",
+        "may use Ask Beyric and make documents from that workspace's meetings without a plan of "
+        "their own",
+        "The owner of a team workspace can delete it once nobody else is in it.",
+    ):
+        assert claim in terms, claim
+    for page in (privacy, terms):  # the decision: policy changes carry no notice promise
+        assert "we will notify" not in page.lower() and "we will email you" not in page.lower()
