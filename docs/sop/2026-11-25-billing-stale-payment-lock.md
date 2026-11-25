@@ -21,12 +21,14 @@ Follow the pattern already used at `subscriptions.py` `_locked_subscription`, `r
 |---|---|---|
 | `app/billing/settle.py` `_apply` | webhook settlement | Payment |
 | `app/billing/settle.py` `settle_transaction` | sweeper, renewal charge, pay link | Payment |
-| `app/billing/refunds.py` `_check` (when `lock`) | refund eligibility | Subscription |
-| `app/billing/refunds.py` `request` step one | start a refund | Payment |
-| `app/billing/refunds.py` `request` step one, first-plan-7-days | end the plan | Subscription |
-| `app/billing/refunds.py` step three (after the provider call, a new transaction in the same session) | finish a refund | Payment and Refund |
+| `app/billing/refunds.py` `assess` (when `lock`) | refund eligibility | Subscription |
+| `app/billing/refunds.py` `_start` (`request` step one) | start a refund | Payment |
+| `app/billing/refunds.py` `_accepted` (runs in `request` step three), first-plan-7-days | end the plan | Subscription |
+| `app/billing/refunds.py` step three (after the provider call) | finish a refund | Payment and Refund |
 | `app/billing/refunds.py` `resolve` | admin resolves a refund | Payment |
 | `app/billing/invoices.py` issue loop (`skip_locked`) | issue an invoice | Payment |
+
+Hardening, not an M1 fix: the step-three locks in `request` were already fresh on `main`, because `db.rollback()` (`refunds.py:391`, "no transaction stays open while the provider is asked") expires every object in the session before they run. `populate_existing` there only makes that independent of the rollback. The same applies to the lock in `_accepted` that follows it. The stale reads that M1 describes are in `settle.py` (and the callers that hold a payment across a provider call with no rollback); the `refunds.py` `_start`, `assess` and `resolve` locks and the `invoices.py` lock were added for consistency with the same rule.
 
 Already correct, untouched: `subscriptions.py` (two), `renewals.py` (two), `cancel_checkout.py`, `profile.py`, `refunds.py` `resolve`'s refund lock.
 
