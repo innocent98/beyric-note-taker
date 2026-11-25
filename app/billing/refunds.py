@@ -229,7 +229,9 @@ def assess(
         # the subscription first (its row lock orders us against a renewal or an upgrade being
         # settled), then count what was paid on it
         query = select(Subscription).where(Subscription.id == payment.subscription_id)
-        sub = db.scalars(query.with_for_update() if lock else query).first()
+        if lock:
+            query = query.with_for_update().execution_options(populate_existing=True)
+        sub = db.scalars(query).first()
         later = db.scalar(
             select(func.count())
             .select_from(Payment)
@@ -267,7 +269,12 @@ def _start(
     now: datetime,
 ) -> Refund:
     """Step one: check, write the refund row, end the grant it covers. Commits."""
-    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).first()
+    payment = db.scalars(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
     if payment is None:
         raise Refused(404, "not_found", "No such payment.")
     payer = db.get(User, payment.payer_user_id) if payment.payer_user_id else None
@@ -315,7 +322,10 @@ def _accepted(
     payment.status = "refunded"
     if refund.reason == "first_plan_7d" and payment.subscription_id is not None:
         sub = db.scalars(
-            select(Subscription).where(Subscription.id == payment.subscription_id).with_for_update()
+            select(Subscription)
+            .where(Subscription.id == payment.subscription_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).first()
         if sub is not None:
             transition = states.apply(sub.status, states.REFUNDED)
@@ -398,8 +408,18 @@ def request(
             )
             unknown = True
     # step three: a fresh transaction, no lock held while the provider was asked
-    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
-    refund = db.scalars(select(Refund).where(Refund.id == refund_id).with_for_update()).one()
+    payment = db.scalars(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
+    refund = db.scalars(
+        select(Refund)
+        .where(Refund.id == refund_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
     amount = subs.money(refund.amount_minor, refund.currency)
     if refund.status != "pending":
         # A person closed this refund (`resolve`, after STUCK_AFTER) while the provider's answer was
@@ -471,7 +491,12 @@ def resolve(
     payment_id = db.scalar(select(Refund.payment_id).where(Refund.id == refund_id))
     if payment_id is None:
         raise Refused(404, "not_found", "No such refund.")
-    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
+    payment = db.scalars(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
     refund = db.scalars(
         select(Refund)
         .where(Refund.id == refund_id)

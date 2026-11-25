@@ -3,6 +3,11 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25: billing review M1 fixed** (branch `fix/billing-stale-payment-lock`, SOP `docs/sop/2026-11-25-billing-stale-payment-lock.md`; PR needs an Opus delta review before merge; no migration)
+- [x] Payment row locks in `settle.py` (webhook `_apply` and `settle_transaction`) read the row as it is now (`populate_existing`): a payment a webhook already settled is no longer re-granted, marked "needs refund", or overwritten by a `failed` report (3 tests, failing before the fix)
+- [x] Same one-line fix for the other Payment, Subscription and Refund locks without it (`refunds.py` x6, `invoices.py` x1)
+- [ ] S1 and S2 of the review: Adebayo's pick, not started
+
 **Addendum 2026-11-25: first real-model run of the recipes** (branch `feature/recipes-real-fixes`, SOP `docs/sop/2026-11-24-recipes-integration.md` "First real-model run, 2026-11-25", migration 0061)
 - [x] 17 of 18 starters ready on `gpt-6-luna`, 18 drafts about 0.0265 USD, 5 to 43 s each
 - [x] `proposal` failed as `structure` (cause not seen; the raw reply was not kept): structure checks now repair a ragged table row, a plain-text cell and unreadable blocks instead of refusing; a refused reply is asked for once more with the reason (a second ledger row and a second place in the day's limit); `documents.failure_detail` and the ledger error say why

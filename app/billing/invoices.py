@@ -259,7 +259,10 @@ def issue_missing(session: Session, now: datetime, settings: Settings) -> int:
     for payment_id in rows:
         try:
             payment = session.scalars(
-                select(Payment).where(Payment.id == payment_id).with_for_update(skip_locked=True)
+                select(Payment)
+                .where(Payment.id == payment_id)
+                .with_for_update(skip_locked=True)
+                .execution_options(populate_existing=True)
             ).first()
             if payment is None:
                 session.rollback()

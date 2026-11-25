@@ -178,8 +178,14 @@ def _apply(
     """Apply the event inside the caller's transaction. Returns a refusal reason, or None."""
     if event.kind in ("refund", "dispute"):
         return _record_refund_notice(db, row, event, now)
+    # `populate_existing`: sessions never expire on commit (`app/db.py`), so a payment this session
+    # already holds (loaded before the provider was asked, or before another process settled it)
+    # would keep its old `status` after the lock is won. The lock must read the row as it is now.
     payment = db.scalars(
-        select(Payment).where(Payment.reference == event.reference).with_for_update()
+        select(Payment)
+        .where(Payment.reference == event.reference)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).one_or_none()
     refusal = _refuse_payment(payment, provider)
     if refusal is None and payment.status in OPEN_STATUSES:
@@ -372,7 +378,14 @@ def settle_transaction(
     rolls back after an exception). Returns a refusal reason, or None: None means the payment is
     `succeeded` (now or already), still open without a verdict (`pending`, `failed`), or a failed
     report was recorded. Raises `RetryLater` while the provider still says `pending`."""
-    payment = db.scalars(select(Payment).where(Payment.id == payment_id).with_for_update()).one()
+    # `populate_existing`: the caller holds this payment from before the provider was asked, and a
+    # webhook in another process may have settled it since (see `_apply`).
+    payment = db.scalars(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
     refusal = _refuse_payment(payment, provider)
     if refusal is None and payment.status in OPEN_STATUSES:
         refusal = _malformed(tx)
