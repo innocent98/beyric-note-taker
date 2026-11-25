@@ -49,9 +49,9 @@ describe("parseTeamId", () => {
 
 describe("links", () => {
   it("only the screens that follow the team are team pages (Meetings is the home page)", () => {
-    for (const p of ["/", "/?from=2026-11-01", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/tasks/", "/tasks?x=1"])
+    for (const p of ["/", "/?from=2026-11-01", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/tasks/", "/tasks?x=1", "/recipes", "/documents", "/documents?tab=shared", "/ask", "/notifications"])
       expect(isTeamPage(p)).toBe(true);
-    for (const p of ["/teams", "/meetings/3", "/ask", "/notifications", "/settings/x"]) expect(isTeamPage(p)).toBe(false);
+    for (const p of ["/teams", "/meetings/3", "/documents/9", "/series/2", "/settings/x"]) expect(isTeamPage(p)).toBe(false);
   });
   it("withTeam sets, replaces and removes ?team= and keeps the rest", () => {
     expect(withTeam("/tasks", 5)).toBe("/tasks?team=5");
@@ -61,7 +61,7 @@ describe("links", () => {
     expect(withTeam("/team#members", 2)).toBe("/team?team=2#members");
   });
   it("leaves a link to any other page alone", () => {
-    expect(withTeam("/ask", 5)).toBe("/ask");
+    expect(withTeam("/documents/9", 5)).toBe("/documents/9");
     expect(withTeam("/meetings/3?tab=transcript", 5)).toBe("/meetings/3?tab=transcript");
   });
 });
@@ -166,7 +166,8 @@ describe("planSwitch: what choosing a team stores and loads", () => {
   });
   it("keeps the rest of the query, and a page that is not one team's loads as it is", () => {
     expect(planSwitch({ ...base, pathname: "/settings", query: "calendar=connected&team=2", teamId: 3 }).href).toBe("/settings?calendar=connected&team=3");
-    expect(planSwitch({ ...base, pathname: "/ask", query: "q=1", teamId: 2 })).toEqual({ remember: 2, href: "/ask?q=1" });
+    expect(planSwitch({ ...base, pathname: "/meetings/3", query: "q=1", teamId: 2 })).toEqual({ remember: 2, href: "/meetings/3?q=1" });
+    expect(planSwitch({ ...base, pathname: "/documents", query: "tab=shared", teamId: 2 })).toEqual({ remember: 2, href: "/documents?tab=shared&team=2" });
   });
 });
 
@@ -182,7 +183,9 @@ describe("planSync: what a page does about the tab's team when it loads", () => 
   it("follows a remembered team on a team page opened without ?team=, but only there", () => {
     expect(sync("/decisions", "", 3)).toEqual({ kind: "follow", href: "/decisions?team=3" });
     expect(sync("/", "", 3)).toEqual({ kind: "follow", href: "/?team=3" });
-    expect(sync("/ask", "", 3)).toEqual({ kind: "none" });
+    expect(sync("/documents", "tab=shared", 3)).toEqual({ kind: "follow", href: "/documents?tab=shared&team=3" });
+    expect(sync("/recipes", "", 3)).toEqual({ kind: "follow", href: "/recipes?team=3" });
+    expect(sync("/meetings/3", "", 3)).toEqual({ kind: "none" });
     expect(sync("/tasks", "", null)).toEqual({ kind: "none" }); // the default team: nothing to follow
   });
   it("the page a switch to the default team lands on (no ?team=, nothing remembered) stays on the default team", () => {

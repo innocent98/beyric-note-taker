@@ -1,10 +1,10 @@
 // The team a browser TAB is working on (multi-team stage 3). Nothing is kept on the server: each
 // team-scoped request names its team in the `X-Team-Id` header (lib/api/client.ts), so two tabs can
 // work on two teams. The team lives in two places, both per tab:
-//   1. the URL, `?team=<id>`, on the team-scoped pages (Team, Tasks, Projects, Settings). The server
-//      render reads this one: it cannot see the browser's storage.
+//   1. the URL, `?team=<id>`, on the team-scoped pages (Meetings, Tasks, Projects, Documents, Recipes, Ask, ...:
+//      TEAM_PAGES). The server render reads this one: it cannot see the browser's storage.
 //   2. `sessionStorage`, which remembers the choice for the pages that carry no `?team=` (the meeting
-//      page, Ask, Notifications). sessionStorage belongs to one tab, so a second tab never sees it.
+//      page, a draft). sessionStorage belongs to one tab, so a second tab never sees it.
 // Switching team is a FULL page load (components/app/team-switcher.tsx), so every screen reads again
 // for the team it opens on.
 // None of this exists while the server's `multi_team` switch is off: the shell draws no switcher and
@@ -24,9 +24,25 @@ export const ACTIVE_TEAM_HEADER = "x-active-team";
 export const SHELL_DEFAULT_TEAM = "data-default-team";
 
 // Pages whose content is one team's: they carry `?team=` in the URL. The Meetings list (the home page
-// `/`), Decisions, Review, Templates and Vocabulary follow the team too; the meeting page, Ask and Notifications do not (a
-// meeting opens by its link whatever team is active).
-export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/templates", "/vocabulary"] as const;
+// `/`), Decisions, Review, Templates, Vocabulary, Recipes, Documents, Ask and Notifications follow the team too
+// (the server render of each reads the workspace's data, and it can only see the address). A page opened by an id
+// (a meeting, a draft, a recurring series) is not one: it opens by its link whatever team is active, and a meeting
+// or a draft then moves the tab to its own workspace (components/app/meeting-workspace-sync.tsx).
+export const TEAM_PAGES = [
+  "/",
+  "/team",
+  "/tasks",
+  "/projects",
+  "/decisions",
+  "/review",
+  "/settings",
+  "/templates",
+  "/vocabulary",
+  "/recipes",
+  "/documents",
+  "/ask",
+  "/notifications",
+] as const;
 
 // The largest id the API accepts in `X-Team-Id` (`MAX_ID` in app/services.py): beyond it the server
 // answers 422, so such a value (a hand-edited URL or storage) counts as no team at all.

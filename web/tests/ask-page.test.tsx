@@ -15,14 +15,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 vi.mock("@/lib/api/server", () => ({
-  requireOwner: async () => ({
+  requireTeamOwner: async () => ({ teams: null, teamId: null, api: {
     ask: {
       scope: async () => {
         if (state.fail !== null) throw new ApiError(state.fail, "x", "x");
         return { meetings: 3, decisions: 4, tasks: 5, suggestions: ["When is the launch?"] };
       },
     },
-  }),
+  } }),
   getReviewOpen: async () => null,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
@@ -34,7 +34,7 @@ vi.mock("@/lib/api/server", () => ({
 describe("/ask page", () => {
   it("draws the scope line, the chips and the sidebar with Ask Beyric current", async () => {
     state.fail = null;
-    const html = renderToStaticMarkup(await AskPage());
+    const html = renderToStaticMarkup(await AskPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain("Searches 3 meetings, 4 decisions and 5 tasks");
     expect(html).toContain("When is the launch?");
     expect(html).toMatch(/href="\/ask"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/ask"/);
@@ -42,7 +42,7 @@ describe("/ask page", () => {
 
   it("still draws the box when the scope could not be loaded, without chips or a scope line", async () => {
     state.fail = 500;
-    const html = renderToStaticMarkup(await AskPage());
+    const html = renderToStaticMarkup(await AskPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain("Ask Beyric");
     expect(html).toContain("e.g. What did we decide about pricing?");
     expect(html).not.toContain("Searches");
@@ -51,6 +51,6 @@ describe("/ask page", () => {
 
   it("sends a lost login to /login", async () => {
     state.fail = 401;
-    await expect(AskPage()).rejects.toThrow("redirect:/login");
+    await expect(AskPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/login");
   });
 });

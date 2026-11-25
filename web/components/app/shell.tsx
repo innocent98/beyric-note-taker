@@ -30,7 +30,7 @@ function shownName(user: ShellUser): string {
 // `teams` is the person's teams (`GET /api/teams`), given only while the server's multi-team switch is on
 // (`multi_team` of the session): the shell then draws the lead-designed team switcher and ONE Teams link (the
 // list; from it a team's page opens, and from that page the way back and "Make a team"), and the links to the
-// screens that follow the team (Meetings, Tasks, Projects, Decisions, Review, Settings) carry the tab's team.
+// screens that follow the team (Meetings, Ask, Tasks, Projects, Decisions, Review, Notifications, Recipes, Documents, Settings) carry the tab's team.
 // The badges beside Tasks and Review count that team only. null (the default, and the switch off): the shell
 // is exactly what it was before multi-team.
 export function AppShell({
@@ -54,11 +54,11 @@ export function AppShell({
 }) {
   // The screens that are one team's; a plain link while the switch is off. `live` names the badge that is
   // counted again in the browser when this tab's remembered team is not the one the server rendered.
-  const scoped = (href: string, label: string, section: NavSection, badge?: number, live?: "tasks_new" | "review_open") =>
+  const scoped = (href: string, label: string, section: NavSection, badge?: number, live?: "tasks_new" | "review_open", badgeLabel?: string) =>
     teams ? (
-      <TeamNavLink href={href} label={label} teams={teams} current={current === section} badge={badge} live={live} />
+      <TeamNavLink href={href} label={label} teams={teams} current={current === section} badge={badge} live={live} badgeLabel={badgeLabel} />
     ) : (
-      <NavLink href={href} label={label} current={current === section} badge={badge} />
+      <NavLink href={href} label={label} current={current === section} badge={badge} badgeLabel={badgeLabel} />
     );
   return (
     <div className="shell" {...(teams ? { [SHELL_MARK]: user?.email ?? "", [SHELL_DEFAULT_TEAM]: String(teams.find((t) => t.is_default)?.id ?? teams[0]?.id ?? "") } : {})}>
@@ -69,7 +69,7 @@ export function AppShell({
         {teams ? <TeamSwitcher teams={teams} variant="sidebar" /> : null}
         <nav className="nav" aria-label="Main">
           {scoped("/", "Meetings", "meetings")}
-          <NavLink href="/ask" label="Ask Beyric" current={current === "ask"} />
+          {scoped("/ask", "Ask Beyric", "ask")}
           {scoped("/tasks", "Tasks", "tasks", tasksNew ?? 0, "tasks_new")}
           {scoped("/projects", "Projects", "projects")}
           {scoped("/decisions", "Decisions", "decisions")}
@@ -79,7 +79,7 @@ export function AppShell({
           ) : (
             <NavLink href="/team" label="Team" current={current === "team"} />
           )}
-          <NavLink href="/notifications" label="Notifications" current={current === "notifications"} badge={unread ?? 0} badgeLabel="unread" />
+          {scoped("/notifications", "Notifications", "notifications", unread ?? 0, undefined, "unread")}
         </nav>
         <div className="nav-label">Configure</div>
         <nav className="nav" aria-label="Configure">

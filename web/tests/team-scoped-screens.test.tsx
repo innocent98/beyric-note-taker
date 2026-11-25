@@ -41,7 +41,7 @@ describe("the badge beside Tasks and Review", () => {
 
   it("is counted again for the tab's team on a page the server could not know it for (no ?team=)", async () => {
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":4");
-    at("/ask"); // Ask carries no ?team=: the server drew the default team's number
+    at("/meetings/3"); // a meeting carries no ?team=: the server drew the default team's number
     session.mockResolvedValue({ badges: { tasks_new: 2, review_open: 0 } });
     render(<TeamNavLink href="/tasks" label="Tasks" teams={teams} badge={41} live="tasks_new" />);
     await waitFor(() => expect(screen.getByRole("link").textContent).toContain("2"));
@@ -51,7 +51,7 @@ describe("the badge beside Tasks and Review", () => {
 
   it("keeps the server's number when the recount fails", async () => {
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":4");
-    at("/ask");
+    at("/meetings/3");
     session.mockRejectedValue(new Error("offline"));
     render(<TeamNavLink href="/tasks" label="Tasks" teams={teams} badge={5} live="tasks_new" />);
     await waitFor(() => expect(session).toHaveBeenCalled());
@@ -60,7 +60,7 @@ describe("the badge beside Tasks and Review", () => {
 
   it("a link with no badge (Projects) never recounts", () => {
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":4");
-    at("/ask");
+    at("/meetings/3");
     render(<TeamNavLink href="/projects" label="Projects" teams={teams} />);
     expect(session).not.toHaveBeenCalled();
   });

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Recipes", robots: { index: false, fo
 
 // The recipe library and the team brief of one team (`?team=`, else the default team).
 export default async function RecipesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { api } = await requireTeamOwner("/recipes", await searchParams);
+  const { api, teamId } = await requireTeamOwner("/recipes", await searchParams);
   const [recipes, brief] = await Promise.all([load(api.recipes.list()), load(api.brief.get())]);
   return (
     <AppShell
@@ -18,7 +18,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
       user={await getShellUser()}
       teams={await getShellTeams()}
     >
-      <RecipesView initial={recipes} brief={brief} />
+      <RecipesView key={teamId ?? "default"} initial={recipes} brief={brief} />
     </AppShell>
   );
 }

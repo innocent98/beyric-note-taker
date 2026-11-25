@@ -3,6 +3,13 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25: Documents, Recipes, Ask and Notifications follow the active workspace** (branch `fix/workspace-follows-documents-and-recipes`, SOP `docs/sop/2026-11-25-workspace-follows-documents-and-recipes.md`, walkthrough `docs/guides/recipes-and-documents-walkthrough.md`; web only, no migration; PR number below once open; **not merged: waits for his typed word**)
+- [x] Cause reproduced live: `TEAM_PAGES` lacked these pages, so sidebar links had no `?team=` and the server render read the default workspace while browser calls read the chosen one
+- [x] The four pages are team pages (`requireTeamOwner`, views keyed by workspace); `/documents/[id]` moves the tab to the draft's workspace; tests first, touched tests green
+- [x] Recipe list hint under the list (where My recipes and Team recipes appear); owner walkthrough with 10 live screenshots
+- [ ] CI green on the final head, then his typed "merge #N"
+- [ ] Suggestions left open: reorder the long recipe list, personal label for the brief box, check `/series/[id]` and the other views' state on "follow"
+
 **Addendum 2026-11-25: billing review M1 fixed** (branch `fix/billing-stale-payment-lock`, SOP `docs/sop/2026-11-25-billing-stale-payment-lock.md`; PR needs an Opus delta review before merge; no migration)
 - [x] Payment row locks in `settle.py` (webhook `_apply` and `settle_transaction`) read the row as it is now (`populate_existing`): a payment a webhook already settled is no longer re-granted, marked "needs refund", or overwritten by a `failed` report (3 tests, failing before the fix)
 - [x] Same one-line fix for the other Payment, Subscription and Refund locks without it (`refunds.py` x6, `invoices.py` x1)
