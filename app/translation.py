@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import openai
+from fastapi import HTTPException
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 from openai import OpenAI
@@ -555,6 +556,8 @@ def request_translation(
     answer 202. The feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) applies only to a NEW
     translation, after those two answers. Commits."""
     now = now or datetime.now(UTC)
+    if not visibility.in_meeting_workspace(session, user, meeting):
+        raise HTTPException(404, "No such meeting")  # its workspace's vocabulary is not theirs
     if language not in TARGETS:
         raise Refused(422, "language_unsupported", unsupported_message())
     if meeting.status != "ready" or not meeting.notes:

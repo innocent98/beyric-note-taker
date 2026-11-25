@@ -201,7 +201,8 @@ def _has_template(session: Session, join: ScheduledJoin) -> bool:
     template for the join's workspace (else that workspace's oldest), and it is the workspace's
     (what `placement._resolve` needs). A queued join naming a template of another workspace is
     still sendable: placement uses the workspace's default for it."""
-    return workspace_prefs.default_template_id(session, join.team_id, join.user_id) is not None
+    workspace_id = workspace_prefs.workspace_for(session, join.user_id, join.team_id)
+    return workspace_prefs.default_template_id(session, workspace_id, join.user_id) is not None
 
 
 def _event_title(session: Session, join: ScheduledJoin) -> str | None:
