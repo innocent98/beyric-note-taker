@@ -151,10 +151,9 @@ describe("the shell", () => {
       </AppShell>,
     );
     const hrefs = Array.from(container.querySelectorAll("aside a")).map((a) => a.getAttribute("href"));
-    for (const href of ["/?team=4", "/tasks?team=4", "/projects?team=4", "/decisions?team=4", "/review?team=4", "/settings?team=4"])
+    for (const href of ["/?team=4", "/tasks?team=4", "/projects?team=4", "/decisions?team=4", "/review?team=4", "/settings?team=4", "/ask?team=4", "/notifications?team=4", "/recipes?team=4", "/documents?team=4"])
       expect(hrefs).toContain(href);
     expect(hrefs).toContain("/teams"); // the Teams list is not one team's
-    expect(hrefs).toContain("/ask");
   });
 
   it("has ONE Teams entry (no separate Team link) while the switch is on, and the plain Team link while it is off", () => {
@@ -207,7 +206,7 @@ describe("keeping the tab's team in step", () => {
 
   it("does not touch a page that is not one team's", () => {
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":5");
-    at("/ask");
+    at("/meetings/3");
     render(<ActiveTeamSync teams={teams} />);
     expect(nav.replace).not.toHaveBeenCalled();
   });
