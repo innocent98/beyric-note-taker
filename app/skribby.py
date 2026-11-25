@@ -384,6 +384,22 @@ def _in_the_call(name: str, shown: dict[str, str], bot: set[str] = frozenset()) 
     return fits[0] if len(fits) == 1 else None
 
 
+def _extra_share(
+    reading: meet_timeline.Reading, taken: set[str], bot: set[str]
+) -> tuple[bool, bool]:
+    """`(refuse, note)`: the people with no tag, together. `taken` is the participants (Meet's
+    keys) the named tags stand for. Under `meet_timeline.MIN_EXTRA_SECONDS` altogether they are a
+    cough (neither); from there `note` is true, and `refuse` too when they hold
+    `meet_timeline.MAX_EXTRA_SHARE` or more of all the lit time (the note taker is no one's share).
+    One arithmetic for the one-to-one rule and for the timeline's candidate-only mode."""
+    extra = sum(
+        seconds for key, seconds in reading.lit.items() if key not in taken and key not in bot
+    )
+    everyone = sum(seconds for key, seconds in reading.lit.items() if key not in bot)
+    note = extra >= meet_timeline.MIN_EXTRA_SECONDS
+    return note and extra >= meet_timeline.MAX_EXTRA_SHARE * everyone, note
+
+
 def _one_to_one(
     given: dict[str, dict[str, str]],
     listed: dict[str, dict[str, str] | None],
@@ -467,18 +483,8 @@ def _one_to_one(
                 people[tag] = person
             if not reading.lit_known:
                 unchecked.add("extra_speaker")
-            extras = {
-                key: seconds
-                for key, seconds in reading.lit.items()
-                if key not in people.values() and key not in bot
-            }
-            # Everyone with no tag counts together: a few coughs are nothing, but a share of the lit
-            # time that adds up to `MAX_EXTRA_SHARE` is a voice the tags do not hold, however many
-            # people it is spread over. Under it, `MIN_EXTRA_SECONDS` altogether earns the note.
-            extra_seconds = sum(extras.values())
-            everyone = sum(seconds for key, seconds in reading.lit.items() if key not in bot)
-            small_extra = extra_seconds >= meet_timeline.MIN_EXTRA_SECONDS
-            if small_extra and extra_seconds >= meet_timeline.MAX_EXTRA_SHARE * everyone:
+            refuse, small_extra = _extra_share(reading, set(people.values()), bot)
+            if refuse:
                 return None, "extra_speaker", "", False
             if reading.refused in (None, "clock_shifted"):
                 for tag, person in people.items():
@@ -722,6 +728,7 @@ def _name_by_timeline(
     # spelling and the clock that a named tag gave, on the tag itself). `contradicted` still ends
     # it.
     candidate_only = gate == "uncorroborated"
+    pending: dict[str, str] = {}  # candidate-only: tag -> the participant Meet leads it with
     if gate and not candidate_only:
         for tag in open_tags:
             result[tag]["timeline"] = gate
@@ -752,8 +759,22 @@ def _name_by_timeline(
         if (picked and key != picked) or (candidates and key not in candidates):
             info["timeline"] = "disagrees"
             continue
+        if candidate_only:
+            pending[tag] = key
+            continue
         result[tag] = {"name": reading.shown[key], "how": "meet_timeline", "note": ""}
-    if not candidate_only:
+    if candidate_only:
+        # the same extra-share policy as the one-to-one rule: people the named tags do not hold,
+        # a tag left blank included, may not add up to `MAX_EXTRA_SHARE` of the lit time; a small
+        # share is named and says so (`extra_speaker_small`, so the transcript is marked incomplete)
+        refuse, small = _extra_share(reading, set(pending.values()), bot)
+        for tag, key in pending.items():
+            if refuse:
+                result[tag]["timeline"] = "extra_speaker"
+                continue
+            note = EXTRA_SPEAKER_SMALL if small else ""
+            result[tag] = {"name": reading.shown[key], "how": "meet_timeline", "note": note}
+    else:
         _name_by_exclusion(result, reading, bot, listed, chosen)
 
 

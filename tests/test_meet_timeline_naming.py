@@ -303,11 +303,14 @@ def test_a_clear_contradiction_still_stops_a_meeting_without_a_named_tag():
 
 
 def test_without_a_named_tag_a_leader_the_tag_does_not_list_is_not_a_name():
-    # Meet leads tag 0 with Ada, the tag lists Bo and Cy only: no support from Skribby at all
+    # Meet leads tag 0 with Ada, the tag lists Bo and Cy only: no support from Skribby at all.
+    # Tag 1 lists Di, whom Meet leads it with, but Ada's 200 s are a voice no named tag holds (57%
+    # of the lit time): the extra-share policy of the one-to-one rule keeps both blank
     table = {"0": ([200.0, 0, 0, 0, 0, 0], 220.0), "1": ([0, 0, 0, 150.0, 0, 0], 160.0)}
     items, spans = layout(table, {"0": [BO, CY], "1": [DI, EVE]}, {})
     after = resolve(items, events_record(spans))
-    assert names(after) == {"0": "", "1": DI}  # tag 1 lists Di, whom Meet leads it with
+    assert names(after) == {"0": "", "1": ""}
+    assert after["1"]["timeline"] == "extra_speaker"
 
 
 def test_a_tag_carrying_two_names_of_its_own_is_never_named_from_the_timeline():

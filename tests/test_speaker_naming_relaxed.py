@@ -348,3 +348,71 @@ def test_a_candidate_that_fits_nobody_in_the_call_is_not_in_the_call(listed):
     items, events = timeline_case(listed={"0": [listed], "1": [BO]})
     tags = resolve(items, events, timeline=False)
     assert tags["0"]["name"] == "" and tags["0"]["one_to_one"] == "not_in_call"
+
+
+# ---- the timeline's candidate-only mode keeps the extra-share policy (review of 1fa05301) ----
+
+
+def merged_tag_case(cy_seconds, *, partial=False):
+    """Tag 0 lists Ada and Cy (or, with `partial`, lists Ada on only two of its segments), Meet
+    leads it with Ada (200 s) and lights Cy `cy_seconds` over it; tag 1 lists Bo and is Bo's."""
+    table = {"0": ([200.0, 0.0, cy_seconds], 300.0), "1": ([2.0, 150.0, 0.0], 170.0)}
+    listed = {"0": [ADA] if partial else [ADA, CY], "1": [BO]}
+    items, events = timeline_case(table, listed=listed, people=(ADA, BO, CY))
+    if partial:
+        tag0 = [item for item in items if item["speaker"] == "0"]
+        assert len(tag0) >= 3
+        for item in tag0[:2]:
+            item["potential_speaker_names"] = []  # the name is on under 80% of the segments
+    return items, events
+
+
+@pytest.mark.parametrize("partial", [False, True])
+@pytest.mark.parametrize("timeline", [True, False])
+def test_a_large_extra_share_stays_blank_whatever_route_would_name_the_tags(timeline, partial):
+    # Cy lit 65 s of 417 (15.6%): the one-to-one shape does not fit (two names, or the name on
+    # under 80% of the segments), and the timeline's candidate-only mode must still refuse
+    items, events = merged_tag_case(65.0, partial=partial)
+    tags = resolve(items, events, timeline=timeline)
+    assert named(tags) == {"0": "", "1": ""}
+    assert not skribby.holds_other_speakers(tags)
+    out = skribby._segments({"transcript": items}, (BOT,), True, events, timeline, True)
+    assert {s["speaker"] for s in out} == {""}
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_a_small_extra_share_is_named_by_the_timeline_with_the_note(partial):
+    # Cy lit 20 s of 372 (5.4%): named from Meet and Skribby's candidates, marked incomplete
+    items, events = merged_tag_case(20.0, partial=partial)
+    tags = resolve(items, events, timeline=True)
+    assert named(tags) == {"0": ADA, "1": BO}
+    assert {t["how"] for t in tags.values()} == {"meet_timeline"}
+    assert {t["note"] for t in tags.values()} == {"extra_speaker_small"}
+    assert skribby.holds_other_speakers(tags)
+    assert not transcript_source.candidate(
+        [{"speaker": ADA, "text": "some placeholder words here"}] * 4, None, True
+    ).complete
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_with_the_timeline_off_the_same_meeting_stays_blank(partial):
+    items, events = merged_tag_case(20.0, partial=partial)
+    assert named(resolve(items, events, timeline=False)) == {"0": "", "1": ""}
+
+
+def test_a_small_extra_share_by_the_timeline_lets_the_correction_move_that_persons_lines():
+    items, events = merged_tag_case(20.0)
+    tags = resolve(items, events, timeline=True)
+    placed = speaker_correction.place(events, (BOT,)).people
+    assert speaker_correction.extra_names(tags, placed) == [CY]
+
+
+def test_without_a_named_tag_the_extra_share_counts_a_tag_left_blank_too():
+    # Meet leads tag 1 with Cy, whom its candidates [Di, Eve] do not list: it stays blank, and Cy's
+    # lit time is an extra voice (65 of 267 s), so tag 0 is not named either
+    table = {"0": ([200.0, 0.0, 0.0, 0.0], 220.0), "1": ([2.0, 0.0, 65.0, 0.0], 100.0)}
+    items, events = timeline_case(
+        table, listed={"0": [ADA, BO], "1": [DI, EVE]}, people=(ADA, BO, CY, DI)
+    )
+    tags = resolve(items, events, timeline=True)
+    assert named(tags) == {"0": "", "1": ""}
