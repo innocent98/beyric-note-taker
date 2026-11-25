@@ -519,7 +519,9 @@ def _prefs_workspace(session: Session, user: User, conn) -> int:
     """The workspace whose settings the calendar screen shows and changes: the connection's, else
     the person's default one."""
     if conn is not None:
-        return conn.team_id
+        mine = workspace_prefs.workspace_for(session, user.id, conn.team_id)
+        if mine == conn.team_id:  # still a member of it
+            return mine
     return workspace_context.require(session, user, None).id
 
 
@@ -729,7 +731,7 @@ def calendar_event_override(
         ).first()
     if row is None:
         raise StarletteHTTPException(404, "No such event")
-    prefs = workspace_prefs.for_user(session, user.id, conn.team_id)
+    prefs = workspace_prefs.for_user(session, user.id, _prefs_workspace(session, user, conn))
     join_settings = _join_settings(prefs, request)
     now = _now()
     # With the switch on, only what the event itself is can still say no: that is "not joinable".

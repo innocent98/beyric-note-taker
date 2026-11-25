@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import teams
 from app.models import (
     Meeting,
     Team,
@@ -131,10 +132,24 @@ def terms(session: Session, team_id: int) -> list[str]:
     )
 
 
+def workspace_for(session: Session, user_id: int, team_id: int) -> int:
+    """The workspace to act in for this person when a row names `team_id` (a calendar connection, a
+    scheduled join): that workspace while they are a CURRENT member of it, else their personal one.
+    A person who left a workspace never has its templates, vocabulary or settings read on their
+    behalf through an old row."""
+    if teams.membership(session, user_id, team_id) is not None:
+        return team_id
+    user = session.get(User, user_id)
+    return teams.ensure_personal_team(session, user).id
+
+
 def default_template_id(session: Session, team_id: int, user_id: int | None = None) -> int | None:
     """The template notes are written with when nothing else was chosen in this workspace: the
     person's own choice for their calendar's meetings there (when they have one and it is still a
-    live template of the workspace), else the workspace's oldest live template."""
+    live template of the workspace), else the workspace's oldest live template. For a person who is
+    not a member of the workspace: none (nothing of it is used on their behalf)."""
+    if user_id is not None and teams.membership(session, user_id, team_id) is None:
+        return None
     if user_id is not None:
         chosen = for_user(session, user_id, team_id).calendar_template_id
         if chosen is not None:
