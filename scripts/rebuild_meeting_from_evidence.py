@@ -547,6 +547,10 @@ def describe(session: Session, plan: Plan) -> list[str]:
         info = plan.tags[tag]
         named = "named" if info.get("name") else "NOT named"
         why = info.get("how", "?") + (f", {info['note']}" if info.get("note") else "")
+        if info.get("one_to_one"):
+            why += f", one-to-one naming refused: {info['one_to_one']}"
+        if info.get("unchecked"):
+            why += f", Meet checks not run: {info['unchecked']}"
         if info.get("timeline"):
             why += f", timeline: {info['timeline']}"
         lines.append(f"  tag {tag}: {plan.tag_segments.get(tag, 0)} segments, {named} [{why}]")

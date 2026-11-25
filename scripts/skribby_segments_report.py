@@ -12,8 +12,10 @@ How to read it: each block is one diarization tag ("speaker" in Skribby's answer
 the name the app gave the tag and why: `given` (Skribby named it on its own segments),
 `elimination` (taken from `potential_speaker_names` by ruling out the others; a name an earlier
 tag was given by elimination counts as taken, so it can run down a chain), `sole_candidate`
-(every segment of the tag listed one and the same name, nobody else has it), both only while
-SKRIBBY_NAME_BY_ELIMINATION is on, `meet_timeline` or `meet_exclusion` (see the last section), or
+(every segment of the tag listed one and the same name, nobody else has it), `one_to_one` (a
+meeting where Skribby named no tag: every tag listed one name on every segment, all different,
+and Meet's participant list agrees), all three only while SKRIBBY_NAME_BY_ELIMINATION is on,
+`meet_timeline` or `meet_exclusion` (see the last section), or
 `unknown` (with the reason). Under it, every segment of that
 tag: time, the `speaker_name` Skribby put on that segment, the names it listed as possible, and
 the text. If the names Skribby gave are wrong, the fault is Skribby's; if they are right and the
@@ -27,8 +29,9 @@ transcript's clock from the moment the bot's status became `recording`, which is
 recording's own start. If the two clocks look out of step the section says by how much, and
 `--offset SECONDS` re-runs it with the Meet times shifted. Without events, or with events in a
 shape it cannot read, it says so in one line. A final section says which unnamed tags today's
-naming rules would name (and by which route: `elimination`, `meet_timeline` or `meet_exclusion`),
-and why not for the others. It reads the saved evidence again and changes nothing.
+naming rules would name (and by which route: `elimination`, `one_to_one`, `meet_timeline` or
+`meet_exclusion`), and why not for the others. It reads the saved evidence again and changes
+nothing.
 """
 
 import argparse
@@ -144,7 +147,8 @@ def naming_section(
     items, tags and events at offset 0 (the rule never uses `--offset`: a shifted clock is a reason
     to name nothing): the chained elimination, then the timeline rule (`NAME_BY_MEET_TIMELINE`,
     `app/skribby.py::_name_by_timeline`), then exclusion against Meet's participant list
-    (`meet_exclusion`). Each tag it would name prints the route in brackets. Read-only: nothing is
+    (`meet_exclusion`); `one_to_one` comes first, on the earlier rules' own pass. Each tag it would
+    name prints the route in brackets. Read-only: nothing is
     saved, so a meeting saved before a rule existed shows what the rule would have done, and the
     meeting itself stays as it was."""
     head = ["", "== What naming from Meet's timeline would do to the unnamed tags =="]
@@ -168,6 +172,8 @@ def naming_section(
             out.append(f"  tag {tag}: would be named {after[tag]['name']} [{after[tag]['how']}]")
         else:
             why = after[tag].get("timeline") or "no reason"
+            if after[tag].get("one_to_one"):
+                why += f"; one-to-one naming refused: {after[tag]['one_to_one']}"
             if after[tag].get("exclusion"):
                 why += f"; by exclusion: {after[tag]['exclusion']}"
             out.append(f"  tag {tag}: stays unknown ({why})")
@@ -202,8 +208,14 @@ def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
         note = info.get("note")
         would_be = info.get("would_be")
         why = f", {note}" if note else ""
+        if info.get("one_to_one"):
+            why += f", one-to-one naming refused: {info['one_to_one']}"
+        if info.get("unchecked"):
+            why += f", Meet checks not run: {info['unchecked']}"
         if would_be:
-            why += f" (naming by elimination or sole candidate would have said: {would_be})"
+            why += (
+                f" (elimination, sole candidate or one-to-one naming would have said: {would_be})"
+            )
         lines += ["", f"== tag {tag}: {name} [{how}{why}] - {len(by_tag[tag])} segments =="]
         for item in by_tag[tag]:
             given = item.get("speaker_name") or "-"

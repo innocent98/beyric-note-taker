@@ -324,3 +324,11 @@ Skribby's own name stops; the evidence still records `would_be`.
 A name that elimination or the sole-candidate rule gave to exactly one tag now counts as held by that tag when the other
 tags are resolved, in rounds until nothing changes; a name from round 2 on is given only on Meet's positive evidence (usable events, agreeing with the names given, the person leading the tag 1.5x) (`docs/sop/2026-11-23-speaker-name-chain.md`). A name two tags would
 claim in any round goes to neither and is never held. The sole-candidate conditions in this SOP are unchanged.
+
+## Update 2026-11-25: a meeting where Skribby named no tag
+
+The "at least one other tag Skribby named" condition above is unchanged for this rule. A meeting where Skribby named
+**no** tag, every tag listing one different name on every segment (meeting 46), is now named by its own route,
+`how: one_to_one` (`docs/sop/2026-11-25-speaker-naming-one-to-one.md`), which asks for the same sole-candidate evidence
+of every tag plus Meet's participant list. The older test "two unnamed tags with a sole candidate each stay unnamed" now
+covers two tags that share their candidate; two different candidates are named `one_to_one`.

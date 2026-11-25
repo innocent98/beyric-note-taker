@@ -2298,7 +2298,7 @@ class SkribbySegmentEvidence(Base):
     (our own copy of Skribby's is deleted minutes after the meeting). `items` is each transcript
     item as it came (tag, `speaker_name`, the names in `potential_speaker_names`, start, end,
     text); `tags` the name the app derived for each tag and why (given, elimination, sole_candidate,
-    unknown).
+    one_to_one, meet_timeline, meet_exclusion, unknown).
     It holds the words people said: never logged, never in an API answer or a page. Deleted by the
     retention job after 7 days, with the meeting (`ON DELETE CASCADE`) and with the account."""
 

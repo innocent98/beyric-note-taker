@@ -49,6 +49,12 @@ MIN_EXCLUSION_TAG_SECONDS = 90.0
 # line for naming a tag from Meet alone and which would have refused that meeting. Chosen from
 # that one case and the over-split signature (near ties), not measured further.
 EXCLUSION_RATIO = 1.5
+# One-to-one naming (`app/skribby.py::_one_to_one`): a participant in the call who was lit for at
+# least this long and has no tag of their own is a voice the model merged into someone else's tag
+# (meeting 32's third person spoke about 30 s inside another's tag), so it vetoes the naming. Far
+# under `MIN_SECONDS`: this is a veto (it refuses to name), not a naming (it risks a wrong name).
+# A cough or one "mm-hm" is a few seconds; ten is a sentence or two.
+MIN_EXTRA_SECONDS = 10.0
 # How far either way the clock fit looks (seconds), and how much better a shift must be (a share)
 # before the Meet clock is called out of step with the transcript's.
 SEARCH_SECONDS = 30
@@ -116,7 +122,8 @@ def speaking_intervals(
             continue
         events = [e for e in person.get("events") or [] if isinstance(e, dict)]
         stamped = sorted(
-            (t, e.get("type")) for e in events if (t := seconds(e.get("timestamp"))) is not None
+            ((t, e.get("type")) for e in events if (t := seconds(e.get("timestamp"))) is not None),
+            key=lambda pair: pair[0],  # by time only: a missing or odd `type` is never compared
         )
         named.setdefault(key, (shown, []))[1].extend(stamped)
     if not named:
@@ -124,7 +131,7 @@ def speaking_intervals(
     result: dict[str, list[tuple[float, float]]] = {}
     for shown, stamped in named.values():
         opened, spans = None, []
-        for t, kind in sorted(stamped):
+        for t, kind in sorted(stamped, key=lambda pair: pair[0]):
             if kind == "started-speaking" and opened is None:
                 opened = t
             elif kind in ("stopped-speaking", "left") and opened is not None:
@@ -193,6 +200,15 @@ class Reading:
     cells: dict = field(default_factory=dict)
     totals: dict = field(default_factory=dict)  # tag -> seconds its segments cover
     shown: dict[str, str] = field(default_factory=dict)
+    # key -> seconds that participant was lit in all (clock-free: it needs no placing on the
+    # transcript's clock, so it is filled even when the clock is refused)
+    lit: dict[str, float] = field(default_factory=dict)
+    # False when nobody has a usable speaking interval (the names are known, `lit` says nothing:
+    # `events_dropped`): a person absent from `lit` was not seen silent, only unseen
+    lit_known: bool = True
+    # `cells` read again with Meet's times moved by the shift that fits best, set only when the
+    # clock is refused as `clock_shifted` (`cells` is then the zero-shift reading)
+    shifted_cells: dict = field(default_factory=dict)
     refused: str | None = None
 
 
@@ -204,29 +220,45 @@ def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
     segment) or `clock_shifted` (a shift of up to 30 s would fit clearly better, so the Meet clock
     is not trusted at zero)."""
     spans = speaking_intervals(record, group) if record else None
-    if not spans or not any(spans.values()):
-        # Nothing kept, or participants with no usable speaking interval at all (the size cap's
-        # `events_dropped` keeps the names and empties every list; some platforms may send names
-        # only): no evidence, the same as no events.
+    if not spans:
         return Reading(refused="no_events")
-    zero, _ = anchor(record, spans)
-    if zero is None:
-        return Reading(refused="clock_unplaced")
-    spans = {n: merge([(a - zero, b - zero) for a, b in v]) for n, v in spans.items()}
-    heard = heard_by_tag(items, tag_of)
-    if not heard:
-        return Reading(refused="no_times")
     # `spans` is keyed by the shown name; keys are the same strings here by construction of `group`
     # below, so the cells are keyed by the comparison key.
     keys = {shown: group(shown)[0] for shown in spans}
-    cells = {
-        tag: {keys[n]: sum(overlap(spans[n], a, b) for a, b in merge(intervals)) for n in spans}
-        for tag, intervals in heard.items()
+    people = {
+        "shown": {keys[n]: n for n in spans},  # everyone in the participant list, lit or not
+        "lit": {keys[n]: sum(b - a for a, b in v) for n, v in spans.items()},
     }
+    if not any(spans.values()):
+        # Participants with no usable speaking interval at all (the size cap's `events_dropped`
+        # keeps the names and empties every list; some platforms may send names only): no timeline,
+        # the same as no events. The names are still the call's participant list.
+        return Reading(refused="no_events", lit_known=False, **people)
+    zero, _ = anchor(record, spans)
+    if zero is None:
+        return Reading(refused="clock_unplaced", **people)
+    spans = {n: merge([(a - zero, b - zero) for a, b in v]) for n, v in spans.items()}
+    heard = heard_by_tag(items, tag_of)
+    if not heard:
+        return Reading(refused="no_times", **people)
+
+    def cells_at(shift: float = 0.0) -> dict:
+        """Overlaps if Meet's times were moved `shift` seconds later (as `clock_fit` moves them)."""
+        return {
+            tag: {
+                keys[n]: sum(overlap(spans[n], a - shift, b - shift) for a, b in merge(intervals))
+                for n in spans
+            }
+            for tag, intervals in heard.items()
+        }
+
+    cells = cells_at()
     totals = {tag: sum(b - a for a, b in merge(intervals)) for tag, intervals in heard.items()}
-    reading = Reading(cells=cells, totals=totals, shown={keys[n]: n for n in spans})
-    if not clock_is_fine(*clock_fit(spans, heard)):
+    reading = Reading(cells=cells, totals=totals, **people)
+    best, here, there = clock_fit(spans, heard)
+    if not clock_is_fine(best, here, there):
         reading.refused = "clock_shifted"
+        reading.shifted_cells = cells_at(best)
     return reading
 
 
