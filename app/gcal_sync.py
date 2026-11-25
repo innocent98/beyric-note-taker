@@ -34,7 +34,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import calendar_providers, calendar_states
+from app import calendar_providers, calendar_states, workspace_prefs
 from app.bot_provider import BotProvider, build_provider
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
 from app.config import Settings, get_settings
@@ -49,7 +49,6 @@ from app.models import (
     ScheduledJoin,
     Template,
     User,
-    UserSettings,
 )
 from app.services import Refused, cancel_meeting
 
@@ -137,12 +136,15 @@ def _fits(event: ParsedEvent) -> bool:
     )
 
 
-def _own_template(session: Session, user_id: int, template_id: int | None) -> int | None:
-    """The template to record with, only if it is the user's own."""
+def _own_template(session: Session, team_id: int, template_id: int | None) -> int | None:
+    """The template to record with, only if it belongs to the workspace the meetings are for (a
+    template belongs to its workspace, whoever wrote it)."""
     if template_id is None:
         return None
-    owner = session.scalar(select(Template.owner_user_id).where(Template.id == template_id))
-    return template_id if owner == user_id else None
+    found = session.scalar(
+        select(Template.id).where(Template.id == template_id, Template.team_id == team_id)
+    )
+    return template_id if found is not None else None
 
 
 def _parse_all(batch: SyncBatch, conn: CalendarConnection, result: ApplyResult):
@@ -194,7 +196,7 @@ def apply_batch(
         join_settings=JoinSettings.for_user(
             user_settings, teams_join_enabled=settings.teams_join_enabled
         ),
-        template_id=_own_template(session, conn.user_id, user_settings.calendar_template_id),
+        template_id=_own_template(session, conn.team_id, user_settings.calendar_template_id),
     )
     latest, named = _parse_all(batch, conn, run.result)
 
@@ -248,7 +250,7 @@ def rerun_rules(
         join_settings=JoinSettings.for_user(
             user_settings, teams_join_enabled=settings.teams_join_enabled
         ),
-        template_id=_own_template(session, conn.user_id, user_settings.calendar_template_id),
+        template_id=_own_template(session, conn.team_id, user_settings.calendar_template_id),
     )
     owned = [e for e in events if e.user_id == conn.user_id and e.connection_id == conn.id]
     joins = _joins_by_event_id(session, conn.user_id, [e.id for e in owned])
@@ -259,16 +261,23 @@ def rerun_rules(
 
 
 def set_join_template(
-    session: Session, user_id: int, template_id: int | None, *, commit: bool = True
+    session: Session,
+    user_id: int,
+    template_id: int | None,
+    *,
+    team_id: int,
+    commit: bool = True,
 ) -> int:
-    """Record `template_id` (the person's own, else none) on their calendar joins that have not
-    sent a bot yet, so a change of the template for calendar meetings reaches meetings already
-    planned. A join whose bot is in keeps the template it was sent with. Returns how many."""
-    own = _own_template(session, user_id, template_id)
+    """Record `template_id` (a template of workspace `team_id`, else none) on the person's calendar
+    joins IN THAT WORKSPACE that have not sent a bot yet, so a change of the template for calendar
+    meetings reaches meetings already planned. A join whose bot is in keeps the template it was
+    sent with, and a join in another workspace is not touched. Returns how many."""
+    own = _own_template(session, team_id, template_id)
     result = session.execute(
         update(ScheduledJoin)
         .where(
             ScheduledJoin.user_id == user_id,
+            ScheduledJoin.team_id == team_id,
             ScheduledJoin.source == "calendar",
             ScheduledJoin.state.in_(MOVABLE),
         )
@@ -555,7 +564,7 @@ def sync_connection(
     in `last_error` and the next attempt starts from the same state."""
     if conn.status not in SYNCABLE:
         return
-    user_settings = session.get(UserSettings, conn.user_id) or DEFAULT_USER_SETTINGS
+    user_settings = workspace_prefs.for_user(session, conn.user_id, conn.team_id)
     try:
         batch = _fetch(source, conn, now)
         apply_batch(

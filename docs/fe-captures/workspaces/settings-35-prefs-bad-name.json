@@ -1,0 +1,25 @@
+{
+  "note": "A name with a web address: 422 `bot_name_invalid`.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/workspace-prefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "bot_name": "see https://example.test"
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "bot_name_invalid",
+        "message": "Don't put a web address in the name."
+      }
+    }
+  }
+}

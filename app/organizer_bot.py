@@ -40,11 +40,10 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import placement
+from app import placement, workspace_prefs
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
-from app.gcal_sync import DEFAULT_USER_SETTINGS
-from app.models import CalendarEvent, ScheduledJoin, User, UserSettings
+from app.models import CalendarEvent, ScheduledJoin, User
 
 logger = logging.getLogger("app.organizer_bot")
 
@@ -125,7 +124,7 @@ def _can_place(
         return False
     if not connection_ok(other):
         return False
-    prefs = session.get(UserSettings, other.user_id) or DEFAULT_USER_SETTINGS
+    prefs = workspace_prefs.for_user(session, other.user_id, other.team_id)
     decision = will_join(
         event,
         event.override,

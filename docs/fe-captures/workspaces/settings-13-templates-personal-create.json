@@ -1,0 +1,25 @@
+{
+  "note": "In their own personal workspace a person writes freely.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Pat only",
+      "instructions": "Short notes."
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 18,
+      "name": "Pat only",
+      "instructions": "Short notes."
+    }
+  }
+}

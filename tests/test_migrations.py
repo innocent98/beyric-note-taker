@@ -573,8 +573,9 @@ def test_template_soft_delete_frees_the_name_and_downgrades_cleanly(scratch_url)
         # "General" is seeded live for the owner: a deleted row may share its name, a live may not
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions, deleted_at)"
-                " values (:o, 'General', 'old', now())"
+                "insert into templates (owner_user_id, team_id, name, instructions, deleted_at)"
+                " select owner_user_id, team_id, 'General', 'old', now() from templates"
+                " where owner_user_id = :o and name = 'General' and deleted_at is null"
             ),
             {"o": owner},
         )
@@ -632,16 +633,16 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
         user = conn.execute(
             text("insert into users (email) values ('m@example.test') returning id")
         ).scalar()
-        template = conn.execute(
-            text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "values (:u, 'T', 'x') returning id"
-            ),
-            {"u": user},
-        ).scalar()
         workspace = conn.execute(
             text("insert into teams (owner_user_id, is_personal) values (:u, true) returning id"),
             {"u": user},
+        ).scalar()
+        template = conn.execute(
+            text(
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "values (:u, :t, 'T', 'x') returning id"
+            ),
+            {"u": user, "t": workspace},
         ).scalar()
         meeting = conn.execute(
             text(

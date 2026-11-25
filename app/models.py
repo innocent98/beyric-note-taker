@@ -391,17 +391,17 @@ class MailSuppression(Base):
 
 
 class Template(Base):
-    """A person's notes template. Deleting one only marks it (`deleted_at`): meetings keep the id
-    of the template their notes were written with, so the row must stay. A marked row is never
-    listed, chosen or counted; its name may be used again (the unique index is over live rows)."""
+    """A workspace's notes template. `owner_user_id` is who made it, `team_id` the workspace it
+    belongs to: the workspace's owners and admins edit it, every member reads and uses it. Deleting
+    one only marks it (`deleted_at`): meetings keep the id of the template their notes were written
+    with, so the row must stay. A marked row is never listed, chosen or counted; its name may be
+    used again (the unique index is over a workspace's live rows)."""
 
     __tablename__ = "templates"
     __table_args__ = (
         Index(
-            "uq_templates_owner_team_name",
-            "owner_user_id",
-            # team_id may be null until W2; two nulls must still clash (coalesce)
-            sa.text("coalesce(team_id, 0)"),
+            "uq_templates_team_name",
+            "team_id",
             "name",
             unique=True,
             postgresql_where=sa.text("deleted_at is null"),
@@ -411,9 +411,8 @@ class Template(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     # The workspace the template belongs to (workspaces design, section 3). `owner_user_id` is who
-    # made it. Until the per-workspace template routes land (slice W2, which also makes the column
-    # NOT NULL), a new row is in its owner's personal workspace and the column may be null.
-    team_id: Mapped[int | None] = mapped_column(
+    # made it. A row made with no workspace named is in its author's personal workspace.
+    team_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("teams.id", ondelete="CASCADE"),
         index=True,
@@ -426,13 +425,12 @@ class Template(Base):
 
 class VocabularyTerm(Base):
     __tablename__ = "vocabulary_terms"
-    __table_args__ = (
-        UniqueConstraint("owner_user_id", "team_id", "term", name="uq_vocabulary_owner_team_term"),
-    )
+    __table_args__ = (UniqueConstraint("team_id", "term", name="uq_vocabulary_team_term"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    # The workspace the term belongs to; see `Template.team_id`.
+    # The workspace the term belongs to: its owners and admins edit the list, members read it, and
+    # every meeting filed in the workspace uses it. See `Template.team_id`.
     team_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("teams.id", ondelete="CASCADE"),
@@ -984,6 +982,10 @@ class Meeting(Base):
     shared_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )
+    # The recorder pressed "keep private" on a meeting born shared in a team workspace (decision D4,
+    # `meeting_teams.unshare`): nothing may share it again by default (`teams.apply_share_default`),
+    # only the recorder's own "share" (which clears this). Never read for who may see a meeting.
+    kept_private: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
     # one it is merely shared with (`ck_meetings_team_xor`: never both). Null unless moved
     # (`app/meeting_teams.py`). The read and write rules are in `app/visibility.py`.

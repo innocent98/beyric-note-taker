@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app import auth, services
+from app import auth, services, workspace_context
 from app.db import get_session
 from app.models import User
 from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS, is_join_failure
@@ -28,6 +28,13 @@ from app.services import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _workspace(session: Session, user: User):
+    """The server-rendered pages know no workspace switch: they act on the person's default one."""
+    return workspace_context.require(session, user, None)
+
+
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 templates.env.filters["markdown"] = render_markdown
@@ -87,7 +94,7 @@ def _index(request, session: Session, user: User, status_code=200, **context):
         "index.html",
         status_code,
         meetings=services.list_meetings(session, user),
-        templates=services.list_templates(session, user),
+        templates=services.list_templates(session, _workspace(session, user)),
         worker_stale=services.worker_is_stale(session),
         **context,
     )
@@ -148,7 +155,7 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
         "meeting.html",
         status_code,
         meeting=meeting,
-        templates=services.list_templates(session, request.state.user),
+        templates=services.list_templates(session, _workspace(session, request.state.user)),
         worker_stale=meeting.status in services.ACTIVE and services.worker_is_stale(session),
         can_end=services.can_end(meeting),
         can_cancel=services.can_cancel(meeting),
@@ -244,14 +251,16 @@ def _templates_page(request, session: Session, user: User, status_code=200, **co
         request,
         "templates.html",
         status_code,
-        rows=services.list_templates(session, user),
+        rows=services.list_templates(session, _workspace(session, user)),
         **context,
     )
 
 
 def _save_template(request, session: Session, user: User, template, name, instructions):
     try:
-        services.save_template(session, user, template, name, instructions)
+        services.save_template(
+            session, user, _workspace(session, user), template, name, instructions
+        )
     except Refused as exc:
         return _templates_page(request, session, user, exc.status, error=exc.message)
     return see_other("/templates")
@@ -286,7 +295,7 @@ def edit_template(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ):
-    template = template_or_404(session, user, template_id)
+    template = template_or_404(session, _workspace(session, user), template_id)
     return _save_template(request, session, user, template, name, instructions)
 
 
@@ -298,7 +307,7 @@ def _vocabulary_page(request, session: Session, user: User, status_code=200, **c
         request,
         "vocabulary.html",
         status_code,
-        rows=services.list_terms(session, user),
+        rows=services.list_terms(session, _workspace(session, user)),
         **context,
     )
 
@@ -320,7 +329,7 @@ def add_term(
     user: User = Depends(auth.current_user),
 ):
     try:
-        services.add_term(session, user, term)
+        services.add_term(session, user, _workspace(session, user), term)
     except Refused as exc:
         return _vocabulary_page(
             request, session, user, exc.status, error=exc.message, term=term.strip()
@@ -334,5 +343,5 @@ def delete_term(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ):
-    services.delete_term(session, user, term_id)
+    services.delete_term(session, user, _workspace(session, user), term_id)
     return see_other("/vocabulary")

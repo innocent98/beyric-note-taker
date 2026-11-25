@@ -99,6 +99,7 @@ def share(session: Session, user: User, meeting: Meeting, team_id: int | None) -
     else:
         team = _member_team(session, user, team_id)
     meeting.shared_team_id = meeting.workspace_team_id = team.id
+    meeting.kept_private = False
     _touched(session, meeting, user)
 
 
@@ -108,6 +109,7 @@ def unshare(session: Session, meeting: Meeting) -> None:
     if meeting.owner_team_id is not None:
         raise _team_owned()
     meeting.shared_team_id = None
+    meeting.kept_private = True  # nothing re-shares it by default (D4)
     _touched(session, meeting, series_rules.SYSTEM)
 
 
