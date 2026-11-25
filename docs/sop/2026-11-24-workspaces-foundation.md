@@ -1,6 +1,6 @@
 # SOP: Workspaces foundation (slice W1)
 
-**What shipped (PR A, Tasks 1 to 3; Task 4 web follows in PR B).** A team becomes the container of everything. Every meeting, notification, template, vocabulary term, calendar connection and scheduled join now carries its workspace (a team); the active workspace is **required context on every route** (the `X-Team-Id` header, else the personal workspace, never "no narrowing"); lists, counts, badges, Ask and the bell narrow by it through one function. The multi-team switch is removed (it was on in production already). Branch `feature/workspaces-foundation`, base `feature/workspaces`. Migration `0062` (placeholder number; the lead renumbers).
+**What shipped (PR A, Tasks 1 to 3; Task 4 web follows in PR B).** A team becomes the container of everything. Every meeting, notification, template, vocabulary term, calendar connection and scheduled join now carries its workspace (a team); the active workspace is **required context on every route** (the `X-Team-Id` header, else the personal workspace, never "no narrowing"); lists, counts, badges, Ask and the bell narrow by it through one function. The multi-team switch is removed (it was on in production already). Branch `feature/workspaces-foundation`, base `feature/workspaces`. Migration `0062`, chained on the recipes release's `0061` in the final integration.
 
 Spec: `docs/superpowers/specs/2026-11-24-workspaces-design.md` (sections 3, 4, 8, 12). Plan: `docs/superpowers/plans/2026-11-24-workspaces.md`.
 
