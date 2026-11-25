@@ -55,6 +55,16 @@ EXCLUSION_RATIO = 1.5
 # under `MIN_SECONDS`: this is a veto (it refuses to name), not a naming (it risks a wrong name).
 # A cough or one "mm-hm" is a few seconds; ten is a sentence or two.
 MIN_EXTRA_SECONDS = 10.0
+# ...but a few such people lit for a small share of ALL the lit time do not stop the naming: the
+# tags are named, the transcript says it may hold another person (`extra_speaker_small`), and the
+# line correction may move that person's lines to them
+# (docs/sop/2026-11-25-speaker-naming-relaxed.md).
+# Meeting 46: the third person was lit 34.1 s of 957.1 s (3.6%); meeting 39's wrong lines inside a
+# tag were about 4% (`app/speaker_correction.py`); a third voice of meeting 32 was about 30 s of
+# a 46-minute call (its share of the lit time is not in the repository). 10% is far above those and
+# far under a real third speaker (a meeting of three that is shared evenly lights each for 33%;
+# a guest who says a fifth of what the others do is 17%).
+MAX_EXTRA_SHARE = 0.10
 # How far either way the clock fit looks (seconds), and how much better a shift must be (a share)
 # before the Meet clock is called out of step with the transcript's.
 SEARCH_SECONDS = 30

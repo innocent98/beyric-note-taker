@@ -71,6 +71,9 @@ class Candidate:
     unnamed_segments: int  # of those, the ones with no (usable) speaker name
     named: bool  # at least one named speaker: the text carries "[Name]:" turns
     unnamed_words: int = 0  # the words of the unnamed segments
+    # The naming said another person, with no tag of their own, spoke a little in this meeting
+    # (`how: one_to_one`, `note: extra_speaker_small`): lines may sit under a wrong name.
+    other_speakers: bool = False
     distinct_words: int = 0  # different words (case and punctuation ignored)
     last_end: float | None = None  # seconds into the recording where the last segment ends; None
     # means the provider gave no segment times at all (a fallback reason), not how far it reaches
@@ -82,13 +85,21 @@ class Candidate:
         only "someone is named", which stayed true for a meeting where most of the speech was
         unattributed: a bug against the flag's own meaning, "some part of the transcript could not
         be given speaker names".)"""
-        return self.named and self.unnamed_words < MAX_UNNAMED_SHARE * self.words
+        return (
+            self.named
+            and not self.other_speakers
+            and self.unnamed_words < MAX_UNNAMED_SHARE * self.words
+        )
 
 
-def candidate(segments: list[dict], last_end: float | None = None) -> Candidate | None:
+def candidate(
+    segments: list[dict], last_end: float | None = None, other_speakers: bool = False
+) -> Candidate | None:
     """Build the transcript from Skribby's segments (`{"speaker", "text"}`), or None when there is
     no text at all. `last_end` is where the last segment ends (seconds into the recording), as the
     provider reports it; when not given, the latest numeric `end` among the segments is used.
+    `other_speakers` is true when the naming said someone with no tag spoke a little
+    (`skribby.holds_other_speakers`): the labelling is then not complete, whatever is named.
 
     A turn is `[Name]: text`, one per line; consecutive segments of one speaker are merged into one
     turn. A segment with no usable name is `[Unknown speaker]`, as `label_transcript` writes it.
@@ -131,6 +142,7 @@ def candidate(segments: list[dict], last_end: float | None = None) -> Candidate 
         unnamed_segments=unnamed,
         unnamed_words=unnamed_words,
         named=bool(named),
+        other_speakers=other_speakers,
         distinct_words=len(set(_words(" ".join(spoken for _, spoken in turns)))),
         last_end=last_end if last_end is not None else (max(ends) if ends else None),
     )
