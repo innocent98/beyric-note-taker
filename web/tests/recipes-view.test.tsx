@@ -37,75 +37,131 @@ beforeEach(() => Object.values(mocks).forEach((fn) => fn.mockReset()));
 afterEach(cleanup);
 
 const pick = (name: RegExp | string) => userEvent.click(screen.getByRole("button", { name }));
-const form = () => screen.getByRole("form", { name: "Recipe" });
+const form = () => screen.queryByRole("form", { name: "Recipe" }) ?? screen.getByRole("region", { name: "Recipe" });
 
-describe("the list", () => {
-  it("draws the starters under General and School, then the team's recipes and the person's own", () => {
-    render(<RecipesView initial={withOwn(asMember, personal)} brief={memberBrief} />);
-    const heads = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
-    expect(heads).toEqual(["General", "School", "Team recipes", "My recipes"]);
-    const list = screen.getByRole("region", { name: "Recipes" });
-    for (const name of ["Follow-up email", "Proposal", "Study guide", "Class FAQ", "House proposal", "Admin recipe", "Weekly note"]) {
-      expect(within(list).getByRole("button", { name: new RegExp(name) })).toBeTruthy();
-    }
-  });
+const showStarters = () => userEvent.click(screen.getByRole("button", { name: /^Show the \d+ ready-made recipes/ }));
+const list = () => screen.getByRole("region", { name: "Recipes" });
 
-  it("leaves out a group that has nothing in it", () => {
+describe("the page", () => {
+  it("says in one line what a recipe is", () => {
     render(<RecipesView initial={owner} brief={brief} />);
-    expect(screen.queryByRole("heading", { name: "My recipes" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Team recipes" })).toBeNull();
+    expect(screen.getByText("A recipe tells Beyric what to write from a meeting. Pick one, or make your own.")).toBeTruthy();
   });
 
-  it("says where the empty groups will appear, so the person knows they are not missing", () => {
-    // A team the person manages that has no recipe of its own, and none of the person's own (the capture's team
-    // is the personal space, so it is named and marked as a team here).
-    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: false, name: "Platform team" } }} brief={brief} />);
-    const list = screen.getByRole("region", { name: "Recipes" });
-    expect(within(list).getByText(/My recipes appear here, under the starters, once you copy a starter/)).toBeTruthy();
-    expect(within(list).getByText(new RegExp(`Team recipes appear here once an owner or admin of Platform team saves one`))).toBeTruthy();
-  });
-
-  it("says nothing about a group that has recipes in it", () => {
-    render(<RecipesView initial={withOwn(asMember, personal)} brief={memberBrief} />);
-    const list = screen.getByRole("region", { name: "Recipes" });
-    expect(within(list).queryByText(/appear here/)).toBeNull();
-  });
-
-  it("says nothing of team recipes in a personal space (there is no team to save one for)", () => {
-    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: true } }} brief={brief} />);
-    const list = screen.getByRole("region", { name: "Recipes" });
-    expect(within(list).getByText(/My recipes appear here/)).toBeTruthy();
-    expect(within(list).queryByText(/Team recipes appear here/)).toBeNull();
-  });
-
-  it("shows a starter read-only, with how to change it", async () => {
+  it("puts the recipes before the brief", () => {
     render(<RecipesView initial={owner} brief={brief} />);
-    await pick(/Follow-up email/);
-    const f = form();
-    expect((within(f).getByLabelText("Name") as HTMLInputElement).readOnly).toBe(true);
-    expect((within(f).getByLabelText("Instruction") as HTMLTextAreaElement).value).toBe(owner.recipes[0].instruction);
-    expect(within(f).queryByRole("button", { name: "Save" })).toBeNull();
-    expect(screen.getByText(/A starter cannot be changed/)).toBeTruthy();
-    expect(within(f).getByRole("button", { name: "Make a copy to change" })).toBeTruthy();
+    const recipes = list();
+    const box = screen.getByRole("heading", { name: "My brief" });
+    expect(recipes.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("has a short welcome on the right until a recipe is picked", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    expect(screen.getByRole("heading", { name: "Pick a recipe" })).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Recipe" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Recipe" })).toBeNull();
   });
 });
 
-describe("a copy of a starter", () => {
-  it("opens prefilled, and saving makes a recipe of the person's own that remembers the starter", async () => {
+describe("the list", () => {
+  it("leads with the person's own and the team's recipes, and shuts the ready-made ones", async () => {
+    render(<RecipesView initial={withOwn(asMember, personal)} brief={memberBrief} />);
+    const heads = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(heads).toEqual(["My recipes", "Team recipes", "Ready-made recipes"]);
+    for (const name of ["House proposal", "Admin recipe", "Weekly note"]) {
+      expect(within(list()).getByRole("button", { name: new RegExp(name) })).toBeTruthy();
+    }
+    expect(within(list()).queryByRole("button", { name: /Follow-up email/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Show the \d+ ready-made recipes/ }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens the ready-made recipes under General and School", async () => {
+    render(<RecipesView initial={withOwn(asMember, personal)} brief={memberBrief} />);
+    await showStarters();
+    expect(screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual(["General", "School"]);
+    for (const name of ["Follow-up email", "Proposal", "Study guide", "Class FAQ"]) {
+      expect(within(list()).getByRole("button", { name: new RegExp(name) })).toBeTruthy();
+    }
+    expect(screen.getByRole("button", { name: /^Hide the ready-made recipes/ }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("searches the ready-made recipes, and says when none match", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    await showStarters();
+    const search = screen.getByRole("searchbox", { name: "Search the ready-made recipes" });
+    await userEvent.type(search, "study");
+    expect(within(list()).getByRole("button", { name: /Study guide/ })).toBeTruthy();
+    expect(within(list()).queryByRole("button", { name: /Follow-up email/ })).toBeNull();
+    await userEvent.clear(search);
+    await userEvent.type(search, "zzzz");
+    expect(screen.getByText(/No ready-made recipe matches/)).toBeTruthy();
+  });
+
+  it("says what My recipes is while it is empty, with one button that opens the ready-made ones", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    expect(screen.getByRole("heading", { name: "My recipes" })).toBeTruthy();
+    expect(within(list()).getByText(/Only you can use these. Nothing here yet/)).toBeTruthy();
+    expect(within(list()).queryByRole("button", { name: /Follow-up email/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Browse ready-made recipes" }));
+    expect(within(list()).getByRole("button", { name: /Follow-up email/ })).toBeTruthy();
+  });
+
+  it("says what Team recipes is while it is empty in a team workspace", () => {
+    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: false, name: "Platform team" } }} brief={brief} />);
+    expect(screen.getByRole("heading", { name: "Team recipes" })).toBeTruthy();
+    expect(within(list()).getByText(/Recipes saved for everyone on Platform team. None yet: save one and it shows here/)).toBeTruthy();
+  });
+
+  it("tells a member who may save one for the team", () => {
+    render(<RecipesView initial={{ ...asMember, recipes: asMember.recipes.filter((r) => r.source !== "team") }} brief={memberBrief} />);
+    expect(within(list()).getByText(/None yet: an owner or admin can save one/)).toBeTruthy();
+  });
+
+  it("has no Team recipes in a personal space (there is no team to save one for)", () => {
+    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: true } }} brief={brief} />);
+    expect(screen.queryByRole("heading", { name: "Team recipes" })).toBeNull();
+  });
+});
+
+describe("a ready-made recipe", () => {
+  const open = async (name: RegExp = /Follow-up email/) => {
+    await showStarters();
+    await pick(name);
+  };
+
+  it("is described in words, not as greyed-out fields", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    await open();
+    const f = form();
+    expect(within(f).getByRole("heading", { name: "Follow-up email" })).toBeTruthy();
+    expect(within(f).getByText("A ready-made recipe from Beyric.")).toBeTruthy();
+    expect(within(f).getByText("Makes an email from one meeting.")).toBeTruthy();
+    expect(within(f).getByText(/Beyric will ask you/)).toBeTruthy();
+    expect(within(f).getByText(/Recipient or client name, Tone \(Friendly or Formal\)/)).toBeTruthy();
+    expect(within(f).getByText("Your meeting, and my brief if there is one.")).toBeTruthy();
+    expect(within(f).queryByLabelText("Name")).toBeNull();
+    expect(within(f).queryByRole("textbox")).toBeNull();
+    expect(within(f).queryByRole("combobox")).toBeNull();
+    expect(within(f).queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByText(/A starter cannot be changed/)).toBeNull();
+  });
+
+  it("keeps the whole instruction one click away", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    await open();
+    expect(within(form()).getByText("Read the whole instruction")).toBeTruthy();
+    expect(form().querySelector(".recipe-instruction")?.textContent).toBe(owner.recipes[0].instruction);
+  });
+
+  it("is used with one click: the person's own copy is made and opened for changes", async () => {
     mocks.create.mockResolvedValue(copy);
     render(<RecipesView initial={owner} brief={brief} />);
-    await pick(/Follow-up email/);
-    await userEvent.click(screen.getByRole("button", { name: "Make a copy to change" }));
-    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Follow-up email (copy)");
-    expect((screen.getByLabelText("Instruction") as HTMLTextAreaElement).value).toBe(owner.recipes[0].instruction);
-    const name = screen.getByLabelText("Name");
-    await userEvent.clear(name);
-    await userEvent.type(name, "Our follow-up");
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await open();
+    await userEvent.click(within(form()).getByRole("button", { name: "Use this recipe" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(mocks.create.mock.calls[0][0]).toEqual({
       key: "follow_up_email",
-      name: "Our follow-up",
+      name: "My Follow-up email",
       instruction: owner.recipes[0].instruction,
       output_type: "email",
       options: owner.recipes[0].options,
@@ -113,11 +169,28 @@ describe("a copy of a starter", () => {
       uses_brief: true,
       visibility: "personal",
     });
-    const mine = await screen.findByRole("heading", { name: "My recipes" });
-    expect(mine).toBeTruthy();
-    expect(await screen.findByText("Saved")).toBeTruthy();
+    expect(await screen.findByText(/This is your own copy/)).toBeTruthy();
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(copy.name);
+    const mine = screen.getByRole("heading", { name: "My recipes" });
+    expect(within(mine.parentElement as HTMLElement).getByRole("button", { name: new RegExp(copy.name) })).toBeTruthy();
     expect(screen.getByText(/Copied from Follow-up email/)).toBeTruthy();
+  });
+
+  it("shows the server's words when the copy cannot be made, and stays on the recipe", async () => {
+    mocks.create.mockRejectedValue(new ApiError(422, "too_many_recipes", "Keep at most 100 recipes; archive one."));
+    render(<RecipesView initial={owner} brief={brief} />);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Use this recipe" }));
+    expect(await screen.findByText("Keep at most 100 recipes; archive one.")).toBeTruthy();
+    expect(within(form()).getByRole("button", { name: "Use this recipe" })).toBeTruthy();
+  });
+
+  it("can still be changed before saving, which is where it can be made the team's", async () => {
+    render(<RecipesView initial={owner} brief={brief} />);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Change it before saving" }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Follow-up email (copy)");
+    expect(screen.getByRole("radio", { name: "Only me" })).toBeTruthy();
   });
 });
 
@@ -172,7 +245,7 @@ describe("a recipe of your own", () => {
     const name = screen.getByLabelText("Name");
     await userEvent.clear(name);
     await userEvent.type(name, "Monthly note");
-    await userEvent.click(screen.getByRole("checkbox", { name: "Use the team brief" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Use my brief" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mocks.update).toHaveBeenCalled());
     expect(mocks.update).toHaveBeenCalledWith(personal.id, {
@@ -210,16 +283,17 @@ describe("a recipe of your own", () => {
 });
 
 describe("a team recipe read by a member", () => {
-  it("is shown whole and read-only, with a way to copy it", async () => {
+  it("is described in words, with a way to make a copy of their own", async () => {
     render(<RecipesView initial={asMember} brief={memberBrief} />);
     await pick(/House proposal/);
     const f = form();
-    expect((within(f).getByLabelText("Name") as HTMLInputElement).readOnly).toBe(true);
-    expect((within(f).getByLabelText("Instruction") as HTMLTextAreaElement).value).toBe(teamMade.instruction);
+    expect(within(f).getByRole("heading", { name: "House proposal" })).toBeTruthy();
+    expect(within(f).getByText(/A recipe for everyone on .*Only an owner or admin can change it/)).toBeTruthy();
+    expect(within(f).queryByRole("textbox")).toBeNull();
     expect(within(f).queryByRole("button", { name: "Save" })).toBeNull();
     expect(within(f).queryByRole("button", { name: "Archive recipe" })).toBeNull();
-    expect(screen.getByText(/Only an owner or admin of the team can change it/)).toBeTruthy();
-    expect(within(f).getByRole("button", { name: "Make a copy to change" })).toBeTruthy();
+    expect(within(f).getByText(teamMade.instruction)).toBeTruthy();
+    expect(within(f).getByRole("button", { name: "Use this recipe" })).toBeTruthy();
   });
 });
 
@@ -324,9 +398,14 @@ describe("refusals", () => {
 });
 
 describe("the brief on the page", () => {
-  it("is the first thing on it, for the team the page is about", () => {
+  it("is called my brief in the person's own space, with a plain line about it", () => {
     render(<RecipesView initial={owner} brief={brief} />);
-    expect(screen.getByRole("heading", { name: "Team brief" })).toBeTruthy();
-    expect(screen.getByText(/Everyone on My team can read this/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "My brief" })).toBeTruthy();
+    expect(screen.getByText(/Facts about your business that Beyric can use/)).toBeTruthy();
+  });
+
+  it("is called the workspace brief in a team's", () => {
+    render(<RecipesView initial={asMember} brief={memberBrief} />);
+    expect(screen.getByRole("heading", { name: "Workspace brief" })).toBeTruthy();
   });
 });

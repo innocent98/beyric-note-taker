@@ -25,6 +25,33 @@ function valueOf(recipe: Recipe): string {
   return recipe.id === null ? (recipe.key ?? "") : String(recipe.id);
 }
 
+// The recipe made last in this browser is the one offered first next time. Only a convenience: a browser that
+// will not keep it just starts from the first recipe of the person's own.
+const LAST_KEY = "beyric.make.last-recipe";
+function lastMade(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_KEY);
+  } catch {
+    return null;
+  }
+}
+function rememberMade(value: string) {
+  try {
+    window.localStorage.setItem(LAST_KEY, value);
+  } catch {
+    // not kept: the next opening starts from the first recipe
+  }
+}
+
+// The recipe to start on: the last one made if it is still in the list, else the person's own or the team's first,
+// else the first ready-made one.
+function firstPick(list: Recipe[]): string {
+  const last = lastMade();
+  if (last && list.some((r) => valueOf(r) === last)) return last;
+  const g = groupRecipes(list);
+  return valueOf([...g.mine, ...g.team, ...g.general, ...g.school][0]);
+}
+
 // "Make from this meeting": the lead-designed dialog behind the Make button on a ready meeting (the
 // designer's files draw nothing of recipes). Pick a recipe (General and School starters, the team's own,
 // the person's own), fill its choices, see whose brief the draft will use and switch the team, then Make
@@ -59,6 +86,7 @@ export function MakeDialog({
   const [entered, setEntered] = useState<Record<string, Record<string, string>>>({});
   const [useBrief, setUseBrief] = useState(true);
   const [chosen, setChosen] = useState<{ recipe: string | null; ids: number[]; picker: PickerSpec | null }>({ recipe: null, ids: [], picker: null });
+  const [startersOpen, setStartersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const asking = useRef(false);
@@ -71,6 +99,7 @@ export function MakeDialog({
       setList(null);
       setBrief(null);
       setPicked(null);
+      setStartersOpen(false);
       setUseBrief(true);
       setEntered({});
       setChosen({ recipe: null, ids: [], picker: null });
@@ -111,7 +140,7 @@ export function MakeDialog({
         if (!live) return;
         setList(recipes);
         setBrief(found);
-        setPicked((current) => (current && recipes.recipes.some((r) => valueOf(r) === current) ? current : valueOf(recipes.recipes[0])));
+        setPicked((current) => (current && recipes.recipes.some((r) => valueOf(r) === current) ? current : firstPick(recipes.recipes)));
       })
       .catch((caught) => live && setLoadError(recipeErrorMessage(caught)));
     return () => {
@@ -129,6 +158,10 @@ export function MakeDialog({
 
   const many = recipe?.scope === "many";
   const groups = list ? groupRecipes(list.recipes) : null;
+  // The ready-made recipes are shut once the person has recipes of their own or their team's, unless the one chosen is a
+  // ready-made one (the last made, or picked by hand).
+  const hasOwn = groups ? groups.mine.length + groups.team.length > 0 : false;
+  const startersShown = startersOpen || !hasOwn || recipe?.source === "starter";
   const effectiveTeam = brief?.team ?? list?.team ?? null;
 
   async function submit() {
@@ -147,6 +180,7 @@ export function MakeDialog({
         },
         teamId ?? undefined,
       );
+      rememberMade(valueOf(recipe));
       router.push(`/documents/${draft.id}`);
     } catch (caught) {
       setError(recipeErrorMessage(caught));
@@ -232,10 +266,19 @@ export function MakeDialog({
             ) : null}
             {groups ? (
               <div className="mk-pick">
-                {group("General", groups.general)}
-                {group("School", groups.school)}
-                {group("Team recipes", groups.team)}
                 {group("My recipes", groups.mine)}
+                {group("Team recipes", groups.team)}
+                {hasOwn ? (
+                  <button type="button" className="mk-toggle" aria-expanded={startersShown} disabled={recipe?.source === "starter"} onClick={() => setStartersOpen(!startersOpen)}>
+                    {startersShown ? "Ready-made recipes" : `Ready-made recipes (${groups.general.length + groups.school.length})`}
+                  </button>
+                ) : null}
+                {startersShown ? (
+                  <>
+                    {group("General", groups.general)}
+                    {group("School", groups.school)}
+                  </>
+                ) : null}
               </div>
             ) : !loadError ? (
               <p className="field-hint" role="status">

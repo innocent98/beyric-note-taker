@@ -35,6 +35,31 @@ export function groupRecipes(list: Recipe[]): RecipeGroups {
   };
 }
 
+// What the brief is called on screen: the workspace's, or "my brief" in a person's own space.
+export function briefWords(team: { is_personal: boolean }): { title: string; the: string } {
+  return team.is_personal ? { title: "My brief", the: "my brief" } : { title: "Workspace brief", the: "the workspace brief" };
+}
+
+const MAKES: Record<Recipe["output_type"], string> = { document: "a document", email: "an email", table: "a table", board: "a board" };
+
+// One plain sentence of what a recipe makes ("Makes an email from one meeting.").
+export function makesSentence(recipe: Pick<Recipe, "output_type" | "scope">): string {
+  return `Makes ${MAKES[recipe.output_type]} from ${recipe.scope === "many" ? "several meetings" : "one meeting"}.`;
+}
+
+// The first sentence of an instruction, for a line a person can read at a glance.
+export function firstSentence(instruction: string): string {
+  const text = instruction.replace(/\s+/g, " ").trim();
+  const end = text.search(/[.!?](\s|$)/);
+  return end === -1 ? text : text.slice(0, end + 1);
+}
+
+// Whether a recipe's name or what it makes matches what the person typed in the search box.
+export function recipeMatches(recipe: Recipe, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return q === "" || `${recipe.name} ${recipe.output_type}`.toLowerCase().includes(q);
+}
+
 // A starter is named to `POST /api/documents` by its key, a row by its id: exactly one of them.
 export function recipeRef(recipe: Recipe): Pick<DocumentRequest, "recipe_key" | "recipe_id"> {
   return recipe.id === null ? { recipe_key: recipe.key } : { recipe_id: recipe.id };

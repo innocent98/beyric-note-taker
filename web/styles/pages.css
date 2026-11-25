@@ -1150,3 +1150,20 @@ a.doc-chip:hover { background: var(--surface-hover); color: var(--text); text-de
 .transcript-edited p { margin: 0; }
 .transcript-edited + .meeting-delete-ask { margin: var(--space-3) var(--space-5) 0; }
 @media (max-width: 640px) { .transcript-edited { padding-inline: var(--space-4); } .transcript-edited + .meeting-delete-ask { margin-inline: var(--space-4); } }
+.pick-sub { margin: 0; padding: var(--space-3) var(--space-3) 2px; font-size: var(--text-xs); font-weight: 600; color: var(--text-3); }
+.pick-toggle[disabled] { cursor: default; }
+.pick-search { padding: 4px var(--space-3) var(--space-2); }
+.pick-empty { margin: 0; padding: 4px var(--space-3) var(--space-3); }
+.pick-empty p { margin: 0 0 var(--space-2); }
+.recipe-intro p { margin: 0; }
+.recipe-facts { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; }
+.recipe-facts dt { font-size: var(--text-xs); font-weight: 600; color: var(--text-3); }
+.recipe-facts dd { margin: 2px 0 0; }
+.recipe-more summary { cursor: pointer; font-size: var(--text-sm); color: var(--teal-deep); }
+.recipe-instruction { margin: var(--space-2) 0 0; max-height: 220px; overflow-y: auto; white-space: pre-wrap; font-size: var(--text-sm); color: var(--text-2); }
+.recipe-use { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.recipe-use .field-hint { margin: 0; }
+.recipe-use-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.mk-toggle { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: var(--text-sm); color: var(--teal-deep); cursor: pointer; }
+.mk-toggle[disabled] { color: var(--text-2); cursor: default; }
+.pick-toggle .pick-preview { white-space: normal; overflow: visible; text-overflow: clip; }
