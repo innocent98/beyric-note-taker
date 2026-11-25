@@ -112,7 +112,9 @@ def test_the_checks_refuse_a_bad_status_type_scope_and_a_second_share(scratch_ur
     from sqlalchemy.exc import IntegrityError
 
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "head")
+    # The checks belong to 0059's tables; the seed writes a bare meeting, which later migrations
+    # (workspaces: `meetings.workspace_team_id` NOT NULL) no longer allow.
+    command.upgrade(cfg, "0061")
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         uid, _ = seed(conn)

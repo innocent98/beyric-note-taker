@@ -242,6 +242,47 @@ def seed(engine):
                 m=mid,
                 d=key,
             )
+
+        # The recipes release (0059 to 0061) is in production before this one: personal and team
+        # recipes, drafts (one shared with a team), the team brief. None of it moves: it already
+        # names its team, and the migration must not touch it.
+        conn.execute(
+            text(
+                "insert into recipes (owner_user_id, team_id, name, instruction, output_type) "
+                "values (:a, null, 'Mine', 'x', 'email'), (:a, :x, 'Theirs', 'x', 'email')"
+            ),
+            {"a": ada, "x": ids["x"]},
+        )
+        ids["doc_private"] = one(
+            conn,
+            "insert into documents (owner_user_id, team_id, title, output_type) "
+            "values (:a, null, 'Private draft', 'email') returning id",
+            a=ada,
+        )
+        ids["doc_shared"] = one(
+            conn,
+            "insert into documents (owner_user_id, team_id, title, output_type) "
+            "values (:a, :x, 'Shared draft', 'document') returning id",
+            a=ada,
+            x=ids["x"],
+        )
+        conn.execute(
+            text(
+                "insert into document_meetings (document_id, meeting_id) values (:d, :m), (:e, :m)"
+            ),
+            {"d": ids["doc_private"], "e": ids["doc_shared"], "m": ids["m_shared"]},
+        )
+        conn.execute(
+            text(
+                "insert into document_shares (document_id, team_id, shared_by_user_id) "
+                "values (:d, :x, :a)"
+            ),
+            {"d": ids["doc_shared"], "x": ids["x"], "a": ada},
+        )
+        conn.execute(
+            text("insert into team_briefs (team_id, text) values (:x, 'Our prices'), (:p, '')"),
+            {"x": ids["x"], "p": ids["pa"]},
+        )
     return ids
 
 
@@ -256,6 +297,11 @@ def snapshot(conn):
             "calendar_events",
             "scheduled_joins",
             "tasks",
+            "recipes",
+            "documents",
+            "document_meetings",
+            "document_shares",
+            "team_briefs",
         )
     }
 
@@ -286,6 +332,22 @@ def test_0062_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         # ---- nothing lost, nothing re-shared
         assert after == before
         assert visibility_columns(conn) == visible_before
+        # the recipes release's rows stay exactly as they were, shares and team links included
+        assert (
+            one(conn, "select count(*) from documents where team_id = :x", x=ids["x"]) == 1
+            and one(conn, "select count(*) from document_shares where team_id = :x", x=ids["x"])
+            == 1
+            and one(conn, "select count(*) from recipes where team_id = :x", x=ids["x"]) == 1
+        )
+        # every person who can still sign in has exactly one personal team, owned by them
+        stragglers = one(
+            conn,
+            "select count(*) from users u where u.status <> 'deleted' and "
+            "(select count(*) from teams t join team_members tm on tm.team_id = t.id "
+            "  and tm.user_id = u.id and tm.role = 'owner' "
+            " where t.owner_user_id = u.id and t.is_personal) <> 1",
+        )
+        assert stragglers == 0
         # the only new memberships are the owners of the personal teams made for Eve, Fay, Gus, Ivy
         assert one(conn, "select count(*) from team_members") == members_before + 4
 
