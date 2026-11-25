@@ -1360,7 +1360,7 @@ def test_a_blocked_charge_is_held_back_only_until_the_grace_would_end(
     session, ada, admin, providers, bought
 ):
     """Our key staying broken must not keep an `active` row held and retried for ever: once the
-    hold would run past the grace, the attempt counts like any other and the ordinary lapse comes."""
+    hold would run past the grace, the attempt counts like any other and the lapse comes."""
     due = bought
     providers.usd.charge_outcome = "blocked"
     late = due + timedelta(hours=71, minutes=45)  # a 30-minute hold would pass the grace's end
