@@ -1,0 +1,45 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/templates",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "templates": [
+        {
+          "id": 6,
+          "name": "Client call",
+          "instructions": "Focus on what the client asked for, commitments made, deadlines, concerns raised, and next steps. Group action items by who owns them."
+        },
+        {
+          "id": 5,
+          "name": "General",
+          "instructions": "Write a summary, key points, decisions, action items with owners, and open questions."
+        },
+        {
+          "id": 8,
+          "name": "Interview",
+          "instructions": "Summarise the candidate's background, strengths, concerns, notable answers, and any follow-up questions. Do not give a hire or no-hire verdict."
+        },
+        {
+          "id": 18,
+          "name": "Pat only",
+          "instructions": "Short notes."
+        },
+        {
+          "id": 7,
+          "name": "Team update",
+          "instructions": "Group by person or workstream: progress, blockers, and what is planned next. List decisions and action items at the end."
+        }
+      ]
+    }
+  }
+}

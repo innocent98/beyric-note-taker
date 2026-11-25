@@ -1,0 +1,30 @@
+{
+  "note": "A different rule in the personal workspace.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/workspace-prefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "auto_join_rule": "organizer",
+      "skip_one_on_ones": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team_id": 2,
+      "bot_name": null,
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "auto_join_rule": "organizer",
+      "join_unanswered": false,
+      "skip_one_on_ones": true,
+      "calendar_template_id": 5
+    }
+  }
+}

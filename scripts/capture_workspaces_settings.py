@@ -45,6 +45,7 @@ admin_url, scratch_url = database_urls(sys.argv[1] if len(sys.argv) > 1 else "")
 os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADA
 os.environ["OWNER_PASSWORD"] = PASSWORD
+os.environ["SKRIBBY_API_KEY"] = "capture-placeholder-key"  # the stand-in provider replaces it
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
@@ -55,6 +56,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app import services, teams  # noqa: E402
 from app.accounts import create_user_defaults  # noqa: E402
+from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Meeting, TeamMember, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
@@ -270,6 +272,14 @@ def run(base: str, seeded: dict, engine) -> None:
         note="A workspace the caller is not in: 404 `not_found`.",
     )
     ada.call(
+        "templates-personal-create-ada",
+        "POST",
+        "/api/templates",
+        team=ada_home,
+        body={"name": "One to one", "instructions": "Mood, blockers, next steps."},
+        note="Ada's own personal template, the one the copy below will bring over.",
+    )
+    ada.call(
         "templates-copy-personal-into-x",
         "POST",
         "/api/templates/copy-from-personal",
@@ -472,7 +482,16 @@ def main() -> None:
     prepare_database()
     engine = create_engine(scratch_url)
     seeded = seed(engine)
-    app = create_app()
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        session_secret="capture-secret-" + "x" * 30,
+        cookie_secure=False,
+        database_url=scratch_url,
+        public_base_url="https://notes.example.test",
+        skribby_api_key="capture-placeholder-key",
+    )
+    app = create_app(settings)
     app.dependency_overrides[services.get_bot_provider] = lambda: StandInProvider()
     server, base = start_server(app)
     try:

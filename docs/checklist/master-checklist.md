@@ -31,8 +31,8 @@
   - [x] T7 Per-person-per-workspace prefs (`workspace_prefs`, `/api/workspace-prefs`), `JoinSettings` reads the connection's workspace, Settings split into "This workspace" and "Personal" (`tests/test_workspace_prefs.py`)
   - [x] D4 A meeting born in a team workspace is shared with it from birth; personal stays private; existing meetings unchanged; "keep private" stays private (`tests/test_workspace_birth_share.py`)
   - [x] Leak guard extended: templates, vocabulary and `/api/workspace-prefs` are workspace data (`tests/test_workspace_leaks.py`)
-  - [ ] FE guide `docs/fe-integration-guide-workspaces-settings.md` from real captures
-  - [ ] Browser check at 390 and 1280 px; CI green on the final head
+  - [x] FE guide `docs/fe-integration-guide-workspaces-settings.md` from 44 real captures (`docs/fe-captures/workspaces/settings-*.json`)
+  - [x] Browser check at 390 and 1280 px (member view); CI green on the final head: see the PR
 - [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
 - [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)
 - [ ] W5 Rehearsal on production-shaped data, Opus permission review, FE guide, renumber migrations, ONE PR to `main` (T13)

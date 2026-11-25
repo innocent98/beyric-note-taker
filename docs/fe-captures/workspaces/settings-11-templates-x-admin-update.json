@@ -1,0 +1,25 @@
+{
+  "note": "An admin may edit it.",
+  "as": "Quinn",
+  "request": {
+    "method": "PUT",
+    "path": "/api/templates/17",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Board meeting",
+      "instructions": "List the votes, who proposed each, and why."
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 17,
+      "name": "Board meeting",
+      "instructions": "List the votes, who proposed each, and why."
+    }
+  }
+}

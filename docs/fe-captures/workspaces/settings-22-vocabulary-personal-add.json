@@ -1,0 +1,23 @@
+{
+  "note": "A term in Ada's personal workspace.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "term": "Beyric"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 1,
+      "term": "Beyric"
+    }
+  }
+}

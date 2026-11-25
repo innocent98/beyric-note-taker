@@ -1,0 +1,26 @@
+{
+  "note": "A personal template addressed through X's header is not X's: 404, never 403.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/templates/18",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Pat only",
+      "instructions": "x"
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such template"
+      }
+    }
+  }
+}
