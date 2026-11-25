@@ -1183,13 +1183,15 @@ def test_a_charge_the_provider_refused_outright_is_a_failed_attempt_at_once(
 
 
 @pytest.mark.parametrize("silence", ["error", "unknown"])  # ProviderError, OutcomeUnknown
-def test_a_charge_nobody_can_find_is_given_up_after_six_hours_into_the_normal_grace(
+def test_a_charge_nobody_can_find_moves_the_clock_after_six_hours_but_is_never_charged_again(
     session, ada, admin, providers, bought, silence
 ):
     """The charge call got no answer and the lookup by our reference finds nothing, for ever. The
-    attempt waits (the provider may be down) but only for UNRESOLVED_AFTER: then it is a failed
-    attempt for the clock, the admins are told, and the plan runs the ordinary 3 days of grace to a
-    lapse. It never stays `active` for ever, and a new plan can be bought once it has lapsed."""
+    attempt waits (the provider may be down) for UNRESOLVED_AFTER, then counts as a failed attempt
+    FOR THE CLOCK: grace, mails, the retry slots and the lapse run. But its payment stays
+    `pending`, because the charge may exist: nothing is charged again for the period while it is
+    unresolved (a second charge could debit the person twice), so the plan runs out its grace and
+    lapses, and a new plan can be bought once it has."""
     due = bought
     providers.usd.charge_outcome = silence
 
@@ -1203,36 +1205,60 @@ def test_a_charge_nobody_can_find_is_given_up_after_six_hours_into_the_normal_gr
     tick(session, due + timedelta(hours=7))
 
     [payment] = renewal_payments(session)
-    assert payment.status == "failed"
+    assert payment.status == "pending"  # never closed on a guess
     sub = live(session, ada)
     assert (sub.status, sub.retry_count) == ("past_due", 1)
     assert sub.grace_ends_at == states.grace_end(due)
     assert notices(session, ada, "billing.failed")
     assert notices(session, admin, "admin.billing_unresolved_charge")
-    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=8))
-    assert started.url.startswith("https://fake.test/pay/")  # the person can pay again
 
-    providers.usd.charge_outcome = "failed"  # the retries are real charges again, and decline
-    tick(session, due + DAY + timedelta(seconds=7))
-    assert len(providers.usd.charges) == 2
-    tick(session, due + 2 * DAY + timedelta(seconds=7))
+    tick(session, due + DAY + timedelta(seconds=7))  # the day-1 slot: counted, NOT charged
+    tick(session, due + 2 * DAY + timedelta(seconds=7))  # the day-2 slot
+    assert len(providers.usd.charges) == 1
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 3)
+    assert notices(session, ada, "billing.last_day")
     tick(session, due + timedelta(hours=73))
     assert live(session, ada) is None  # lapsed by the clock
     new = subs.start_plan_checkout(session, ada, "p20", settings(), due + timedelta(hours=74))
     assert new.payment.kind == "plan"
 
 
-def test_a_charge_given_up_that_was_paid_after_all_is_still_settled(
+@pytest.mark.parametrize("silence", ["error", "unknown"])
+def test_a_charge_given_up_that_turns_out_paid_is_settled_by_the_next_attempt_not_charged_again(
+    session, ada, admin, providers, bought, silence
+):
+    """The provider's lookup was down for the six hours (so the charge was given up for the
+    clock), and has the answer by the day-1 slot: the payment is looked up FIRST, settled, and
+    nothing is charged again. One charge, one new period."""
+    due = bought
+    providers.usd.charge_outcome = silence
+    providers.usd.fetch_error = ProviderError("the lookup is down")
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=7))
+    [payment] = renewal_payments(session)
+    assert live(session, ada).status == "past_due"
+
+    providers.usd.fetch_error = None
+    providers.usd.complete(payment)  # it had gone through after all
+    tick(session, due + DAY + timedelta(seconds=7))
+
+    sub = live(session, ada)
+    assert sub.status == "active" and sub.retry_count == 0
+    assert len(providers.usd.charges) == 1  # exactly one charge, ever
+    assert renewal_payments(session)[0].status == "succeeded"
+    assert len(grants(session, ada, "plan_period")) == 2  # one new period, once
+
+
+def test_a_given_up_charge_paid_by_its_webhook_later_is_still_settled(
     session, ada, admin, providers, bought
 ):
-    """Giving up is for the clock only: a payment the provider later says succeeded (the webhook)
-    is still settled and renews the plan, never lost."""
     due = bought
     providers.usd.charge_outcome = "error"
     tick(session, due + timedelta(seconds=7))
     tick(session, due + timedelta(hours=7))
     [payment] = renewal_payments(session)
-    assert payment.status == "failed" and live(session, ada).status == "past_due"
+    assert live(session, ada).status == "past_due"
 
     pay(session, providers.usd, payment, due + timedelta(hours=8))
 
@@ -1242,20 +1268,92 @@ def test_a_charge_given_up_that_was_paid_after_all_is_still_settled(
     assert len(grants(session, ada, "plan_period")) == 2
 
 
-def test_a_queued_charge_is_given_up_after_six_hours_into_the_grace(
+def test_a_queued_charge_that_succeeds_after_the_window_is_never_charged_twice(
+    session, ada, admin, providers, bought
+):
+    """The provider itself says `pending`, nothing for the payer to do. Six hours on the clock
+    moves; the day-1 slot asks first, finds it paid, settles it and charges nothing."""
+    due = bought
+    providers.usd.charge_outcome = "queued"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=7))
+    [payment] = renewal_payments(session)
+    assert payment.status == "pending" and live(session, ada).status == "past_due"
+    assert notices(session, admin, "admin.billing_unresolved_charge")
+
+    providers.usd.complete(payment)
+    tick(session, due + DAY + timedelta(seconds=7))
+
+    assert len(providers.usd.charges) == 1
+    sub = live(session, ada)
+    assert sub.status == "active" and sub.retry_count == 0
+    assert renewal_payments(session)[0].status == "succeeded"
+    assert len(grants(session, ada, "plan_period")) == 2
+
+
+def test_a_queued_charge_still_pending_at_the_retry_moves_the_clock_and_charges_nothing(
     session, ada, admin, providers, bought
 ):
     due = bought
     providers.usd.charge_outcome = "queued"
     tick(session, due + timedelta(seconds=7))
-    tick(session, due + timedelta(hours=5))
-    assert live(session, ada).status == "active"
-
     tick(session, due + timedelta(hours=7))
+    tick(session, due + DAY + timedelta(seconds=7))
+    tick(session, due + 2 * DAY + timedelta(seconds=7))
 
-    assert renewal_payments(session)[0].status == "failed"
-    assert live(session, ada).status == "past_due"
-    assert notices(session, admin, "admin.billing_unresolved_charge")
+    assert len(providers.usd.charges) == 1  # the open charge is never repeated
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 3)
+    assert renewal_payments(session)[0].status == "pending"
+    tick(session, due + timedelta(hours=73))
+    assert live(session, ada) is None  # lapsed; a late success would still settle (webhook)
+
+
+def test_the_pay_link_makes_no_second_page_beside_a_charge_nobody_can_find(
+    session, ada, admin, providers, bought
+):
+    """A page paid beside a charge that may exist is a double charge: it waits (502, retry) until
+    the provider can say what became of the charge."""
+    due = bought
+    providers.usd.charge_outcome = "error"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=7))
+    pages = len(providers.usd.checkouts)
+
+    with pytest.raises(subs.Refused) as refused:
+        renewals.pay_link(session, ada, settings(), due + timedelta(hours=8))
+
+    assert (refused.value.status, refused.value.code) == (502, "provider_error")
+    assert len(providers.usd.checkouts) == pages
+
+
+def test_a_charge_blocked_by_our_key_or_a_rate_limit_is_not_the_customers_failure(
+    session, ada, admin, providers, bought
+):
+    """A 401 or a missing key (ours) and a 429 (the provider's) say nothing about the person: no
+    grace, no mail, no retry spent. The admins are told and the charge is tried again later."""
+    due = bought
+    providers.usd.charge_outcome = "blocked"
+
+    tick(session, due + timedelta(seconds=7))
+
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("active", 0)
+    assert sub.next_charge_at is not None and sub.next_charge_at > due + timedelta(seconds=7)
+    assert notices(session, ada, "billing.failed") == []
+    assert notices(session, admin, "admin.billing_charge_blocked")
+    [payment] = renewal_payments(session)
+    assert payment.status == "failed" and payment.attempt is None  # nothing sent; slot is free
+
+    tick(session, due + timedelta(minutes=2))  # not tried again at once
+    assert len(providers.usd.charges) == 1
+
+    providers.usd.charge_outcome = "successful"  # the key is fixed
+    tick(session, due + timedelta(hours=1))
+    assert len(providers.usd.charges) == 2
+    sub = live(session, ada)
+    assert sub.status == "active" and sub.next_charge_at is None
+    assert len(grants(session, ada, "plan_period")) == 2
 
 
 def test_giving_up_never_overwrites_a_payment_a_webhook_settled_meanwhile(

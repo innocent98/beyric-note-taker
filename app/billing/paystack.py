@@ -56,6 +56,7 @@ from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
     BillingError,
+    ChargeBlocked,
     Checkout,
     IgnoredEvent,
     NothingMoved,
@@ -98,7 +99,7 @@ _REFUND_EVENTS = ("refund.failed", "refund.pending", "refund.processed", "refund
 _DISPUTE_EVENTS = ("charge.dispute.create", "charge.dispute.remind", "charge.dispute.resolve")
 
 
-class NotConfigured(NothingMoved):
+class NotConfigured(ChargeBlocked):
     """No usable key: nothing was sent. Raised before any connection is opened."""
 
 
@@ -402,6 +403,7 @@ class PaystackProvider:
                 "reference": reference,
             },
             refused=NothingMoved,
+            blocked=ChargeBlocked,
         )
         if data.get("paused") is True:  # the card must be authorized again by the payer
             if data.get("reference") != reference:
@@ -464,15 +466,17 @@ class PaystackProvider:
         *,
         money: bool = False,
         refused: type[ProviderError] = ProviderError,
+        blocked: type[ProviderError] = ProviderError,
     ) -> dict:
         """One call to Paystack; returns its `data` object. Raises `NotConfigured` before any
         connection when the key is missing or of the wrong kind, and `ProviderError` for a
         transport failure, a timeout, any non-success answer or an answer that is not Paystack's
         shape. With `money=True` (a call that moves money: the refund) a lost answer is
         `OutcomeUnknown` instead: a timeout, a transport failure, a 5xx, a 409 conflict, an answer
-        that is not Paystack's shape. `refused` is what a 401, a 429 and a 4xx answer raise (the
-        charge passes `NothingMoved`: Paystack said no before doing anything). No message holds
-        the key, an address, a body or an email."""
+        that is not Paystack's shape. `refused` is what a 4xx answer raises (the charge passes
+        `NothingMoved`: Paystack said no before doing anything) and `blocked` what a 401 and a 429
+        raise (the charge passes `ChargeBlocked`: our key, or a rate limit, not the customer). No
+        message holds the key, an address, a body or an email."""
         lost = OutcomeUnknown if money else ProviderError
         wanted = "sk_live_" if self._live else "sk_test_"
         if not self._secret_key:
@@ -502,22 +506,23 @@ class PaystackProvider:
             raise lost("Paystack did not answer in time") from None
         except httpx.HTTPError as exc:  # its text can hold the address: only the type is kept
             raise lost(f"the Paystack request failed ({type(exc).__name__})") from None
-        return _data(response, lost, refused)
+        return _data(response, lost, refused, blocked)
 
 
 def _data(
     response: httpx.Response,
     lost: type[BillingError] = ProviderError,
     refused: type[ProviderError] = ProviderError,
+    blocked: type[ProviderError] = ProviderError,
 ) -> dict:
     """The `data` of a Paystack answer. `lost` is what a missing or unreadable answer is: a
     `ProviderError` for a read, `OutcomeUnknown` for a call that moves money. `refused` is what a
-    401, a 429 and a 4xx raise: Paystack answered and did nothing."""
+    4xx raises and `blocked` what a 401 and a 429 raise: Paystack answered and did nothing."""
     code = response.status_code
     if code == 401:
-        raise refused("Paystack refused the secret key (401)")
+        raise blocked("Paystack refused the secret key (401)")
     if code == 429:
-        raise refused(f"Paystack answered {code}")  # rate limited: not processed
+        raise blocked(f"Paystack answered {code}")  # rate limited: not processed
     if code >= 500:
         raise lost(f"Paystack answered {code}")
     if code == 409 and lost is OutcomeUnknown:

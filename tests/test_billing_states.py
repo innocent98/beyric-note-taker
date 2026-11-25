@@ -256,3 +256,12 @@ def test_the_retry_count_never_points_past_the_last_attempt():
 )
 def test_effective_status_follows_the_clock(row, at, expected):
     assert s.effective_status(row, at) == expected
+
+
+def test_an_active_subscription_past_its_end_waits_for_a_charge_held_back_until_next_charge_at():
+    """A charge refused for our key or a rate limit (not the person's failure) holds the attempt
+    back with `next_charge_at` while the status stays `active`: nothing is due until then."""
+    held = snap(next_charge_at=D + timedelta(hours=1))
+    assert s.due_action(held, D + timedelta(minutes=1)).kind == s.NONE
+    assert s.due_action(held, D + timedelta(hours=1)) == s.Due(s.CHARGE, 0)
+    assert s.due_action(snap(), D + timedelta(minutes=1)) == s.Due(s.CHARGE, 0)  # nothing held

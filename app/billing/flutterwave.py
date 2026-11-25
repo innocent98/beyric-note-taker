@@ -51,6 +51,7 @@ from app.billing.provider import PROVIDER_FACTORIES
 from app.billing.types import (
     BadEvent,
     BillingError,
+    ChargeBlocked,
     Checkout,
     IgnoredEvent,
     NoRecord,
@@ -239,7 +240,7 @@ class FlutterwaveProvider:
         settings = self._settings
         key = settings.flutterwave_secret_key.strip()
         if not key:
-            raise NothingMoved("FLUTTERWAVE_SECRET_KEY is not set: no call was made")
+            raise ChargeBlocked("FLUTTERWAVE_SECRET_KEY is not set: no call was made")
         lost = OutcomeUnknown if money else ProviderError
         headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
         content = None
@@ -278,9 +279,9 @@ class FlutterwaveProvider:
         if code >= 500:
             raise lost(f"Flutterwave answered HTTP {code}")
         if code in (401, 403):  # refused before it did anything: `NothingMoved`
-            raise NothingMoved(f"Flutterwave refused the secret key (HTTP {code})")
+            raise ChargeBlocked(f"Flutterwave refused the secret key (HTTP {code})")
         if code == 429:
-            raise NothingMoved("Flutterwave rate limit (HTTP 429)")
+            raise ChargeBlocked("Flutterwave rate limit (HTTP 429)")
         if code in (400, 404, 422):
             raise RequestRefused(
                 f"Flutterwave refused the request (HTTP {code}): {message[:200]}", message[:200]

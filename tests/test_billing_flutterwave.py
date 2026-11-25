@@ -39,6 +39,7 @@ from app.billing.routing import provider_for
 from app.billing.types import (
     BadEvent,
     BillingError,
+    ChargeBlocked,
     IgnoredEvent,
     NoRecord,
     NothingMoved,
@@ -691,17 +692,18 @@ def test_a_charge_that_failed_for_another_reason_is_still_an_error(answer):
 
 
 @pytest.mark.parametrize("answer", [reply("{}", 401), reply("{}", 403), reply("{}", 429)])
-def test_a_charge_refused_for_a_key_or_a_rate_limit_is_nothing_moved(answer):
-    """Review S1: the vendor said no before doing anything, so the caller need not wait."""
-    with pytest.raises(NothingMoved):
+def test_a_charge_refused_for_a_key_or_a_rate_limit_is_blocked(answer):
+    """The vendor said no before doing anything, and for a reason that is ours or theirs, never
+    the customer's: the renewal clock must not count it."""
+    with pytest.raises(ChargeBlocked):
         Wire(answer).provider().charge_saved_method(
             "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
         )
 
 
-def test_a_charge_with_no_key_is_nothing_moved():
+def test_a_charge_with_no_key_is_blocked():
     wire = Wire(reply(CHARGE_OK))
-    with pytest.raises(NothingMoved):
+    with pytest.raises(ChargeBlocked):
         wire.provider(flutterwave_secret_key="   ", flutterwave_secret_hash="").charge_saved_method(
             "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
         )

@@ -112,7 +112,9 @@ class JoinDecision:
 
 
 def mine(user: User, user_id_column, hash_column):
-    """`user`'s rows, by id or by the fingerprint of the email, as `ledger_seconds` does."""
+    """`user`'s rows, by id OR by the fingerprint of the email. Only for the trial's abuse check
+    (`trial.had_one`): spending a grant uses `my_grants` and counting usage `usage.owned_entries`,
+    which never match an address that changed hands."""
     return or_(user_id_column == user.id, hash_column == usage.email_hash(user.email))
 
 
@@ -178,7 +180,7 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
             func.max(HourGrant.expires_at),
             func.count().filter(HourGrant.expires_at.is_(None)),
         ).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash),
+            my_grants(user),
             HourGrant.kind.in_(BACKLOG_KINDS),
         )
     ).one()
@@ -187,7 +189,7 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
     if since is None:
         return 0
     query = select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-        mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+        usage.owned_entries(user),
         UsageEntry.counted_at > since,
         ~select(UsageAllocation.id).where(UsageAllocation.usage_entry_id == UsageEntry.id).exists(),
     )
@@ -202,16 +204,14 @@ def pre_pilot_seconds(session: Session, user: User) -> int:
     """Usage counted at or before the moment the person's pilot grants were made (migration 0049
     made each as the old cap minus the ledger of that moment). 0 with no pilot grant."""
     since = session.scalar(
-        select(func.min(HourGrant.starts_at)).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot"
-        )
+        select(func.min(HourGrant.starts_at)).where(my_grants(user), HourGrant.kind == "pilot")
     )
     if since is None:
         return 0
     return int(
         session.scalar(
             select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-                mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+                usage.owned_entries(user),
                 UsageEntry.counted_at <= since,
             )
         )

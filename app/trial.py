@@ -14,10 +14,14 @@ whether to **give** one:
   takes it off the trial, so nobody gets those hours twice.
   `scripts/hours_reconcile_backlog.py` settles it into allocations.
 - **Once per person.** Not given to an admin, to anyone who has held a `trial` or a `pilot` grant
-  (a pilot account has its own hours, even when they are all used), or whose email fingerprint has:
-  grants are found by user id or by the fingerprint (`entitlements.mine`), and a deleted account's
-  grants keep their fingerprint (the user id is set null), so deleting an account and signing up
-  again with the same address gives nothing.
+  (a pilot account has its own hours, even when they are all used), or whose email fingerprint has.
+  This is the ABUSE check, and the one place the fingerprint still decides on its own
+  (`entitlements.mine`: by user id OR by the fingerprint): a deleted account's grants keep their
+  fingerprint (the user id is set null), so deleting an account and signing up again with the same
+  address gives no second trial. It is a different question from who may SPEND a grant
+  (`entitlements.my_grants`: the account's own, plus a trial or pilot a deleted account left, which
+  the person signing up again with that address finds again), and from whose recordings count
+  against it (`usage.owned_entries`). A paid grant is never matched by an address.
 - **The end.** The grant ends at the hours used (`entitlements` counts what is left) or
   `TRIAL_DAYS` days after it is given, whichever comes first. It is given the moment the email is
   confirmed (password link or Google), so "after sign-up" is the confirmation, as spec 3.8 says. A

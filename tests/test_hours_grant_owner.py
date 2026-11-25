@@ -13,8 +13,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import update
 
-from app import entitlements, google_signin, hours
-from app.models import HourGrant
+from app import entitlements, google_signin, hours, usage
+from app.models import HourGrant, UsageAllocation, UsageEntry
 from app.usage import email_hash
 from tests.test_web import make_settings, make_user
 
@@ -125,3 +125,58 @@ def test_the_trial_is_still_refused_to_an_address_that_already_had_one(session, 
 
     assert trial.had_one(session, again) is True
     assert trial.give(session, again, T0, make_settings(trial_seconds=3 * HOUR)) is None
+
+
+def used(session, user, seconds, *, user_id=True, at=T0 - timedelta(hours=1)):
+    row = UsageEntry(
+        user_id=user.id if user_id else None,
+        email_hash=email_hash(ADDRESS),
+        seconds=seconds,
+        counted_at=at,
+    )
+    session.add(row)
+    session.commit()
+    return row
+
+
+def test_the_previous_owners_usage_does_not_come_off_the_next_owners_hours(session, ada):
+    """Review delta (4): the usage ledger and the backlog follow the account too. A recorded hour
+    of the person who left the address must not be taken off the hours of the person who took it,
+    nor settled onto their paid grant by `reconcile_backlog`."""
+    grant(session, ada, "trial", 3 * HOUR)
+    old = used(session, ada, HOUR)  # counted, never allocated: the backlog
+    google_signin._sign_in_by_sub(session, ada, "ada.new@example.test")
+    session.commit()
+    newcomer = make_user(session, ADDRESS)
+    pack = grant(session, newcomer, "pack", 5 * HOUR)
+
+    assert entitlements.status(session, newcomer, T0).seconds_left == 5 * HOUR
+    assert hours.reconcile_backlog(session, newcomer, T0) == 0
+    session.commit()
+    assert session.query(UsageAllocation).count() == 0
+    assert usage.ledger_seconds(session, newcomer) == 0
+    assert entitlements.pre_pilot_seconds(session, newcomer) == 0
+    # the person who left keeps their own account of it
+    assert usage.ledger_seconds(session, ada) == HOUR
+    assert entitlements.status(session, ada, T0).seconds_left == 2 * HOUR
+    assert (old.user_id, pack.user_id) == (ada.id, newcomer.id)
+
+
+def test_the_cap_baseline_ignores_the_previous_owners_pilot_and_usage(session, ada):
+    grant(session, ada, "pilot", 2 * HOUR)
+    used(session, ada, 4 * HOUR, at=T0 - timedelta(days=2))
+    google_signin._sign_in_by_sub(session, ada, "ada.new@example.test")
+    session.commit()
+    newcomer = make_user(session, ADDRESS)
+
+    assert hours._cap_baseline(session, newcomer) == usage.DEFAULT_CAP_SECONDS
+
+
+def test_usage_a_deleted_account_left_still_counts_against_the_next_person_at_the_address(
+    session, ada
+):
+    """The documented rule (deleting an account and signing up again does not reset the hours):
+    only a row whose `user_id` is gone is found again by the fingerprint."""
+    used(session, ada, HOUR, user_id=False)
+
+    assert usage.ledger_seconds(session, ada) == HOUR

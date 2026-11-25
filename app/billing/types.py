@@ -40,6 +40,14 @@ class NothingMoved(ProviderError):
     waiting for a lookup that can never find a charge that was never made."""
 
 
+class ChargeBlocked(NothingMoved):
+    """A charge refused for a reason that is OURS or the provider's, never the customer's: our key
+    is missing or refused (401, 403), or the provider is rate limiting us (429). Nothing was
+    charged, and it says nothing about the person or their card, so `renewals` does not count it
+    as their failed attempt (no grace, no mail, no retry spent): it tells the admins and tries
+    again later."""
+
+
 class NoRecord(ProviderError):
     """The provider understood a lookup by our reference and says it has nothing under it (a hosted
     page nobody tried to pay: some providers make a transaction only when the payer attempts one).

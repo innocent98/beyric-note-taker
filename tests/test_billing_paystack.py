@@ -28,6 +28,7 @@ from app.billing.paystack import API_BASE, NotConfigured, PaystackProvider
 from app.billing.provider import PROVIDER_FACTORIES, provider_named
 from app.billing.types import (
     BadEvent,
+    ChargeBlocked,
     IgnoredEvent,
     NothingMoved,
     OutcomeUnknown,
@@ -779,16 +780,29 @@ def test_a_charge_answer_with_a_float_amount_is_refused():
     "answer",
     [
         (400, {"status": False, "message": "Authorization code not found"}),
-        (401, {"status": False, "message": "Invalid key"}),
         (403, {"status": False, "message": "Forbidden"}),
         (404, {"status": False, "message": "Not found"}),
+    ],
+)
+def test_a_charge_paystack_refuses_with_a_4xx_is_nothing_moved_and_the_customers_failure(answer):
+    """Review S1: a refused call made no charge, so a caller need not wait for a lookup."""
+    provider, _ = make(answer)
+    with pytest.raises(NothingMoved) as caught:
+        charge(provider)
+    assert not isinstance(caught.value, ChargeBlocked)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (401, {"status": False, "message": "Invalid key"}),
         (429, {"status": False, "message": "Too many requests"}),
     ],
 )
-def test_a_charge_paystack_refuses_with_a_4xx_is_nothing_moved(answer):
-    """Review S1: a refused call made no charge, so a caller need not wait for a lookup."""
+def test_a_charge_refused_for_our_key_or_a_rate_limit_is_blocked_not_the_customers_failure(answer):
+    """Review delta (3): ours, or the provider's, so the renewal clock must not count it."""
     provider, _ = make(answer)
-    with pytest.raises(NothingMoved):
+    with pytest.raises(ChargeBlocked):
         charge(provider)
 
 
@@ -809,9 +823,9 @@ def test_a_charge_refused_before_any_call_is_nothing_moved(bad):
     assert script.requests == []
 
 
-def test_a_charge_with_no_key_is_nothing_moved():
+def test_a_charge_with_no_key_is_blocked():
     provider, script = make(ok("charge_authorization_response.json"), secret_key="")
-    with pytest.raises(NothingMoved):
+    with pytest.raises(ChargeBlocked):
         charge(provider)
     assert script.requests == []
 

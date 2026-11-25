@@ -163,6 +163,8 @@ def due_action(s: Snapshot, now: datetime) -> Due:
             return Due(NONE)
         if s.cancel_at_period_end:
             return Due(END_CANCELED)
+        if s.next_charge_at is not None and now < s.next_charge_at:
+            return Due(NONE)  # held back: a charge refused for a reason that is not the person's
         return Due(CHARGE, 0)
     if s.status == PAST_DUE:
         ends = s.grace_ends_at or grace_end(s.current_period_end)
