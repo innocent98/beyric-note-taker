@@ -271,6 +271,12 @@ class OAuthFlow(Base):
     code_verifier: Mapped[str] = mapped_column(String(128))
     nonce: Mapped[str] = mapped_column(String(64))
     return_to: Mapped[str | None] = mapped_column(String(500))
+    # The workspace a calendar connect was started from, so the callback files the connection there
+    # and returns to it (workspaces design, section 4). Null for a sign-in flow and for a calendar
+    # flow begun before the column existed: the callback then uses the person's default workspace.
+    team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="CASCADE")
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -653,7 +659,7 @@ class CalendarConnection(Base):
     """A user's connected calendar source: their Google connection (the calendar and Meet features
     are each derived from `granted_scopes`, so Meet detection works without the Calendar scope) or,
     from provider `ics`, a pasted calendar link. Access tokens are never stored; the refresh token
-    is AES-GCM ciphertext (`app/vault.py`). One row per user and provider."""
+    is AES-GCM ciphertext (`app/vault.py`). One row per user, workspace and provider."""
 
     __tablename__ = "calendar_connections"
     __table_args__ = (
@@ -673,14 +679,17 @@ class CalendarConnection(Base):
             _in("meet_subscription_state", MEET_SUBSCRIPTION_STATES),
             name="ck_calendar_connections_meet_state",
         ),
-        UniqueConstraint("user_id", "provider", name="uq_calendar_connections_user_provider"),
+        UniqueConstraint(
+            "user_id", "team_id", "provider", name="uq_calendar_connections_user_team_provider"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     # The workspace this connection belongs to (workspaces design, section 4): meetings it joins
-    # are born there, and the join rules live on it. Until the connect routes take the active
-    # workspace, a new connection is in the person's default workspace.
+    # are born there, and the join rules live on it. A person holds at most one connection per
+    # provider in a workspace, and may hold the same provider (even the same account) in several.
+    # The connect routes name the workspace; a path that does not gets the person's default one.
     team_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("teams.id", ondelete="CASCADE"),

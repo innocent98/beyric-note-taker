@@ -227,6 +227,7 @@ def _note_crash(session: Session, join_id: int, now: datetime) -> None:
             alerts.notify_user(
                 session,
                 join.user_id,
+                team_id=join.team_id,
                 kind="calendar.error",
                 severity="error",
                 title="Meeting not recorded",
@@ -478,6 +479,7 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         alerts.notify_user(
             session,
             join.user_id,
+            team_id=join.team_id,
             kind="calendar.in_earlier_notes",
             severity="info",
             title="Recorded in the earlier meeting",
@@ -494,6 +496,7 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         alerts.notify_user(
             session,
             join.user_id,
+            team_id=join.team_id,
             kind="calendar.not_recorded",
             severity="error",
             title="Meeting not recorded",
@@ -583,7 +586,7 @@ def _recheck(
         raw = calendar_providers.cancelled_stub(conn.provider, event.source_event_id)
     join.rechecked_at = now  # committed by apply_batch with the rest
     _touch(join, now)
-    user_settings = workspace_prefs.for_user(session, join.user_id, join.team_id)
+    user_settings = workspace_prefs.for_user(session, join.user_id, conn.team_id)
     try:
         apply_batch(
             session,
@@ -812,6 +815,7 @@ def _refused(
         alerts.notify_user(
             session,
             user_id,
+            team_id=join.team_id,
             kind="calendar.no_capacity",
             severity="warning",
             title="The note taker is busy",
@@ -842,6 +846,7 @@ def _refused(
             alerts.notify_user(
                 session,
                 user_id,
+                team_id=join.team_id,
                 kind=f"calendar.{reason}",
                 severity="warning",
                 title=title,
@@ -918,6 +923,7 @@ def _send_failed(session: Session, join_id: int, now: datetime) -> JoinOutcome |
     alerts.notify_user(
         session,
         join.user_id,
+        team_id=join.team_id,
         kind="calendar.join_failed",
         severity="warning",
         title="The note taker could not start",
@@ -949,6 +955,7 @@ def _fail(
     alerts.notify_user(
         session,
         join.user_id,
+        team_id=join.team_id,
         kind=f"calendar.{reason}",
         severity="error",
         title="Meeting not recorded",

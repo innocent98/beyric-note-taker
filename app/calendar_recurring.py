@@ -24,10 +24,17 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import auth, calendar_connect, calendar_providers, google_oauth, services
+from app import (
+    auth,
+    calendar_connect,
+    calendar_providers,
+    google_oauth,
+    services,
+    workspace_context,
+)
 from app.api_schemas import ErrorResponse
 from app.db import get_session
-from app.models import CalendarConnection, CalendarEvent, User
+from app.models import CalendarConnection, CalendarEvent, SeriesIgnored, Team, User
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -173,9 +180,17 @@ def _series(
         )
         .order_by(CalendarEvent.starts_at, CalendarEvent.id)
     ).all()
+    # A recurring meeting removed from THIS workspace has no card here (`series_ignored` is per
+    # workspace: the same meeting in another workspace keeps its card).
+    removed = set(
+        session.scalars(
+            select(SeriesIgnored.calendar_recurring_id).where(SeriesIgnored.team_id == conn.team_id)
+        )
+    )
     groups: dict[str, list[CalendarEvent]] = defaultdict(list)
     for row in rows:
-        groups[row.recurring_event_id].append(row)
+        if row.recurring_event_id not in removed:
+            groups[row.recurring_event_id].append(row)
     cards = []
     for events in groups.values():
         ahead = [event for event in events if event.starts_at > now]
@@ -200,10 +215,13 @@ def calendar_recurring(
     tz: str | None = Query(None, max_length=64, description="IANA zone name, e.g. Africa/Lagos"),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    ws: Team = Depends(workspace_context.current),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> RecurringOut:
-    """The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting
-    on the connected calendar with a cadence worked out from its stored times, and its next
+    """The Recurring cards of the Meetings screen for the ACTIVE workspace (`X-Team-Id`, else the
+    caller's default one; no CSRF header needed): each recurring meeting on the calendar connected
+    in this workspace, except those removed from it, with a cadence worked out from its stored
+    times, and its next
     occurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().
     timeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty
     when no calendar is connected or nothing recurs. Nothing is fetched from Google. 404
@@ -211,6 +229,6 @@ def calendar_recurring(
     name that is not known."""
     _enabled(request, google)
     zone = _zone(tz)
-    conn = calendar_connect.live_calendar_connection(session, user)
-    series = _series(session, conn, zone, _now()) if conn is not None else []
-    return RecurringOut(timezone=zone.key, series=series)
+    conn = calendar_connect.live_calendar_connection(session, user, ws.id)
+    cards = _series(session, conn, zone, _now()) if conn is not None else []
+    return RecurringOut(timezone=zone.key, series=cards)

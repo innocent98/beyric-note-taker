@@ -89,7 +89,7 @@ def write_workspace_prefs(
         services.template_or_404(session, workspace, body.calendar_template_id)
     if name_given:
         workspace_prefs.row_for_update(session, user.id, workspace.id).bot_name = new_name
-    conn = calendar_connect.live_calendar_connection(session, user)
+    conn = calendar_connect.live_calendar_connection(session, user, workspace.id)
     calendar_api.apply_prefs(
         session,
         user,

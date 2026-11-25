@@ -33,7 +33,9 @@
   - [x] Leak guard extended: templates, vocabulary and `/api/workspace-prefs` are workspace data (`tests/test_workspace_leaks.py`)
   - [x] FE guide `docs/fe-integration-guide-workspaces-settings.md` from 44 real captures (`docs/fe-captures/workspaces/settings-*.json`)
   - [x] Browser check at 390 and 1280 px (member view); CI green on the final head: see the PR
-- [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
+- [x] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9) (branch `feature/workspaces-calendar`, SOP `docs/sop/2026-11-24-workspaces-calendar.md`, migration `0075` placeholder, FE guide `docs/fe-integration-guide-workspaces-calendar.md`; nothing verified against a real Google or Microsoft calendar)
+  - [x] T8 connections keyed `(user, workspace, provider)`, connect and callback return per workspace, reference-counted revoke, leave and removal disconnect
+  - [x] T9 chooser `app/calendar_arbitration.py` under a per-person lock, `recorded_in` Upcoming row with Switch here, recurring per workspace, calendar GETs out of `PENDING_SLICE`
 - [x] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12) (branch `feature/workspaces-lifecycle`, SOP `docs/sop/2026-11-24-workspaces-lifecycle.md`, FE guide `docs/fe-integration-guide-workspaces-lifecycle.md`, 36 live captures `docs/fe-captures/workspaces-lifecycle/`; no migration; verified locally and in a real browser at 390 and 1280 px, the `make` gate pending the recipes merge)
   - [x] T10 Plan limit: `Plan.max_owned_teams` through the live plan (Free 0, Starter 3, Pro 10, Scale unlimited; a trial is Free; members never count; a lapse or downgrade never removes a team; hand-overs checked); Make-a-team card shows the allowance and the upgrade message
   - [x] T11 Delete a workspace (owner, nobody else in it; meetings go home or are deleted when the recorder is gone), leave and removal rules, personal space protected, classes (`kind`, share default on, one `workspaceWords` helper)

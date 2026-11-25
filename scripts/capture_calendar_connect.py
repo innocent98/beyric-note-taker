@@ -109,8 +109,10 @@ class Recorder:
         text_ = re.sub(r"\b(state|nonce|code_challenge)=[\w-]{20,}", r"\1=<\1>", text_)
         return re.sub(r"\bcode=[\w%./-]{10,}", "code=<code>", text_)
 
-    def call(self, name, method, path, *, body=None, csrf="session", note=""):
+    def call(self, name, method, path, *, body=None, csrf="session", note="", team=None):
         headers = {}
+        if team is not None:  # the workspace this call is about (`X-Team-Id`)
+            headers["X-Team-Id"] = str(team)
         token = (None if method == "GET" else self.csrf) if csrf == "session" else csrf
         if token:
             headers["X-CSRF-Token"] = token

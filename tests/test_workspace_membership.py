@@ -43,6 +43,7 @@ from tests.test_workspace_pipeline import (  # noqa: F401
     cast,
     ready_in_x,
 )
+from tests.workspace_plans import subscribe
 
 
 def leave(session, cast):
@@ -112,6 +113,7 @@ def old_workspace(session, owner, linked):
     """The owner's calendar is connected in team X (with a template of its own), and the owner is
     a member of it."""
     other = make_user(session, "boss@example.test")
+    subscribe(session, other, "plan_20h")  # owning a team needs a plan
     x = teams.create_owned_team(session, other, "Old workspace")
     session.add(TeamMember(team_id=x.id, user_id=owner.id, role="member"))
     secret = Template(

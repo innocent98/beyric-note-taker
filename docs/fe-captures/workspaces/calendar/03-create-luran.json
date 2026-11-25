@@ -1,0 +1,31 @@
+{
+  "note": "A second workspace (a team Ada owns). Her personal workspace already exists.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "name": "Luran"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "Luran",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": true,
+      "can_manage": true
+    }
+  }
+}

@@ -23,18 +23,20 @@ What it stores and what it never does:
   overlap the listed window and only before a bot was sent.
 * A join whose bot is already sent follows the meeting (spec 7.7), not the calendar: a move is
   ignored, and only an explicit cancellation from the calendar stops the bot.
+* One person's copies of the same event in several workspaces make ONE join: the chooser in
+  `app/calendar_arbitration.py` decides which workspace records (workspaces design 12.4), under
+  one lock per person, and the others' not-yet-sent joins are cancelled (`recorded_elsewhere`).
 """
 
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import calendar_providers, calendar_states, workspace_prefs
+from app import calendar_arbitration, calendar_providers, calendar_states, workspace_prefs
 from app.bot_provider import BotProvider, build_provider
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
 from app.config import Settings, get_settings
@@ -64,14 +66,6 @@ SYNCABLE = ("connected", "degraded")
 # backlog (after downtime) from holding the sync thread for minutes.
 MAX_PER_RUN = 50
 ERROR_LIMIT = 300
-# What a user without a settings row gets (sign-up creates one, so this is a safety net).
-DEFAULT_USER_SETTINGS = SimpleNamespace(
-    auto_join_rule="all",
-    calendar_template_id=None,
-    join_unanswered=False,
-    skip_one_on_ones=False,
-)
-
 # The bot keeps trying to get in until this long after the start (spec 7.6).
 DEADLINE_AFTER_START = timedelta(minutes=15)
 # Titles are the user's own words but not bounded by Google; the Upcoming list needs a line, not a
@@ -114,10 +108,26 @@ class _Run:
     lead: timedelta
     join_settings: JoinSettings
     template_id: int | None
+    settings: Settings
     result: ApplyResult = field(default_factory=ApplyResult)
     # Joins whose bot is already sent and whose event was cancelled: stopped after the commit,
     # because `cancel_meeting` commits and talks to the provider.
     to_stop: list[int] = field(default_factory=list)
+
+
+def _run_for(
+    session: Session, conn: CalendarConnection, prefs, now: datetime, settings: Settings
+) -> _Run:
+    """What one connection's reconcile needs: the rules and template of ITS workspace."""
+    return _Run(
+        session=session,
+        conn=conn,
+        now=now,
+        lead=timedelta(seconds=settings.autojoin_lead_seconds),
+        join_settings=JoinSettings.for_user(prefs, teams_join_enabled=settings.teams_join_enabled),
+        template_id=_own_template(session, conn.team_id, prefs.calendar_template_id),
+        settings=settings,
+    )
 
 
 def _clean(text: str) -> str:
@@ -188,16 +198,8 @@ def apply_batch(
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     settings = settings or get_settings()
-    run = _Run(
-        session=session,
-        conn=conn,
-        now=now,
-        lead=timedelta(seconds=settings.autojoin_lead_seconds),
-        join_settings=JoinSettings.for_user(
-            user_settings, teams_join_enabled=settings.teams_join_enabled
-        ),
-        template_id=_own_template(session, conn.team_id, user_settings.calendar_template_id),
-    )
+    run = _run_for(session, conn, user_settings, now, settings)
+    calendar_arbitration.lock_person(session, conn.user_id)  # until the commit below
     latest, named = _parse_all(batch, conn, run.result)
 
     existing = _events_by_source_id(session, conn, list(latest))
@@ -220,6 +222,7 @@ def apply_batch(
 
     if batch.complete and batch.full:
         _cancel_missing(run, named)
+    _heal_losers(run)
     session.commit()
     _stop_cancelled_bots(run, provider)
     return run.result
@@ -242,16 +245,8 @@ def rerun_rules(
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     settings = settings or get_settings()
-    run = _Run(
-        session=session,
-        conn=conn,
-        now=now,
-        lead=timedelta(seconds=settings.autojoin_lead_seconds),
-        join_settings=JoinSettings.for_user(
-            user_settings, teams_join_enabled=settings.teams_join_enabled
-        ),
-        template_id=_own_template(session, conn.team_id, user_settings.calendar_template_id),
-    )
+    run = _run_for(session, conn, user_settings, now, settings)
+    calendar_arbitration.lock_person(session, conn.user_id)  # until the commit below
     owned = [e for e in events if e.user_id == conn.user_id and e.connection_id == conn.id]
     joins = _joins_by_event_id(session, conn.user_id, [e.id for e in owned])
     for row in owned:
@@ -339,8 +334,122 @@ def _copy_event(row: CalendarEvent, parsed: ParsedEvent, now: datetime) -> None:
 # ---- joins ----
 
 
+def would_record(
+    event: CalendarEvent,
+    join_settings: JoinSettings,
+    now: datetime,
+) -> bool:
+    """Whether the workspace whose rules are `join_settings` would send a bot to this event now: the
+    rule, the person's switch for it and the event itself say yes, there is a link to join, it is
+    not past its deadline, and it is not a stranger's invite that only the box would join once it
+    has started. The same answer `_decide` acts on, so the chooser and the join creation agree."""
+    if not will_join(event, event.override, join_settings, now=now).join:
+        return False
+    if not (event.platform and event.native_id and event.meeting_url):
+        return False
+    if now > event.starts_at + DEADLINE_AFTER_START:
+        return False
+    if join_settings.join_unanswered and event.starts_at <= now:
+        without = replace(join_settings, join_unanswered=False)
+        return will_join(event, event.override, without, now=now).join
+    return True
+
+
+def make_wants(
+    session: Session,
+    conn: CalendarConnection,
+    join_settings: JoinSettings,
+    now: datetime,
+    *,
+    teams_join_enabled: bool,
+):
+    """`would_record` for any of the person's connections: `join_settings` for `conn` itself, the
+    other workspace's (`workspace_prefs`) for the others. What the chooser asks of each copy."""
+
+    def wants(event: CalendarEvent, other: CalendarConnection) -> bool:
+        if other.id == conn.id:
+            return would_record(event, join_settings, now)
+        prefs = workspace_prefs.for_user(session, other.user_id, other.team_id)
+        theirs = JoinSettings.for_user(prefs, teams_join_enabled=teams_join_enabled)
+        return would_record(event, theirs, now)
+
+    return wants
+
+
+def _wants(run: _Run):
+    return make_wants(
+        run.session,
+        run.conn,
+        run.join_settings,
+        run.now,
+        teams_join_enabled=run.settings.teams_join_enabled,
+    )
+
+
 def _reconcile(run: _Run, row: CalendarEvent, join: ScheduledJoin | None) -> None:
-    """Bring the event's join in line with what the rule says now."""
+    """Bring the event's join in line with what the rule says now, and with the person's other
+    copies of the same event: when it is held in several workspaces only the one the chooser picks
+    records it (`app/calendar_arbitration.py`); the others' joins that have not sent a bot are
+    cancelled, and the winner's is made, moved or revived."""
+    others = calendar_arbitration.siblings(run.session, row)
+    if not others:  # the usual case: one workspace holds this event
+        _decide(run, row, join)
+        return
+    me = calendar_arbitration.Member(row, run.conn, join)
+    winner = calendar_arbitration.winner_among(me, others, _wants(run))
+    for member in (me, *others):
+        if winner is not None and member.event.id == winner.event_id:
+            continue
+        # A copy that does not record it must not hold the meeting: its join is cancelled while no
+        # bot has been sent (a bot already in is the winner by rule and is never in this list).
+        held = _locked_join(run.session, member.join)
+        if held is not None and held.state in CANCELLABLE:
+            _cancel_join(run, held, calendar_arbitration.RECORDED_ELSEWHERE)
+    if winner is None or winner.event_id == row.id:
+        _decide(run, row, join)
+        return
+    chosen = next(m for m in others if m.event.id == winner.event_id)
+    prefs = workspace_prefs.for_user(run.session, chosen.conn.user_id, chosen.conn.team_id)
+    other_run = _run_for(run.session, chosen.conn, prefs, run.now, run.settings)
+    other_run.result, other_run.to_stop = run.result, run.to_stop
+    _decide(other_run, chosen.event, _locked_join(run.session, chosen.join))
+
+
+def _locked_join(session: Session, join: ScheduledJoin | None) -> ScheduledJoin | None:
+    """The join row, locked and re-read: the runner may be changing its state."""
+    if join is None:
+        return None
+    return session.scalars(
+        select(ScheduledJoin)
+        .where(ScheduledJoin.id == join.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+
+
+def _heal_losers(run: _Run) -> None:
+    """A copy whose join was cancelled because another workspace recorded the meeting gets it back
+    when that other workspace no longer does (its calendar was disconnected, its event cancelled or
+    its rule changed elsewhere): the incremental sync only reconciles events that changed, so this
+    looks at the cancelled ones that are still ahead."""
+    rows = run.session.execute(
+        select(CalendarEvent, ScheduledJoin)
+        .join(ScheduledJoin, ScheduledJoin.calendar_event_id == CalendarEvent.id)
+        .where(
+            CalendarEvent.connection_id == run.conn.id,
+            CalendarEvent.user_id == run.conn.user_id,
+            ScheduledJoin.user_id == run.conn.user_id,
+            ScheduledJoin.state == "cancelled",
+            ScheduledJoin.skip_reason == calendar_arbitration.RECORDED_ELSEWHERE,
+            CalendarEvent.ends_at > run.now,
+        )
+    ).all()
+    for event, join in rows:
+        _reconcile(run, event, join)
+
+
+def _decide(run: _Run, row: CalendarEvent, join: ScheduledJoin | None) -> None:
+    """The join of one event by its own workspace's rule alone (no other copy to consider)."""
     decision = will_join(row, row.override, run.join_settings, now=run.now)
     if not decision.join:
         # An event that has simply ended keeps its join as it is: if no bot went in, the runner
