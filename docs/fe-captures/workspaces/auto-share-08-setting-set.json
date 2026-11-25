@@ -1,0 +1,21 @@
+{
+  "note": "Pat chooses Platform team (X): the saved rule.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/auto-share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 4
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team_id": 4
+    }
+  }
+}

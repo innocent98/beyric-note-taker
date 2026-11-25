@@ -1001,6 +1001,14 @@ class Meeting(Base):
     # `meeting_teams.unshare`): nothing may share it again by default (`teams.apply_share_default`),
     # only the recorder's own "share" (which clears this). Never read for who may see a meeting.
     kept_private: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # True while `shared_team_id` was set by the recorder's own "Share my new meetings with" choice
+    # (`teams.apply_share_default`, the one place that sets it) and by nothing else: it is what lets
+    # the meeting page say "Shared with <team> by your auto-share rule". Any other write of
+    # `shared_team_id` (a manual share, unshare, move) resets it (`_forget_auto_rule` below). Only a
+    # label: never read for who may see a meeting.
+    shared_by_auto_rule: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
     # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
     # one it is merely shared with (`ck_meetings_team_xor`: never both). Null unless moved
     # (`app/meeting_teams.py`). The read and write rules are in `app/visibility.py`.
@@ -2333,6 +2341,17 @@ def _file_in_team(target: Meeting, value, oldvalue, initiator) -> None:
 
 event.listen(Meeting.shared_team_id, "set", _file_in_team)
 event.listen(Meeting.owner_team_id, "set", _file_in_team)
+
+
+# The "shared by your auto-share rule" label is true only for the write the rule made. Every other
+# write of `shared_team_id` (the share and unshare routes, a move, tests, scripts) resets it, so a
+# meeting the person shared or unshared by hand never carries the label.
+# `teams.apply_share_default` sets it again right after its own write.
+def _forget_auto_rule(target: Meeting, value, oldvalue, initiator) -> None:
+    target.shared_by_auto_rule = False
+
+
+event.listen(Meeting.shared_team_id, "set", _forget_auto_rule)
 
 
 class Recipe(Base):

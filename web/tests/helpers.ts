@@ -56,6 +56,10 @@ function withDetailDefaults<T>(body: T): T {
   if (body && typeof body === "object" && "notes_html" in body && !("shared_with_team" in body)) {
     Object.assign(body, { shared_with_team: false, can_share: true, shared_by: null });
   }
+  // Captures made before the auto-share label lack `shared_by_auto_share`: not shared by the rule.
+  if (body && typeof body === "object" && "notes_html" in body && !("shared_by_auto_share" in body)) {
+    Object.assign(body, { shared_by_auto_share: false });
+  }
   // Captures made before Tasks lack `tasks` and `tasks_count`, which the API now always sends.
   if (body && typeof body === "object" && "notes_html" in body && !("tasks" in body)) {
     Object.assign(body, { tasks: [], tasks_count: 0 });

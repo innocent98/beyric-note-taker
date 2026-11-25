@@ -45,6 +45,12 @@ describe("the card", () => {
     expect(document.body.textContent).toContain("Never when the bot joins, and never again for a meeting you unshared.");
   });
 
+  it("says the choice also applies to meetings recorded in the Personal workspace", () => {
+    render(<SettingsAutoShare initial={null} teams={teams} />);
+    expect(document.body.textContent).toContain("This includes meetings you record in your Personal workspace.");
+    expect(document.body.textContent).toContain("those meetings are shared with the team too and move into its workspace");
+  });
+
   it("with no team to choose, points to making one", () => {
     render(<SettingsAutoShare initial={null} teams={teams.filter((t) => t.is_personal)} />);
     expect(screen.queryByRole("combobox")).toBeNull();

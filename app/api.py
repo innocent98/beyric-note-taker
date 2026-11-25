@@ -471,6 +471,9 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         shared_by=None if recorder else _owner_name(session, meeting),
         team=_team_ref(session, meeting),
         owned_by_team=meeting.owner_team_id is not None,
+        shared_by_auto_share=recorder
+        and visibility.is_shared(meeting)
+        and meeting.shared_by_auto_rule,
         can_move=(owner and ready and meeting.owner_team_id is None and recorder),
         can_move_back=_can_move_back(session, user, meeting),
         join_attempts=meeting.join_attempts,

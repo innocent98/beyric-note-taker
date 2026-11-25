@@ -4288,6 +4288,11 @@ export interface components {
             series?: components["schemas"]["SeriesRef"] | null;
             /** Shared By */
             shared_by: string | null;
+            /**
+             * Shared By Auto Share
+             * @default false
+             */
+            shared_by_auto_share: boolean;
             /** Shared With Team */
             shared_with_team: boolean;
             /** Speakers Incomplete */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Card, SelectField } from "@/components/ui";
+import { AppLink, Button, Card, SelectField } from "@/components/ui";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Meeting, TeamSummary } from "@/lib/api/types";
 
@@ -115,6 +115,12 @@ export function MeetingTeamCard({ meeting: m, teams, busy, onShare, onUnshare, o
           ? "Everyone on that team can read these notes, the transcript and the tasks. You stay the owner."
           : "Private to you. Share it with one of your teams so they can read the notes, transcript and tasks."}
       </p>
+      {shared && m.shared_by_auto_share ? (
+        <p className="sh-sub mt-note" id="share-team-auto">
+          Shared with {m.team?.name} by your auto-share rule. Stop sharing makes this meeting private; to change the rule
+          for new meetings, go to <AppLink href="/settings">Settings</AppLink>.
+        </p>
+      ) : null}
       {options.length > 0 ? (
         <div className="mt-fields">
           <SelectField

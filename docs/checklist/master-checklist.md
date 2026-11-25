@@ -3,6 +3,13 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25: auto-share rule made visible** (branch `feature/auto-share-visible-label`, SOP `docs/sop/2026-11-25-auto-share-visible-label.md`, migration `0065`, FE guide `docs/fe-integration-guide-workspaces.md` section 13; PR number below once open; **not merged: waits for his typed word**)
+- [x] Settings card says the rule also applies to meetings recorded in the Personal workspace (they are shared with the team and move into its workspace)
+- [x] Meeting page says "Shared with <team> by your auto-share rule" (with the existing Stop sharing and a Settings link) for the recorder; additive `shared_by_auto_share` on the meeting detail from a new `meetings.shared_by_auto_rule` flag (set by the rule, reset by every other share write); who the rule shares with is unchanged
+- [x] Backend, migration round trip and web tests; 17 live captures (`docs/fe-captures/workspaces/auto-share-*.json`); the notes step in the capture is a stand-in
+- [ ] CI green on the pushed head, then his typed "merge #N"; after deploy `alembic current` shows `0065 (head)`
+- [ ] Suggestions left to him: mail and bell wording for a rule-shared meeting; a reminder at the Share dialog; meetings shared by the rule before this ships carry no label
+
 **Addendum 2026-11-25: billing review M1 fixed** (branch `fix/billing-stale-payment-lock`, SOP `docs/sop/2026-11-25-billing-stale-payment-lock.md`; PR needs an Opus delta review before merge; no migration)
 - [x] Payment row locks in `settle.py` (webhook `_apply` and `settle_transaction`) read the row as it is now (`populate_existing`): a payment a webhook already settled is no longer re-granted, marked "needs refund", or overwritten by a `failed` report (3 tests, failing before the fix)
 - [x] Same one-line fix for the other Payment, Subscription and Refund locks without it (`refunds.py` x6, `invoices.py` x1)

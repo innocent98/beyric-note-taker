@@ -374,6 +374,12 @@ class MeetingDetail(MeetingSummary):
     # a private meeting. A moved meeting belongs to its team: it stays if the recorder leaves.
     team: TeamRef | None = None
     owned_by_team: bool = False
+    # True for the recorder while the meeting is shared with `team` because of their own "Share my
+    # new meetings with" setting (`GET /api/settings/auto-share`), and not by hand or by the
+    # workspace's default: the page says "Shared with <team> by your auto-share rule". False for
+    # everyone else (a teammate never sees it), for a private or moved meeting, and as soon as the
+    # recorder shares, unshares or moves it themselves. Additive: older clients ignore it.
+    shared_by_auto_share: bool = False
     # The recorder of a finished, private or shared meeting may move it to a team they belong to
     # the team's owners and admins may move a team's meeting back to its recorder.
     can_move: bool = False

@@ -574,3 +574,105 @@ This guide is the entry point. The other slices have their own guides, each veri
 | Personal recipes shown in every workspace | by design, stated from the code (`app/api_recipe_library.py` lists personal rows for the person whatever the header); no capture of it |
 | Notifications re-filed after share, move and leave | **not run live**: covered by `tests/test_workspace_review_fixes.py`; the list and session shapes are the verified ones of section 6 |
 | Cutover on production-shaped data | rehearsed on a scratch database (`docs/fe-captures/workspaces-cutover/cutover-rehearsal.txt`); not run on the real server |
+
+## 13. Why a meeting is shared: `shared_by_auto_share` (the saved auto-share rule)
+
+**What it is, in the FE's terms.** A person can save "Share my new meetings with <team>" (Settings; `PUT /api/settings/auto-share`, guide `docs/fe-integration-guide-teams.md` section 12). The rule also publishes a meeting recorded in the person's **Personal** workspace: when its notes are first written it is shared with the team and **filed in the team's workspace** (it leaves Personal). People assume Personal means private, so the meeting page says why it is shared. `GET /api/meetings/{id}` (and the share, unshare, move and move-back answers, which return the same detail) gained one field. It is additive: older clients ignore it. No other endpoint changed. Captures: `docs/fe-captures/workspaces/auto-share-NN-*.json` (`scripts/capture_auto_share_label.py`).
+
+### The field
+
+`shared_by_auto_share: boolean`, always present on the meeting detail, **true only when all of these hold**: the reader is the one who recorded the meeting, it is shared with a team right now, and the rule is what shared it. It is **false** for a teammate reading the same meeting, for a private meeting, for a meeting shared by hand (the Share button, even if a rule is saved), for a meeting born shared by its workspace's own default, and for every meeting that was shared before this change (the server did not record why; nothing is guessed). It is on the **detail only**: the rows of `GET /api/meetings` do not carry it (capture 13).
+
+**Field-nesting trap:** it is a top-level field of the detail, next to `shared_with_team` and `team`. It is not inside `team`. Do not infer it from `workspace.is_personal` (a rule-shared meeting is filed in the team's workspace, so `workspace` is the team's: capture 11).
+
+### Real responses (the detail trimmed to the sharing fields; every shown value is verbatim)
+
+Before the notes are written (capture 10: Pat's meeting in her Personal workspace, rule saved as team 4 in capture 08, `{"team_id": 4}`):
+
+```json
+{
+  "id": 1,
+  "status": "bot_sent",
+  "workspace_team_id": 2,
+  "workspace": {
+    "id": 2,
+    "name": "My team",
+    "is_personal": true,
+    "kind": "team"
+  },
+  "shared_with_team": false,
+  "can_share": true,
+  "shared_by": null,
+  "team": null,
+  "owned_by_team": false,
+  "shared_by_auto_share": false
+}
+```
+
+After the notes are written and the rule ran, as the **recorder** (capture 11). Note `workspace` is now the team's:
+
+```json
+{
+  "id": 1,
+  "status": "ready",
+  "workspace_team_id": 4,
+  "workspace": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false,
+    "kind": "team"
+  },
+  "shared_with_team": true,
+  "can_share": true,
+  "shared_by": null,
+  "team": {
+    "id": 4,
+    "name": "Platform team"
+  },
+  "owned_by_team": false,
+  "shared_by_auto_share": true
+}
+```
+
+The same meeting read by a **teammate** (capture 12): the flag is false for them.
+
+```json
+{
+  "id": 1,
+  "status": "ready",
+  "workspace_team_id": 4,
+  "workspace": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false,
+    "kind": "team"
+  },
+  "shared_with_team": true,
+  "can_share": false,
+  "shared_by": "Pat Example",
+  "team": {
+    "id": 4,
+    "name": "Platform team"
+  },
+  "owned_by_team": false,
+  "shared_by_auto_share": false
+}
+```
+
+After the recorder presses Stop sharing (the existing `DELETE /api/meetings/{id}/share`, capture 14) and after she shares it again by hand (`POST /api/meetings/{id}/share` with `{"team_id": 4}`, capture 15): `shared_with_team` is false then true, and `shared_by_auto_share` is **false in both** (`False` and `False`): the person's own act replaced the rule's. A meeting born shared by its workspace (capture 17) is also false.
+
+### UX consequences the FE must surface
+
+- **Settings, "Share my new meetings with":** must say the choice also applies to meetings recorded in the Personal workspace, and that they move into the team's workspace.
+- **Meeting page, team card:** when `shared_with_team && shared_by_auto_share`, say "Shared with <team.name> by your auto-share rule", keep the existing Stop sharing button, and link to Settings to change the rule. Never show it to anyone but the recorder (the API already sends false to others).
+- Stop sharing keeps the meeting where it is (still filed in the team's workspace, private to its recorder) and the rule never shares it again; that is the existing "keep private" behaviour (capture 14).
+
+### Verification (section 13)
+
+| Behaviour | Status |
+|---|---|
+| Rule shares a Personal meeting: flag true for recorder, false for teammate, workspace becomes the team's | verified live (captures 10 to 12) |
+| Unshare and manual re-share clear the flag | verified live (14, 15) |
+| Born shared by the workspace's default is not labelled | verified live (16, 17) |
+| The notes step | **stood in for**: the capture writes a ready meeting and calls `teams.apply_share_default`, the one line the pipeline calls (`app/pipeline.py`); no model ran |
+| Rule naming the workspace the meeting is recorded in; team deleted or left | by tests only (`tests/test_auto_share_label.py`), not captured |
