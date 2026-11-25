@@ -368,11 +368,13 @@ def _listed_enough(listing: dict[str, dict[str, int]], tag: str, key: str, count
     return count >= MIN_SOLE_CANDIDATE_SEGMENTS and listing[tag][key] >= MIN_LISTED_SHARE * count
 
 
-def _in_the_call(name: str, shown: dict[str, str]) -> str | None:
+def _in_the_call(name: str, shown: dict[str, str], bot: set[str] = frozenset()) -> str | None:
     """The participant (comparison key) a candidate's `name` is, among Meet's participants `shown`
     (key -> name): the same name after cleaning, else the ONE participant whose words and the
     name's words are all among each other's ("Ada" is "Ada Obi" when no other participant fits;
-    two that fit, or none, is no answer). None when nobody is that person."""
+    two that fit, or none, is no answer). The note taker is never that person (`bot`, its own
+    names as comparison keys). None when nobody is that person."""
+    shown = {key: text for key, text in shown.items() if key not in bot}
     key = _same(name)
     if key in shown:
         return key
@@ -459,7 +461,7 @@ def _one_to_one(
         else:
             people: dict[str, str] = {}  # tag -> the participant it is, by Meet's own key
             for tag in keys:
-                person = _in_the_call(next(iter(listed[tag].values())), reading.shown)
+                person = _in_the_call(next(iter(listed[tag].values())), reading.shown, bot)
                 if person is None:
                     return None, "not_in_call", "", False
                 people[tag] = person
@@ -470,11 +472,14 @@ def _one_to_one(
                 for key, seconds in reading.lit.items()
                 if key not in people.values() and key not in bot
             }
-            if any(seconds >= meet_timeline.MIN_EXTRA_SECONDS for seconds in extras.values()):
-                everyone = sum(seconds for key, seconds in reading.lit.items() if key not in bot)
-                if sum(extras.values()) >= meet_timeline.MAX_EXTRA_SHARE * everyone:
-                    return None, "extra_speaker", "", False
-                small_extra = True
+            # Everyone with no tag counts together: a few coughs are nothing, but a share of the lit
+            # time that adds up to `MAX_EXTRA_SHARE` is a voice the tags do not hold, however many
+            # people it is spread over. Under it, `MIN_EXTRA_SECONDS` altogether earns the note.
+            extra_seconds = sum(extras.values())
+            everyone = sum(seconds for key, seconds in reading.lit.items() if key not in bot)
+            small_extra = extra_seconds >= meet_timeline.MIN_EXTRA_SECONDS
+            if small_extra and extra_seconds >= meet_timeline.MAX_EXTRA_SHARE * everyone:
+                return None, "extra_speaker", "", False
             if reading.refused in (None, "clock_shifted"):
                 for tag, person in people.items():
                     for cells in (reading.cells, reading.shifted_cells):
@@ -627,6 +632,8 @@ def _earlier_rules(
                 "note": "elimination_off",
                 "would_be": chosen[tag],
             }
+            if chosen_how[tag] == "one_to_one":
+                result[tag]["via"] = "one_to_one"  # the timeline may not name it either
         elif not listed.get(tag):
             result[tag] = {"name": "", "how": "unknown", "note": "no_candidates"}
         else:
@@ -721,8 +728,15 @@ def _name_by_timeline(
         return
     for tag in open_tags:
         info = result[tag]
-        if info["note"] not in _TIMELINE_MAY_NAME:
+        if info["note"] not in _TIMELINE_MAY_NAME or info.get("via") == "one_to_one":
+            # (a one-to-one pick the elimination switch holds back stays unnamed: the off switch
+            # means no derived name for that shape, the timeline included)
             info["timeline"] = "not_eligible"
+            continue
+        if candidate_only and info.get("one_to_one"):
+            # the one-to-one rule looked at this meeting and refused it (`extra_speaker`,
+            # `not_in_call`, `contradicted`): the candidate-only mode may not name round the veto
+            info["timeline"] = gate
             continue
         key, why = meet_timeline.verdict(
             reading.cells.get(tag, {}), bot, reading.totals.get(tag, 0.0)

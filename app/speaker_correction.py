@@ -114,9 +114,10 @@ def extra_names(tags: dict, people: dict[str, list[tuple[float, float]]]) -> lis
     """The people a line may move to although no tag is named after them: only in a meeting whose
     naming said another person spoke a little (`skribby.EXTRA_SPEAKER_SMALL`, the one-to-one rule
     with a small extra share), the participants Meet lit for `meet_timeline.MIN_EXTRA_SECONDS` or
-    more whose name is no tag's. They are Meet's own spelling of the name, so a moved line carries
-    the name the call shows. In any other meeting there is none: a line is never moved to a name
-    nobody in the meeting is called by (`resolve_label`)."""
+    more whose name is no tag's (compared as loosely as the naming does: a tag "Ada" is the
+    participant "Ada Obi", so she is not an extra). They are Meet's own spelling of the name, so a
+    moved line carries the name the call shows. In any other meeting there is none: a line is
+    never moved to a name nobody in the meeting is called by (`resolve_label`)."""
     if not any(info.get("note") == skribby.EXTRA_SPEAKER_SMALL for info in tags.values()):
         return []
     tagged = [info["name"] for info in tags.values() if info.get("name")]
@@ -124,7 +125,7 @@ def extra_names(tags: dict, people: dict[str, list[tuple[float, float]]]) -> lis
         name
         for name, spans in people.items()
         if sum(b - a for a, b in spans) >= meet_timeline.MIN_EXTRA_SECONDS
-        and not any(same_name(name, other) for other in tagged)
+        and not any(same_person(name, other) for other in tagged)
     ]
 
 

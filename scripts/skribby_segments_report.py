@@ -12,9 +12,10 @@ How to read it: each block is one diarization tag ("speaker" in Skribby's answer
 the name the app gave the tag and why: `given` (Skribby named it on its own segments),
 `elimination` (taken from `potential_speaker_names` by ruling out the others; a name an earlier
 tag was given by elimination counts as taken, so it can run down a chain), `sole_candidate`
-(every segment of the tag listed one and the same name, nobody else has it), `one_to_one` (a
-meeting where Skribby named no tag: every tag listed one name on every segment, all different,
-and Meet's participant list agrees), all three only while SKRIBBY_NAME_BY_ELIMINATION is on,
+(80% or more of the tag's segments listed one and the same name and no other, nobody else has
+it), `one_to_one` (a meeting where Skribby named no tag: every big tag listed one name on 80% or
+more of its segments, all different, and Meet's participant list agrees), all three only while
+SKRIBBY_NAME_BY_ELIMINATION is on,
 `meet_timeline` or `meet_exclusion` (see the last section), or
 `unknown` (with the reason). Under it, every segment of that
 tag: time, the `speaker_name` Skribby put on that segment, the names it listed as possible, and

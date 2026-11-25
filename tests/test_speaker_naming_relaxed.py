@@ -15,8 +15,8 @@ candidates hold Meet's leader (the last one is in `tests/test_meet_timeline_nami
 import pytest
 
 from app import skribby, speaker_correction, transcript_source
-from tests.test_meet_timeline_naming import ADA, BO, BOT, CY, DI, START, events_record
-from tests.test_one_to_one_naming import lines, named, resolve, timeline_case
+from tests.test_meet_timeline_naming import ADA, BO, BOT, CY, DI, EVE, FLO, START, events_record
+from tests.test_one_to_one_naming import SMALL, lines, named, resolve, timeline_case
 
 
 def meeting_46_like():
@@ -145,12 +145,77 @@ def test_the_evidence_keeps_the_note_so_the_flag_can_be_read_again():
     assert not skribby.holds_other_speakers({"0": {"name": ADA, "how": "given", "note": ""}})
 
 
-def test_elimination_off_records_would_be_and_no_note():
+@pytest.mark.parametrize("timeline", [False, True])
+def test_elimination_off_records_would_be_and_no_name_with_the_timeline_on_or_off(timeline):
+    # the off switch means no derived name: the timeline rule may not name a one-to-one tag
     items, events = meeting_46_like()
-    tags = skribby._resolve_tags(items, (BOT,), False, events, False)
+    tags = skribby._resolve_tags(items, (BOT,), False, events, timeline)
+    assert {t["name"] for t in tags.values()} == {""}
     assert {t["note"] for t in tags.values()} == {"elimination_off"}
     assert {t["would_be"] for t in tags.values()} == {ADA, BO}
     assert not skribby.holds_other_speakers(tags)
+    out = skribby._segments({"transcript": items}, (BOT,), False, events, timeline, True)
+    assert {s["speaker"] for s in out} == {""}
+
+
+@pytest.mark.parametrize("seconds", [50.0, 90.0])
+def test_a_large_extra_share_stays_blank_with_the_timeline_on(seconds):
+    # Cy lit 12% and 20% of all lit time: the owner's policy is that this stays blank, and the
+    # timeline's candidate-only mode must not name the tags round the veto
+    items, events = timeline_case(SMALL, people=(ADA, BO, CY), extra={CY: seconds})
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == "extra_speaker"
+        assert not skribby.holds_other_speakers(tags)
+
+
+def test_many_small_extras_are_one_share_for_the_veto():
+    # four people lit 9.9 s each (none reaches 10 s alone): together 39.6 of 394.6 s, 10.04%
+    people = (ADA, BO, CY, DI, EVE, FLO)
+    extra = {CY: 9.9, DI: 9.9, EVE: 9.9, FLO: 9.9}
+    items, events = timeline_case(SMALL, people=people, extra=extra)
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == "extra_speaker"
+
+
+def test_a_few_small_extras_together_under_the_share_are_named_with_the_note():
+    # two people lit 6 s each: 12 s together is over the floor and under 10% of the lit time
+    items, events = timeline_case(SMALL, people=(ADA, BO, CY, DI), extra={CY: 6.0, DI: 6.0})
+    tags = resolve(items, events, timeline=False)
+    assert named(tags) == {"0": ADA, "1": BO}
+    assert {t["note"] for t in tags.values()} == {"extra_speaker_small"}
+
+
+def test_extras_that_do_not_add_up_to_ten_seconds_are_coughs():
+    people = (ADA, BO, CY, DI, EVE, FLO)
+    extra = {CY: 2.0, DI: 2.0, EVE: 2.0, FLO: 2.0}
+    items, events = timeline_case(SMALL, people=people, extra=extra)
+    tags = resolve(items, events, timeline=False)
+    assert named(tags) == {"0": ADA, "1": BO}
+    assert {t["note"] for t in tags.values()} == {""}
+
+
+def test_a_candidate_that_only_fits_the_note_taker_is_not_in_the_call():
+    # "Beyric" is a word of the note taker's own name and of nobody else's
+    items, events = timeline_case(listed={"0": ["Beyric"], "1": [BO]})
+    assert BOT in [p["name"] for p in events["participants"]]
+    tags = resolve(items, events, timeline=False)
+    assert tags["0"]["name"] == "" and tags["0"]["one_to_one"] == "not_in_call"
+
+
+def test_a_tag_named_with_a_shorter_spelling_does_not_make_the_long_one_a_destination():
+    # tag 0 lists "Ada", the call shows "Ada Example": one person, never a second destination
+    items, events = meeting_46_like()
+    for item in items:
+        if item["speaker"] == "0":
+            item["potential_speaker_names"] = [{"name": "Ada"}]
+    tags = skribby._resolve_tags(items, (BOT,), True, events, True)
+    assert tags["0"]["name"] == "Ada" and tags["0"]["note"] == "extra_speaker_small"
+    placed = speaker_correction.place(events, (BOT,)).people
+    assert speaker_correction.extra_names(tags, placed) == [CY]
 
 
 def test_a_larger_extra_share_still_refuses_and_nothing_moves():

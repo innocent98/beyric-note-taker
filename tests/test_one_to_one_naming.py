@@ -100,8 +100,10 @@ def test_three_tags_for_three_people_are_named_too():
 
 def test_with_elimination_off_nothing_is_named_but_would_be_is_recorded():
     tags = resolve(two_people(), elimination=False)
-    assert tags["0"] == {"name": "", "how": "unknown", "note": "elimination_off", "would_be": ADA}
-    assert tags["1"] == {"name": "", "how": "unknown", "note": "elimination_off", "would_be": BO}
+    # `via` tells the timeline rule that the off switch holds this pick back for it too
+    off = {"name": "", "how": "unknown", "note": "elimination_off", "via": "one_to_one"}
+    assert tags["0"] == {**off, "would_be": ADA}
+    assert tags["1"] == {**off, "would_be": BO}
 
 
 # ---- shapes that must stay unnamed ----
@@ -109,20 +111,15 @@ def test_with_elimination_off_nothing_is_named_but_would_be_is_recorded():
 
 def test_three_voices_merged_into_two_tags_stay_unnamed_meeting_32_shape():
     # Cy spoke 60 s inside Ada's tag (60 of 362 s lit, 17%: over the share a stray voice may have);
-    # Skribby lists one name per tag; Meet lit Cy but no tag is his. The one-to-one rule refuses
-    # with `extra_speaker`. The merged tag stays unnamed; tag 1, which Meet puts clearly on Bo and
-    # Skribby lists as Bo, is named by that agreement (the timeline rule, `uncorroborated` relaxed)
+    # Skribby lists one name per tag; Meet lit Cy but no tag is his. Refused with `extra_speaker`,
+    # and the timeline's candidate-only mode does not get round the veto, switch on or off
     table = {"0": ([150.0, 0.0, 60.0], 260.0), "1": ([2.0, 150.0, 0.0], 170.0)}
     items, events = timeline_case(table, people=(ADA, BO, CY))
-    tags = resolve(items, events)
-    assert named(tags) == {"0": "", "1": BO}
-    assert tags["0"]["one_to_one"] == "extra_speaker"
-    assert tags["0"]["how"] == "unknown"
-    assert tags["1"]["how"] == "meet_timeline"
-    # with the timeline rule off nothing confirms either tag, and both stay unnamed
-    off = resolve(items, events, timeline=False)
-    assert named(off) == {"0": "", "1": ""}
-    assert off["0"]["one_to_one"] == off["1"]["one_to_one"] == "extra_speaker"
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == tags["1"]["one_to_one"] == "extra_speaker"
+        assert tags["0"]["how"] == "unknown"
 
 
 def test_a_merged_tag_that_lists_both_people_stays_unnamed():
@@ -193,19 +190,15 @@ def test_a_meeting_where_skribby_named_a_tag_goes_by_the_older_rules():
 # ---- the checks against Meet ----
 
 
-def test_a_candidate_who_is_not_in_the_call_is_not_named_by_this_rule():
-    # the call has Ada and Cy; the tags list Ada and Bo, who is not there: the rule refuses, so
-    # Bo's tag stays unnamed (a name with no support at all). Ada's tag is named only because
-    # Meet leads it with Ada and Skribby lists her (the timeline rule), not by this rule
+def test_a_candidate_who_is_not_in_the_call_names_nothing():
+    # the call has Ada and Cy; the tags list Ada and Bo, who is not there: nothing is named, with
+    # the timeline rule on or off (a name with no support at all)
     table = {"0": ([200.0, 3.0], 220.0), "1": ([2.0, 150.0], 170.0)}
     items, events = timeline_case(table, people=(ADA, CY))
-    tags = resolve(items, events)
-    assert named(tags) == {"0": ADA, "1": ""}
-    assert tags["0"]["how"] == "meet_timeline"
-    assert tags["1"]["one_to_one"] == "not_in_call"
-    off = resolve(items, events, timeline=False)
-    assert named(off) == {"0": "", "1": ""}
-    assert off["0"]["one_to_one"] == "not_in_call"
+    for timeline in (True, False):
+        tags = resolve(items, events, timeline=timeline)
+        assert named(tags) == {"0": "", "1": ""}
+        assert tags["0"]["one_to_one"] == tags["1"]["one_to_one"] == "not_in_call"
 
 
 def test_meet_clearly_putting_a_tag_under_someone_else_names_nothing_contradicted():
