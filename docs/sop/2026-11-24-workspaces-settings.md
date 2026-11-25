@@ -67,3 +67,14 @@ Scratch Postgres 17 (Docker, removed afterwards), only named test files, never t
 - `/api/calendar` GETs are still the person's own list until W3; its settings now read and write the CONNECTION's workspace row. W3 must keep `workspace_prefs.for_user(session, user, connection.team_id)` when it keys connections by workspace.
 - A member's review item "Add to vocabulary" in a team workspace is now 403 `team_forbidden` (only owners and admins write the list); the web shows the error text. A "suggest a term" path for members is not built.
 - A team made before this keeps `share_new_meetings` off until a manager turns it on; the Team screen already has that switch.
+
+## Membership fixes (review of W2, branch `feature/workspaces-membership-fixes`)
+
+A workspace id taken from a meeting or a connection is no longer used for a person who has left that workspace (`tests/test_workspace_membership.py`):
+
+| Path | Rule now |
+|---|---|
+| `services.regenerate_notes`, `translation.request_translation` | the caller must be a CURRENT member of `meeting.workspace_team_id` (`visibility.in_meeting_workspace`), else the 404 an unchangeable meeting gets, before any template or vocabulary is read and with no model call. Chosen over a fall-back to their personal templates: a rewrite would still run on a meeting of a workspace they left. An admin of a moved meeting is a member, so unchanged. |
+| `calendar_api._prefs_workspace` (state, settings, per-meeting switch) | the connection's workspace only while the person is a member; else their default workspace, so the old workspace's prefs, template names and ids are neither shown nor accepted (404 for its template). |
+| `placement._resolve`, `send_now._has_template` | a join filed in a workspace the person left records into their personal workspace (private, their own template); `workspace_prefs.default_template_id` returns none for a non-member. `workspace_prefs.workspace_for` is the one helper. |
+| Audited, already safe | the templates, vocabulary and prefs routes (`workspace_context.current` checks membership), copy-from-personal and "Add to vocabulary" (`manager_or_403`), reminder mails (`_recipient` skips `left_team` before the join sentence), D4 (`birth_share_team_id` requires membership), the pipeline and the translation job (read on behalf of the system, not a caller). |

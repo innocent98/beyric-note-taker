@@ -740,6 +740,8 @@ def regenerate_notes(
     """Rewrite a ready meeting's notes with a template (one model call). `user` is the caller, the
     person pressing the button: the feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) is
     checked against them, here, so the JSON route and the page route cannot differ."""
+    if not visibility.in_meeting_workspace(session, user, meeting):
+        raise HTTPException(404, "No such meeting")  # as for a meeting they cannot change
     if meeting.status != "ready":
         raise Refused(409, "not_ready", "Notes can only be rewritten once a meeting is ready.")
     # The meeting's workspace's templates, not the recorder's: a team admin rewriting a moved
