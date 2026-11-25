@@ -294,7 +294,7 @@ Every draft, recipe and brief call carries `X-Team-Id` (the web already sends it
 | `GET /api/recipes`, `POST/PUT/DELETE /api/recipes` | The starters, the person's own recipes, and **that workspace's** recipes. |
 | `GET/PUT /api/briefs`, `POST /api/briefs/import` | That workspace's brief. Members read; owners and admins write. |
 | `POST /api/recipes/picker/resolve` | A date range, project or sprint is read **inside that workspace** (the Meetings list's rule). |
-| `POST /api/documents` | The workspace decides whose brief and team recipes are used; the draft is filed in it (`team`). |
+| `POST /api/documents` | A draft is filed in the workspace its **meetings live in**: the header's workspace when any chosen meeting is filed there (the other chosen meetings are left out and counted in `left_out_count`); otherwise the one workspace they all live in, when the caller belongs to it (a meeting opened from another workspace is never a 404); several workspaces and none of them the header's: `404 not_found`. That workspace's brief and team recipes are used, and `team` names it. Send the header of the workspace the meeting is in (the Regenerate button sends the draft's own `team.id`). |
 
 A team the person is not in is `404 not_found` on every call that reads the header (`{"error": {"code": "not_found", "message": "No such team."}}`), and the same for an ex-member.
 
@@ -316,8 +316,8 @@ A team the person is not in is `404 not_found` on every call that reads the head
       "meeting_ids": [
         1
       ],
-      "created_at": "2026-11-25T12:55:23.858796Z",
-      "updated_at": "2026-11-25T12:55:23.858796Z",
+      "created_at": "2026-11-25T13:32:40.912958Z",
+      "updated_at": "2026-11-25T13:32:40.912958Z",
       "access": "owner",
       "owner_name": null,
       "shared_with": [],
@@ -384,8 +384,8 @@ Pat, in Platform team, lists what teammates shared with it (capture 14). `access
       "meeting_ids": [
         1
       ],
-      "created_at": "2026-11-25T12:55:23.858796Z",
-      "updated_at": "2026-11-25T12:55:23.858796Z",
+      "created_at": "2026-11-25T13:32:40.912958Z",
+      "updated_at": "2026-11-25T13:32:40.912958Z",
       "access": "shared",
       "owner_name": "Ada Example",
       "shared_with": [],
@@ -417,7 +417,7 @@ The same call in Pat's personal workspace returns `{"documents": []}` (capture 1
     "scope": "one",
     "uses_brief": true,
     "can_edit": false,
-    "updated_at": "2026-11-25T12:55:23.858796Z"
+    "updated_at": "2026-11-25T13:32:40.912958Z"
   }
 ]
 ```
@@ -451,7 +451,7 @@ The envelope also has `team` (the active workspace as `{id, name, is_personal, c
   },
   "text": "Our prices: audit 50,000 naira, retainer 120,000 naira.",
   "max_chars": 12000,
-  "updated_at": "2026-11-25T12:55:23.858796Z",
+  "updated_at": "2026-11-25T13:32:40.912958Z",
   "updated_by": null
 }
 ```
@@ -481,7 +481,7 @@ A member writing it: `403` `{"error": {"code": "team_forbidden", "message": "Onl
 
 ### 10.6 Making a draft: the plan gate follows the workspace the meetings live in (captures 26, 27, 28)
 
-A member on Free may **make** (and Ask in) a workspace whose **owner** has a plan, from that workspace's meetings, within the daily limits. The gate looks at the chosen meetings: if they are all filed in one workspace the caller belongs to and its owner has a live plan, it passes; otherwise it is the caller's own plan. The header does not decide it (a meeting of Platform team asked for with the personal header passes the same way). Trial or pilot grants of the owner do **not** cover members.
+A member on Free may **make** (and Ask in) a workspace whose **owner** has a plan, from that workspace's meetings, within the daily limits. The gate looks at the workspace the draft is made in (above, the workspace its meetings live in): if the caller belongs to it and its owner has a live plan, it passes; otherwise it is the caller's own plan. Trial or pilot grants of the owner do **not** cover members. Meetings of a personal workspace are never covered by someone else's plan.
 
 Pat (Free), meeting 1 (in Platform team, whose owner has a plan): accepted, `202`. This is the whole response:
 
@@ -497,8 +497,8 @@ Pat (Free), meeting 1 (in Platform team, whose owner has a plan): accepted, `202
   "meeting_ids": [
     1
   ],
-  "created_at": "2026-11-25T12:55:24.747083Z",
-  "updated_at": "2026-11-25T12:55:24.747083Z",
+  "created_at": "2026-11-25T13:32:41.716462Z",
+  "updated_at": "2026-11-25T13:32:41.716462Z",
   "access": "owner",
   "owner_name": null,
   "shared_with": [],

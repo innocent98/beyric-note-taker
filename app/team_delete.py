@@ -92,5 +92,12 @@ def delete_team(session: Session, provider, team_id: int, user: User) -> None:
     for meeting in session.scalars(select(Meeting).where(filed_here).order_by(Meeting.id)):
         deletion.give_back_meeting(session, meeting)
     session.flush()
+    # The owner's own calendar connection in it goes with the provider clean-up (the grant is
+    # revoked unless another workspace of theirs uses the account; the Meet subscription is
+    # stopped), parked for the route to settle after the commit
+    # (`calendar_connect.settle_released`).
+    from app import calendar_connect  # it imports this package's `teams`
+
+    calendar_connect.detach_workspace(session, user.id, team_id)
     teams.dissolve_team(session, team)
     session.commit()

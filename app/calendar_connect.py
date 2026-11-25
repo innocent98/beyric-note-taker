@@ -48,7 +48,7 @@ usage and settings stay.
 import logging
 import secrets
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -114,6 +114,9 @@ class ReleasedConnection:
     meet_subscription_name: str | None
     token: Secret | None
     had_token: bool
+    # Another workspace of the person stands on the same provider account: the grant is not ours to
+    # revoke (`grant_still_used`); the hooks of this connection still run.
+    keep_grant: bool = False
 
 
 # Called after a disconnect, or after a dead connection was replaced by another Google account, as
@@ -386,6 +389,12 @@ def _store(
     domain = identity.hosted_domain.strip().lower() if identity.hosted_domain else None
     if len(email) > MAX_EMAIL_CHARS or (domain and len(domain) > MAX_DOMAIN_CHARS):
         return "google_failed"
+    # The workspace is locked (as `teams.leave` locks it) and the membership read again: a leave
+    # that committed while the code was being exchanged must not leave a connection in a workspace
+    # the person is no longer in.
+    teams._lock_teams(session, team_id)
+    if teams.membership(session, user.id, team_id) is None:
+        return "workspace_unavailable"
     # The user's own row is the lock for "one live calendar at a time in a workspace": two tabs
     # finishing two providers at once queue here, and the second sees the first one's committed
     # connection.
@@ -516,6 +525,9 @@ def _release_at_google(
     this call leaves the token live at Google with no copy here; that window is a few
     milliseconds and the same advice applies."""
     revoked = True
+    if released.keep_grant:
+        run_disconnect_hooks(session, released, None)
+        return True
     if released.had_token:
         revoked = False
         if google is not None and released.token is not None:
@@ -557,7 +569,7 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
     the Meet subscription of the old account is forgotten. Returns what the caller must revoke
     at Google once the replacement is committed (the old token may still be alive there even
     though the connection died)."""
-    released = _release(conn)
+    released = replace(_release(conn), keep_grant=grant_still_used(session, conn))
     _forget_meet_subscription(conn)
     own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
     # Only this connection's joins: another provider's connection keeps its own. A join with no

@@ -165,6 +165,10 @@ def resolve_meetings(
     else:
         scope = _days_scope(session, user, team_id, spec)
 
+    # Only the active workspace's meetings are offered (a recurring meeting, project or sprint of
+    # another workspace, or a meeting id from another one, is left out and counted).
+    here = Meeting.workspace_team_id == team_admin.my_membership(session, user, team_id).team_id
+    scope = _Scope(and_(scope.clause, here), scope.counts_unreadable)
     rows = list(
         session.scalars(
             select(Meeting)
@@ -178,7 +182,7 @@ def resolve_meetings(
         # an id that is not readable and an id that does not exist look the same: left out
         readable = set(
             session.scalars(
-                select(Meeting.id).where(Meeting.id.in_(unique_ids), can_read_clause(user))
+                select(Meeting.id).where(Meeting.id.in_(unique_ids), can_read_clause(user), here)
             )
         )
         left_out = len(unique_ids) - len(readable)

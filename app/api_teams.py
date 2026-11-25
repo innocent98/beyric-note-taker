@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import auth, entitlements, team_delete, teams, titles
+from app import auth, calendar_connect, entitlements, google_oauth, team_delete, teams, titles
 from app.api_schemas import ErrorResponse, TeamCreate, TeamList, TeamSummary
 from app.db import get_session
 from app.models import Team, TeamMember, User
@@ -127,6 +127,7 @@ def delete_team(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     provider=Depends(get_bot_provider),
+    google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> Response:
     """Delete a team workspace. Only its owner, and only when nobody else is in it (409
     `team_has_members`); the personal space cannot be deleted (409 `personal_team`). Its tasks,
@@ -135,4 +136,5 @@ def delete_team(
     deleted. Deleting never depends on a plan: a lapsed plan keeps every workspace until its owner
     deletes it."""
     team_delete.delete_team(session, provider, team_id, user)
+    calendar_connect.settle_released(session, google)  # the provider side, after the commit
     return Response(status_code=204)

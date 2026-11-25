@@ -207,9 +207,9 @@ def test_the_policy_names_the_vendors_that_receive_the_recording_and_says_what_t
 def test_the_pages_say_what_a_workspace_holds_who_sees_it_and_what_leaving_and_deleting_do(
     anon_client,
 ):
-    """Workspaces release: the wording is true of what the code does (docs/sop/2026-11-25-workspaces-
-    release.md lists each claim with the test that proves the behaviour). No promise to tell people
-    about a change: the product decision is that policy changes are not notified."""
+    """Workspaces release: the wording is true of what the code does (the SOP of the release lists
+    each claim with the test that proves the behaviour). No promise to tell people about a change:
+    the product decision is that policy changes are not notified."""
     privacy = text(anon_client, PRIVACY)
     for claim in (
         "Your account has a personal workspace that only you can use.",

@@ -111,6 +111,8 @@ def unshare(session: Session, meeting: Meeting) -> None:
     meeting.shared_team_id = None
     meeting.kept_private = True  # nothing re-shares it by default (D4)
     _touched(session, meeting, series_rules.SYSTEM)
+    # After `_touched`: its re-homing files the tasks in the team.
+    teams.keep_private_tasks(session, meeting)
 
 
 def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:

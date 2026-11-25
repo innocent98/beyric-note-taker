@@ -17,8 +17,8 @@ ledger (`app/ask.py`):
   count).
 * The gate `make` (`feature_gates.require`) is checked here, before anything is written, in the
   function that leads to the model call. The worker is not gated: a queued draft was allowed. It
-  passes the workspace the chosen meetings all live in, so a member of a workspace whose owner is
-  on a plan may Make from it without a plan of their own (workspaces design 12.6).
+  passes the workspace the draft is made in (all its meetings are filed there), so a member of a
+  workspace whose owner is on a plan may Make from it without a plan of their own (design 12.6).
 * A claim is held `STALE_RUNNING`; a worker that died leaves a draft another claim picks up, at most
   `MAX_ATTEMPTS` times, then it fails with `gave_up`. The outcome is written with a compare-and-set
   on the claim, so a draft discarded or reclaimed meanwhile is not overwritten (its model call is
@@ -200,6 +200,20 @@ def _picker_left_out(
     return picking.resolve_meetings(session, user, picker, team_id=team_id).left_out_count
 
 
+def _draft_workspace(session: Session, user: User, active: int, meetings: list[Meeting]) -> int:
+    """The workspace a draft made from `meetings` belongs to: `active` (the header's) when any of
+    them is filed there, else the single workspace they all are filed in when the caller is a member
+    of it, else `active` (and nothing is then offered: 404)."""
+    homes = {m.workspace_team_id for m in meetings}
+    if active in homes:
+        return active
+    if len(homes) == 1:
+        only = homes.pop()
+        if teams.membership(session, user.id, only) is not None:
+            return only
+    return active
+
+
 def request_draft(
     session: Session,
     user: User,
@@ -221,17 +235,29 @@ def request_draft(
     resolved = resolve_recipe(session, user, recipe_ref, member.team_id)
     ids = list(dict.fromkeys(meeting_ids))
     meetings, left_out = _readable_meetings(session, user, ids, resolved.scope)
+    # A draft is filed in the workspace its meetings live in and may be shared with that team, so
+    # it is made only from one workspace's meetings. The header's workspace when any chosen meeting
+    # is in it (the others are left out and counted); else the one workspace they all live in (a
+    # meeting opened from another workspace never turns into a 404: spec 12.2); else nothing.
+    home = _draft_workspace(session, user, member.team_id, meetings)
+    if home != member.team_id:
+        member = team_admin.my_membership(session, user, home)
+        resolved = resolve_recipe(session, user, recipe_ref, member.team_id)
+    here = [m for m in meetings if m.workspace_team_id == member.team_id]
+    if not here:
+        raise _not_found("meeting")
+    left_out += len(meetings) - len(here)
+    meetings = here
     if picker is not None:
-        left_out = max(left_out, _picker_left_out(session, user, picker, resolved.scope, team_id))
+        left_out = max(
+            left_out, _picker_left_out(session, user, picker, resolved.scope, member.team_id)
+        )
     chosen = {m.id for m in meetings}
     clean = _options(options)
-    # A free member may Make from a workspace whose OWNER has a plan (workspaces design 12.6), but
-    # only from that workspace's own meetings: the chosen meetings must all be filed in one
-    # workspace, and the gate checks the caller is a member of it. Meetings from several workspaces
-    # (or none chosen that are readable) are the caller's own plan alone.
-    homes = {m.workspace_team_id for m in meetings}
-    workspace = homes.pop() if len(homes) == 1 else None
-    feature_gates.require(session, user, entitlements.MAKE, workspace=workspace, now=now)
+    # A free member may Make from a workspace whose OWNER has a plan (workspaces design 12.6). Every
+    # chosen meeting is filed in the workspace the draft is made in (above), and the gate checks
+    # the caller is a member of it, so the owner's plan covers exactly this workspace's meetings.
+    feature_gates.require(session, user, entitlements.MAKE, workspace=member.team_id, now=now)
     settings = get_settings()
     _lock_user(session, user.id)
     for existing in session.scalars(

@@ -252,7 +252,7 @@ def test_a_draft_is_stale_when_the_transcript_is_edited(api, session, template):
 
 
 def test_a_draft_is_stale_when_the_brief_changes(api, session, template, owner, team):
-    meeting = meeting_of(session, template)
+    meeting = meeting_of(session, template, workspace_team_id=team.id)
     session.add(TeamBrief(team_id=team.id, text="Onboarding costs 50,000 naira."))
     session.commit()
     doc_id = make(api, meeting).json()["id"]

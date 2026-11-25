@@ -166,6 +166,37 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     )
 
 
+def keep_private_tasks(session: Session, meeting: Meeting) -> None:
+    """ "Keep private" on a meeting filed in a team's workspace: the meeting stays in the workspace
+    but only its recorder reads it, so what the AI took from it must not stay readable to the team
+    through the back door. A task assigned to anyone but the recorder is unassigned (a task is
+    visible to its assignee on the team even where the meeting is not, `tasks.visible`), and a date
+    proposed from the meeting (not yet confirmed) goes to the recorder's personal team, where only
+    they can confirm it. Tasks and dates of a meeting nobody shared are never in a team's view.
+    In the caller's transaction, no commit."""
+    session.execute(
+        update(Task)
+        .where(
+            Task.meeting_id == meeting.id,
+            Task.source == "ai",
+            Task.assignee_user_id.is_not(None),
+            Task.assignee_user_id != meeting.owner_user_id,
+        )
+        .values(assignee_user_id=None)
+    )
+    recorder = session.get(User, meeting.owner_user_id)
+    home = ensure_personal_team(session, recorder)
+    session.execute(
+        update(Milestone)
+        .where(
+            Milestone.source_meeting_id == meeting.id,
+            Milestone.confirmed_at.is_(None),
+            Milestone.team_id != home.id,
+        )
+        .values(team_id=home.id, project_id=None)
+    )
+
+
 def owned_team_count(session: Session, user: User) -> int:
     """How many team workspaces the person owns besides their personal one (what the plan limit
     counts: being a member of a team never does)."""

@@ -345,6 +345,12 @@ def _store(
     """Write the connection of `user` in workspace `team_id`. None on success, else the error code
     (nothing is committed then)."""
     identity = grant.identity
+    # The workspace is locked (as `teams.leave` locks it) and the membership read again: a leave
+    # that committed while the code was being exchanged must not leave a connection in a workspace
+    # the person is no longer in.
+    teams._lock_teams(session, team_id)
+    if teams.membership(session, user.id, team_id) is None:
+        return "workspace_unavailable"
     # The user's own row is the lock for "one live calendar at a time in a workspace": two tabs
     # finishing two providers at once queue here, and the second sees the first one's committed
     # connection.
