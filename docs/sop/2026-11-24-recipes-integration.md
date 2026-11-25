@@ -131,6 +131,59 @@ docker rm -f recipes-live-pg
 
 Safety, all pinned by `tests/test_recipes_live_real.py` (no key needed): the key is read **only** from the environment and the script refuses to start without it (before any database or server is touched); it is never printed, logged, written to a file or sent anywhere but the OpenAI client, and any echoed text is masked; the run **stops calling the model once the estimated cost reaches `RECIPE_LIVE_MAX_USD`** (default 3), counted from each response's real token usage at the prices in `scripts/ai_cost_report.py`; a model with no price there is not guessed (the run says so and stops after `RECIPE_LIVE_MAX_DRAFTS` drafts, default 5). The estimate is checked before each draft, so the last draft can overshoot the cap by one draft's cost. Expect a few minutes and, at the current price, a few US cents. The seeded meetings are short, so this measures the model's behaviour (valid JSON, blanks instead of guesses, sources, figures) more than the cost of a one-hour meeting. Tested end to end against a local fake endpoint (`OPENAI_BASE_URL`), **not against OpenAI itself**.
 
+## First real-model run, 2026-11-25
+
+Adebayo ran `scripts/recipes_live.py pass --real` on `gpt-6-luna` against the synthetic meetings (results kept outside git: `docs/fe-captures/recipes/live-pass-real/results.json`). 17 of 18 starters came back `ready`; 18 drafts cost about **0.0265 USD** in all (token usage from the responses, at `scripts/ai_cost_report.py` prices), each taking 5 to 43 seconds.
+
+| Recipe | Status | In tok | Out tok | Sec | USD | Blanks | Flags | Sources dropped |
+|---|---|---|---|---|---|---|---|---|
+| follow_up_email | ready | 2329 | 1469 | 12.9 | 0.00097 | 2 | 0 | 1 |
+| **proposal** | **failed (`structure`)** | 2307 | 3273 | 20.4 | 0.00187 | 0 | 0 | 50 |
+| requirements | ready | 2070 | 5099 | 33.5 | 0.00276 | 11 | 0 | 7 |
+| marketing_post | ready | 2283 | 1278 | 10.2 | 0.00087 | 0 | 0 | 0 |
+| decision_memo | ready | 1928 | 3647 | 22.8 | 0.00202 | 1 | 0 | 0 |
+| sop | ready | 1938 | 3452 | 21.2 | 0.00192 | 3 | 0 | 0 |
+| action_tracker | ready | 1951 | 613 | 5.2 | 0.00050 | 6 | 0 | 0 |
+| board | ready | 2152 | 2781 | 17.9 | 0.00161 | 0 | 0 | 0 |
+| status_report | ready | 1862 | 3136 | 19.3 | 0.00175 | 0 | **9** | 0 |
+| client_briefing | ready | 1859 | 3911 | 22.4 | 0.00214 | 4 | 0 | 0 |
+| study_guide | ready | 1891 | 2293 | 14.5 | 0.00134 | 1 | 0 | 0 |
+| flashcards | ready | 1864 | 1872 | 13.3 | 0.00112 | 2 | 0 | 0 |
+| practice_quiz | ready | 1887 | 2019 | 15.3 | 0.00120 | 0 | 0 | 1 |
+| glossary | ready | 1866 | 6031 | 42.6 | 0.00320 | 2 | 0 | 0 |
+| assignments | ready | 1883 | 489 | 5.2 | 0.00043 | 1 | 0 | 0 |
+| revision_plan | ready | 1566 | 1281 | 11.1 | 0.00080 | 0 | 0 | 0 |
+| class_recap | ready | 1916 | 2035 | 12.7 | 0.00121 | 1 | 0 | 0 |
+| class_faq | ready | 1871 | 1303 | 10.2 | 0.00084 | 2 | 0 | 5 |
+
+So a real draft costs about **0.001 to 0.003 USD** on these short meetings (the earlier estimate of "well under a cent" holds). The model wrote `[need: ...]` blanks where the meeting had no fact (requirements 11, action_tracker 6, client_briefing 4), which is what the prompts ask for.
+
+### What was wrong, and what was changed
+
+1. **The proposal failed as `structure`, and nothing said why.** The run did not keep the raw reply, so the cause was **not seen directly**. Each suspect was tried with a realistic proposal reply (`tests/test_recipe_repair.py`). The old strict check refused a draft in only two situations a model can produce here: **a table row with a different number of cells from the columns** (`table_row`) and **a cell that is plain text instead of an object** (`item`). A well-formed proposal, more blocks than `draft_max_blocks` (cut, not refused), an over-long cell (cut), 50 source ids the model was never shown (dropped, "sources dropped: 50" is only the count of references that did not survive and does not by itself fail a draft), a table with no rows, and 20 columns (cut to 12) were never refused. The proposal is the only starter with two tables, so a ragged Investment or Timeline row is by far the likeliest cause; the re-run will now show it (below).
+2. **Structure checks repair instead of refusing** (`blocks.parse_blocks(..., fixes=[])`, used for the model's reply only): a short table row is padded with visible `[need: <column>]` blanks (the audit finds them and the person fills them in; never a guess), a long row loses its extra cells, a plain-text cell or item is read as text, an unreadable block is dropped. A person's own edit is still checked strictly (a ragged table is a 422). Each repair is a short note about the shape.
+3. **A failure says why, and is asked for again once.** When the structure still cannot be used (nothing left after cleaning, a board with no card, not a list), the model is asked **once more** with the checks' reason appended to the message ("Your previous reply was refused by the checks: ..."). **That second call is a second ledger row (`ai_runs`, kind `recipe`) and counts as a second attempt toward the daily limit** (it is part of the same request, so it can take a person one over the limit; it never blocks the retry). The first row is marked `failed` with the reason, the second `ok` or `failed`. A second refusal fails the draft as `structure` with the same plain sentence for the person and a new `failure_detail` on the draft: the validator's reason, built from positions and counts only ("block 6: table row 3 has 2 cells for 3 columns"), never a word of the meeting, the brief or the reply (a test pins it). It is stored in `documents.failure_detail` (migration `0061_recipes_failure_detail`), in the `ai_runs.error` column (cut to 100 characters), and returned as `failure_detail` on `GET /api/documents/{id}` for diagnosis; the FE does not show it. Only a `structure` failure is asked again: not a cut-off or non-JSON reply (`model_reply`).
+4. **The audit no longer flags the labels the prompt prints.** The nine flags on `status_report` were "Meeting 4", "Meeting 5" and "Meeting 6" echoed from the context labels. The audit now ignores `Meeting N` and `Meeting id: N`, `[D3]` and `[T9]` (as it already ignored line numbers, list ordinals and `[L12]`), so they are not read as figures. Left alone on purpose: a number next to a unit ("meeting in 6 weeks") is still a figure, and a figure that is not in the meeting is still flagged (tests). Line markers, list ordinals and the dates the context prints from tasks were already handled.
+5. **The live script:** `pass --only KEY[,KEY...]` runs just those starters (re-run one for pennies); an unknown key stops it before anything starts. Under `--real`, a draft that **failed** also leaves the model's raw replies (every call), the failure code and `failure_detail` in the results folder as `failed-<key>.txt` (the meetings are synthetic); the key is masked and never in it (tested, and checked against a local fake endpoint).
+
+**Not touched on purpose:** `requirements` (7 sources dropped) and `class_faq` (5) drop only references to ids the model was never shown, which the checks have always done and the draft stands; `follow_up_email` and `practice_quiz` drop 1 each. Whether the model's invented source ids hint at a prompt problem is worth reading in `failed`/`ready` drafts, not fixing blind.
+
+**To re-run the proposal for pennies:**
+
+```bash
+docker run -d --name recipes-live-pg -e POSTGRES_PASSWORD=pw -p 55640:5432 postgres:16
+```
+
+```bash
+OPENAI_API_KEY=sk-... PYTHONPATH=. python scripts/recipes_live.py pass postgresql+psycopg://postgres:pw@localhost:55640/postgres --real --only proposal
+```
+
+```bash
+docker rm -f recipes-live-pg
+```
+
+If it fails again, send back `docs/fe-captures/recipes/live-pass-real/failed-proposal.txt` and `results.json`.
+
 ## Export load (one-at-a-time renderer)
 
 Measured with `scripts/recipes_live.py load` (developer Mac, five runs each, two signed-in sessions): a 40-row table draft and a board.

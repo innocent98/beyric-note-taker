@@ -323,7 +323,9 @@ def _claim(session: Session, now: datetime) -> Document | None:
         return row
 
 
-def _settle(session, run_id, *, ok, error=None, tokens=(None, None), called=True) -> None:
+def _settle(
+    session, run_id, *, ok, error=None, tokens=(None, None), called=True, detail=None
+) -> None:
     """The pending ledger row of a draft: its outcome, or gone when no model call was made."""
     if run_id is None:
         return
@@ -337,7 +339,43 @@ def _settle(session, run_id, *, ok, error=None, tokens=(None, None), called=True
         input_tokens=tokens[0],
         output_tokens=tokens[1],
         error=error,
+        detail=detail,
     )
+
+
+def _ledger_attempts(session: Session, job, attempts, *, error, ok: bool) -> None:
+    """Write what the calls of one draft cost. The draft's pending row takes the FIRST call. A
+    second call (the reply's structure was refused, so the model was asked once more with the
+    reason) is a row of its own: another attempt, counted in the day's limit like any other.
+    `ok` is whether the draft was written; `error` is the exception that failed it, if any."""
+    first = attempts[0] if attempts else None
+    first_refused = first.refused if first else None
+    tokens = (first.input_tokens, first.output_tokens) if first else (None, None)
+    first_ok = ok if len(attempts) <= 1 else False  # a first call that was asked again was refused
+    _settle(
+        session,
+        job.run_id,
+        ok=first_ok,
+        error=error if len(attempts) <= 1 else None,
+        tokens=tokens,
+        detail=f"structure: {first_refused}" if first_refused else None,
+    )
+    if len(attempts) > 1:
+        second = attempts[1]
+        pending = session.get(AiRun, job.run_id) if job.run_id is not None else None
+        ai_runs.record(
+            session,
+            pending.meeting_id if pending is not None else None,
+            "recipe",
+            get_settings().recipe_model,
+            input_tokens=second.input_tokens,
+            output_tokens=second.output_tokens,
+            status="ok" if ok else "failed",
+            error=error,
+            prompt_version=RECIPE_PROMPT_VERSION,
+            user_id=pending.user_id if pending is not None else None,
+            detail=f"structure: {second.refused}" if second.refused else None,
+        )
 
 
 def _fail_before_model(session: Session, row: Document, now: datetime, code: str) -> None:
@@ -438,14 +476,14 @@ def process_next(session: Session, now: datetime | None = None, *, client=None) 
         return document_id
     settings = get_settings()
     model = settings.recipe_model
-    tokens: tuple[int | None, int | None] = (None, None)
+    attempts: list = []
     error: BaseException | None = None
     called = True
     try:
         result = generate.generate_blocks(
             job.spec, job.context, job.options, client=client, max_blocks=settings.draft_max_blocks
         )
-        tokens = (result.input_tokens, result.output_tokens)
+        attempts = result.attempts
         won = _finish(
             session,
             job,
@@ -457,17 +495,24 @@ def process_next(session: Session, now: datetime | None = None, *, client=None) 
             model=model,
             prompt_version=RECIPE_PROMPT_VERSION,
             failure_code=None,
+            failure_detail=None,
             ledger_run_id=None,
         )
     except GenerationFailed as exc:
-        error, tokens = exc, (exc.input_tokens, exc.output_tokens)
+        error = exc
         called = exc.code not in NOT_CALLED
+        attempts = exc.attempts or (
+            [generate.Attempt(exc.input_tokens, exc.output_tokens)]
+            if called and (exc.input_tokens or exc.output_tokens)
+            else []
+        )
         won = _finish(
             session,
             job,
             now,
             status="failed",
             failure_code=exc.code,
+            failure_detail=(exc.detail or None) and exc.detail[:200],
             model=model,
             ledger_run_id=None,
         )
@@ -484,8 +529,11 @@ def process_next(session: Session, now: datetime | None = None, *, client=None) 
             model=model,
             ledger_run_id=None,
         )
-    # The model call is settled whatever happened to the draft meanwhile: it cost.
-    _settle(session, job.run_id, ok=error is None, error=error, tokens=tokens, called=called)
+    # The model calls are settled whatever happened to the draft meanwhile: they cost.
+    if called:
+        _ledger_attempts(session, job, attempts, error=error, ok=error is None)
+    else:
+        _settle(session, job.run_id, ok=False, called=False)
     session.commit()
     if not won:
         logger.info(

@@ -2,7 +2,7 @@
 
     PYTHONPATH=. python scripts/recipes_live.py serve  ADMIN_URL [PORT]   # app + worker, for a browser
     PYTHONPATH=. python scripts/recipes_live.py pass   ADMIN_URL          # all 18 starters + the board
-    OPENAI_API_KEY=... PYTHONPATH=. python scripts/recipes_live.py pass ADMIN_URL --real [--out DIR]
+    OPENAI_API_KEY=... PYTHONPATH=. python scripts/recipes_live.py pass ADMIN_URL --real [--out DIR] [--only KEY,KEY]
                                                                            # the same, on a REAL model
     PYTHONPATH=. python scripts/recipes_live.py load   ADMIN_URL          # export load, two sessions
     PYTHONPATH=. python scripts/recipes_live.py capture ADMIN_URL         # sharing, stale, deletion exchanges
@@ -35,6 +35,9 @@ placeholder people stay; only the model is real.
   (default 3), counted from each response's real token usage at the prices in
   `scripts/ai_cost_report.py`. A model with no price there is not guessed: it stops after
   `RECIPE_LIVE_MAX_DRAFTS` drafts (default 5).
+* `--only proposal` (or `--only proposal,board`) runs just those starters: re-run one for pennies. A draft
+  that FAILED also leaves the model's raw reply in `--out DIR` as `failed-<key>.txt` (the meetings are
+  synthetic) so the failure can be read; the key is never in it.
 * Results go to `--out DIR` (default `docs/fe-captures/recipes/live-pass-real/`, git-ignored, never
   committed by the script): `results.json` and `summary.txt`. Send `results.json` back.
 
@@ -81,7 +84,7 @@ def _positional(argv: list[str]) -> list[str]:
     for a in argv:
         if skip:
             skip = False
-        elif a == "--out":
+        elif a in ("--out", "--only"):
             skip = True  # its value is not a positional argument
         elif not a.startswith("--"):
             out.append(a)
@@ -94,6 +97,11 @@ admin_url = _args[1] if len(_args) > 1 else ""
 serve_port = int(_args[2]) if len(_args) > 2 else 8800
 REAL = "--real" in sys.argv or os.environ.get("RECIPES_LIVE_REAL") == "1"
 OUT_DIR = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else None
+ONLY = (
+    [k for k in sys.argv[sys.argv.index("--only") + 1].split(",") if k]
+    if "--only" in sys.argv
+    else None
+)
 scratch_url = urlparse(admin_url)._replace(path=f"/{DB_NAME}").geturl() if admin_url else ""
 if REAL:
     # Fail fast, before a database or a server is touched; the refusal text never holds the key.
@@ -640,6 +648,18 @@ def one_meeting_for(key: str, ids: dict) -> int:
     return ids["lecture"] if school else ids["sales"]
 
 
+def chosen_starters() -> list:
+    """The starters to run: all eighteen, or only the keys given with `--only` (an unknown key stops
+    the script before anything starts)."""
+    if not ONLY:
+        return list(library.STARTERS)
+    known = {s.key for s in library.STARTERS}
+    unknown = [k for k in ONLY if k not in known]
+    if unknown:
+        sys.exit(f"unknown starter key(s): {', '.join(unknown)}. Known: {', '.join(sorted(known))}")
+    return [s for s in library.STARTERS if s.key in ONLY]
+
+
 def body_for(starter, ids: dict) -> dict:
     """The meetings (and options) each starter is run on in the pass."""
     if starter.scope == "many":
@@ -660,7 +680,7 @@ def body_for(starter, ids: dict) -> dict:
 def run_pass(base: str, engine, ids: dict) -> list[dict]:
     ada = Client(base, "ada@example.test")
     rows = []
-    for starter in library.STARTERS:
+    for starter in chosen_starters():
         started = time.time()
         body = body_for(starter, ids)
         got = ada.call("POST", "/api/documents", {"recipe_key": starter.key, **body})
@@ -692,7 +712,7 @@ def run_pass(base: str, engine, ids: dict) -> list[dict]:
     return rows
 
 
-def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]:
+def run_pass_real(base: str, ids: dict, client, out: Path) -> tuple[list[dict], str | None]:
     """The pass on a real model: one draft at a time, each recorded from the response's own usage.
     Stops before a draft when the spend guard says so."""
     from app.recipes import blocks as blocks_mod
@@ -701,7 +721,7 @@ def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]
     guard = client.guard
     rows: list[dict] = []
     stopped = None
-    for starter in library.STARTERS:
+    for starter in chosen_starters():
         stopped = guard.reason_to_stop()
         if stopped:
             print(f"STOP: {stopped}")
@@ -723,7 +743,8 @@ def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]
         rows.append(
             {
                 "key": starter.key, "pack": starter.pack, "scope": starter.scope, "output_type": starter.output_type,
-                "status": doc["status"], "failure_code": doc["failure_code"], "blocks": len(doc["blocks"]),
+                "status": doc["status"], "failure_code": doc["failure_code"],
+                "failure_detail": doc.get("failure_detail"), "blocks": len(doc["blocks"]),
                 "input_tokens": tin, "output_tokens": tout, "model_calls": len(done),
                 "seconds": seconds,
                 "cost_usd_estimated": guard.price_of(tin, tout),
@@ -736,6 +757,10 @@ def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]
                 "document_id": doc["id"],
             }
         )  # fmt: skip
+        if doc["status"] == "failed":
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"failed-{starter.key}.txt").write_text(live_real.failed_reply_text(starter.key, doc, calls, REAL_KEY))  # fmt: skip
+            print(f"  failed ({doc['failure_code']}: {doc.get('failure_detail')}); the raw reply is in {out / ('failed-' + starter.key + '.txt')}")  # fmt: skip
         r = rows[-1]
         usd = "n/a" if r["cost_usd_estimated"] is None else f"{r['cost_usd_estimated']:.5f}"
         print(f"{starter.key:18} {doc['status']:7} in={tin} out={tout} {seconds}s ~${usd} blanks={len(r['blanks'])} flags={len(r['flags'])} spend=${guard.cost:.4f}")  # fmt: skip
@@ -745,7 +770,7 @@ def run_pass_real(base: str, ids: dict, client) -> tuple[list[dict], str | None]
 def cmd_pass_real(server, base, engine, ids, model) -> None:
     out = OUT_DIR or ROOT / "docs" / "fe-captures" / "recipes" / "live-pass-real"
     try:
-        rows, stopped = run_pass_real(base, ids, model)
+        rows, stopped = run_pass_real(base, ids, model, out)
         out.mkdir(parents=True, exist_ok=True)
         table = live_real.summary_table(rows, model.guard, stopped)
         report = {

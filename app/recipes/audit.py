@@ -12,7 +12,9 @@ A figure is written as a set of keys (`normalise_figures`), so "50k", "50,000" a
 are the same figure: `v:<value>` always, `n:<value>` with no currency, `c:<CUR>:<value>` with one,
 `p:<value>` for a percentage, `d:<date>` and `t:<time>`. Number words and month names are English
 only; digits and currency symbols work in any language, so a draft in another language is still
-audited on its digits. Line numbers (`line 12`, `[L12]`), list ordinals (`1.`, `2nd`), version-like
+audited on its digits. Line numbers (`line 12`, `[L12]`), the labels the prompt itself prints
+(`Meeting 4`, `Meeting id: 4`, `[D3]`, `[T9]`: a model that echoes them invents nothing), list
+ordinals (`1.`, `2nd`), version-like
 tokens (`v2.1`, `A4`), bare years and the numbering column of a table are not figures; a blank
 (`[need: ...]`) is not read for figures.
 """
@@ -111,6 +113,9 @@ _IGNORED = re.compile(
     r"""(?ix)
     \blines?\s+\d+(?:\s*(?:to|-|–|and)\s*\d+)?
     | \[L\d+\]
+    | \[[DT]\d+\]
+    | \bmeetings?\s+(?:id\s*:?\s*)?\#?\d+\b
+      (?!\s*(?:weeks?|days?|months?|years?|hours?|minutes?|mins?|%|percent))
     | ^\s*\d+[.)]\s
     """,
     re.MULTILINE,

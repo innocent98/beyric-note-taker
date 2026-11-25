@@ -2300,6 +2300,10 @@ class Document(Base):
     model: Mapped[str | None] = mapped_column(String(100))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     failure_code: Mapped[str | None] = mapped_column(String(32))
+    # Why a `structure` failure was refused, as the validator worded it: a sentence about positions
+    # and counts ("block 7: table row 3 has 5 cells for 4 columns"), never meeting, brief or reply
+    # text.
+    failure_detail: Mapped[str | None] = mapped_column(String(200))
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The `ai_runs` row written when the draft was asked for (`pending` until the worker settles

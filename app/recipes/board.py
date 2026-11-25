@@ -140,7 +140,7 @@ def shape(blocks: list[Block]) -> list[Block]:
     is not a board (`BlocksInvalid("board")`, the draft fails as `structure`)."""
     columns = [block for block in blocks if isinstance(block, Column)][: b.MAX_COLUMNS]
     if not any(column.cards for column in columns):
-        raise BlocksInvalid("board")
+        raise BlocksInvalid("board", "the reply has no column with a card in it")
     return columns
 
 

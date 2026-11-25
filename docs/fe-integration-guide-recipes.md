@@ -957,6 +957,8 @@ A failed draft is **200** with `status: "failed"`, empty `blocks`, a `failure_co
 }
 ```
 
+A failed draft also carries `failure_detail` (string or null): for a `structure` failure, the checks' reason in words about the shape only ("block 6: table row 3 has 2 cells for 3 columns"), never meeting text. It is for diagnosis: **do not show it to the person**; show `failure_message`. *(Added after the first real-model run; not in the captures above, which predate it: shape from `tests/test_recipe_repair.py::test_the_detail_reaches_the_api_for_the_creator`. A `structure` failure is now asked for a second time by the server before it is reported, and the second call counts toward the day's limit.)*
+
 Codes the server uses (the message for each is the sentence in `app/recipes/service.py` `FAILURE_MESSAGES`; only `model_reply` was captured live, the rest are verified in `tests/test_recipe_jobs.py`): `model_reply` and `structure` (the writing service sent back something unusable), `model_error` (it did not answer), `empty` (nothing in the meeting to write from), `too_long`, `gave_up` (stopped after three tries), `not_ready`, `recipe_gone`, `owner_gone`, `access_gone` (the person left the team or lost the recipe before it ran), `error`. Offer "Try again" (a new `POST`). A failed attempt **counts** against the day's limit when the model was reached; `empty`, `too_long`, `not_ready`, `recipe_gone`, `owner_gone` and `access_gone` do not (no model call).
 
 ## Field-nesting traps

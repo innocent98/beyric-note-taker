@@ -2242,6 +2242,17 @@
             ],
             "title": "Failure Code"
           },
+          "failure_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Detail"
+          },
           "failure_message": {
             "anyOf": [
               {

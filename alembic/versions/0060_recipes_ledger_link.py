@@ -4,8 +4,6 @@ The `ai_runs` row written when a draft is asked for (`pending` until the worker 
 the draft so the worker can settle exactly that row. No foreign key: the ledger outlives the draft
 (a discarded draft's call still cost). Nullable, empty for every row that exists.
 
-This number is a placeholder (renumbered when `feature/recipes` is rebased onto `main`).
-
 Downgrade drops the column.
 
 Revision ID: 0060

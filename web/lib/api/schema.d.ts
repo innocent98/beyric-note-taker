@@ -3769,6 +3769,8 @@ export interface components {
             edited: boolean;
             /** Failure Code */
             failure_code: string | null;
+            /** Failure Detail */
+            failure_detail?: string | null;
             /** Failure Message */
             failure_message: string | null;
             /** Id */

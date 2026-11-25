@@ -337,7 +337,7 @@ def test_a_transport_error_is_tried_once_more_and_other_errors_are_not(session, 
         ({"title": "x"}, "model_reply"),
         (reply([]), "structure"),
         (reply([{"type": "chart"}]), "structure"),
-        (reply([{"type": "table", "columns": ["A"], "rows": [[]]}]), "structure"),
+        (reply([{"type": "table", "columns": [], "rows": []}]), "structure"),
     ],
 )
 def test_a_bad_reply_fails_with_a_code_and_never_half_shows(session, owner, meeting, out, code):  # noqa: F811

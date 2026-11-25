@@ -106,16 +106,36 @@ the recipe instruction says otherwise.
 them to null."""
 
 
+@dataclass
+class Attempt:
+    """One model call of a draft: what it cost and, when its reply was refused, why (a short
+    sentence about the SHAPE, never meeting, brief or reply text)."""
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    refused: str | None = None
+
+
 class GenerationFailed(Exception):
-    """`code` is a short word. `input_tokens` and `output_tokens` are what a reply that came back
-    but could not be used already cost (None when no reply came)."""
+    """`code` is a short word. `input_tokens` and `output_tokens` are what the replies that came
+    back but could not be used already cost, all calls together (None when no reply came).
+    `detail` is the validator's reason for a `structure` failure ("block 7: table row 3 has 5
+    cells for 4 columns"), `attempts` the calls made (one, or two when the reply was refused and
+    asked for again)."""
 
     def __init__(
-        self, code: str, input_tokens: int | None = None, output_tokens: int | None = None
+        self,
+        code: str,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        detail: str | None = None,
+        attempts: list[Attempt] | None = None,
     ):
         super().__init__(code)
         self.code = code
         self.input_tokens, self.output_tokens = input_tokens, output_tokens
+        self.detail = detail
+        self.attempts = attempts or []
 
 
 @dataclass
@@ -155,6 +175,11 @@ class GenerationResult:
     title: str
     input_tokens: int | None
     output_tokens: int | None
+    # The calls made: two when the first reply's structure was refused and the model was asked
+    # again.
+    attempts: list[Attempt] = field(default_factory=list)
+    # What was repaired in the reply instead of refusing it (shape only).
+    fixes: list[str] = field(default_factory=list)
 
 
 FENCE_TAGS = ("meeting", "brief", "options")
@@ -444,6 +469,22 @@ def _requote(blocks: list[Block], quotes: dict[tuple[int, int], str]) -> None:
                 source.quote = quotes.get((source.meeting_id, source.line or 0)) or None
 
 
+RETRY_NOTE = (
+    "\n\nYour previous reply was refused by the checks: {reason}. Reply again with the same JSON "
+    "shape and fix only that: every table row needs exactly one cell for each column, and every "
+    "block must be one of the five types."
+)
+
+
+def _sum(values: list[int | None]) -> int | None:
+    counted = [v for v in values if v is not None]
+    return sum(counted) if counted else None
+
+
+def _totals(attempts: list[Attempt]) -> tuple[int | None, int | None]:
+    return _sum([a.input_tokens for a in attempts]), _sum([a.output_tokens for a in attempts])
+
+
 def generate_blocks(
     recipe: RecipeSpec,
     context: Context,
@@ -452,40 +493,69 @@ def generate_blocks(
     client=None,
     max_blocks: int | None = None,
 ) -> GenerationResult:
-    """The draft the model writes for `recipe` from `context`, checked (`GenerationFailed`)."""
+    """The draft the model writes for `recipe` from `context`, checked (`GenerationFailed`).
+
+    What is safely repairable in the reply is repaired rather than refused (a ragged table row, a
+    plain-text cell, an unknown source id, an over-long block). When the structure still cannot be
+    used the model is asked ONCE more, with the validator's reason added to the message; that second
+    call is a second attempt in `attempts` (the worker writes it to the ledger, where it counts
+    toward the day's limit). A second refusal fails the draft as `structure` with the reason in
+    `detail`."""
     if len(context.text) > MAX_CONTEXT_CHARS:
         raise GenerationFailed(TOO_LONG)
     settings = get_settings()
-    response = _call(
-        client or _client(), settings.recipe_model, user_message(recipe, context, options)
-    )
-    usage = getattr(response, "usage", None)
-    tokens = (getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None))
-    choice = response.choices[0]
-    if choice.finish_reason != "stop":
-        raise GenerationFailed(MODEL_REPLY, *tokens)
-    try:
-        data = json.loads(choice.message.content or "")
-    except ValueError as exc:
-        raise GenerationFailed(MODEL_REPLY, *tokens) from exc
-    if not isinstance(data, dict) or not isinstance(data.get("blocks"), list):
-        raise GenerationFailed(MODEL_REPLY, *tokens)
-    try:
-        blocks = blocks_mod.parse_blocks(
-            data["blocks"], allowed_sources=context.allowed_sources, max_blocks=max_blocks
+    message = user_message(recipe, context, options)
+    model_client = client or _client()
+    attempts: list[Attempt] = []
+    reason: str | None = None
+    for turn in (1, 2):
+        response = _call(
+            model_client,
+            settings.recipe_model,
+            message if reason is None else message + RETRY_NOTE.format(reason=reason),
         )
-        if recipe.output_type == "board":
-            from app.recipes import board  # a board is columns of cards and nothing else
+        usage = getattr(response, "usage", None)
+        attempt = Attempt(
+            getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None)
+        )
+        attempts.append(attempt)
+        choice = response.choices[0]
+        if choice.finish_reason != "stop":
+            raise GenerationFailed(MODEL_REPLY, *_totals(attempts), attempts=attempts)
+        try:
+            data = json.loads(choice.message.content or "")
+        except ValueError as exc:
+            raise GenerationFailed(MODEL_REPLY, *_totals(attempts), attempts=attempts) from exc
+        if not isinstance(data, dict) or not isinstance(data.get("blocks"), list):
+            raise GenerationFailed(MODEL_REPLY, *_totals(attempts), attempts=attempts)
+        fixes: list[str] = []
+        try:
+            blocks = blocks_mod.parse_blocks(
+                data["blocks"],
+                allowed_sources=context.allowed_sources,
+                max_blocks=max_blocks,
+                fixes=fixes,
+            )
+            if recipe.output_type == "board":
+                from app.recipes import board  # a board is columns of cards and nothing else
 
-            blocks = board.shape(blocks)
-    except BlocksInvalid as exc:
-        raise GenerationFailed(STRUCTURE, *tokens) from exc
-    _requote(blocks, context.quotes)
-    title = blocks_mod.plain(data.get("title"), 80) or recipe.name
-    return GenerationResult(blocks, title, tokens[0], tokens[1])
+                blocks = board.shape(blocks)
+        except BlocksInvalid as exc:
+            reason = exc.detail or exc.code
+            attempt.refused = reason
+            if turn == 2:
+                raise GenerationFailed(
+                    STRUCTURE, *_totals(attempts), detail=reason, attempts=attempts
+                ) from exc
+            continue
+        _requote(blocks, context.quotes)
+        title = blocks_mod.plain(data.get("title"), 80) or recipe.name
+        return GenerationResult(blocks, title, *_totals(attempts), attempts=attempts, fixes=fixes)
+    raise AssertionError("unreachable")  # the loop returns or raises on its second turn
 
 
 __all__ = [
+    "Attempt",
     "Context",
     "GenerationFailed",
     "GenerationResult",

@@ -172,6 +172,7 @@ def _out(session: Session, user: User, doc: Document) -> DocumentOut:
         left_out_count=doc.left_out_count if mine else 0,
         failure_code=doc.failure_code if failed else None,
         failure_message=service.failure_message(doc.failure_code) if failed else None,
+        failure_detail=doc.failure_detail if failed else None,
         options=(doc.options or {}) if mine else {},
         use_brief=doc.use_brief if mine else False,
         can_edit=mine,

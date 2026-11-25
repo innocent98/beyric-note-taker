@@ -206,6 +206,26 @@ def preview(text: str, limit: int = PREVIEW_CHARS) -> str:
     return " ".join(text.split())[:limit]
 
 
+def failed_reply_text(key: str, doc: dict, calls: list[dict], secret: str | None) -> str:
+    """What to read when a draft failed: the checks' reason and every raw reply the model sent for it
+    (the live meetings are synthetic), masked. Never holds the key."""
+    parts = [
+        f"recipe: {key}",
+        f"failure_code: {doc.get('failure_code')}",
+        f"failure_detail: {doc.get('failure_detail')}",
+        f"failure_message: {doc.get('failure_message')}",
+    ]
+    for number, call in enumerate(calls, start=1):
+        if "error" in call:
+            parts.append(f"\n--- call {number}: error ---\n{call['error']}")
+            continue
+        parts.append(
+            f"\n--- call {number}: {call['input_tokens']} in, {call['output_tokens']} out, "
+            f"finish_reason {call['finish_reason']} ---\n{call['raw']}"
+        )
+    return mask("\n".join(parts), secret) + "\n"
+
+
 def summary_table(rows: list[dict], guard: SpendGuard, stopped: str | None) -> str:
     head = f"{'recipe':18} {'status':7} {'in tok':>7} {'out tok':>7} {'sec':>6} {'USD':>8} {'blanks':>6} {'flags':>5} {'src dropped':>11}"  # noqa: E501
     lines = [head, "-" * len(head)]

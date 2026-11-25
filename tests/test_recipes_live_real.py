@@ -160,3 +160,26 @@ def test_the_summary_table_says_what_was_spent_and_when_it_stopped_early():
     table = real.summary_table([row], guard, "cap reached")
     assert "proposal" in table and "0.00200" in table and "1 drafts" in table
     assert "STOPPED EARLY: cap reached" in table
+
+
+def test_a_failed_drafts_reply_file_holds_the_reason_and_every_raw_reply_but_never_the_key():
+    doc = {
+        "failure_code": "structure",
+        "failure_detail": "block 6: table row 3 has 2 cells for 3 columns",
+        "failure_message": "The writing service sent back something unusable. Try again.",
+    }
+    calls = [
+        {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "finish_reason": "stop",
+            "raw": f'{{"blocks": 1, "k": "{KEY}"}}',
+        },  # noqa: E501
+        {"error": f"APIError: bad key {KEY}"},
+        {"input_tokens": 110, "output_tokens": 30, "finish_reason": "stop", "raw": '{"blocks": 2}'},
+    ]
+    text = real.failed_reply_text("proposal", doc, calls, KEY)
+    assert "recipe: proposal" in text and "failure_code: structure" in text
+    assert "table row 3 has 2 cells for 3 columns" in text
+    assert text.count("--- call") == 3 and '{"blocks": 2}' in text
+    assert KEY not in text and "SECRET" not in text
