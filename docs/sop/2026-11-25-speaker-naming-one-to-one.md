@@ -169,3 +169,13 @@ for `extra_speaker` is a veto floor chosen from meeting 32's ~30 s third voice, 
 * Zoom and Teams have no events, so the shape alone decides there. Check the first real one before trusting it.
 * A one-to-one rule for meetings with a partly clean shape (some tags clean, one tag with two names) was rejected for
   now; revisit with evidence.
+
+## Update 2026-11-25 (later): relaxed
+
+`docs/sop/2026-11-25-speaker-naming-relaxed.md` changes this rule: a third person lit for 10 s or more no longer vetoes when
+the people with no tag add up to under 10% of all lit time (the tags are named with `note: extra_speaker_small` and the
+transcript stays marked incomplete); a tag under 5% of the segments (a stray) no longer blocks the meeting; the name must be
+on 80% of a tag's segments, not all; a candidate that is the one Meet participant its words fit counts as in the call. The
+rule's other conditions (no tag named by Skribby, at least two big tags, distinct names, `contradicted`) are as above, and
+the "Designs evaluated" and "risk" sections still describe why. The meeting-32 test now names a 29 s third voice and refuses
+a 60 s one.
