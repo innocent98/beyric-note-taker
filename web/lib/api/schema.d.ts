@@ -2552,11 +2552,37 @@ export interface paths {
         put?: never;
         /**
          * Create Team
-         * @description Make a team the caller owns. At most three teams per account besides the personal one (409
-         *     `team_limit`), 422 `invalid_name` for an empty name.
+         * @description Make a team the caller owns, as many as their plan allows besides the personal one (Free 0,
+         *     Starter 3, Pro 10, Scale unlimited; 409 `team_limit` with a message naming the plan to upgrade
+         *     to), 422 `invalid_name` for an empty name.
          */
         post: operations["create_team"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Team
+         * @description Delete a team workspace. Only its owner, and only when nobody else is in it (409
+         *     `team_has_members`); the personal space cannot be deleted (409 `personal_team`). Its tasks,
+         *     projects, series and integrations go with it. Its meetings go back to the people who recorded
+         *     them, private, in their personal workspaces; a meeting whose recorder's account is gone is
+         *     deleted. Deleting never depends on a plan: a lapsed plan keeps every workspace until its owner
+         *     deletes it.
+         */
+        delete: operations["delete_team"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4822,6 +4848,12 @@ export interface components {
         };
         /** TeamCreate */
         TeamCreate: {
+            /**
+             * Kind
+             * @default team
+             * @enum {string}
+             */
+            kind: "team" | "class";
             /** Name */
             name: string;
         };
@@ -4856,7 +4888,15 @@ export interface components {
         /** TeamList */
         TeamList: {
             /** Can Create More */
-            can_create_more: number;
+            can_create_more: number | null;
+            /** Limit Message */
+            limit_message: string | null;
+            /** Max Owned Teams */
+            max_owned_teams: number | null;
+            /** Owned Teams */
+            owned_teams: number;
+            /** Plan Name */
+            plan_name: string | null;
             /** Teams */
             teams: components["schemas"]["TeamSummary"][];
         };
@@ -4922,6 +4962,12 @@ export interface components {
              * @default false
              */
             is_personal: boolean;
+            /**
+             * Kind
+             * @default team
+             * @enum {string}
+             */
+            kind: "team" | "class";
             /** Member Count */
             member_count: number;
             /**
@@ -4989,6 +5035,11 @@ export interface components {
             is_default: boolean;
             /** Is Personal */
             is_personal: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "team" | "class";
             /** Member Count */
             member_count: number;
             /** Name */
@@ -13602,6 +13653,80 @@ export interface operations {
             };
             /** @description `invalid_name` */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: not the owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such team (of the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team`, `team_has_members`, `meeting_active` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `recording_delete_failed` */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

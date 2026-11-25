@@ -29,6 +29,7 @@ from tests.test_pipeline import DONE, NOW, FakeBot, FakeOpenAI, env, run  # noqa
 from tests.test_series import daniel, owner, template, weekly  # noqa: F401
 from tests.test_series_mail import OWNER_EMAIL, busy, due  # noqa: F401
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 BOARD = "BOARD_INSTRUCTIONS: list the votes."
 MINE = "PERSONAL_INSTRUCTIONS: be brief."
@@ -63,6 +64,7 @@ def cast(session, owner) -> Cast:
     c.quinn = make_user(session, "quinn@example.test")
     for user in (c.ada, c.pat, c.quinn):
         accounts.create_user_defaults(session, user)
+    subscribe(session, c.ada, "plan_20h")  # owning a team needs a plan
     c.x = teams.create_owned_team(session, c.ada, "X")
     session.add_all(
         [
@@ -231,6 +233,7 @@ def test_the_join_sentence_in_a_reminder_reads_the_rules_of_the_series_workspace
     live_join(session, owner, due)
     assert box(mail_of(session, OWNER_EMAIL)) == JOIN
     # their rule in ANOTHER workspace changes nothing here
+    subscribe(session, owner, "plan_20h")  # owning a team needs a plan
     other = teams.create_owned_team(session, owner, "Elsewhere")
     session.add(WorkspacePrefs(team_id=other.id, user_id=owner.id, auto_join_rule="none"))
     session.commit()

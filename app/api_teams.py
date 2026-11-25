@@ -3,15 +3,17 @@
 and error shape. Which team a request is about is a different thing: the `X-Team-Id` header of
 the team-implicit routes (`app/team_admin.py`)."""
 
-from fastapi import APIRouter, Depends
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import auth, teams, titles
+from app import auth, entitlements, team_delete, teams, titles
 from app.api_schemas import ErrorResponse, TeamCreate, TeamList, TeamSummary
 from app.db import get_session
 from app.models import Team, TeamMember, User
-from app.services import Refused
+from app.services import Refused, get_bot_provider
 
 router = APIRouter()
 
@@ -47,17 +49,10 @@ def _summaries(session: Session, user: User) -> list[TeamSummary]:
             is_personal=teams.is_personal_of(team, user.id),
             is_default=default is not None and default.team_id == team.id,
             can_manage=member.role in teams.MANAGER_ROLES,
+            kind=team.kind,
         )
         for member, team in rows
     ]
-
-
-def _owned_count(session: Session, user: User) -> int:
-    return session.scalar(
-        select(func.count())
-        .select_from(Team)
-        .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
-    )
 
 
 @router.get("/teams", tags=["team"])
@@ -70,9 +65,17 @@ def list_teams(
     who joined a team before multi-team lost theirs)."""
     teams.ensure_personal_team(session, user)
     session.commit()
+    now = datetime.now(UTC)
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = teams.owned_team_count(session, user)
+    plan = entitlements.live_plan(session, user, now)
     return TeamList(
         teams=_summaries(session, user),
-        can_create_more=max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user)),
+        can_create_more=None if allowed is None else max(0, allowed - owned),
+        owned_teams=owned,
+        max_owned_teams=allowed,
+        plan_name=plan.name if plan is not None and not user.is_admin else None,
+        limit_message=teams.limit_message(session, user, now),
     )
 
 
@@ -90,15 +93,46 @@ def create_team(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamSummary:
-    """Make a team the caller owns. At most three teams per account besides the personal one (409
-    `team_limit`), 422 `invalid_name` for an empty name."""
+    """Make a team the caller owns, as many as their plan allows besides the personal one (Free 0,
+    Starter 3, Pro 10, Scale unlimited; 409 `team_limit` with a message naming the plan to upgrade
+    to), 422 `invalid_name` for an empty name."""
     name = titles.clean_title(body.name, 100)
     if not name:
         raise Refused(422, "invalid_name", "Give the team a name.")
     teams.ensure_personal_team(session, user)
     try:
-        team = teams.create_owned_team(session, user, name)
+        team = teams.create_owned_team(session, user, name, kind=body.kind)
     except teams.TeamChangeRefused as exc:
         raise Refused(exc.status, exc.code, exc.message) from None
     session.commit()
     return next(t for t in _summaries(session, user) if t.id == team.id)
+
+
+@router.delete(
+    "/teams/{team_id:id}",
+    status_code=204,
+    tags=["team"],
+    responses={
+        403: {"model": ErrorResponse, "description": "`team_forbidden`: not the owner"},
+        404: {"model": ErrorResponse, "description": "No such team (of the caller's)"},
+        409: {
+            "model": ErrorResponse,
+            "description": "`personal_team`, `team_has_members`, `meeting_active`",
+        },
+        502: {"model": ErrorResponse, "description": "`recording_delete_failed`"},
+    },
+)
+def delete_team(
+    team_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    provider=Depends(get_bot_provider),
+) -> Response:
+    """Delete a team workspace. Only its owner, and only when nobody else is in it (409
+    `team_has_members`); the personal space cannot be deleted (409 `personal_team`). Its tasks,
+    projects, series and integrations go with it. Its meetings go back to the people who recorded
+    them, private, in their personal workspaces; a meeting whose recorder's account is gone is
+    deleted. Deleting never depends on a plan: a lapsed plan keeps every workspace until its owner
+    deletes it."""
+    team_delete.delete_team(session, provider, team_id, user)
+    return Response(status_code=204)

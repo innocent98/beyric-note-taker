@@ -55,7 +55,7 @@ export function TeamSwitcher({ teams, variant, unread: given }: { teams: TeamSum
       <div className="team-switch-row">
         <select id={id} className="select select-sm team-switch-select" value={activeId ?? ""} onChange={(event) => choose(event.target.value)}>
           {teams.map((team) => {
-            const name = team.is_personal ? `${team.name} (personal)` : team.name;
+            const name = team.is_personal ? `${team.name} (personal)` : team.kind === "class" ? `${team.name} (class)` : team.name;
             const count = team.id === activeId ? 0 : (unread[team.id] ?? 0);
             return (
               <option key={team.id} value={team.id}>

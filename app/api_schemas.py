@@ -1086,16 +1086,37 @@ class TeamSummary(BaseModel):
     # The team a request with no `X-Team-Id` acts on (what the frontend before multi-team uses).
     is_default: bool
     can_manage: bool
+    # `class` is a team the lecturer owns and students join as members: the same workspace, said in
+    # a school's words (Class, Students, Lecturer) and sharing every meeting with its members by
+    # default. `team` for everything else, the personal space included.
+    kind: Literal["team", "class"]
 
 
 class TeamList(BaseModel):
     teams: list[TeamSummary]
-    # How many more teams the caller may create now (they may own three).
-    can_create_more: int
+    # How many more teams the caller may create now on their plan. Null: as many as they like
+    # (the Scale plan, an admin).
+    can_create_more: int | None
+    # The team workspaces the caller owns besides their personal one (what the limit counts: a team
+    # they only belong to never does).
+    owned_teams: int
+    # How many they may own on their live plan: 0 on Free (a trial counts as Free), 3 Starter,
+    # 10 Pro; null is unlimited. A plan that lapses or drops never removes a workspace:
+    # `owned_teams` can then be above this, and only creating another is refused.
+    max_owned_teams: int | None
+    # The name of the caller's live plan (null on Free), for "your plan owns up to 3 teams".
+    plan_name: str | None
+    # What to tell the caller when they cannot make another team (the same sentence a refused
+    # `POST /api/teams` carries in 409 `team_limit`, naming the plan to upgrade to); null while they
+    # still can.
+    limit_message: str | None
 
 
 class TeamCreate(Body):
     name: str
+    # `class` changes the wording only (Class, Students, Lecturer) and switches "share new
+    # meetings with the members" on; it counts toward the plan's owned-team limit like any team.
+    kind: Literal["team", "class"] = "team"
 
 
 class TeamOut(BaseModel):
@@ -1103,6 +1124,8 @@ class TeamOut(BaseModel):
     name: str
     # True for the caller's personal space (see `TeamSummary.is_personal`).
     is_personal: bool = False
+    # `class` or `team` (see `TeamSummary.kind`): which words the screens use.
+    kind: Literal["team", "class"] = "team"
     # The team default for "Share with team": new meetings of the team's owner and admins are
     # shared when their notes are first written. Off by default; members' meetings are never
     # shared by it.

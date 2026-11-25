@@ -1,0 +1,23 @@
+{
+  "note": "...or left: 409 `personal_team`.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/team/members/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "Your personal space cannot be left."
+      }
+    }
+  }
+}

@@ -874,7 +874,7 @@ def answer(
     question = question.strip()
     if not question or len(question) > MAX_QUESTION_CHARS:
         raise Refused(422, "question_invalid", QUESTION_INVALID)
-    feature_gates.require(session, user, entitlements.ASK, now=now)
+    feature_gates.require(session, user, entitlements.ASK, workspace=workspace, now=now)
     zone = _zone_of(session, user)
     today = now.astimezone(zone).date()
     rng = date_hint(question, today)

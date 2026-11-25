@@ -1,0 +1,24 @@
+{
+  "note": "Only making more is refused: 409 `team_limit` (Free).",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Another"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "team_limit",
+        "message": "Owning a team needs a paid plan. Upgrade to the 20 hours a month plan to own up to 3 teams."
+      }
+    }
+  }
+}

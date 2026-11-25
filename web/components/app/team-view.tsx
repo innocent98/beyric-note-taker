@@ -3,17 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TeamInviteDialog } from "@/components/app/team-invite-dialog";
-import { MAX_NAME } from "@/components/app/teams-view";
+import { pageLoad } from "@/components/app/team-switcher";
+import { MAX_NAME, roleLabel } from "@/components/app/teams-view";
 import { Alert, AppLink, Button, Field, Icon, PageHead, Toast, Toggle } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
+import { beginTeamSwitch, writeStoredTeam } from "@/lib/active-team";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { Team, TeamInvite, TeamMember, TeamMembers, TeamRole } from "@/lib/api/types";
 import { initials, plural } from "@/lib/format";
+import { workspaceWords } from "@/lib/workspace-words";
 
 export const INVITE_NAME_KEY = "beyric.invite-name";
 const TONES = ["avatar-a", "avatar-b", "avatar-c", "avatar-d", "avatar-e"] as const;
-const ROLE_LABEL: Record<TeamRole, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
 // The Team screen (the designer's `isTeam`): the header with Invite people, the Members card (an
 // avatar, the name with "You", the email, "Matched in meetings as ...", the role, "N open" or
@@ -32,6 +34,11 @@ const ROLE_LABEL: Record<TeamRole, string> = { owner: "Owner", admin: "Admin", m
 // server's multi-team switch is on: (5) the "Team name" card, for owners and admins of an ordinary team (a
 // personal space keeps its name), and (6) the "All teams" and "Make a team" links above the heading: there is
 // one Teams entry in the sidebar, so a team's page is reached from the Teams list and goes back to it.
+//
+// LEAD-DESIGNED too (workspaces W4, for the designer to review): (7) the "Delete" card at the foot, for the
+// owner of an ordinary team: the button is off with its reason while other people are in the team, and
+// once the owner is alone it asks first, in the words of the removal question, and says where the meetings
+// go; (8) a class's words (Class, Students, Lecturer) from the one `workspaceWords` helper.
 export function TeamView({
   initialTeam,
   initialMembers,
@@ -56,6 +63,7 @@ export function TeamView({
   const [toast, flash] = useToast();
   const router = useRouter();
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // "Invite them to the team" in the task drawer leaves the spoken name here and comes to this page.
   useEffect(() => {
@@ -111,9 +119,12 @@ export function TeamView({
   }
 
   const personal = multiTeam && team.is_personal;
+  const words = workspaceWords(team.kind);
   const subtitle = multiTeam && !team.is_personal ? `People on ${team.name} can be assigned tasks from meetings.` : "People on your team can be assigned tasks from meetings.";
   const pending = list.invites.length;
-  const count = `${plural(list.members.length, "member")}, ${pending} pending`;
+  const count = `${plural(list.members.length, words.member.toLowerCase())}, ${pending} pending`;
+  const canDelete = multiTeam && !team.is_personal && team.my_role === "owner";
+  const alone = list.members.length === 1;
 
   async function refresh() {
     const [t, m] = await Promise.all([api.team.get(), api.team.members()]);
@@ -146,7 +157,7 @@ export function TeamView({
           <AppLink href="/teams">Make a team</AppLink>
         </nav>
       ) : null}
-      <PageHead title="Team" subtitle={subtitle}>
+      <PageHead title={words.label} subtitle={subtitle}>
         {team.can_manage && !personal ? (
           <Button
             type="button"
@@ -205,7 +216,7 @@ export function TeamView({
       ) : null}
       <section className="tm-card" aria-label="Members">
         <div className="tm-card-head">
-          <h2>Members</h2>
+          <h2>{words.members}</h2>
           <span>{count}</span>
         </div>
         <ul className="tm-list">
@@ -281,10 +292,10 @@ export function TeamView({
                       }
                     >
                       <option value="admin">Admin</option>
-                      <option value="member">Member</option>
+                      <option value="member">{words.member}</option>
                     </select>
                   ) : (
-                    <span className="tm-role-text">{ROLE_LABEL[m.role]}</span>
+                    <span className="tm-role-text">{roleLabel(m.role, team.kind)}</span>
                   )}
                 </div>
                 <div className="tm-open">{m.open_tasks} open</div>
@@ -384,13 +395,13 @@ export function TeamView({
         <section className="tm-info-card tm-roles">
           <h2>Roles</h2>
           <div>
-            <strong>Owner</strong> manages settings and the team.
+            <strong>{words.owner}</strong> manages settings and the {words.noun}.
           </div>
           <div>
             <strong>Admin</strong> invites people and manages all tasks.
           </div>
           <div>
-            <strong>Member</strong> sees shared meetings and works on their tasks.
+            <strong>{words.member}</strong> sees shared meetings and works on their tasks.
           </div>
         </section>
       </div>
@@ -417,6 +428,58 @@ export function TeamView({
               }
             />
           </div>
+        </section>
+      ) : null}
+      {canDelete ? (
+        <section className="tm-card" aria-label={`Delete ${words.noun}`}>
+          <div className="pl-row pl-row-last pl-row-center">
+            <div>
+              <div className="pl-row-title">Delete this {words.noun}</div>
+              <div className="pl-row-sub">
+                {alone
+                  ? `Its tasks, projects, recurring meetings and integrations are deleted. Meetings recorded in it go back to the people who recorded them, private, in their personal spaces.`
+                  : `Other people are still in this ${words.noun}. Remove them first: you can delete it once you are its only member.`}
+              </div>
+            </div>
+            <Button kind="danger" size="sm" type="button" disabled={!alone || busy !== null} onClick={() => setDeleting(true)}>
+              Delete {words.noun}
+            </Button>
+          </div>
+          {deleting && alone ? (
+            <div className="meeting-delete-ask tm-ask" role="group" aria-label={`Delete ${team.name}?`}>
+              <p>
+                <strong>Delete {team.name}?</strong> This cannot be undone. Meetings recorded in it are not deleted: each goes back to the
+                person who recorded it, private, in their personal space.
+              </p>
+              <div className="dec-ask-actions">
+                <Button kind="secondary" size="sm" type="button" onClick={() => setDeleting(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  kind="danger"
+                  size="sm"
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void run(
+                      "delete-team",
+                      () => api.teams.remove(team.id),
+                      () => {
+                        // The team is gone: forget it for this tab and load the Teams list afresh, a full
+                        // page load like the switcher's, so nothing of the deleted team is left on screen
+                        // (a soft refresh would call it a team "no longer available to you").
+                        writeStoredTeam(null);
+                        beginTeamSwitch();
+                        pageLoad.to("/teams");
+                      },
+                    )
+                  }
+                >
+                  {busy === "delete-team" ? "Deleting..." : `Delete ${words.noun}`}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
       <TeamInviteDialog

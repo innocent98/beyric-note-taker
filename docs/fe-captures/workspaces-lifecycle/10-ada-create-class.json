@@ -1,0 +1,29 @@
+{
+  "note": "`kind` `class`: the same workspace in a school's words. It counts toward the limit.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Maths 101",
+      "kind": "class"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 5,
+      "name": "Maths 101",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": true,
+      "kind": "class"
+    }
+  }
+}

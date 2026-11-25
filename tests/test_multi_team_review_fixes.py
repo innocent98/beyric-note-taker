@@ -44,6 +44,7 @@ from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F40
 from tests.test_multi_team_moved import ADA, DEE, NoBot, dee, move  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_workspace import GOOD, NOTES, FakeChat
+from tests.workspace_plans import subscribe
 
 
 def add_review(session, meeting, text="Metrika may be misheard", position=0):
@@ -61,6 +62,7 @@ def add_review(session, meeting, text="Metrika may be misheard", position=0):
 
 def ada_leaves_x(session, world):
     """Ada hands X to Pat (the pilot admin does it by hand) and leaves it."""
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     teams.leave(session, world.ada, datetime.now(UTC), team_id=world.x.id)
@@ -309,6 +311,7 @@ def test_a_team_admin_may_decide_the_suggestions_of_a_moved_meeting_and_a_member
     assert task_rules.owns_meeting_of(session, dee, suggestion) is True  # an admin of X
     assert task_rules.owns_meeting_of(session, world.ada, suggestion) is True  # the recorder
     assert task_rules.owns_meeting_of(session, world.pat, suggestion) is False  # a plain member
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     ada_gone = session.get(User, world.ada.id)

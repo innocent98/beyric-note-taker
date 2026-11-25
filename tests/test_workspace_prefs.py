@@ -28,6 +28,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_team_visibility import sign_in
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 ADA, PAT = "owner@example.test", "pat@example.test"
 
@@ -42,6 +43,7 @@ def cast(session, template, owner) -> Cast:
     c.ada = owner
     c.pat = make_user(session, PAT, bot_name="Pat default")
     accounts.create_user_defaults(session, c.pat)
+    subscribe(session, c.ada, "plan_20h")  # owning a team needs a plan
     c.x = teams.create_owned_team(session, c.ada, "X")
     session.add(TeamMember(team_id=c.x.id, user_id=c.pat.id, role="member"))
     session.commit()

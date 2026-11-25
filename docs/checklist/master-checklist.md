@@ -36,7 +36,11 @@
 - [x] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9) (branch `feature/workspaces-calendar`, SOP `docs/sop/2026-11-24-workspaces-calendar.md`, migration `0075` placeholder, FE guide `docs/fe-integration-guide-workspaces-calendar.md`; nothing verified against a real Google or Microsoft calendar)
   - [x] T8 connections keyed `(user, workspace, provider)`, connect and callback return per workspace, reference-counted revoke, leave and removal disconnect
   - [x] T9 chooser `app/calendar_arbitration.py` under a per-person lock, `recorded_in` Upcoming row with Switch here, recurring per workspace, calendar GETs out of `PENDING_SLICE`
-- [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)
+- [x] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12) (branch `feature/workspaces-lifecycle`, SOP `docs/sop/2026-11-24-workspaces-lifecycle.md`, FE guide `docs/fe-integration-guide-workspaces-lifecycle.md`, 36 live captures `docs/fe-captures/workspaces-lifecycle/`; no migration; verified locally and in a real browser at 390 and 1280 px, the `make` gate pending the recipes merge)
+  - [x] T10 Plan limit: `Plan.max_owned_teams` through the live plan (Free 0, Starter 3, Pro 10, Scale unlimited; a trial is Free; members never count; a lapse or downgrade never removes a team; hand-overs checked); Make-a-team card shows the allowance and the upgrade message
+  - [x] T11 Delete a workspace (owner, nobody else in it; meetings go home or are deleted when the recorder is gone), leave and removal rules, personal space protected, classes (`kind`, share default on, one `workspaceWords` helper)
+  - [x] T12 Feature-gate rule for members: `ask` and `make` pass on a workspace whose owner has a plan; `translate` and `rewrite` caller-only; caps per caller; all three modes
+  - [ ] Pass `workspace=` in `recipes/service.py` when the recipes release merges (one line)
 - [ ] W5 Rehearsal on production-shaped data, Opus permission review, FE guide, renumber migrations, ONE PR to `main` (T13)
 
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):

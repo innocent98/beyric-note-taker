@@ -41,6 +41,7 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_team_visibility import OWNER_ONLY, READS, call, sign_in
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 ADA, DEE = "owner@example.test", "dee@example.test"
 
@@ -115,6 +116,7 @@ def test_the_recorder_reads_and_changes_a_moved_meeting_only_while_in_the_owning
     ada = sign_in(app, ADA)
     assert ada.get(f"/api/meetings/{world.private.id}").status_code == 200
     # Ada leaves X (no longer an owner of it: Pat is made the owner first, as the pilot admin does)
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     teams.leave(session, world.ada, datetime.now(UTC), team_id=world.x.id)
@@ -168,6 +170,7 @@ def test_the_teams_owner_and_admins_change_a_moved_meeting_they_did_not_record(
     moved(session, world.private, world.x)
     assert visibility.owns(session, dee, world.private)
     assert visibility.owns(session, world.ada, world.private)
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)  # Pat is now the owner of X
     session.commit()
     assert visibility.owns(session, world.pat, world.private)
