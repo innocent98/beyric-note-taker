@@ -193,6 +193,9 @@ class Reading:
     cells: dict = field(default_factory=dict)
     totals: dict = field(default_factory=dict)  # tag -> seconds its segments cover
     shown: dict[str, str] = field(default_factory=dict)
+    # key -> seconds that participant was lit in all (clock-free: it needs no placing on the
+    # transcript's clock, so it is filled even when the clock is refused)
+    lit: dict[str, float] = field(default_factory=dict)
     refused: str | None = None
 
 
@@ -209,22 +212,26 @@ def read(items: list[dict], record, group: Group, tag_of=None) -> Reading:
         # `events_dropped` keeps the names and empties every list; some platforms may send names
         # only): no evidence, the same as no events.
         return Reading(refused="no_events")
-    zero, _ = anchor(record, spans)
-    if zero is None:
-        return Reading(refused="clock_unplaced")
-    spans = {n: merge([(a - zero, b - zero) for a, b in v]) for n, v in spans.items()}
-    heard = heard_by_tag(items, tag_of)
-    if not heard:
-        return Reading(refused="no_times")
     # `spans` is keyed by the shown name; keys are the same strings here by construction of `group`
     # below, so the cells are keyed by the comparison key.
     keys = {shown: group(shown)[0] for shown in spans}
+    people = {
+        "shown": {keys[n]: n for n in spans},  # everyone in the participant list, lit or not
+        "lit": {keys[n]: sum(b - a for a, b in v) for n, v in spans.items()},
+    }
+    zero, _ = anchor(record, spans)
+    if zero is None:
+        return Reading(refused="clock_unplaced", **people)
+    spans = {n: merge([(a - zero, b - zero) for a, b in v]) for n, v in spans.items()}
+    heard = heard_by_tag(items, tag_of)
+    if not heard:
+        return Reading(refused="no_times", **people)
     cells = {
         tag: {keys[n]: sum(overlap(spans[n], a, b) for a, b in merge(intervals)) for n in spans}
         for tag, intervals in heard.items()
     }
     totals = {tag: sum(b - a for a, b in merge(intervals)) for tag, intervals in heard.items()}
-    reading = Reading(cells=cells, totals=totals, shown={keys[n]: n for n in spans})
+    reading = Reading(cells=cells, totals=totals, **people)
     if not clock_is_fine(*clock_fit(spans, heard)):
         reading.refused = "clock_shifted"
     return reading

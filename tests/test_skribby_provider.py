@@ -542,12 +542,24 @@ def test_a_sole_candidate_needs_one_tag_Skribby_named_itself_in_the_meeting():
     only = read(*several(5, "1", candidates=[("Cy Example", 1)]))
     assert [seg["speaker"] for seg in only.segments] == [""] * 5
     assert only.evidence["tags"]["1"]["name"] == ""
-    two_unnamed = read(
+    # Two unnamed tags that share their one candidate are no better.
+    shared = read(
+        *several(4, "1", candidates=[("Cy Example", 1)]),
+        *several(4, "2", candidates=[("Cy Example", 1)]),
+    )
+    assert [seg["speaker"] for seg in shared.segments] == [""] * 8
+    assert shared.evidence["tags"]["1"]["how"] == "unknown"
+
+
+def test_two_unnamed_tags_with_a_different_sole_candidate_each_are_named_one_to_one():
+    # Meeting 46's shape: no tag named by Skribby, every tag one name on every segment, the names
+    # differ. Before docs/sop/2026-11-25-speaker-naming-one-to-one.md this stayed unnamed.
+    two = read(
         *several(4, "1", candidates=[("Cy Example", 1)]),
         *several(4, "2", candidates=[("Di Example", 1)]),
     )
-    assert [seg["speaker"] for seg in two_unnamed.segments] == [""] * 8
-    assert two_unnamed.evidence["tags"]["1"]["how"] == "unknown"
+    assert [seg["speaker"] for seg in two.segments] == ["Cy Example"] * 4 + ["Di Example"] * 4
+    assert two.evidence["tags"]["1"]["how"] == "one_to_one"
 
 
 def test_a_sole_candidate_that_is_the_bot_is_not_a_name():

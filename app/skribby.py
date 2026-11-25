@@ -351,6 +351,61 @@ def _meeting_gate(reading: meet_timeline.Reading, named: dict[str, str]) -> str 
     return None if agreeing else "uncorroborated"
 
 
+def _one_to_one(
+    given: dict[str, dict[str, str]],
+    listed: dict[str, dict[str, str] | None],
+    segments: dict[str, int],
+    listing: dict[str, dict[str, int]],
+    bot: set[str],
+    reading: meet_timeline.Reading | None,
+) -> tuple[dict[str, str] | None, str | None]:
+    """`how` = `one_to_one` (docs/sop/2026-11-25-speaker-naming-one-to-one.md): the meeting where
+    Skribby named NO tag itself, so the sole-candidate rule and the timeline rule have no anchor,
+    and yet every tag lists exactly one name on every one of its segments, a different one each.
+    `(picks, None)` (tag -> name, every tag) when all of these hold, `(None, why)` when the shape
+    fits but Meet vetoes it, `(None, None)` when the shape does not fit (nothing to say):
+
+    * no tag carries a `speaker_name`, and there are at least two tags (one tag cannot tell one
+      person from a crowd the model merged);
+    * EVERY tag has exactly one candidate, not the bot, on every segment, at least
+      `MIN_SOLE_CANDIDATE_SEGMENTS` of them; a tag that fails (two names, none, the bot, too few
+      lines, a list too long to read) blocks the whole meeting;
+    * no two tags share the name, so tags and names are as many;
+    * when Meet's participant list is readable (`reading`): every name is in the call
+      (`not_in_call`), nobody else was lit for `MIN_SECONDS` or more (`extra_speaker`: a person
+      who spoke and has no tag, the signature of voices merged into fewer tags), and, when the
+      clock is usable, no tag has a different person clearly on top of Meet's timeline
+      (`contradicted`, `meet_timeline.verdict`). A silent attendee is no veto. Without events
+      (Zoom, Teams, a failed fetch) the shape alone decides."""
+    if any(given.values()) or len(segments) < 2:
+        return None, None
+    keys: dict[str, str] = {}  # tag -> its one candidate's key
+    for tag, count in segments.items():
+        candidates = listed.get(tag)
+        if not candidates or len(candidates) != 1:
+            return None, None
+        key = next(iter(candidates))
+        if key in bot or not listing[tag][key] == count >= MIN_SOLE_CANDIDATE_SEGMENTS:
+            return None, None
+        keys[tag] = key
+    if len(set(keys.values())) != len(keys):
+        return None, None
+    if reading is not None and reading.shown:
+        if any(key not in reading.shown for key in keys.values()):
+            return None, "not_in_call"
+        for key, seconds in reading.lit.items():
+            if key not in keys.values() and key not in bot and seconds >= meet_timeline.MIN_SECONDS:
+                return None, "extra_speaker"
+        if not reading.refused:
+            for tag, key in keys.items():
+                top, _ = meet_timeline.verdict(
+                    reading.cells.get(tag, {}), bot, reading.totals.get(tag, 0.0)
+                )
+                if top is not None and top != key:
+                    return None, "contradicted"
+    return {tag: next(iter(listed[tag].values())) for tag in keys}, None
+
+
 def _earlier_rules(
     value: list[dict],
     own_names: tuple[str, ...],
@@ -459,6 +514,10 @@ def _earlier_rules(
                 progress = True
         if not progress:
             break
+    # The chain above starts from a tag Skribby named; this is the meeting where it named none.
+    picks, vetoed = _one_to_one(given, listed, segments, listing, bot, reading)
+    for tag, name in (picks or {}).items():
+        chosen[tag], chosen_how[tag] = name, "one_to_one"
     result: dict[str, dict[str, str]] = {}
     for tag, named in given.items():
         if len(named) == 1:
@@ -480,6 +539,8 @@ def _earlier_rules(
             result[tag] = {"name": "", "how": "unknown", "note": "no_candidates"}
         else:
             result[tag] = {"name": "", "how": "unknown", "note": "unresolved"}
+            if vetoed:
+                result[tag]["one_to_one"] = vetoed  # the shape fit and Meet said no: say why
     return result, chosen, listed, bot
 
 

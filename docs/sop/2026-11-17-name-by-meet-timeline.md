@@ -281,3 +281,10 @@ participant is left over (`docs/sop/2026-11-23-speaker-name-chain.md`). What thi
 stays 3.0 (meeting 39's weak tags stay unnamed; its fixtures pass unchanged), the same gates (readable events, checked
 clock, at least one agreeing named tag, no contradiction) come first, and the exclusion route runs only behind them. The
 timeline rule's "the tags the other rules left unnamed" now includes fewer tags, because the chain names more of them first; a chain name that this timeline does not positively support is not given, so the tag stays open and this rule can name it (an over-split person).
+
+## Update 2026-11-25: the zero-anchor meeting
+
+The corroboration gate ("a meeting where nothing was named gets no timeline names") is unchanged. A meeting where nothing
+was named because each tag lists one different person is named by `how: one_to_one` instead, which uses this module's
+`verdict` only as a veto and adds `Reading.lit`/`Reading.shown` for the participant checks
+(`docs/sop/2026-11-25-speaker-naming-one-to-one.md`).
