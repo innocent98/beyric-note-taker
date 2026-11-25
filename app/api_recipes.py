@@ -16,7 +16,7 @@ from sqlalchemy import delete, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, team_admin, teams
+from app import auth, services, team_admin, teams, workspace_context
 from app import visibility as meeting_visibility
 from app.api_schemas import (
     BlankOut,
@@ -315,21 +315,28 @@ def list_documents(
     shared: bool | None = Query(default=None),
     before_id: int | None = Query(default=None, ge=1, le=services.MAX_ID),
     limit: int = Query(default=50, ge=1, le=MAX_LISTED),
+    ws: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> DocumentList:
-    """Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts
-    teammates shared with a team the caller is in now (never their own; an unshared one, or one of
-    a team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts
-    made from that meeting (cross-meeting drafts included; a shared draft only when the caller may
-    read that meeting). For the next page pass the smallest `id` as `before_id`."""
+    """Drafts, newest first, of the active workspace (`X-Team-Id`, else the caller's default; 404
+    for a team the caller is not in). With no filter, or `mine=true`: the caller's own, made in this
+    workspace. `shared=true`: drafts teammates shared with this team (never their own; an unshared
+    one, or one of a team they left, is not listed). Both true: the two together. With
+    `meeting_id`, only drafts made from that meeting, in any workspace (the meeting page lists what
+    was made from it; cross-meeting drafts included; a shared draft only when the caller may read
+    that meeting). For the next page pass the smallest `id` as `before_id`."""
     want_mine = True if mine is None and not shared else bool(mine)
     want_shared = bool(shared)
     scopes = []
     if want_mine:
-        scopes.append(Document.owner_user_id == user.id)
+        scopes.append(
+            Document.owner_user_id == user.id
+            if meeting_id is not None
+            else doc_visibility.made_in_clause(user, ws)
+        )
     if want_shared:
-        scopes.append(doc_visibility.shared_clause(user))
+        scopes.append(doc_visibility.shared_clause(user, None if meeting_id is not None else ws.id))
     if not scopes:
         return DocumentList(documents=[])
     query = select(Document).where(or_(*scopes))

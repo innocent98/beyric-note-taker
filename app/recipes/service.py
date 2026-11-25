@@ -16,7 +16,9 @@ ledger (`app/ask.py`):
   options while that draft is still `writing` gets that draft back (no second draft, no second
   count).
 * The gate `make` (`feature_gates.require`) is checked here, before anything is written, in the
-  function that leads to the model call. The worker is not gated: a queued draft was allowed.
+  function that leads to the model call. The worker is not gated: a queued draft was allowed. It
+  passes the workspace the chosen meetings all live in, so a member of a workspace whose owner is
+  on a plan may Make from it without a plan of their own (workspaces design 12.6).
 * A claim is held `STALE_RUNNING`; a worker that died leaves a draft another claim picks up, at most
   `MAX_ATTEMPTS` times, then it fails with `gave_up`. The outcome is written with a compare-and-set
   on the claim, so a draft discarded or reclaimed meanwhile is not overwritten (its model call is
@@ -223,7 +225,13 @@ def request_draft(
         left_out = max(left_out, _picker_left_out(session, user, picker, resolved.scope, team_id))
     chosen = {m.id for m in meetings}
     clean = _options(options)
-    feature_gates.require(session, user, entitlements.MAKE, now=now)
+    # A free member may Make from a workspace whose OWNER has a plan (workspaces design 12.6), but
+    # only from that workspace's own meetings: the chosen meetings must all be filed in one
+    # workspace, and the gate checks the caller is a member of it. Meetings from several workspaces
+    # (or none chosen that are readable) are the caller's own plan alone.
+    homes = {m.workspace_team_id for m in meetings}
+    workspace = homes.pop() if len(homes) == 1 else None
+    feature_gates.require(session, user, entitlements.MAKE, workspace=workspace, now=now)
     settings = get_settings()
     _lock_user(session, user.id)
     for existing in session.scalars(

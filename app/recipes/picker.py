@@ -38,7 +38,7 @@ from app import series as series_rules
 from app.ask import transcript_of
 from app.models import Meeting, Project, Series, Sprint, Task, Team, User, UserSettings
 from app.recipes.picker_spec import MAX_MEETINGS, PickerSpec
-from app.visibility import active_team_clause, can_read_clause, readable_in
+from app.visibility import can_read_clause, readable_in
 
 # The newest meetings looked at before the cap: a team with hundreds of meetings in one scope does
 # not load them all to offer twelve.
@@ -126,7 +126,9 @@ def _sprint_scope(session: Session, user: User, team_id: int | None, sprint_id: 
         )
     )
     held = and_(
-        Meeting.created_at >= start, Meeting.created_at < before, active_team_clause(user, active)
+        Meeting.created_at >= start,
+        Meeting.created_at < before,
+        Meeting.workspace_team_id == active.id,
     )
     return _Scope(planned | held)
 

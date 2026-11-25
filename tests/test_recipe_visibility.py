@@ -140,10 +140,15 @@ def test_only_a_finished_draft_in_a_real_team_can_be_shared(api, session, templa
     error_of(share(api, writing), 409, "not_ready")
     work(session, [para("Hi.")])
     assert share(api, writing).status_code == 200
-    team.is_personal = True  # the owner's own space: nobody to share with
-    session.commit()
-    api.call("DELETE", url(writing) + "/share")
-    error_of(share(api, writing), 409, "personal_team")
+    # a draft made in the owner's own personal workspace: nobody to share with
+    personal = teams.personal_team(session, owner.id)
+    api.client.headers["X-Team-Id"] = str(personal.id)
+    try:
+        own = make(api, meeting).json()["id"]
+    finally:
+        del api.client.headers["X-Team-Id"]
+    work(session, [para("Hi.")])
+    error_of(share(api, own), 409, "personal_team")
     error_of(api.call("POST", "/api/documents/999999/share"), 404, "not_found")
 
 
@@ -408,11 +413,15 @@ def test_a_share_goes_to_the_drafts_own_team_whatever_team_is_active(
     session.add(TeamMember(team_id=other.id, user_id=owner.id, role="owner"))
     session.commit()
     meeting = meeting_of(session, template)
-    made = api.call(
-        "POST",
-        "/api/documents",
-        {"recipe_key": "follow_up_email", "meeting_ids": [meeting.id]},
-    )
+    api.client.headers["X-Team-Id"] = str(team.id)  # made in the first team
+    try:
+        made = api.call(
+            "POST",
+            "/api/documents",
+            {"recipe_key": "follow_up_email", "meeting_ids": [meeting.id]},
+        )
+    finally:
+        del api.client.headers["X-Team-Id"]
     doc_id = made.json()["id"]
     work(session)
     api.client.headers["X-Team-Id"] = str(other.id)  # the person has switched to the other team

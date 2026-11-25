@@ -22,7 +22,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import ADMIN_EMAIL, MEMBER_EMAIL, admin, as_user, member, team  # noqa: F401
-from tests.test_multi_team_leaks import PAT, multi_team_on, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, world  # noqa: F401
 from tests.test_recipe_library import call
 from tests.test_team_visibility import OTHER_EMAIL, outsider  # noqa: F401
 from tests.test_web import stranger  # noqa: F401
@@ -100,9 +100,7 @@ def test_a_stranger_does_not_see_another_teams_brief(api, app, outsider):
     assert api.get("/api/briefs").json()["text"] == BRIEF  # untouched
 
 
-def test_a_person_in_two_teams_reads_and_writes_the_active_teams_brief(
-    app, session, world, multi_team_on
-):
+def test_a_person_in_two_teams_reads_and_writes_the_active_teams_brief(app, session, world):
     ada = as_user(app, "owner@example.test")
     assert put(ada, "Brief of X", world.x).status_code == 200
     pat = as_user(app, PAT)
@@ -113,7 +111,7 @@ def test_a_person_in_two_teams_reads_and_writes_the_active_teams_brief(
     assert call(pat, "PUT", "/api/briefs", {"text": "x"}, world.z).status_code == 404
 
 
-def test_a_persons_personal_team_has_a_brief_of_its_own(app, session, world, multi_team_on):
+def test_a_persons_personal_team_has_a_brief_of_its_own(app, session, world):
     pat = as_user(app, PAT)
     personal = next(t for t in pat.client.get("/api/teams").json()["teams"] if t["is_personal"])
     assert put(pat, "My own style", personal["id"]).status_code == 200

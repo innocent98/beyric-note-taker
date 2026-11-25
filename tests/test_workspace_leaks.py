@@ -27,17 +27,21 @@ from app.models import (
     CalendarEvent,
     Decision,
     DecisionTask,
+    Document,
+    DocumentShare,
     Integration,
     Meeting,
     Milestone,
     Notification,
     Project,
+    Recipe,
     ReviewItem,
     ScheduledJoin,
     Series,
     SeriesIgnored,
     Task,
     Team,
+    TeamBrief,
     TeamMember,
     Template,
     VocabularyTerm,
@@ -96,6 +100,11 @@ WORKSPACE_DATA = {
     "/api/templates",
     "/api/vocabulary",
     "/api/workspace-prefs",
+    # Recipes release: the team brief and the team's recipes are the workspace's; a draft is listed
+    # in the workspace it was made in (and the ones shared to it)
+    "/api/briefs",
+    "/api/recipes",
+    "/api/documents",
 }
 
 # The caller's own account, not a workspace's: sign-in, plan and hours, payments, the personal
@@ -316,6 +325,40 @@ def cast(session, template, world) -> Cast:
         session.add(Series(team_id=team.id, owner_user_id=c.pat.id, title=f"{mark} weekly"))
         add_task(session, team, title=f"{mark} task", assignee=c.pat)
         add_task(session, team, mine, title=f"{mark} follow-up", assignee=c.pat)
+        # the recipes release: the workspace's brief, a draft Pat made in it
+        session.add(TeamBrief(team_id=team.id, text=f"{mark} brief: our prices"))
+        session.add(
+            Document(
+                owner_user_id=c.pat.id,
+                team_id=team.id,
+                title=f"{mark} proposal",
+                output_type="document",
+                status="ready",
+            )
+        )
+        if key != "p":
+            session.add(
+                Recipe(
+                    owner_user_id=c.ada.id if key == "x" else c.quinn.id,
+                    team_id=team.id,
+                    name=f"{mark} recipe",
+                    instruction="Write it up.",
+                )
+            )
+            # a draft a teammate shared with the team (read-only for Pat)
+            boss = c.ada if key == "x" else c.quinn
+            shared_doc = Document(
+                owner_user_id=boss.id,
+                team_id=team.id,
+                title=f"{mark} shared recap",
+                output_type="document",
+                status="ready",
+            )
+            session.add(shared_doc)
+            session.flush()
+            session.add(
+                DocumentShare(document_id=shared_doc.id, team_id=team.id, shared_by_user_id=boss.id)
+            )
         if key != "p":
             session.add(
                 Integration(
@@ -417,8 +460,14 @@ def test_each_workspace_shows_its_own_data_on_the_list_routes(app, session, cast
             "/api/templates",
             "/api/vocabulary",
             "/api/workspace-prefs",
+            "/api/briefs",
+            "/api/documents",
         ):
             assert mark in get(pat, path, team).text, (path, key)
+        if key != "p":
+            assert f"{mark} recipe" in get(pat, "/api/recipes", team).text, key
+            shared = get(pat, "/api/documents", team, shared="true").text
+            assert f"{mark} shared recap" in shared and leaks(shared, key) == [], key
         assert f"TEAM_{key.upper()}" in get(pat, "/api/team", team).text
         if key != "p":
             assert f"{mark} engineering" in get(pat, "/api/integrations/linear", team).text
