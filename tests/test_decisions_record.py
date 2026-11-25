@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app import extraction, workspace
+from app import extraction, teams, workspace
 from app.extraction import ModelDecision, ModelExtraction, ParsedNotes, check_extraction
 from app.models import Decision, DecisionTask, Task, UserSettings
 from tests.test_api_tasks import (  # noqa: F401  (fixtures used by name)
@@ -492,6 +492,7 @@ def test_replaced_by_refuses_itself_cycles_and_decisions_outside_the_log(
     # a decision of someone else's private meeting is not in the caller's log
     theirs = ready(session, template, notes=NOTES, speaker_transcript=TRANSCRIPT)
     theirs.owner_user_id = outsider.id
+    theirs.workspace_team_id = teams.ensure_personal_team(session, outsider).id
     session.commit()
     workspace.run_extraction(session, theirs, with_ai=False)
     foreign = session.scalars(select(Decision).where(Decision.meeting_id == theirs.id)).first()
@@ -634,8 +635,10 @@ def test_a_linked_decision_the_reader_may_not_read_is_not_named(
     assert mate[BUDGET]["replaced_by"] is None  # points into a private meeting
     assert mate[LAUNCH]["replaces"] == []  # the private decision that names it is not shown
     own = by_text(listed(api))
-    assert own[BUDGET]["replaced_by"]["id"] == hidden_from_mate.id
-    assert [r["id"] for r in own[LAUNCH]["replaces"]] == [hidden_from_mate.id]
+    # the private decision is filed in her personal workspace, this log is the team's: a title of
+    # another workspace is never named here, even to the person who may read both
+    assert own[BUDGET]["replaced_by"] is None
+    assert own[LAUNCH]["replaces"] == []
 
 
 def test_the_evidence_line_is_only_given_with_a_quote_found_in_the_transcript(

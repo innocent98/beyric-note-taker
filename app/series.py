@@ -135,10 +135,9 @@ def team_id_of(session: Session, user: User) -> int:
 
 
 def follow_enabled() -> bool:
-    """`SERIES_FOLLOW_MEETINGS` and `MULTI_TEAM_ENABLED`, both on: a series row then belongs to a
-    team scope and meetings follow it. Read on each call (the settings are cached), so a test may
-    replace this function."""
-    return get_settings().series_follow_meetings and teams.multi_team_enabled()
+    """`SERIES_FOLLOW_MEETINGS` on: a series row then belongs to a team scope and meetings follow
+    it. Read on each call (the settings are cached), so a test may replace this function."""
+    return get_settings().series_follow_meetings
 
 
 def scope_team_id(session: Session, recorder: User, meeting: Meeting, *, follow: bool) -> int:

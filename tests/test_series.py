@@ -86,6 +86,8 @@ def meeting_in(session, template, found, *, when=MONDAY, user=None, **fields):
     )
     if user is not None:
         meeting.owner_user_id = user.id
+        # born in the new recorder's personal workspace, as if they had recorded it
+        meeting.workspace_team_id = teams.ensure_personal_team(session, user).id
     session.commit()
     return meeting
 
@@ -584,33 +586,6 @@ def test_a_teammate_does_not_see_the_series_of_a_meeting_when_their_team_is_not_
 
 
 # ---- teams change ----
-
-
-def test_joining_a_team_brings_the_series_along_and_merges_a_twin(session, owner, daniel, template):
-    # Daniel's team of one has two series; one is the owner's team's recurring event too.
-    own_team = teams.ensure_team(session, owner)
-    twin_mine = Series(team_id=own_team.id, title="Monday", calendar_recurring_id="rid-1")
-    session.add(twin_mine)
-    session.commit()
-    solo = make_user(session, "solo@example.test", name="Solo")
-    solo_team = teams.ensure_team(session, solo)
-    twin_theirs = Series(
-        team_id=solo_team.id, title="Monday (theirs)", calendar_recurring_id="rid-1"
-    )
-    unique = Series(team_id=solo_team.id, title="Only mine", calendar_recurring_id="rid-2")
-    session.add_all([twin_theirs, unique])
-    session.commit()
-    meeting = ready(session, template, series_id=twin_theirs.id)
-    meeting.owner_user_id = solo.id
-    session.add(SeriesAgendaItem(series_id=twin_theirs.id, text="Carry me", created_by=solo.id))
-    session.commit()
-    teams.join(session, solo, own_team.id, "member", None, NOW)
-    session.commit()
-    session.expire_all()
-    assert session.get(Meeting, meeting.id).series_id == twin_mine.id  # merged into the twin
-    assert session.get(Series, twin_theirs.id) is None
-    assert session.get(Series, unique.id).team_id == own_team.id
-    assert [i.text for i in series.agenda_items(session, twin_mine)] == ["Carry me"]
 
 
 def test_leaving_a_team_takes_your_meetings_out_of_its_series(

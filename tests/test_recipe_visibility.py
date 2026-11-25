@@ -71,7 +71,7 @@ def reader(app, team):
 
 
 def sourced_draft(api, session, template, team, *, meeting_shared: bool):
-    meeting = meeting_of(session, template, title=SECRET_TITLE)
+    meeting = meeting_of(session, template, workspace_team_id=team.id, title=SECRET_TITLE)
     if meeting_shared:
         meeting.shared_team_id = team.id
         session.commit()
@@ -135,15 +135,22 @@ def test_sharing_is_idempotent_and_the_creator_sees_who_it_is_shared_with(
 
 
 def test_only_a_finished_draft_in_a_real_team_can_be_shared(api, session, template, team, owner):
-    meeting = meeting_of(session, template)
+    meeting = meeting_of(session, template, workspace_team_id=team.id)
     writing = make(api, meeting).json()["id"]
     error_of(share(api, writing), 409, "not_ready")
     work(session, [para("Hi.")])
     assert share(api, writing).status_code == 200
-    team.is_personal = True  # the owner's own space: nobody to share with
+    # a draft made in the owner's own personal workspace: nobody to share with
+    personal = teams.ensure_personal_team(session, owner)
     session.commit()
-    api.call("DELETE", url(writing) + "/share")
-    error_of(share(api, writing), 409, "personal_team")
+    own_meeting = meeting_of(session, template)  # filed in the personal workspace
+    api.client.headers["X-Team-Id"] = str(personal.id)
+    try:
+        own = make(api, own_meeting).json()["id"]
+    finally:
+        del api.client.headers["X-Team-Id"]
+    work(session, [para("Hi.")])
+    error_of(share(api, own), 409, "personal_team")
     error_of(api.call("POST", "/api/documents/999999/share"), 404, "not_found")
 
 
@@ -341,7 +348,7 @@ def test_a_share_does_not_come_back_when_its_creator_leaves_and_rejoins(
     from datetime import UTC, datetime
 
     maker = sign_in(app, TEAMMATE_EMAIL)  # the teammate makes and shares; the owner reads
-    meeting = meeting_of(session, template, title=SECRET_TITLE)
+    meeting = meeting_of(session, template, workspace_team_id=team.id, title=SECRET_TITLE)
     meeting.shared_team_id = team.id
     session.commit()
     doc_id = make(maker, meeting).json()["id"]
@@ -378,7 +385,7 @@ def test_a_creator_who_lost_access_to_the_meeting_sees_hidden_sources(
     api, session, template, team, teammate, app
 ):
     maker = sign_in(app, TEAMMATE_EMAIL)
-    meeting = meeting_of(session, template, title=SECRET_TITLE)
+    meeting = meeting_of(session, template, workspace_team_id=team.id, title=SECRET_TITLE)
     meeting.shared_team_id = team.id
     session.commit()
     doc_id = make(maker, meeting).json()["id"]
@@ -407,12 +414,16 @@ def test_a_share_goes_to_the_drafts_own_team_whatever_team_is_active(
     session.flush()
     session.add(TeamMember(team_id=other.id, user_id=owner.id, role="owner"))
     session.commit()
-    meeting = meeting_of(session, template)
-    made = api.call(
-        "POST",
-        "/api/documents",
-        {"recipe_key": "follow_up_email", "meeting_ids": [meeting.id]},
-    )
+    meeting = meeting_of(session, template, workspace_team_id=team.id)
+    api.client.headers["X-Team-Id"] = str(team.id)  # made in the first team
+    try:
+        made = api.call(
+            "POST",
+            "/api/documents",
+            {"recipe_key": "follow_up_email", "meeting_ids": [meeting.id]},
+        )
+    finally:
+        del api.client.headers["X-Team-Id"]
     doc_id = made.json()["id"]
     work(session)
     api.client.headers["X-Team-Id"] = str(other.id)  # the person has switched to the other team
@@ -444,7 +455,7 @@ def test_a_draft_made_in_the_personal_space_cannot_be_shared(api, session, templ
 
 
 def test_a_draft_whose_creator_left_its_team_cannot_be_shared(api, session, template, team, owner):
-    meeting = meeting_of(session, template)
+    meeting = meeting_of(session, template, workspace_team_id=team.id)
     doc_id = make(api, meeting).json()["id"]
     work(session)
     assert api.get(url(doc_id)).json()["share_blocked"] is None

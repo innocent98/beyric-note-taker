@@ -322,8 +322,15 @@ describe("Regenerate", () => {
       meeting_ids: [1],
       options: { tone: "friendly", recipient: "Daniel" },
       use_brief: false,
-    });
+    }, undefined);
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(`/documents/${made.id}`));
+  });
+
+  it("asks in the workspace the draft was made in, whichever workspace the tab is on", async () => {
+    mocks.create.mockResolvedValue(recipesBody<DocumentDraft>("07-create.json"));
+    show({ ...email(), team: { id: 4, name: "Platform team" } });
+    await userEvent.click(action("Regenerate"));
+    expect(mocks.create.mock.calls[0][1]).toBe(4);
   });
 
   it("says why when the day's limit is reached, and stays", async () => {

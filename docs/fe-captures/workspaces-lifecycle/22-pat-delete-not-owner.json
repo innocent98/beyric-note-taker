@@ -1,0 +1,22 @@
+{
+  "note": "A member is not the owner: 403 `team_forbidden`.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/teams/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only the owner of the team can delete it."
+      }
+    }
+  }
+}

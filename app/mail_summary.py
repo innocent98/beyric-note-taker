@@ -44,7 +44,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import series as series_module
-from app import sprints, tasks, timezones, titles
+from app import sprints, tasks, timezones, titles, workspace_prefs
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
 from app.models import (
@@ -56,7 +56,6 @@ from app.models import (
     Sprint,
     Task,
     User,
-    UserSettings,
 )
 
 SUMMARY_DAYS = 14  # a closed sprint is mentioned for this many days (14 x 24 hours)
@@ -215,7 +214,8 @@ def auto_join_sentence(
 ) -> str | None:
     if not found.calendar_recurring_id:
         return None
-    prefs = session.get(UserSettings, user.id)
+    # the recipient's rules in the series' workspace, where its calendar meetings are recorded
+    prefs = workspace_prefs.for_user(session, user.id, found.team_id)
     join_settings = JoinSettings.for_user(prefs, teams_join_enabled=settings.teams_join_enabled)
     events = session.scalars(
         select(CalendarEvent).where(

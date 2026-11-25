@@ -1,0 +1,53 @@
+ok   meeting visibility columns unchanged
+ok   meetings.workspace_team_id: no row without a workspace
+ok   notifications.team_id: no row without a workspace
+ok   calendar_connections.team_id: no row without a workspace
+ok   scheduled_joins.team_id: no row without a workspace
+ok   templates.team_id: no row without a workspace
+ok   vocabulary_terms.team_id: no row without a workspace
+ok   users: 401 rows kept
+ok   meetings: 4800 rows kept
+ok   notifications: 2000 rows kept
+ok   calendar_connections: 280 rows kept
+ok   calendar_events: 280 rows kept
+ok   scheduled_joins: 280 rows kept
+ok   tasks: 0 rows kept
+ok   recipes: 117 rows kept
+ok   documents: 123 rows kept
+ok   document_shares: 78 rows kept
+ok   team_briefs: 40 rows kept
+ok   every active user owns exactly one personal workspace
+ok   every calendar connection is in its person's default workspace
+ok   every calendar join is in its connection's workspace
+ok   downgrade: visibility columns unchanged
+ok   downgrade: users 401 rows kept
+ok   downgrade: meetings 4800 rows kept
+ok   downgrade: notifications 2000 rows kept
+ok   downgrade: calendar_connections 280 rows kept
+ok   downgrade: calendar_events 280 rows kept
+ok   downgrade: scheduled_joins 280 rows kept
+ok   downgrade: tasks 0 rows kept
+ok   downgrade: recipes 117 rows kept
+ok   downgrade: documents 123 rows kept
+ok   upgrade again after the downgrade: clean
+
+| Table | Before (0061) | After (head) |
+|---|---:|---:|
+| `users` | 401 | 401 |
+| `teams` | 314 | 441 |
+| `team_members` | 443 | 570 |
+| `meetings` | 4800 | 4800 |
+| `notifications` | 2000 | 2000 |
+| `templates` | 804 | 938 |
+| `vocabulary_terms` | 1200 | 1328 |
+| `calendar_connections` | 280 | 280 |
+| `calendar_events` | 280 | 280 |
+| `scheduled_joins` | 280 | 280 |
+| `tasks` | 0 | 0 |
+| `recipes` | 117 | 117 |
+| `documents` | 123 | 123 |
+| `document_shares` | 78 | 78 |
+| `team_briefs` | 40 | 40 |
+
+personal teams: 274 before, 401 after
+upgrade 0061 to head: 0.9 s; meeting visibility checksum 622624a997245407

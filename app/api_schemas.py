@@ -107,6 +107,23 @@ class BadgesOut(BaseModel):
     tasks_new: int
 
 
+class WorkspaceRef(BaseModel):
+    """A workspace (a team) as the switcher and the toast name it."""
+
+    id: int
+    name: str
+    # The person's own personal space (a workspace of one).
+    is_personal: bool
+    # `team` or `class`: `class` only changes the wording (Class, Students, Lecturer).
+    kind: str
+
+
+class OtherWorkspace(WorkspaceRef):
+    # Unread notifications in this workspace: the switcher shows a dot when it is above zero, so
+    # nothing in another workspace is missed.
+    unread_notifications: int
+
+
 class SessionState(BaseModel):
     authenticated: bool
     csrf_token: str
@@ -115,11 +132,17 @@ class SessionState(BaseModel):
     usage: UsageOut | None
     # Notifications the user has not read yet: the number on the bell.
     unread_notifications: int | None
-    # Counts for the sidebar.
+    # Counts for the sidebar, for the ACTIVE workspace: the `X-Team-Id` header, else the person's
+    # personal workspace (a team the caller is not in quietly gives the personal one).
     badges: BadgesOut | None
-    # `MULTI_TEAM_ENABLED`: whether this server lets a person belong to several teams. The frontend
-    # draws the team switcher, the teams list and the Move action only when it is true. A server
-    # setting, not a person's: the same answer logged in or out.
+    # The workspace the counts above are about; null while logged out.
+    active_workspace: WorkspaceRef | None
+    # Every other workspace the person is in, with its unread notification count; null while
+    # logged out.
+    other_workspaces: list[OtherWorkspace] | None
+    # Always true since the multi-team switch was removed (workspaces design, section 7): every
+    # server lets a person belong to several teams. Kept so an older frontend keeps drawing the
+    # team switcher; a new one need not read it.
     multi_team: bool
 
 
@@ -315,6 +338,12 @@ class MoveRequest(BaseModel):
 
 
 class MeetingDetail(MeetingSummary):
+    # The workspace this meeting lives in (workspaces design, 12.2). The page may be opened from
+    # any workspace (a link, an email, a notification): the web switches to this one and says so.
+    # `workspace` is null only when the reader is not a member of that team (it is not theirs to
+    # name).
+    workspace_team_id: int
+    workspace: WorkspaceRef | None = None
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
     # The note taker's Google address, when the page may tell the owner to add it to the event's
@@ -346,8 +375,7 @@ class MeetingDetail(MeetingSummary):
     team: TeamRef | None = None
     owned_by_team: bool = False
     # The recorder of a finished, private or shared meeting may move it to a team they belong to
-    # (only while the switch is on, `MULTI_TEAM_ENABLED`); the team's owners and admins may move a
-    # team's meeting back to its recorder.
+    # the team's owners and admins may move a team's meeting back to its recorder.
     can_move: bool = False
     can_move_back: bool = False
     join_attempts: int
@@ -458,6 +486,15 @@ class TemplateList(BaseModel):
     templates: list[TemplateOut]
 
 
+class TemplateCopyOut(BaseModel):
+    """`copied` templates were added to the active workspace, `skipped` already had that name;
+    `templates` is the workspace's list afterwards."""
+
+    copied: int
+    skipped: int
+    templates: list[TemplateOut]
+
+
 # ---- vocabulary ----
 
 
@@ -473,6 +510,15 @@ class TermOut(BaseModel):
 
 
 class TermList(BaseModel):
+    terms: list[TermOut]
+
+
+class TermCopyOut(BaseModel):
+    """`copied` terms were added to the active workspace, `skipped` were there already; `terms` is
+    the workspace's list afterwards."""
+
+    copied: int
+    skipped: int
     terms: list[TermOut]
 
 
@@ -1051,16 +1097,37 @@ class TeamSummary(BaseModel):
     # The team a request with no `X-Team-Id` acts on (what the frontend before multi-team uses).
     is_default: bool
     can_manage: bool
+    # `class` is a team the lecturer owns and students join as members: the same workspace, said in
+    # a school's words (Class, Students, Lecturer) and sharing every meeting with its members by
+    # default. `team` for everything else, the personal space included.
+    kind: Literal["team", "class"]
 
 
 class TeamList(BaseModel):
     teams: list[TeamSummary]
-    # How many more teams the caller may create now (they may own three).
-    can_create_more: int
+    # How many more teams the caller may create now on their plan. Null: as many as they like
+    # (the Scale plan, an admin).
+    can_create_more: int | None
+    # The team workspaces the caller owns besides their personal one (what the limit counts: a team
+    # they only belong to never does).
+    owned_teams: int
+    # How many they may own on their live plan: 0 on Free (a trial counts as Free), 3 Starter,
+    # 10 Pro; null is unlimited. A plan that lapses or drops never removes a workspace:
+    # `owned_teams` can then be above this, and only creating another is refused.
+    max_owned_teams: int | None
+    # The name of the caller's live plan (null on Free), for "your plan owns up to 3 teams".
+    plan_name: str | None
+    # What to tell the caller when they cannot make another team (the same sentence a refused
+    # `POST /api/teams` carries in 409 `team_limit`, naming the plan to upgrade to); null while they
+    # still can.
+    limit_message: str | None
 
 
 class TeamCreate(Body):
     name: str
+    # `class` changes the wording only (Class, Students, Lecturer) and switches "share new
+    # meetings with the members" on; it counts toward the plan's owned-team limit like any team.
+    kind: Literal["team", "class"] = "team"
 
 
 class TeamOut(BaseModel):
@@ -1068,6 +1135,8 @@ class TeamOut(BaseModel):
     name: str
     # True for the caller's personal space (see `TeamSummary.is_personal`).
     is_personal: bool = False
+    # `class` or `team` (see `TeamSummary.kind`): which words the screens use.
+    kind: Literal["team", "class"] = "team"
     # The team default for "Share with team": new meetings of the team's owner and admins are
     # shared when their notes are first written. Off by default; members' meetings are never
     # shared by it.
@@ -1448,6 +1517,38 @@ class LinearOut(BaseModel):
     # The Linear team the tasks go to; null when not connected.
     team_name: str | None
     can_manage: bool
+
+
+# ---- per-person-per-workspace preferences ----
+
+
+class WorkspacePrefsOut(BaseModel):
+    """The caller's own settings in the active workspace (workspaces design, section 3).
+    `bot_name` is the name set for THIS workspace, null when none is set; `bot_name_default` is the
+    name that applies then (the caller's own default from Settings > Personal, else the server's).
+    `warning` is the soft warning about a name that bot-detection dislikes, null for none."""
+
+    team_id: int
+    bot_name: str | None
+    bot_name_default: str
+    warning: str | None
+    auto_join_rule: Literal["all", "organizer", "none"]
+    join_unanswered: bool
+    skip_one_on_ones: bool
+    calendar_template_id: int | None
+
+
+class WorkspacePrefsIn(Body):
+    """What to change; a field that is left out stays as it is. `bot_name` null or empty clears the
+    workspace's own name (the default applies again); `calendar_template_id` null means the
+    workspace's default template, otherwise one of the workspace's own templates (404 `not_found`
+    for any other)."""
+
+    bot_name: str | None = Field(default=None, max_length=2000)
+    auto_join_rule: Literal["all", "organizer", "none"] | None = None
+    join_unanswered: bool | None = None
+    skip_one_on_ones: bool | None = None
+    calendar_template_id: int | None = None
 
 
 # ---- meeting recipes: drafts made from meetings (app/api_recipes.py) ----

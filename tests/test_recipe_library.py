@@ -24,7 +24,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import ADMIN_EMAIL, MEMBER_EMAIL, admin, as_user, member, team  # noqa: F401
-from tests.test_multi_team_leaks import PAT, multi_team_on, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, world  # noqa: F401
 from tests.test_team_visibility import OTHER_EMAIL, outsider  # noqa: F401
 from tests.test_web import stranger  # noqa: F401
 
@@ -329,9 +329,7 @@ def test_a_stranger_gets_404_for_a_team_recipe_of_another_team(api, app, outside
     error_of(other.delete(f"/api/recipes/{team_recipe['id']}"), 404, "not_found")
 
 
-def test_a_person_in_two_teams_sees_only_the_active_teams_recipes(
-    app, session, world, multi_team_on
-):
+def test_a_person_in_two_teams_sees_only_the_active_teams_recipes(app, session, world):
     ada = as_user(app, "owner@example.test")
     quinn = as_user(app, "quinn@example.test")
     assert call(ada, "POST", "/api/recipes", mine(visibility="team", name="X recipe"), world.x)
@@ -350,9 +348,7 @@ def test_a_person_in_two_teams_sees_only_the_active_teams_recipes(
     assert [r["can_edit"] for r in listed(ada, world.x) if r["source"] == "team"] == [True]
 
 
-def test_only_a_team_recipe_made_on_the_active_team_goes_to_that_team(
-    app, session, world, multi_team_on
-):
+def test_only_a_team_recipe_made_on_the_active_team_goes_to_that_team(app, session, world):
     ada = as_user(app, "owner@example.test")
     made = call(ada, "POST", "/api/recipes", mine(visibility="team"), world.x).json()
     row = session.get(Recipe, made["id"])

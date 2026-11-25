@@ -1,0 +1,22 @@
+{
+  "note": "Not in X: 404, the same answer as for a team that does not exist.",
+  "as": "Quinn",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/teams/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

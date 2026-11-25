@@ -24,9 +24,9 @@ export const ACTIVE_TEAM_HEADER = "x-active-team";
 export const SHELL_DEFAULT_TEAM = "data-default-team";
 
 // Pages whose content is one team's: they carry `?team=` in the URL. The Meetings list (the home page
-// `/`), Decisions and Review follow the team too; the meeting page, Ask and Notifications do not (a
+// `/`), Decisions, Review, Templates and Vocabulary follow the team too; the meeting page, Ask and Notifications do not (a
 // meeting opens by its link whatever team is active).
-export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings"] as const;
+export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/templates", "/vocabulary"] as const;
 
 // The largest id the API accepts in `X-Team-Id` (`MAX_ID` in app/services.py): beyond it the server
 // answers 422, so such a value (a hand-edited URL or storage) counts as no team at all.
@@ -209,6 +209,31 @@ export function resetToDefaultTeam(): void {
   url.searchParams.set(NOTICE_PARAM, TEAM_GONE_NOTICE);
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.href = `${url.pathname}${url.search}${url.hash}`;
+}
+
+// ---- Opening a meeting of another workspace ----------------------------------------------------------------------
+// A meeting opened by its id (a link, an email, a notification, an Ask source chip) answers with its own workspace
+// (`workspace` of `GET /api/meetings/{id}`, workspaces design 12.2). When that is not the workspace this tab is on,
+// the tab SWITCHES to it and says so: "Switched to <name>". Pure, so a test runs the real rule.
+export function switchedMessage(name: string): string {
+  return `Switched to ${name}`;
+}
+
+export type MeetingSwitch = { kind: "none" } | { kind: "switch"; remember: number | null; message: string };
+
+// `workspace` is the meeting's (null when the reader is not a member of it: nothing to switch to), `activeId` the
+// workspace this tab is on now, `defaultId` the one a link without a choice opens (remembering it is "no choice"),
+// `teams` the person's workspaces (a workspace not among them is never switched to).
+export function planMeetingSwitch(args: {
+  workspace: { id: number; name: string } | null;
+  activeId: number | null;
+  defaultId: number | null;
+  teams: { id: number }[];
+}): MeetingSwitch {
+  const { workspace, activeId, defaultId, teams } = args;
+  if (workspace === null || !teams.some((t) => t.id === workspace.id)) return { kind: "none" };
+  if (workspace.id === (activeId ?? defaultId)) return { kind: "none" };
+  return { kind: "switch", remember: workspace.id === defaultId ? null : workspace.id, message: switchedMessage(workspace.name) };
 }
 
 export const TEAM_GONE_MESSAGE = "That team is no longer available to you, so you are back on your default team.";

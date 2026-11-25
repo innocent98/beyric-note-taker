@@ -1,0 +1,21 @@
+{
+  "note": "Ada no longer reads it: 404.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

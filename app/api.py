@@ -39,6 +39,7 @@ from app import (
     api_teams,
     api_translation,
     api_workspace,
+    api_workspace_prefs,
     auth,
     calendar_api,
     calendar_recurring,
@@ -56,6 +57,7 @@ from app import (
     usage,
     visibility,
     workspace,
+    workspace_context,
 )
 from app import series as series_rules
 from app.api_schemas import (
@@ -68,19 +70,23 @@ from app.api_schemas import (
     MoveRequest,
     NewMeeting,
     NewTerm,
+    OtherWorkspace,
     Regenerate,
     SessionState,
     ShareRequest,
     TeamRef,
+    TemplateCopyOut,
     TemplateIn,
     TemplateList,
     TemplateOut,
+    TermCopyOut,
     TermList,
     TermOut,
     TranscriptEdit,
     TranscriptRestore,
     UsageOut,
     UserOut,
+    WorkspaceRef,
 )
 from app.bot_invite import meeting_invite_email
 from app.config import get_settings
@@ -232,6 +238,26 @@ def _usage_out(db: Session, user, settings) -> UsageOut:
     )
 
 
+def _workspace_ref(db: Session, user: User, team_id: int) -> WorkspaceRef:
+    team = db.get(Team, team_id)
+    return WorkspaceRef(
+        id=team.id, name=team.name, is_personal=teams.is_personal_of(team, user.id), kind=team.kind
+    )
+
+
+def _other_workspaces(db: Session, user: User, active_id: int) -> list[OtherWorkspace]:
+    """Every workspace the person is in except the active one, with how many notifications are
+    unread there (the switcher's dot), oldest membership first."""
+    unread = notifications.unread_by_workspace(db, user)
+    return [
+        OtherWorkspace(
+            **_workspace_ref(db, user, team_id).model_dump(), unread_notifications=unread[team_id]
+        )
+        for team_id in teams.team_ids_of(db, user.id)
+        if team_id != active_id
+    ]
+
+
 def _session_state(request: Request, db: Session, team_id: int | None = None) -> SessionState:
     current, user = request.state.session, request.state.user
     if user is None:
@@ -242,7 +268,9 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
             usage=None,
             unread_notifications=None,
             badges=None,
-            multi_team=teams.multi_team_enabled(),
+            active_workspace=None,
+            other_workspaces=None,
+            multi_team=True,
         )
     settings = request.app.state.settings
     active = team_admin.active_team_or_default(db, user, team_id)
@@ -260,12 +288,14 @@ def _session_state(request: Request, db: Session, team_id: int | None = None) ->
             ),
         ),
         usage=_usage_out(db, user, settings),
-        unread_notifications=notifications.unread_count(db, user),
+        unread_notifications=notifications.unread_count(db, user, active.id),
         badges=BadgesOut(
             review_open=workspace.open_review_count(db, user, active),
-            tasks_new=tasks.new_count(db, user, active.id if active else None),
+            tasks_new=tasks.new_count(db, user, active.id),
         ),
-        multi_team=teams.multi_team_enabled(),
+        active_workspace=_workspace_ref(db, user, active.id),
+        other_workspaces=_other_workspaces(db, user, active.id),
+        multi_team=True,
     )
 
 
@@ -280,9 +310,12 @@ def read_session(
     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
     it names the user and reports their recorded hours (`usage`).
 
-    The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
-    (with multi-team off and no header: everything they can see, as before). A team the caller is
-    not in is NOT an error here (this call is every page's first): it counts the default team.
+    The active workspace (`active_workspace`) is the `X-Team-Id` header's, else the person's
+    default one (their only team, else their personal workspace: the one the web opens on, the same
+    as `is_default` in `GET /api/teams`). `badges` and `unread_notifications` count that workspace
+    only, and `other_workspaces` lists the rest with their unread count (the switcher's dot). A team
+    the caller is not in is NOT an error here (this call is every page's first): it answers the
+    default workspace. Every other route with no header acts on that same default workspace.
     """
     return _session_state(request, session, team_id)
 
@@ -413,7 +446,12 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
     review_open_count = review_open_count if recorder else 0  # review items are the recorder's
     task_rows = tasks.meeting_tasks(session, user, meeting.id) if ready else []
+    in_workspace = teams.membership(session, user.id, meeting.workspace_team_id) is not None
     return MeetingDetail(
+        workspace_team_id=meeting.workspace_team_id,
+        workspace=_workspace_ref(session, user, meeting.workspace_team_id)
+        if in_workspace
+        else None,
         **_summary(
             meeting,
             services.template_names(session, [meeting])[meeting.template_id],
@@ -433,13 +471,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         shared_by=None if recorder else _owner_name(session, meeting),
         team=_team_ref(session, meeting),
         owned_by_team=meeting.owner_team_id is not None,
-        can_move=(
-            owner
-            and ready
-            and meeting.owner_team_id is None
-            and recorder
-            and teams.multi_team_enabled()
-        ),
+        can_move=(owner and ready and meeting.owner_team_id is None and recorder),
         can_move_back=_can_move_back(session, user, meeting),
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
@@ -713,6 +745,7 @@ def create_meeting(
     body: NewMeeting,
     request: Request,
     response: Response,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     provider=Depends(get_bot_provider),
@@ -723,9 +756,18 @@ def create_meeting(
     bot of the account's is already in that meeting), `meeting_has_note_taker` (another account's
     bot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a
     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
-    when the bot host did not take the bot."""
+    when the bot host did not take the bot. The meeting is born in the active workspace (the
+    `X-Team-Id` header, else the default one): a member may record into any workspace they belong
+    to, on their own hours."""
     meeting = services.create_meeting(
-        session, provider, user, body.url, body.template_id, request.app.state.settings, body.title
+        session,
+        provider,
+        user,
+        body.url,
+        body.template_id,
+        request.app.state.settings,
+        body.title,
+        workspace.id,
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
     return _detail(meeting, session, user)
@@ -818,8 +860,7 @@ def unshare_meeting(
         },
         409: {
             "model": ErrorResponse,
-            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, "
-            "`multi_team_disabled`",
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`",
         },
     },
 )
@@ -1027,13 +1068,21 @@ def restore_transcript(
 
 # ---- templates ----
 
+_WRITER_ERRORS = {
+    403: {"model": ErrorResponse, "description": "`team_forbidden`: only an owner or admin writes"},
+    404: {"model": ErrorResponse, "description": "A team the caller is not in"},
+}
 
-@router.get("/templates", tags=["templates"])
+
+@router.get("/templates", tags=["templates"], responses={404: _WRITER_ERRORS[404]})
 def list_templates(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TemplateList:
-    """The caller's templates, sorted by name."""
-    rows = services.list_templates(session, user)
+    """The active workspace's templates (the `X-Team-Id` header, else the default workspace),
+    sorted by name. Every member reads and uses them; owners and admins write them."""
+    rows = services.list_templates(session, workspace)
     return TemplateList(templates=[TemplateOut.model_validate(row) for row in rows])
 
 
@@ -1041,33 +1090,57 @@ def list_templates(
     "/templates",
     status_code=201,
     tags=["templates"],
-    responses={400: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def create_template(
     body: TemplateIn,
     response: Response,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TemplateOut:
-    template = services.save_template(session, user, None, body.name, body.instructions)
+    template = services.save_template(session, user, workspace, None, body.name, body.instructions)
     response.headers["Location"] = f"/api/templates/{template.id}"
     return TemplateOut.model_validate(template)
+
+
+@router.post(
+    "/templates/copy-from-personal",
+    tags=["templates"],
+    responses={409: {"model": ErrorResponse, "description": "`personal_team`"}, **_WRITER_ERRORS},
+)
+def copy_templates_from_personal(
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TemplateCopyOut:
+    """Copy the caller's personal-workspace templates into the active workspace (owners and
+    admins). A name already in the workspace is skipped, never overwritten. 409 `personal_team`
+    when the active workspace is the personal one."""
+    copied, skipped, rows = services.copy_templates_from_personal(session, user, workspace)
+    return TemplateCopyOut(
+        copied=copied,
+        skipped=skipped,
+        templates=[TemplateOut.model_validate(row) for row in rows],
+    )
 
 
 @router.put(
     "/templates/{template_id:id}",
     tags=["templates"],
-    responses={code: {"model": ErrorResponse} for code in (400, 404)},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def update_template(
     template_id: int,
     body: TemplateIn,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TemplateOut:
-    """Replace the name and instructions."""
-    template = services.template_or_404(session, user, template_id)
-    services.save_template(session, user, template, body.name, body.instructions)
+    """Replace the name and instructions of one of the active workspace's templates. A template
+    of another workspace is a 404."""
+    template = services.template_or_404(session, workspace, template_id)
+    services.save_template(session, user, workspace, template, body.name, body.instructions)
     return TemplateOut.model_validate(template)
 
 
@@ -1075,30 +1148,33 @@ def update_template(
     "/templates/{template_id:id}",
     status_code=204,
     tags=["templates"],
-    responses={code: {"model": ErrorResponse} for code in (404, 409)},
+    responses={409: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def delete_template(
     template_id: int,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    """Delete a template. Meetings written with it keep their notes and the template name they
-    show; the calendar setting that pointed at it moves to the oldest template left. 409
-    `last_template` for the only one."""
-    services.delete_template(session, user, template_id)
+    """Delete a template of the active workspace. Meetings written with it keep their notes and the
+    template name they show; a calendar setting that pointed at it moves to the workspace's oldest
+    template left. 409 `last_template` for the only one."""
+    services.delete_template(session, user, workspace, template_id)
     return Response(status_code=204)
 
 
 # ---- vocabulary ----
 
 
-@router.get("/vocabulary", tags=["vocabulary"])
+@router.get("/vocabulary", tags=["vocabulary"], responses={404: _WRITER_ERRORS[404]})
 def list_terms(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TermList:
-    """The caller's terms, sorted alphabetically."""
+    """The active workspace's terms, sorted alphabetically."""
     return TermList(
-        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session, user)]
+        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session, workspace)]
     )
 
 
@@ -1106,29 +1182,51 @@ def list_terms(
     "/vocabulary",
     status_code=201,
     tags=["vocabulary"],
-    responses={400: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def add_term(
     body: NewTerm,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TermOut:
-    row = services.add_term(session, user, body.term)
+    row = services.add_term(session, user, workspace, body.term)
     return TermOut(id=row.id, term=row.term)
+
+
+@router.post(
+    "/vocabulary/copy-from-personal",
+    tags=["vocabulary"],
+    responses={409: {"model": ErrorResponse, "description": "`personal_team`"}, **_WRITER_ERRORS},
+)
+def copy_terms_from_personal(
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TermCopyOut:
+    """Copy the caller's personal-workspace terms into the active workspace (owners and admins),
+    never doubling one that is there. 409 `personal_team` for the personal workspace itself."""
+    copied, skipped, rows = services.copy_terms_from_personal(session, user, workspace)
+    return TermCopyOut(
+        copied=copied,
+        skipped=skipped,
+        terms=[TermOut(id=row.id, term=row.term) for row in rows],
+    )
 
 
 @router.delete(
     "/vocabulary/{term_id:id}",
     status_code=204,
     tags=["vocabulary"],
-    responses={404: {"model": ErrorResponse}},
+    responses={404: {"model": ErrorResponse}, 403: _WRITER_ERRORS[403]},
 )
 def delete_term(
     term_id: int,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    if not services.delete_term(session, user, term_id):
+    if not services.delete_term(session, user, workspace, term_id):
         raise StarletteHTTPException(404, "No such term")
     return Response(status_code=204)
 
@@ -1136,6 +1234,7 @@ def delete_term(
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
 router.include_router(api_settings.router)
+router.include_router(api_workspace_prefs.router)
 router.include_router(api_integrations.router)
 router.include_router(calendar_api.router)
 router.include_router(calendar_api.joins_router)

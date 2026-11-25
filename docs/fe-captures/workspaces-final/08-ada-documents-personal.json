@@ -1,0 +1,41 @@
+{
+  "note": "In her personal workspace: the other draft. Nothing of X.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "documents": [
+        {
+          "id": 2,
+          "title": "Ada's own follow-up",
+          "output_type": "document",
+          "recipe_key": "follow_up_email",
+          "recipe_id": null,
+          "status": "ready",
+          "edited": false,
+          "meeting_ids": [
+            2
+          ],
+          "created_at": "2026-11-25T13:32:40.912958Z",
+          "updated_at": "2026-11-25T13:32:40.912958Z",
+          "access": "owner",
+          "owner_name": null,
+          "shared_with": [],
+          "team": {
+            "id": 1,
+            "name": "My team"
+          }
+        }
+      ]
+    }
+  }
+}

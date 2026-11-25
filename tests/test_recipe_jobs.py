@@ -492,6 +492,7 @@ def test_a_person_who_left_the_team_or_a_recipe_archived_meanwhile_fails_before_
         output_type="document",
     )
     session.add(recipe)
+    meeting.workspace_team_id = team.id  # a draft is made where its meeting lives
     session.commit()
     first = ask(session, owner, [meeting.id], team_id=team.id)
     second = ask(session, owner, [meeting.id], ref=recipe.id, team_id=team.id, options={"n": 2})
@@ -531,6 +532,7 @@ def test_a_person_who_left_the_team_gets_no_hint_of_its_brief_from_the_audit(
             team_id=team.id, text="Package price 777,000 naira.", updated_by_user_id=stranger.id
         )
     )
+    meeting.workspace_team_id = team.id  # a draft is made where its meeting lives
     session.commit()
     doc = ask(session, owner, [meeting.id], team_id=team.id)
     svc.process_next(session, T0, client=good([para("The package is 777,000 naira.")]))

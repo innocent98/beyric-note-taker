@@ -1,0 +1,22 @@
+{
+  "note": "A stranger naming X: 404 `not_found`, the same answer as a team that does not exist.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

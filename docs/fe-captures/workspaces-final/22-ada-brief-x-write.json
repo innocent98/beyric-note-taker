@@ -1,0 +1,31 @@
+{
+  "note": "An owner may.",
+  "as": "Ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/briefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Our prices: audit 55,000 naira, retainer 120,000 naira."
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false,
+        "can_manage": true
+      },
+      "text": "Our prices: audit 55,000 naira, retainer 120,000 naira.",
+      "max_chars": 12000,
+      "updated_at": "2026-11-25T13:32:41.667874Z",
+      "updated_by": "Ada Example"
+    }
+  }
+}

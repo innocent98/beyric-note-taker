@@ -36,6 +36,7 @@ from app import (
     meeting_search,
     passwords,
     placement,
+    teams,
     timezones,
     titles,
     usage,
@@ -58,10 +59,12 @@ from app.models import (
     Meeting,
     Milestone,
     SkribbySegmentEvidence,
+    Team,
     Template,
     User,
     UserSettings,
     VocabularyTerm,
+    WorkspacePrefs,
 )
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
@@ -495,16 +498,23 @@ def list_meetings(
     keywords: str | None = None,
 ) -> list[Meeting]:
     """Newest first, through the same visibility rule as every other read, narrowed to the active
-    team's list when `active` is given (`visibility.readable_in`). `created_from`
+    workspace's list (`visibility.readable_in`; none given: the caller's default workspace, never
+    everything they may read). `created_from`
     (inclusive) and `created_before` (exclusive) are instants on `created_at`, the timestamp the
     list and its day headings use; `day_range_utc` makes them from two calendar days. `keywords`
     (already checked by `parse_keywords`) narrows it to the meetings whose title, notes or
     transcript match (`meeting_search.keyword_clause`); it only ever removes rows from what the
     rule above allows."""
+    active = visibility.active_or_default(session, user, active)
     readable = visibility.readable_in(user, active)
     query = select(Meeting).where(readable)
     if keywords:
-        query = query.where(meeting_search.keyword_clause(keywords, readable))
+        # The search subqueries see what the caller may read, NOT the workspace too: a btree-indexed
+        # workspace equality inside them can win the planner's choice over the full-text index. The
+        # outer query narrows to the workspace.
+        query = query.where(
+            meeting_search.keyword_clause(keywords, visibility.can_read_clause(user))
+        )
     query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
@@ -555,13 +565,18 @@ def recorded_meeting_or_404(session: Session, user: User, meeting_id: int) -> Me
     return meeting
 
 
-def _own_template(session: Session, user_id: int, template_id: int | None) -> Template | None:
-    if not _in_range(template_id):
+def _workspace_template(
+    session: Session, workspace_team_id: int | None, template_id: int | None
+) -> Template | None:
+    """A live template of this workspace (workspaces design, section 3: templates belong to the
+    workspace, whoever wrote them), or None: a template of another workspace looks like a missing
+    one."""
+    if workspace_team_id is None or not _in_range(template_id):
         return None
     return session.scalars(
         select(Template).where(
             Template.id == template_id,
-            Template.owner_user_id == user_id,
+            Template.team_id == workspace_team_id,
             Template.deleted_at.is_(None),  # a deleted template can no longer be chosen
         )
     ).first()
@@ -653,9 +668,14 @@ def create_meeting(
     template_id: int | None,
     settings: Settings,
     title: str | None = None,
+    workspace_team_id: int | None = None,
 ) -> Meeting:
+    """Send a bot to a pasted link. `workspace_team_id` is the active workspace the route checked
+    the caller belongs to; none: their default workspace."""
     try:
-        return _create_meeting(session, provider, user, url.strip(), template_id, settings, title)
+        return _create_meeting(
+            session, provider, user, url.strip(), template_id, settings, title, workspace_team_id
+        )
     except Refused:
         session.rollback()  # also releases the advisory lock
         raise
@@ -669,6 +689,7 @@ def _create_meeting(
     template_id: int | None,
     settings: Settings,
     title: str | None = None,
+    workspace_team_id: int | None = None,
 ) -> Meeting:
     # The submitted link is never echoed back: a Zoom link carries its meeting password.
     try:
@@ -687,8 +708,10 @@ def _create_meeting(
         url = canonical_meeting_url(
             url
         )  # a Safe Links wrapper (its data= can name the reader) goes
-    template = _own_template(session, user.id, template_id)
-    if template is None:  # also a template that is someone else's: it looks like a missing one
+    if workspace_team_id is None:  # no workspace named: the person's default one
+        workspace_team_id = teams.ensure_team(session, user).id
+    template = _workspace_template(session, workspace_team_id, template_id)
+    if template is None:  # also a template of another workspace: it looks like a missing one
         raise Refused(400, "template_required", "Choose a template for the notes.")
 
     request = PlacementRequest(
@@ -699,6 +722,7 @@ def _create_meeting(
         template_id=template.id,
         source="manual",
         title=title,  # cleaned when stored (`titles.event_title`); blank = the fallback name
+        workspace_team_id=workspace_team_id,
     )
     try:
         return placement.place_bot(
@@ -717,9 +741,13 @@ def regenerate_notes(
     """Rewrite a ready meeting's notes with a template (one model call). `user` is the caller, the
     person pressing the button: the feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) is
     checked against them, here, so the JSON route and the page route cannot differ."""
+    if not visibility.in_meeting_workspace(session, user, meeting):
+        raise HTTPException(404, "No such meeting")  # as for a meeting they cannot change
     if meeting.status != "ready":
         raise Refused(409, "not_ready", "Notes can only be rewritten once a meeting is ready.")
-    template = _own_template(session, meeting.owner_user_id, template_id)
+    # The meeting's workspace's templates, not the recorder's: a team admin rewriting a moved
+    # meeting chooses among the workspace's, and it works when the recorder has left.
+    template = _workspace_template(session, meeting.workspace_team_id, template_id)
     if template is None:
         raise Refused(400, "template_required", "Choose a template.")
     feature_gates.require(session, user, entitlements.REWRITE)
@@ -729,7 +757,9 @@ def regenerate_notes(
     source_version = version_of(source)
     terms = list(
         session.scalars(
-            select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
+            select(VocabularyTerm.term)
+            .where(VocabularyTerm.team_id == meeting.workspace_team_id)
+            .order_by(VocabularyTerm.id)
         )
     )
     spent: list = []
@@ -1050,11 +1080,20 @@ def _send_refused_meeting_again(
 # ---- templates ----
 
 
-def list_templates(session: Session, user: User) -> list[Template]:
+def manager_or_403(session: Session, user: User, workspace: Team) -> None:
+    """Writing a workspace's templates and vocabulary is for its owner and admins (a person is the
+    owner of their personal workspace). Members read and use them. 403 `team_forbidden`."""
+    member = teams.membership(session, user.id, workspace.id)
+    if member is None or member.role not in teams.MANAGER_ROLES:
+        raise Refused(403, "team_forbidden", "Only an owner or admin of the team can do that.")
+
+
+def list_templates(session: Session, workspace: Team) -> list[Template]:
+    """The workspace's live templates, by name. The route has checked the caller belongs to it."""
     return list(
         session.scalars(
             select(Template)
-            .where(Template.owner_user_id == user.id, Template.deleted_at.is_(None))
+            .where(Template.team_id == workspace.id, Template.deleted_at.is_(None))
             .order_by(Template.name)
         )
     )
@@ -1070,8 +1109,8 @@ def template_names(session: Session, meetings: list[Meeting]) -> dict[int, str]:
     return {template_id: name for template_id, name in rows}
 
 
-def template_or_404(session: Session, user: User, template_id: int) -> Template:
-    template = _own_template(session, user.id, template_id)
+def template_or_404(session: Session, workspace: Team, template_id: int) -> Template:
+    template = _workspace_template(session, workspace.id, template_id)
     if template is None:
         raise HTTPException(404, "No such template")
     return template
@@ -1099,23 +1138,37 @@ def _duplicate_template() -> Refused:
 
 
 def save_template(
-    session: Session, user: User, template: Template | None, name: str, instructions: str
+    session: Session,
+    user: User,
+    workspace: Team,
+    template: Template | None,
+    name: str,
+    instructions: str,
 ) -> Template:
-    """Create a template of `user`'s, or replace the name and instructions of `template`."""
+    """Create a template in `workspace`, or replace the name and instructions of `template` (one of
+    its own). Owners and admins only (403 `team_forbidden`)."""
     try:
-        return _save_template(session, user, template, name.strip(), instructions.strip())
+        manager_or_403(session, user, workspace)
+        return _save_template(
+            session, user, workspace, template, name.strip(), instructions.strip()
+        )
     except Refused:
         session.rollback()
         raise
 
 
 def _save_template(
-    session: Session, user: User, template: Template | None, name: str, instructions: str
+    session: Session,
+    user: User,
+    workspace: Team,
+    template: Template | None,
+    name: str,
+    instructions: str,
 ) -> Template:
     _check_template(name, instructions)
     taken = session.scalars(
         select(Template.id).where(
-            Template.owner_user_id == user.id,
+            Template.team_id == workspace.id,
             Template.name == name,
             Template.deleted_at.is_(None),
         )
@@ -1123,7 +1176,9 @@ def _save_template(
     if taken is not None and (template is None or taken != template.id):
         raise _duplicate_template()
     if template is None:
-        template = Template(owner_user_id=user.id, name=name, instructions=instructions)
+        template = Template(
+            owner_user_id=user.id, team_id=workspace.id, name=name, instructions=instructions
+        )
         session.add(template)
     else:
         template.name, template.instructions = name, instructions
@@ -1134,28 +1189,30 @@ def _save_template(
     return template
 
 
-def delete_template(session: Session, user: User, template_id: int) -> None:
-    """Delete one of `user`'s templates: 404 when it is not theirs, is gone already or never was
-    (the second of two deletes is a 404, never a 500), 409 `last_template` for their only one
-    (notes need a template).
+def delete_template(session: Session, user: User, workspace: Team, template_id: int) -> None:
+    """Delete one of `workspace`'s templates (owners and admins): 404 when it is not this
+    workspace's, is gone already or never was (the second of two deletes is a 404, never a 500),
+    409 `last_template` for its only one (notes need a template).
 
     The row is marked, not erased (see `Template`): meetings written with it keep their notes and
     the name they show, a meeting still being written and a rewrite in flight finish with it, and
-    nothing can choose it again. The calendar setting that points at it moves to the person's
-    oldest remaining template (the same one the Settings select shows for "no choice"), and so do
-    the calendar joins that have not sent a bot yet; a join whose bot is in keeps its template.
+    nothing can choose it again. A calendar setting in this workspace that points at it moves to the
+    workspace's oldest remaining template (the same one the Settings select shows for "no choice"),
+    and so do the calendar joins of that person in this workspace that have not sent a bot yet; a
+    join whose bot is in keeps its template.
 
-    The person's live templates are locked first (`FOR NO KEY UPDATE`, which does not stop a
+    The workspace's live templates are locked first (`FOR NO KEY UPDATE`, which does not stop a
     meeting from being created with one of them), so two deletes at once are decided one after the
     other: the second looks again after the first committed."""
     from app import gcal_sync  # gcal_sync imports this module
 
-    if not _in_range(template_id):
-        raise HTTPException(404, "No such template")
+    if _workspace_template(session, workspace.id, template_id) is None:
+        raise HTTPException(404, "No such template")  # another workspace's looks like none
+    manager_or_403(session, user, workspace)
     live = list(
         session.scalars(
             select(Template)
-            .where(Template.owner_user_id == user.id, Template.deleted_at.is_(None))
+            .where(Template.team_id == workspace.id, Template.deleted_at.is_(None))
             .order_by(Template.id)
             .with_for_update(key_share=True)
         )
@@ -1173,21 +1230,84 @@ def delete_template(session: Session, user: User, template_id: int) -> None:
         )
     target.deleted_at = datetime.now(UTC)
     fallback = next(t for t in live if t.id != target.id)  # the oldest left (ordered by id)
-    settings = session.get(UserSettings, user.id)
-    if settings is not None and settings.calendar_template_id == target.id:
-        settings.calendar_template_id = fallback.id
-        gcal_sync.set_join_template(session, user.id, fallback.id, commit=False)
+    pointing = list(
+        session.scalars(
+            select(WorkspacePrefs).where(
+                WorkspacePrefs.team_id == workspace.id,
+                WorkspacePrefs.calendar_template_id == target.id,
+            )
+        )
+    )
+    moved_users = {prefs.user_id for prefs in pointing}
+    for prefs in pointing:
+        prefs.calendar_template_id = fallback.id
+    if workspace.is_personal:  # the person's own default follows (`workspace_prefs` fallback)
+        settings = session.get(UserSettings, workspace.owner_user_id)
+        if settings is not None and settings.calendar_template_id == target.id:
+            settings.calendar_template_id = fallback.id
+            moved_users.add(workspace.owner_user_id)
+    for user_id in moved_users:
+        gcal_sync.set_join_template(
+            session, user_id, fallback.id, team_id=workspace.id, commit=False
+        )
     session.commit()
+
+
+def copy_templates_from_personal(
+    session: Session, user: User, workspace: Team
+) -> tuple[int, int, list[Template]]:
+    """Copy the caller's personal-workspace templates into `workspace` (owners and admins), never
+    overwriting: a name already live in `workspace` is skipped. Returns (copied, skipped, the
+    workspace's templates now). 409 `personal_team` when `workspace` is the personal one."""
+    manager_or_403(session, user, workspace)
+    home = teams.ensure_personal_team(session, user)
+    if home.id == workspace.id:
+        raise Refused(
+            409, "personal_team", "This is your personal workspace: there is nothing to copy into."
+        )
+    have = set(
+        session.scalars(
+            select(Template.name).where(
+                Template.team_id == workspace.id, Template.deleted_at.is_(None)
+            )
+        )
+    )
+    copied = skipped = 0
+    mine = session.scalars(
+        select(Template)
+        .where(Template.team_id == home.id, Template.deleted_at.is_(None))
+        .order_by(Template.id)
+    )
+    for source in mine:
+        if source.name in have:
+            skipped += 1
+            continue
+        session.add(
+            Template(
+                owner_user_id=user.id,
+                team_id=workspace.id,
+                name=source.name,
+                instructions=source.instructions,
+            )
+        )
+        have.add(source.name)
+        copied += 1
+    try:
+        session.commit()
+    except IntegrityError:  # another request added the same name meanwhile
+        session.rollback()
+        raise _duplicate_template() from None
+    return copied, skipped, list_templates(session, workspace)
 
 
 # ---- vocabulary ----
 
 
-def list_terms(session: Session, user: User) -> list[VocabularyTerm]:
+def list_terms(session: Session, workspace: Team) -> list[VocabularyTerm]:
     return list(
         session.scalars(
             select(VocabularyTerm)
-            .where(VocabularyTerm.owner_user_id == user.id)
+            .where(VocabularyTerm.team_id == workspace.id)
             .order_by(VocabularyTerm.term)
         )
     )
@@ -1204,17 +1324,19 @@ def _check_term(term: str) -> None:
         )
 
 
-def add_term(session: Session, user: User, term: str) -> VocabularyTerm:
+def add_term(session: Session, user: User, workspace: Team, term: str) -> VocabularyTerm:
+    """Add a term to `workspace`'s vocabulary (owners and admins; 403 `team_forbidden`)."""
+    manager_or_403(session, user, workspace)
     term = term.strip()
     _check_term(term)
     taken = session.scalars(
         select(VocabularyTerm.id).where(
-            VocabularyTerm.owner_user_id == user.id, VocabularyTerm.term == term
+            VocabularyTerm.team_id == workspace.id, VocabularyTerm.term == term
         )
     ).first()
     if taken:
         raise Refused(400, "duplicate_term", "That term is already in the list.")
-    row = VocabularyTerm(owner_user_id=user.id, term=term)
+    row = VocabularyTerm(owner_user_id=user.id, team_id=workspace.id, term=term)
     session.add(row)
     try:
         session.commit()
@@ -1225,20 +1347,25 @@ def add_term(session: Session, user: User, term: str) -> VocabularyTerm:
 
 
 def add_term_from_review(session: Session, user: User, item, term: str) -> VocabularyTerm:
-    """Add `term` to the caller's vocabulary and mark the review item checked. The term is
-    checked before anything changes (400 `invalid_term`). A term that exists already is 409
-    `duplicate_term`, but the item is still checked: the person has dealt with it."""
+    """Add `term` to the vocabulary of the workspace the item's meeting is filed in and mark the
+    review item checked. Only an owner or admin of that workspace may add to its list (403
+    `team_forbidden`, before anything changes). The term is checked before anything changes (400
+    `invalid_term`). A term that exists already is 409 `duplicate_term`, but the item is still
+    checked: the person has dealt with it."""
+    meeting = session.get(Meeting, item.meeting_id)
+    workspace_team = session.get(Team, meeting.workspace_team_id)
+    manager_or_403(session, user, workspace_team)
     term = term.strip()
     _check_term(term)
     workspace.set_checked(session, item, True)
     taken = session.scalars(
         select(VocabularyTerm).where(
-            VocabularyTerm.owner_user_id == user.id, VocabularyTerm.term == term
+            VocabularyTerm.team_id == workspace_team.id, VocabularyTerm.term == term
         )
     ).first()
     if taken:
         raise Refused(409, "duplicate_term", "That term is already in your vocabulary.")
-    row = VocabularyTerm(owner_user_id=user.id, term=term)
+    row = VocabularyTerm(owner_user_id=user.id, team_id=workspace_team.id, term=term)
     session.add(row)
     try:
         session.commit()
@@ -1248,17 +1375,55 @@ def add_term_from_review(session: Session, user: User, item, term: str) -> Vocab
     return row
 
 
-def delete_term(session: Session, user: User, term_id: int) -> bool:
-    """Remove one of `user`'s terms. False when they have no such term."""
+def delete_term(session: Session, user: User, workspace_team: Team, term_id: int) -> bool:
+    """Remove one of `workspace_team`'s terms (owners and admins). False if it has no such term."""
     term = None
     if _in_range(term_id):
         term = session.scalars(
             select(VocabularyTerm).where(
-                VocabularyTerm.id == term_id, VocabularyTerm.owner_user_id == user.id
+                VocabularyTerm.id == term_id, VocabularyTerm.team_id == workspace_team.id
             )
         ).first()
     if term is None:
-        return False
+        return False  # another workspace's term looks like none
+    manager_or_403(session, user, workspace_team)
     session.delete(term)
     session.commit()
     return True
+
+
+def copy_terms_from_personal(
+    session: Session, user: User, workspace_team: Team
+) -> tuple[int, int, list[VocabularyTerm]]:
+    """Copy the caller's personal-workspace terms into `workspace_team` (owners and admins), never
+    doubling one that is there. Returns (copied, skipped, the workspace's terms now). 409
+    `personal_team` for the personal workspace itself."""
+    manager_or_403(session, user, workspace_team)
+    home = teams.ensure_personal_team(session, user)
+    if home.id == workspace_team.id:
+        raise Refused(
+            409, "personal_team", "This is your personal workspace: there is nothing to copy into."
+        )
+    have = set(
+        session.scalars(
+            select(VocabularyTerm.term).where(VocabularyTerm.team_id == workspace_team.id)
+        )
+    )
+    copied = skipped = 0
+    for source in session.scalars(
+        select(VocabularyTerm).where(VocabularyTerm.team_id == home.id).order_by(VocabularyTerm.id)
+    ):
+        if source.term in have:
+            skipped += 1
+            continue
+        session.add(
+            VocabularyTerm(owner_user_id=user.id, team_id=workspace_team.id, term=source.term)
+        )
+        have.add(source.term)
+        copied += 1
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise Refused(400, "duplicate_term", "That term is already in the list.") from None
+    return copied, skipped, list_terms(session, workspace_team)

@@ -1,0 +1,25 @@
+{
+  "note": "A template of another workspace: 404 `not_found`.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/workspace-prefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "calendar_template_id": 18
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such template"
+      }
+    }
+  }
+}

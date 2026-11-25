@@ -40,10 +40,11 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_api_tasks import add_task
-from tests.test_multi_team_leaks import PAT, QUINN, multi_team_on, new_team, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F401
 from tests.test_multi_team_moved import ADA, DEE, NoBot, dee, move  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_workspace import GOOD, NOTES, FakeChat
+from tests.workspace_plans import subscribe
 
 
 def add_review(session, meeting, text="Metrika may be misheard", position=0):
@@ -61,6 +62,7 @@ def add_review(session, meeting, text="Metrika may be misheard", position=0):
 
 def ada_leaves_x(session, world):
     """Ada hands X to Pat (the pilot admin does it by hand) and leaves it."""
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     teams.leave(session, world.ada, datetime.now(UTC), team_id=world.x.id)
@@ -159,7 +161,9 @@ def test_an_unshare_during_the_model_call_files_nothing_in_the_old_team(app, ses
     run_like_the_worker(session, meeting_id, FakeChat([GOOD], on_call=unshared_meanwhile))
     session.expire_all()
     found = session.scalars(select(Task).where(Task.meeting_id == meeting_id)).all()
-    assert found and {t.team_id for t in found} == {home.id}
+    # unsharing keeps the meeting filed in X ("keep private"): its tasks stay in X's team
+    assert found and {t.team_id for t in found} == {world.x.id}
+    assert home.id != world.x.id
 
 
 def test_no_milestone_or_post_goes_to_a_team_that_can_no_longer_read_the_meeting(
@@ -236,7 +240,9 @@ def test_a_meeting_given_back_by_a_deleted_team_keeps_its_tasks_and_milestones(a
         select(Milestone).where(Milestone.source_meeting_id == world.private.id)
     ).all()
     assert [m.team_id for m in proposals] == [home.id]
-    assert [t["id"] for t in sign_in(app, ADA).get("/api/tasks").json()["tasks"]] == [task.id]
+    ada = sign_in(app, ADA)
+    ada.client.headers["X-Team-Id"] = str(home.id)  # her personal board
+    assert [t["id"] for t in ada.get("/api/tasks").json()["tasks"]] == [task.id]
 
 
 # ---- 5. one meeting is never both owned by a team and shared with another ----
@@ -305,6 +311,7 @@ def test_a_team_admin_may_decide_the_suggestions_of_a_moved_meeting_and_a_member
     assert task_rules.owns_meeting_of(session, dee, suggestion) is True  # an admin of X
     assert task_rules.owns_meeting_of(session, world.ada, suggestion) is True  # the recorder
     assert task_rules.owns_meeting_of(session, world.pat, suggestion) is False  # a plain member
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     ada_gone = session.get(User, world.ada.id)
@@ -331,11 +338,14 @@ def test_a_notification_about_a_moved_meeting_is_hidden_from_a_recorder_who_left
     )
     session.add(Notification(user_id=world.ada.id, kind="y", title="General", dedupe_key="b"))
     session.commit()
-    assert notifications_rules.unread_count(session, world.ada) == 2
+    home = teams.personal_team(session, world.ada.id).id  # both were filed in her personal one
+    assert notifications_rules.unread_count(session, world.ada, home) == 2
     assert move(sign_in(app, ADA), world.private, world.x).status_code == 200
     ada_leaves_x(session, world)
-    assert notifications_rules.unread_count(session, world.ada) == 1
-    titles = [n.title for n in notifications_rules.list_notifications(session, world.ada, 50, None)]
+    assert notifications_rules.unread_count(session, world.ada, home) == 1
+    titles = [
+        n.title for n in notifications_rules.list_notifications(session, world.ada, home, 50, None)
+    ]
     assert titles == ["General"]
 
 

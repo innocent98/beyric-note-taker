@@ -5,40 +5,34 @@ The rules that make that safe live here, in one place:
 
 * `is_personal` marks a person's own permanent space. It is never left, never joined and nobody is
   invited into it.
-* `default_membership` / `team_of` is the ONE rule for a route that names no team: the caller's
-  single ordinary team if they have exactly one, else their personal team. For everyone who has one
-  membership, and for everyone while `MULTI_TEAM_ENABLED` is off, that is the team they have always
-  had.
-* `MULTI_TEAM_ENABLED` (off by default) decides whether a second membership may be made. Off:
-  joining works as it always did (a team of one is dissolved into the team joined; someone on a
-  team with others is refused with `already_on_team`). On: joining adds a membership and dissolves
-  nothing.
+* `default_membership` / `team_of` is the rule for "the team a person is most likely in": the
+  caller's single ordinary team if they have exactly one, else their personal team. The shell
+  preselects it; the calendar cutover filed each connection there. A ROUTE names its workspace with
+  `X-Team-Id`, else the person's default workspace (`app/workspace_context.py`).
+* A person may belong to any number of teams: joining adds a membership and dissolves nothing (the
+  multi-team switch is gone; it was on in production already).
 """
 
 from datetime import datetime
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
+from app import entitlements
 from app.models import (
     DocumentShare,
     Meeting,
     Milestone,
-    Project,
+    Plan,
     Task,
     Team,
     TeamInvite,
     TeamMember,
+    Template,
     User,
     UserSettings,
+    VocabularyTerm,
 )
-
-
-def multi_team_enabled() -> bool:
-    """`MULTI_TEAM_ENABLED`: may a person belong to more than one team. Read on each call (the
-    settings are cached), so a test may replace this function."""
-    return get_settings().multi_team_enabled
 
 
 def is_personal_of(team: Team, user_id: int) -> bool:
@@ -125,18 +119,16 @@ def ensure_team(session: Session, user: User) -> Team:
 
 def team_for_meeting(session: Session, meeting: Meeting) -> Team:
     """The team a meeting's extracted tasks belong to (spec 6.6): the team that owns it, else the
-    team it is shared to, else (switch on) its recorder's personal team. While the switch is off
-    it is the recorder's default team, as it has always been. In the caller's transaction (it may
-    make a personal team)."""
-    for team_id in (meeting.owner_team_id, meeting.shared_team_id):
+    team it is shared to, else the workspace it was recorded into (a private meeting in a team's
+    workspace, or one a calendar join filed there), else its recorder's personal team. In the
+    caller's transaction (it may make a personal team)."""
+    for team_id in (meeting.owner_team_id, meeting.shared_team_id, meeting.workspace_team_id):
         if team_id is not None:
             team = session.get(Team, team_id)
             if team is not None:
                 return team
     recorder = session.get(User, meeting.owner_user_id)
-    if multi_team_enabled():
-        return ensure_personal_team(session, recorder)
-    return ensure_team(session, recorder)
+    return ensure_personal_team(session, recorder)
 
 
 def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None) -> None:
@@ -144,14 +136,10 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     to the meeting's team (spec 6.6). Tasks typed in by hand stay where they were made. What
     belonged to the old team goes with it: the project, milestone and sprint are cleared, an
     assignee who is not in the new team is unassigned, and a date proposed from the meeting stays
-    with the meeting. With no `target` given, nothing happens while `MULTI_TEAM_ENABLED` is off: a
-    person with one team has nowhere else to put them, and the old rule (tasks stay, hidden by the
-    meeting check) is the one that applies to a team of several. A `target` (a team being deleted
-    gives its meetings back: `app/deletion.py`) always re-files. In the caller's transaction, no
-    commit."""
+    with the meeting. With no `target` given, the meeting's own team (`team_for_meeting`); a
+    `target` (a team being deleted gives its meetings back: `app/deletion.py`) re-files there. In
+    the caller's transaction, no commit."""
     if target is None:
-        if not multi_team_enabled():
-            return
         target = team_for_meeting(session, meeting)
     members = select(TeamMember.user_id).where(TeamMember.team_id == target.id)
     session.execute(
@@ -178,22 +166,163 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     )
 
 
-def create_owned_team(session: Session, user: User, name: str) -> Team:
-    """Make a team the person owns: at most `MAX_OWNED_TEAMS` besides the personal one (409
-    `team_limit`). The person's row is locked first, so two creates at once count one after the
-    other. In the caller's transaction (flushes, no commit)."""
-    session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    owned = session.scalar(
+def refile_notifications(
+    session: Session, meeting_ids: list[int] | None = None, user_id: int | None = None
+) -> None:
+    """A notification follows its meeting's workspace (workspaces design section 3): after a meeting
+    is shared, moved, moved back, given back or its recorder leaves, the notifications about it are
+    re-filed in the meeting's CURRENT workspace for every person who is a member of it, and in
+    their own personal workspace for anyone who is not (a person who left must not keep a note
+    about it in a workspace they are no longer in). `meeting_ids`: the notifications about these
+    meetings; `user_id`: all of this person's notifications that are about a meeting. Notifications
+    about no meeting (hours, account notices) never move. In the caller's transaction, no commit."""
+    if not meeting_ids and user_id is None:
+        return
+    scope = []
+    params: dict = {}
+    if meeting_ids:
+        scope.append("n.meeting_id = any(:meeting_ids)")
+        params["meeting_ids"] = list(meeting_ids)
+    if user_id is not None:
+        scope.append("n.user_id = :user_id")
+        params["user_id"] = user_id
+    session.execute(
+        text(
+            "update notifications n set team_id = coalesce("
+            "(select m.workspace_team_id from meetings m "
+            " join team_members tm on tm.team_id = m.workspace_team_id and tm.user_id = n.user_id "
+            " where m.id = n.meeting_id), "
+            "(select p.id from teams p where p.owner_user_id = n.user_id and p.is_personal "
+            " order by p.id limit 1), n.team_id) "
+            "where n.meeting_id is not null and (" + " or ".join(scope) + ")"  # noqa: S608
+        ),
+        params,
+    )
+
+
+def keep_private_tasks(session: Session, meeting: Meeting) -> None:
+    """ "Keep private" on a meeting filed in a team's workspace: the meeting stays in the workspace
+    but only its recorder reads it, so what the AI took from it must not stay readable to the team
+    through the back door. A task assigned to anyone but the recorder is unassigned (a task is
+    visible to its assignee on the team even where the meeting is not, `tasks.visible`), and a date
+    proposed from the meeting (not yet confirmed) goes to the recorder's personal team, where only
+    they can confirm it. Tasks and dates of a meeting nobody shared are never in a team's view.
+    In the caller's transaction, no commit."""
+    session.execute(
+        update(Task)
+        .where(
+            Task.meeting_id == meeting.id,
+            Task.source == "ai",
+            Task.assignee_user_id.is_not(None),
+            Task.assignee_user_id != meeting.owner_user_id,
+        )
+        .values(assignee_user_id=None)
+    )
+    recorder = session.get(User, meeting.owner_user_id)
+    home = ensure_personal_team(session, recorder)
+    session.execute(
+        update(Milestone)
+        .where(
+            Milestone.source_meeting_id == meeting.id,
+            Milestone.confirmed_at.is_(None),
+            Milestone.team_id != home.id,
+        )
+        .values(team_id=home.id, project_id=None)
+    )
+
+
+def owned_team_count(session: Session, user: User) -> int:
+    """How many team workspaces the person owns besides their personal one (what the plan limit
+    counts: being a member of a team never does)."""
+    return session.scalar(
         select(func.count())
         .select_from(Team)
         .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
     )
-    if owned >= MAX_OWNED_TEAMS:
-        raise TeamChangeRefused(409, "team_limit", f"You can own up to {MAX_OWNED_TEAMS} teams.")
-    team = Team(owner_user_id=user.id, name=name, is_personal=False)
+
+
+def _count_of_teams(n: int) -> str:
+    return f"{n} team" if n == 1 else f"{n} teams"
+
+
+def _upgrade_plan(session: Session, allowed: int) -> Plan | None:
+    """The first plan on sale that owns more than `allowed` teams (unlimited counts as the most)."""
+    return session.scalars(
+        select(Plan)
+        .where(
+            Plan.active.is_(True),
+            (Plan.max_owned_teams.is_(None)) | (Plan.max_owned_teams > allowed),
+        )
+        .order_by(Plan.sort_order, Plan.code)
+    ).first()
+
+
+def _upgrade_sentence(session: Session, allowed: int) -> str:
+    """ "Upgrade to the Pro plan to own up to 10 teams." (the plan to move to, in plain words), or
+    nothing when no bigger plan is on sale."""
+    plan = _upgrade_plan(session, allowed)
+    if plan is None:
+        return ""
+    if plan.max_owned_teams is None:
+        return f" Upgrade to the {plan.name} plan for as many teams as you need."
+    return f" Upgrade to the {plan.name} plan to own up to {_count_of_teams(plan.max_owned_teams)}."
+
+
+def _limit_message(session: Session, allowed: int, owned: int) -> str:
+    if allowed == 0:
+        return "Owning a team needs a paid plan." + _upgrade_sentence(session, allowed)
+    return (
+        f"Your plan owns up to {_count_of_teams(allowed)} and you have {owned}."
+        + _upgrade_sentence(session, allowed)
+    )
+
+
+def limit_message(session: Session, user: User, now: datetime | None = None) -> str | None:
+    """The plain sentence a refused `create_owned_team` carries, or None while the person still has
+    room. The Make-a-team card shows it before anyone presses the button."""
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = owned_team_count(session, user)
+    if allowed is None or owned < allowed:
+        return None
+    return _limit_message(session, allowed, owned)
+
+
+def has_room_for_another_team(session: Session, user: User, now: datetime | None = None) -> bool:
+    """True when the person's live plan lets them own one more team (`create_owned_team`'s test)."""
+    allowed = entitlements.max_owned_teams(session, user, now)
+    return allowed is None or owned_team_count(session, user) < allowed
+
+
+def create_owned_team(
+    session: Session, user: User, name: str, kind: str = "team", now: datetime | None = None
+) -> Team:
+    """Make a team the person owns, as many as their live plan's `max_owned_teams` allows besides
+    the personal one (Free 0, Starter 3, Pro 10, Scale unlimited; a trial counts as Free; being a
+    member never counts): 409 `team_limit` naming the plan to upgrade to. A lapse or a downgrade
+    never removes a team that exists, it only refuses this. The person's row is locked first, so
+    two creates at once count one after the other. In the caller's transaction (flushes, no
+    commit). A `class` is the same team in a school's words (workspaces design, section 6)."""
+    session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    allowed = entitlements.max_owned_teams(session, user, now)
+    owned = owned_team_count(session, user)
+    if allowed is not None and owned >= allowed:
+        raise TeamChangeRefused(409, "team_limit", _limit_message(session, allowed, owned))
+    # A new team workspace starts with the seeded default templates (the notes need one) and with
+    # "share new meetings" on (decision D4: a team's meetings are shared with its members by
+    # default; "keep private" is the per-meeting unshare), a class and an ordinary team alike.
+    # Existing teams keep their stored value.
+    team = Team(
+        owner_user_id=user.id, name=name, is_personal=False, kind=kind, share_new_meetings=True
+    )
     session.add(team)
     session.flush()
     session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
+    from app.accounts import DEFAULT_TEMPLATES  # accounts imports this module
+
+    session.add_all(
+        Template(owner_user_id=user.id, team_id=team.id, name=n, instructions=text)
+        for n, text in DEFAULT_TEMPLATES
+    )
     session.flush()
     return team
 
@@ -207,24 +336,82 @@ def doomed_teams(session: Session, user_id: int) -> list[int]:
     return [team_id for team_id in owned if not _has_other_members(session, team_id, user_id)]
 
 
+def dissolve_team(session: Session, team: Team) -> None:
+    """Delete a team whose people and meetings are already dealt with (the last member's account is
+    going, or the owner deleted it: `app/team_delete.py`). What it held (tasks, projects, series,
+    integrations, invitations, notifications, calendar rows, preferences) goes by the foreign keys.
+    Two things need care first. A meeting still filed in it (nobody should be) returns to its
+    recorder's personal workspace rather than blocking the delete on `meetings.workspace_team_id`.
+    A template a kept meeting was written with outlives the team (taken out of use if its owner is
+    gone, `app/deletion.py`): it moves to that meeting's workspace; every other row of the team's
+    goes. Vocabulary goes with the team. In the caller's transaction, no commit."""
+    filed_here = list(
+        session.scalars(select(Meeting.id).where(Meeting.workspace_team_id == team.id))
+    )
+    session.execute(
+        update(Meeting)
+        .where(Meeting.workspace_team_id == team.id)
+        .values(
+            workspace_team_id=select(Team.id)
+            .where(
+                Team.owner_user_id == Meeting.owner_user_id,
+                Team.is_personal.is_(True),
+                Team.id != team.id,
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+    )
+    refile_notifications(session, filed_here)  # their notes survive in the recorders' workspaces
+    kept = select(Meeting.template_id)
+    session.execute(delete(Template).where(Template.team_id == team.id, Template.id.not_in(kept)))
+    session.execute(
+        update(Template)
+        .where(Template.team_id == team.id)
+        .values(
+            team_id=select(Meeting.workspace_team_id)
+            .where(Meeting.template_id == Template.id)
+            .limit(1)
+            .scalar_subquery()
+        )
+    )
+    session.execute(delete(VocabularyTerm).where(VocabularyTerm.team_id == team.id))
+    session.delete(team)
+
+
+def _heir(session: Session, team: Team) -> TeamMember | None:
+    """Who inherits a team whose owner is going: the member who joined first AND has room under
+    their plan's team limit; failing that the member who joined first anyway. A purge must never be
+    blocked and a team is never destroyed over billing, so the limit only chooses between members;
+    it never refuses."""
+    members = list(
+        session.scalars(
+            select(TeamMember)
+            .where(TeamMember.team_id == team.id)
+            .order_by(TeamMember.joined_at, TeamMember.id)
+        )
+    )
+    for member in members:
+        person = session.get(User, member.user_id)
+        if person is not None and has_room_for_another_team(session, person):
+            return member
+    return members[0] if members else None
+
+
 def remove_users(session: Session, user_ids: list[int]) -> None:
     """Take these accounts out of their teams before the accounts are deleted. A team left with
     no members goes too (meetings shared with it become private: `shared_team_id` is set null by
-    the foreign key). A team that still has other members is handed to the one who joined first;
-    W3 will refuse that case until the pilot admin transfers ownership by hand (spec section 4),
-    but a purge must never be blocked by it. In the caller's transaction, no commit."""
+    the foreign key). A team that still has other members is handed to the one who joined first and
+    has room under their plan's team limit (`_heir`); a purge must never be blocked by it. In the
+    caller's transaction, no commit."""
     if not user_ids:
         return
     owned = list(session.scalars(select(Team).where(Team.owner_user_id.in_(user_ids))))
     session.execute(delete(TeamMember).where(TeamMember.user_id.in_(user_ids)))
     for team in owned:
-        heir = session.scalars(
-            select(TeamMember)
-            .where(TeamMember.team_id == team.id)
-            .order_by(TeamMember.joined_at, TeamMember.id)
-        ).first()
+        heir = _heir(session, team)
         if heir is None:
-            session.delete(team)
+            dissolve_team(session, team)
         else:
             # A team handed on is an ordinary team, whatever it was: the heir may already own a
             # personal team, and `uq_teams_one_personal_per_owner` must never block a deletion.
@@ -235,9 +422,6 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
 # ---- W3: joining, leaving, the share default ----
 
 MANAGER_ROLES = ("owner", "admin")
-# Teams one account may own besides its personal one (a plan setting later; checked in the route,
-# not by a database constraint).
-MAX_OWNED_TEAMS = 3
 
 
 class TeamChangeRefused(Exception):
@@ -275,31 +459,6 @@ def _lock_teams(session: Session, *team_ids: int) -> None:
         session.execute(select(Team.id).where(Team.id == team_id).with_for_update())
 
 
-def move_team_content(session: Session, old_team_id: int, new_team_id: int) -> None:
-    """Everything that belongs to a team of one moves into the team its owner joins: tasks now;
-    W4 (projects) and W8 (series) add theirs HERE, in the same function, so a joining account
-    never loses them (spec 8.1). Meetings are not team content: they stay theirs, and a meeting
-    shared with the dissolved team becomes private (`shared_team_id` null)."""
-    # The old team's sprints go with it: its tasks arrive in the new team's Backlog (W9).
-    session.execute(
-        update(Task)
-        .where(Task.team_id == old_team_id)
-        .values(team_id=new_team_id, sprint_id=None, carried=False)
-    )
-    session.execute(
-        update(Project).where(Project.team_id == old_team_id).values(team_id=new_team_id)
-    )
-    session.execute(
-        update(Milestone).where(Milestone.team_id == old_team_id).values(team_id=new_team_id)
-    )
-    from app import series  # series imports this module
-
-    series.move_team_series(session, old_team_id, new_team_id)
-    session.execute(
-        update(Meeting).where(Meeting.shared_team_id == old_team_id).values(shared_team_id=None)
-    )
-
-
 def join(
     session: Session,
     user: User,
@@ -308,63 +467,22 @@ def join(
     alias: str | None,
     now: datetime,
 ) -> TeamMember:
-    """Make `user` a member of `team_id`, in the caller's transaction (no commit).
-
-    `MULTI_TEAM_ENABLED` on: the person gains a membership and nothing is dissolved or moved; their
-    personal team is made if a flag-off join dissolved it. A personal team cannot be joined (409
-    `personal_team`). Joining a team they are already in returns that membership.
-
-    Off (today's behaviour, exactly): their own team of one is dissolved first (their tasks move;
-    their meetings stay theirs and private), and someone on a team with other people must leave it
-    first (409 `already_on_team`). A team of one that somebody joins stops being "personal" (it is
-    now the team its owner runs)."""
-    on = multi_team_enabled()
-    current = default_membership(session, user.id)
-    _lock_teams(session, team_id, *([current.team_id] if current else []))
+    """Make `user` a member of `team_id`, in the caller's transaction (no commit). The person gains
+    a membership and nothing is dissolved or moved; their personal team is made if they have none.
+    A personal team cannot be joined (409 `personal_team`). Joining a team they are already in
+    returns that membership."""
+    _lock_teams(session, team_id)
     target = session.get(Team, team_id)
     if target is None:  # dissolved while we waited
         raise TeamChangeRefused(404, "invite_invalid", "That invitation is not valid any more.")
     held = membership(session, user.id, team_id)
     if held is not None:
         return held
-    if on:
-        if target.is_personal:
-            raise TeamChangeRefused(
-                409, "personal_team", "Nobody can join a personal space. Ask for a team invitation."
-            )
-        ensure_personal_team(session, user)
-    else:
-        current = default_membership(session, user.id)
-        if current is not None:
-            others = session.scalar(
-                select(func.count())
-                .select_from(TeamMember)
-                .where(TeamMember.team_id == current.team_id, TeamMember.user_id != user.id)
-            )
-            if others:
-                raise TeamChangeRefused(
-                    409,
-                    "already_on_team",
-                    "You are on another team. Leave it first, then accept this invitation.",
-                )
-            old_team_id = current.team_id
-            move_team_content(session, old_team_id, team_id)
-            # What the person invited from their team of one goes with it (`team_invites.team_id`
-            # is ON DELETE CASCADE): those links promised a place in a team that no longer exists,
-            # and their places are free again.
-            session.delete(current)
-            session.flush()
-            old = session.get(Team, old_team_id)
-            if old is not None:
-                session.delete(old)
-            session.flush()
-        if target.is_personal:
-            # The owner invited people into their team of one (today's way to make a team): it is
-            # a team now, no longer a personal space. Nothing else changes while the switch is off
-            # (the owner's new personal team is made later, by `ensure_personal_team`, the first
-            # time something needs it).
-            target.is_personal = False
-            session.flush()
+    if target.is_personal:
+        raise TeamChangeRefused(
+            409, "personal_team", "Nobody can join a personal space. Ask for a team invitation."
+        )
+    ensure_personal_team(session, user)
     member = TeamMember(
         team_id=team_id, user_id=user.id, role=role, aliases=[alias] if alias else []
     )
@@ -444,9 +562,33 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
         .where(Meeting.owner_user_id == user.id, Meeting.shared_team_id == old_team_id)
         .values(shared_team_id=None)
     )
-    from app import series  # series imports this module
+    # What they recorded into this workspace and kept (not moved) goes back to their personal
+    # workspace: it is private to them now, and a person outside a workspace lists nothing in it.
+    # A moved meeting is the team's: it stays, and the recorder shows as "Former member".
+    going_home = list(
+        session.scalars(
+            select(Meeting.id).where(
+                Meeting.owner_user_id == user.id,
+                Meeting.workspace_team_id == old_team_id,
+                Meeting.owner_team_id.is_(None),
+            )
+        )
+    )
+    session.execute(
+        update(Meeting)
+        .where(
+            Meeting.owner_user_id == user.id,
+            Meeting.workspace_team_id == old_team_id,
+            Meeting.owner_team_id.is_(None),
+        )
+        .values(workspace_team_id=home.id)
+    )
+    from app import calendar_connect, series  # both import this module
 
     series.forget_meetings_of(session, user.id, old_team_id)
+    # Their calendar connection in this workspace goes with them, and the joins it planned: a person
+    # who left must not keep recording into it (workspaces design 12.3). What they recorded stays.
+    calendar_connect.detach_workspace(session, user.id, old_team_id)
     session.execute(
         update(TeamInvite)
         .where(
@@ -466,16 +608,15 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
     )
     session.delete(member)
     session.flush()
+    # The bell follows the meetings: what the person recorded went home with them, and their notes
+    # about the team's meetings leave the workspace they are no longer in.
+    refile_notifications(session, going_home, user.id)
     return home
 
 
 def auto_share_team(session: Session, user: User) -> int | None:
     """The team the person chose for new meetings (`user_settings.auto_share_team_id`), only while
-    they are still a member of it and it is not a personal space; else None. Always None while
-    `MULTI_TEAM_ENABLED` is off: then only today's team-wide rule applies (owners and admins), and a
-    row written while the switch was on lies dormant (it comes back if the switch does)."""
-    if not multi_team_enabled():
-        return None
+    they are still a member of it and it is not a personal space; else None."""
     team_id = session.scalar(
         select(UserSettings.auto_share_team_id).where(UserSettings.user_id == user.id)
     )
@@ -483,6 +624,21 @@ def auto_share_team(session: Session, user: User) -> int | None:
         return None
     team = session.get(Team, team_id)
     return team_id if team is not None and not team.is_personal else None
+
+
+def birth_share_team_id(session: Session, user: User, workspace_team_id: int) -> int | None:
+    """Decision D4 (workspaces design): a meeting BORN in a team workspace is shared with that
+    workspace by default, readable by every member, and the existing unshare is the per-meeting
+    "keep private". The personal workspace stays private, and so does a team that has switched
+    "share new meetings" off (each existing team kept the value it had; teams made from now on start
+    with it on). The recorder must belong to the workspace (a member may record into any workspace
+    they belong to, on their own hours), and the rule is the same whoever the recorder is: an owner,
+    an admin or a plain member. Existing meetings are never touched by it: it runs only when a
+    meeting row is made. Returns the team to share to, or None."""
+    team = session.get(Team, workspace_team_id)
+    if team is None or team.is_personal or not team.share_new_meetings:
+        return None
+    return team.id if membership(session, user.id, team.id) is not None else None
 
 
 def apply_share_default(session: Session, meeting: Meeting) -> None:
@@ -496,13 +652,27 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
     meeting page.
 
     A person who chose one team for their new meetings (`auto_share_team`, at most one) is shared
-    to THAT team, whatever their role in it: it is their own choice for their own meetings."""
+    to THAT team, whatever their role in it: it is their own choice for their own meetings. It
+    applies only to a meeting recorded into that team's workspace or into the person's own personal
+    workspace (sharing is what files it in the team); a meeting recorded into another team's
+    workspace (a class, say) is never published to a different team by it, and its own workspace's
+    default decides."""
+    if meeting.kept_private:  # "keep private" is the recorder's word: no default overrides it
+        return
     recorder = session.get(User, meeting.owner_user_id)
     chosen = auto_share_team(session, recorder) if recorder is not None else None
-    if chosen is not None:
-        meeting.shared_team_id = chosen
+    workspace = session.get(Team, meeting.workspace_team_id)
+    in_own_personal = (
+        workspace is not None and workspace.is_personal and workspace.owner_user_id == recorder.id
+        if recorder is not None
+        else False
+    )
+    if chosen is not None and (chosen == meeting.workspace_team_id or in_own_personal):
+        meeting.shared_team_id = chosen  # sharing files it in that team's workspace (models.py)
         return
-    member = default_membership(session, meeting.owner_user_id)
+    # The meeting's own workspace, not the person's default team: a member records into any
+    # workspace they belong to (workspaces design, D3).
+    member = membership(session, meeting.owner_user_id, meeting.workspace_team_id)
     if member is None or member.role not in MANAGER_ROLES:
         return
     team = session.get(Team, member.team_id)
@@ -532,7 +702,9 @@ def owns_team_with_others(session: Session, user_id: int) -> bool:
 
 def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> None:
     """Hand a team to one of its members (the pilot admin does this by hand: spec section 4).
-    The old owner becomes an admin. In the caller's transaction, no commit."""
+    The old owner becomes an admin. The new owner must have room under their own plan's limit
+    (409 `team_limit`: a team is never handed to someone who could not have made it). In the
+    caller's transaction, no commit."""
     team = session.get(Team, team_id)
     heir = session.scalars(
         select(TeamMember).where(
@@ -541,6 +713,20 @@ def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> No
     ).first()
     if team is None or heir is None:
         raise TeamChangeRefused(404, "not_found", "That person is not a member of that team.")
+    # Lock the new owner's row, as `create_owned_team` does, so a create running at the same moment
+    # cannot take their last place between this check and the hand-over.
+    session.execute(select(User.id).where(User.id == new_owner_user_id).with_for_update())
+    new_owner = session.get(User, new_owner_user_id)
+    if team.owner_user_id != new_owner_user_id and not has_room_for_another_team(
+        session, new_owner
+    ):
+        allowed = entitlements.max_owned_teams(session, new_owner)
+        reason = (
+            "owning a team needs a paid plan."
+            if allowed == 0
+            else f"their plan owns up to {_count_of_teams(allowed)}."
+        )
+        raise TeamChangeRefused(409, "team_limit", f"That person can't take another team: {reason}")
     for member in session.scalars(
         select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.role == "owner")
     ):

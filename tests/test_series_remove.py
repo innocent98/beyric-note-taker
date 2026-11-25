@@ -18,7 +18,7 @@ later meetings of that event are not regrouped into it.
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app import meeting_teams
 from app import series as series_rules
@@ -55,7 +55,6 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     QUINN,
     ZED,
     ids_of,
-    multi_team_on,
     new_team,
     world,
 )
@@ -711,6 +710,7 @@ def test_the_mark_is_one_per_scope_and_event_and_records_who_removed_it(app, ses
 def test_an_ignored_mark_goes_with_its_team(app, session, world, rows):
     ada = sign_in(app, OWNER_EMAIL)
     assert remove(ada, rows.x.id).status_code == 200
+    session.execute(delete(Meeting).where(Meeting.workspace_team_id == world.x.id))
     session.delete(world.x)
     session.commit()
     assert session.scalar(select(func.count()).select_from(SeriesIgnored)) == 0

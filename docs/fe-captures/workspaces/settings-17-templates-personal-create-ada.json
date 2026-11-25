@@ -1,0 +1,25 @@
+{
+  "note": "Ada's own personal template, the one the copy below will bring over.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "One to one",
+      "instructions": "Mood, blockers, next steps."
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 19,
+      "name": "One to one",
+      "instructions": "Mood, blockers, next steps."
+    }
+  }
+}

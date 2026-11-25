@@ -36,12 +36,12 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     QUINN,
     ZED,
     ids_of,
-    multi_team_on,
     new_team,
     world,
 )
 from tests.test_team_visibility import OWNER_ONLY, READS, call, sign_in
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 ADA, DEE = "owner@example.test", "dee@example.test"
 
@@ -116,6 +116,7 @@ def test_the_recorder_reads_and_changes_a_moved_meeting_only_while_in_the_owning
     ada = sign_in(app, ADA)
     assert ada.get(f"/api/meetings/{world.private.id}").status_code == 200
     # Ada leaves X (no longer an owner of it: Pat is made the owner first, as the pilot admin does)
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)
     session.commit()
     teams.leave(session, world.ada, datetime.now(UTC), team_id=world.x.id)
@@ -169,6 +170,7 @@ def test_the_teams_owner_and_admins_change_a_moved_meeting_they_did_not_record(
     moved(session, world.private, world.x)
     assert visibility.owns(session, dee, world.private)
     assert visibility.owns(session, world.ada, world.private)
+    subscribe(session, world.pat, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, world.x.id, world.pat.id)  # Pat is now the owner of X
     session.commit()
     assert visibility.owns(session, world.pat, world.private)
@@ -259,11 +261,6 @@ def test_nobody_but_the_recorder_moves_a_not_yet_moved_meeting(app, session, wor
 def test_only_a_ready_meeting_can_be_moved(app, session, world, template):
     waiting = ready(session, template, status="bot_sent", step="waiting")
     error_of(move(sign_in(app, ADA), waiting, world.x), 409, "meeting_not_ready")
-
-
-def test_moving_is_refused_while_the_switch_is_off(app, session, world, monkeypatch):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    error_of(move(sign_in(app, ADA), world.private, world.x), 409, "multi_team_disabled")
 
 
 def test_a_moved_meeting_cannot_be_shared_or_unshared(app, session, world):
@@ -479,6 +476,7 @@ def test_moving_re_homes_the_extracted_tasks_to_the_team_and_moving_back_takes_t
     task = add_task(session, personal, world.private, title="Send the deck", assignee=world.ada)
     other = add_task(session, personal, world.private, title="Book room", assignee=world.pat)
     ada, pat, quinn = sign_in(app, ADA), sign_in(app, PAT), sign_in(app, QUINN)
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # the board of team X
     assert pat.get("/api/tasks").json()["tasks"] == []
 
     assert move(ada, world.private, world.x).status_code == 200
@@ -491,6 +489,7 @@ def test_moving_re_homes_the_extracted_tasks_to_the_team_and_moving_back_takes_t
     session.expire_all()
     assert {t.team_id for t in tasks_of(session, world.private)} == {personal.id}
     assert pat.get("/api/tasks").json()["tasks"] == []  # no longer exposed to the team
+    ada.client.headers["X-Team-Id"] = str(personal.id)  # her personal board
     mine = {t["id"] for t in ada.get("/api/tasks").json()["tasks"]}
     assert mine == {task.id, other.id}
     # Pat does not hold a task in a team of one they are not in
@@ -508,17 +507,20 @@ def test_sharing_and_unsharing_re_home_the_extracted_tasks_without_exposing_them
     assert ada.post(f"/api/meetings/{meeting.id}/share", {"team_id": world.x.id}).status_code == 200
     session.expire_all()
     assert session.get(Task, task.id).team_id == world.x.id
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # the board of team X
     assert [t["id"] for t in pat.get("/api/tasks").json()["tasks"]] == [task.id]
     assert quinn.get("/api/tasks").json()["tasks"] == []
 
     assert ada.delete(f"/api/meetings/{meeting.id}/share").status_code == 200
     session.expire_all()
-    assert session.get(Task, task.id).team_id == personal.id
+    # "keep private": the meeting stays filed in X, so its tasks stay in X's team, unexposed
+    assert session.get(Task, task.id).team_id == world.x.id
     assert pat.get("/api/tasks").json()["tasks"] == []
     error_of(pat.get(f"/api/tasks/{task.id}"), 404, "not_found")
 
 
 def test_re_homing_clears_the_old_teams_sprint_project_and_assignee(app, session, world):
+    """A move back to the recorder (the team changes) clears what belonged to the old team."""
     from app.models import Project
 
     personal = teams.personal_team(session, world.ada.id)
@@ -529,7 +531,9 @@ def test_re_homing_clears_the_old_teams_sprint_project_and_assignee(app, session
     task = add_task(
         session, world.x, meeting, title="Ship it", assignee=world.pat, project_id=project.id
     )
-    assert sign_in(app, ADA).delete(f"/api/meetings/{meeting.id}/share").status_code == 200
+    ada = sign_in(app, ADA)
+    assert ada.post(f"/api/meetings/{meeting.id}/move", {"team_id": world.x.id}).status_code == 200
+    assert ada.post(f"/api/meetings/{meeting.id}/move-back").status_code == 200  # owns X
     session.expire_all()
     row = session.get(Task, task.id)
     assert row.team_id == personal.id and row.project_id is None
@@ -565,20 +569,3 @@ def test_a_meetings_tasks_are_filed_by_owner_then_share_then_home(session, world
     other = new_team(session, world.ada, "Other")
     moved(session, world.in_x, other)
     assert teams.team_for_meeting(session, world.in_x).id == other.id  # owned beats shared
-
-
-def test_with_the_switch_off_a_private_meetings_tasks_go_to_the_recorders_default_team(
-    session, world, monkeypatch
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    default = teams.team_of(session, world.ada.id)
-    assert default.id == world.x.id  # Ada's one ordinary team, as today
-    assert teams.team_for_meeting(session, world.private).id == default.id
-
-
-def test_with_the_switch_off_re_homing_does_nothing(app, session, world, monkeypatch):
-    task = add_task(session, world.x, world.in_x, title="Ship it")
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert sign_in(app, ADA).delete(f"/api/meetings/{world.in_x.id}/share").status_code == 200
-    session.expire_all()
-    assert session.get(Task, task.id).team_id == world.x.id  # the old rule: it stays

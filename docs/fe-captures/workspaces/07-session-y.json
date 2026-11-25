@@ -1,0 +1,67 @@
+{
+  "note": "`active_workspace` is the one named by the header; `other_workspaces` lists the rest with their unread count (the switcher's dot); `badges` and `unread_notifications` count the active one only.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "pat@example.test",
+        "name": "Pat Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000,
+        "state": null,
+        "seconds_left": null,
+        "warning": null,
+        "can_record": null,
+        "unlimited": null,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 1,
+      "badges": {
+        "review_open": 1,
+        "tasks_new": 1
+      },
+      "active_workspace": {
+        "id": 5,
+        "name": "Client Y",
+        "is_personal": false,
+        "kind": "team"
+      },
+      "other_workspaces": [
+        {
+          "id": 2,
+          "name": "My team",
+          "is_personal": true,
+          "kind": "team",
+          "unread_notifications": 2
+        },
+        {
+          "id": 4,
+          "name": "Platform team",
+          "is_personal": false,
+          "kind": "team",
+          "unread_notifications": 1
+        }
+      ],
+      "multi_team": true
+    }
+  }
+}

@@ -170,8 +170,9 @@ def _bot_name_out(request: Request, user: User) -> BotNameOut:
 
 @router.get("/bot-name")
 def read_bot_name(request: Request, user: User = Depends(auth.current_user)) -> BotNameOut:
-    """The name the note taker joins this person's meetings with: their own when set, else null with
-    the server's default beside it (`bot_name_default`)."""
+    """The person's default note taker name: used in every workspace that sets none of its own
+    (`PUT /api/workspace-prefs`), else null with the server's default beside it
+    (`bot_name_default`). It never switches with the workspace."""
     return _bot_name_out(request, user)
 
 
@@ -238,7 +239,7 @@ def read_auto_share(
     "/auto-share",
     responses={
         404: {"model": ErrorResponse, "description": "A team the caller is not in"},
-        409: {"model": ErrorResponse, "description": "`personal_team`, `multi_team_disabled`"},
+        409: {"model": ErrorResponse, "description": "`personal_team`"},
     },
 )
 def write_auto_share(
@@ -248,12 +249,7 @@ def write_auto_share(
 ) -> AutoShareOut:
     """Choose the team new meetings are shared to automatically (one at most), or null for none. The
     caller must belong to it and it must not be their personal space. It applies once, when a
-    meeting's notes are first written; a meeting already written is not touched. 409
-    `multi_team_disabled` while the switch is off."""
-    if not teams.multi_team_enabled():
-        raise services.Refused(
-            409, "multi_team_disabled", "Choosing a team for new meetings is not available yet."
-        )
+    meeting's notes are first written; a meeting already written is not touched."""
     if body.team_id is not None:
         member = teams.membership(session, user.id, body.team_id)
         team = session.get(Team, body.team_id) if member is not None else None

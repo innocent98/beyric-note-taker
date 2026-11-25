@@ -42,11 +42,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import calendar_text, join_runner, placement, services
+from app import calendar_text, join_runner, placement, services, workspace_prefs
 from app.bot_provider import BotProvider, BotProviderError, describe_failure
 from app.config import Settings
 from app.meeting_url import UnsupportedMeetingUrl
-from app.models import CalendarEvent, Meeting, ScheduledJoin, Template, User, UserSettings
+from app.models import CalendarEvent, Meeting, ScheduledJoin, User
 from app.placement import PlacementRefused, PlacementRequest, place_bot
 
 logger = logging.getLogger("app.send_now")
@@ -151,6 +151,7 @@ def _attempt(
         # adopted instead of answering that someone else's note taker is there.
         adopt_orphan=True,
         expected_seconds=int((join.ends_at - join.starts_at).total_seconds()),
+        workspace_team_id=join.team_id,
     )
     row_id = join.id
 
@@ -197,22 +198,11 @@ def _attempt(
 
 def _has_template(session: Session, join: ScheduledJoin) -> bool:
     """Whether the notes can be written: the join's own template, else the person's calendar
-    template, and it is theirs (what `placement._resolve` needs)."""
-    template_id = join.template_id
-    if template_id is None:
-        template_id = session.scalar(
-            select(UserSettings.calendar_template_id).where(UserSettings.user_id == join.user_id)
-        )
-    if template_id is None:
-        return False
-    return (
-        session.scalar(
-            select(Template.id).where(
-                Template.id == template_id, Template.owner_user_id == join.user_id
-            )
-        )
-        is not None
-    )
+    template for the join's workspace (else that workspace's oldest), and it is the workspace's
+    (what `placement._resolve` needs). A queued join naming a template of another workspace is
+    still sendable: placement uses the workspace's default for it."""
+    workspace_id = workspace_prefs.workspace_for(session, join.user_id, join.team_id)
+    return workspace_prefs.default_template_id(session, workspace_id, join.user_id) is not None
 
 
 def _event_title(session: Session, join: ScheduledJoin) -> str | None:

@@ -1,0 +1,31 @@
+{
+  "note": "Again: `copied` 0, `skipped` 2.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary/copy-from-personal",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "copied": 0,
+      "skipped": 1,
+      "terms": [
+        {
+          "id": 3,
+          "term": "Beyric"
+        },
+        {
+          "id": 2,
+          "term": "Luran"
+        }
+      ]
+    }
+  }
+}

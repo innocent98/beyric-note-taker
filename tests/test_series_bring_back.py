@@ -48,7 +48,6 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     PAT,
     QUINN,
     ZED,
-    multi_team_on,
     world,
 )
 from tests.test_series import MONDAY, calendar_event, join_for, question_in, task_in

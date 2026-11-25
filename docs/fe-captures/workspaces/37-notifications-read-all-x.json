@@ -1,0 +1,20 @@
+{
+  "note": "Marks X's notifications read only; the other workspaces stay unread.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/notifications/read-all",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "unread_notifications": 0
+    }
+  }
+}

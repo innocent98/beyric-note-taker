@@ -1,0 +1,60 @@
+{
+  "note": "Quinn is not in X: the session does not fail over it, it answers Quinn's personal workspace (every page reads this first).",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "quinn@example.test",
+        "name": "Quinn Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000,
+        "state": null,
+        "seconds_left": null,
+        "warning": null,
+        "can_record": null,
+        "unlimited": null,
+        "period_ends_at": null,
+        "trial_ends_at": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 1
+      },
+      "active_workspace": {
+        "id": 5,
+        "name": "Client Y",
+        "is_personal": false,
+        "kind": "team"
+      },
+      "other_workspaces": [
+        {
+          "id": 3,
+          "name": "My team",
+          "is_personal": true,
+          "kind": "team",
+          "unread_notifications": 0
+        }
+      ],
+      "multi_team": true
+    }
+  }
+}

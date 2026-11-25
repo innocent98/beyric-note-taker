@@ -41,10 +41,11 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
     template,
 )
 from tests.test_multi_team_api import call, get
-from tests.test_multi_team_leaks import PAT, QUINN, multi_team_on, new_team, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F401
 from tests.test_series import meeting_in
 from tests.test_team_visibility import sign_in
 from tests.test_web import make_user
+from tests.workspace_plans import subscribe
 
 SLACK = "https://hooks.slack.com/services/T000/B000/placeholder"
 
@@ -295,58 +296,7 @@ def test_a_meeting_moved_to_a_team_joins_that_teams_series_only(app, session, te
     )
 
 
-def test_with_one_team_and_the_switch_off_attaching_is_as_it_was(
-    app, session, template, world, monkeypatch
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    series_x = Series(team_id=world.x.id, owner_user_id=world.ada.id, title="X sync")
-    session.add(series_x)
-    session.commit()
-    ada = sign_in(app, "owner@example.test")  # one ordinary team: X, her default
-    meeting = ready(session, template)
-    assert (
-        ada.put(f"/api/meetings/{meeting.id}/series", {"series_id": series_x.id}).status_code == 200
-    )
-
-
-# ---- auto-share while the switch is off ----
-
-
-def test_auto_share_is_refused_and_ignored_while_the_switch_is_off(
-    app, session, template, world, monkeypatch
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    pat = sign_in(app, PAT)
-    error_of(
-        call(pat, "PUT", "/api/settings/auto-share", None, {"team_id": world.x.id}),
-        409,
-        "multi_team_disabled",
-    )
-    # a row written while the switch was on is ignored while it is off: today's rule only
-    from app.models import UserSettings
-
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: True)
-    assert (
-        call(pat, "PUT", "/api/settings/auto-share", None, {"team_id": world.y.id}).status_code
-        == 200
-    )
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert teams.auto_share_team(session, world.pat) is None
-    assert get(pat, "/api/settings/auto-share").json() == {"team_id": None}
-    mine = ready(session, template, owner_user_id=world.pat.id)  # a plain member
-    teams.apply_share_default(session, mine)
-    assert mine.shared_team_id is None
-    assert session.scalars(select(UserSettings.auto_share_team_id)).all()  # the row is still there
-
-
 # ---- the teams list and creation ----
-
-
-def test_nothing_can_be_created_while_the_switch_is_off_and_the_list_says_so(
-    app, session, world, monkeypatch
-):
-    monkeypatch.setattr(teams, "multi_team_enabled", lambda: False)
-    assert get(sign_in(app, PAT), "/api/teams").json()["can_create_more"] == 0
 
 
 def test_a_team_name_body_is_strict_like_every_other_request_body(app, session, world):
@@ -359,6 +309,7 @@ def test_two_creates_at_once_cannot_pass_the_limit(app, session, world):
     """A create in flight holds the person's row: a second one waits for it and then sees the count
     it left (three), refusing with `team_limit`."""
     engine = session.get_bind()
+    subscribe(session, world.zed, "plan_20h")  # Starter owns three
     new_team(session, world.zed, "Z0")  # Zed owns Z and Z0: two of three
     zed_id = world.zed.id
     holder = Session(engine)
@@ -392,4 +343,4 @@ def test_two_creates_at_once_cannot_pass_the_limit(app, session, world):
     owned = session.scalars(
         select(Team).where(Team.owner_user_id == zed_id, Team.is_personal.is_(False))
     ).all()
-    assert len(owned) == teams.MAX_OWNED_TEAMS
+    assert len(owned) == 3

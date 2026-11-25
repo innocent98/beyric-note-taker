@@ -40,18 +40,17 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import placement
+from app import calendar_arbitration, placement, workspace_prefs
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
-from app.gcal_sync import DEFAULT_USER_SETTINGS
-from app.models import CalendarEvent, ScheduledJoin, User, UserSettings
+from app.models import CalendarEvent, ScheduledJoin, User
 
 logger = logging.getLogger("app.organizer_bot")
 
 # Two calendars hold "the same event" when the meeting code is the same and the starts are this
 # close. A recurring series or a personal Zoom room reuses one code for many meetings, so the code
 # alone is not enough; a moved copy (an invite updated for one person) still lines up.
-SAME_EVENT_START_TOLERANCE = timedelta(minutes=5)
+SAME_EVENT_START_TOLERANCE = calendar_arbitration.SAME_EVENT_START_TOLERANCE
 # The organizer's join is ahead of its bot in these states.
 BEFORE_THE_BOT = ("scheduled", "dispatching", "no_capacity")
 # Read this many candidate organizers at most (one is normal; more only when the same code is
@@ -125,7 +124,7 @@ def _can_place(
         return False
     if not connection_ok(other):
         return False
-    prefs = session.get(UserSettings, other.user_id) or DEFAULT_USER_SETTINGS
+    prefs = workspace_prefs.for_user(session, other.user_id, other.team_id)
     decision = will_join(
         event,
         event.override,

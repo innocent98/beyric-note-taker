@@ -59,7 +59,9 @@ from app.models import (
     Notification,
     SkribbySegmentEvidence,
     Task,
+    Team,
     TeamInvite,
+    TeamMember,
     Template,
     UsageEntry,
     User,
@@ -169,16 +171,27 @@ def _give_back_meetings_of_doomed_teams(
             Meeting.owner_team_id.in_(doomed), Meeting.id.not_in(deleted_meeting_ids)
         )
     ):
-        recorder = session.get(User, meeting.owner_user_id)
-        meeting.owner_team_id = None
-        if recorder is not None and recorder.status != "deleted":
-            teams.rehome_tasks(
-                session, meeting, target=teams.ensure_personal_team(session, recorder)
-            )
-            # Flag on: its series row goes with the team (the foreign key would null it), so it
-            # follows to its recorder's personal row first.
-            series.follow_meeting(session, meeting, actor=series.SYSTEM)
+        give_back_meeting(session, meeting)
     session.flush()
+
+
+def give_back_meeting(session: Session, meeting: Meeting) -> None:
+    """A team that goes gives a meeting moved to it back to its recorder: private again, filed in
+    their personal workspace, the tasks and date proposals read from it re-filed there too. A
+    recorder whose account is gone has no one to return it to: only `owner_team_id` is cleared
+    (the caller deletes the meeting, `team_delete.delete_team`, or the foreign key does it with the
+    team). In the caller's transaction, no commit."""
+    recorder = session.get(User, meeting.owner_user_id)
+    meeting.owner_team_id = None
+    if recorder is not None and recorder.status != "deleted":
+        home = teams.ensure_personal_team(session, recorder)
+        meeting.workspace_team_id = home.id  # filed back in their personal workspace
+        meeting.shared_team_id = None
+        teams.rehome_tasks(session, meeting, target=home)
+        teams.refile_notifications(session, [meeting.id])
+        # Flag on: its series row goes with the team (the foreign key would null it), so it
+        # follows to its recorder's personal row first.
+        series.follow_meeting(session, meeting, actor=series.SYSTEM)
 
 
 def erase_account_row(session: Session, user: User, now: datetime) -> None:
@@ -257,6 +270,7 @@ def purge_user(
     # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned
     # by the foreign key.
     session.execute(delete(Task).where(Task.created_by_user_id == user_id, Task.source == "manual"))
+    _hand_workspace_lists_on(session, user_id)
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id == user_id))
     # A template a kept meeting was written with stays, taken out of use (`deleted_at`): the
     # meeting still names it. Every other template goes.
@@ -288,6 +302,46 @@ def purge_user(
     else:
         session.execute(delete(User).where(User.id == user_id))
     session.commit()
+
+
+def _hand_workspace_lists_on(session: Session, user_id: int) -> None:
+    """The templates and terms a person wrote in a team workspace that outlives them are the
+    workspace's, not theirs (workspaces design, section 3): they pass to the workspace's owner, or,
+    when the person is that owner, to the member who joined first, before the person's own rows are
+    cleared. A workspace that goes with them (nobody else in it) is left alone: `teams.remove_users`
+    decides what stays of it."""
+    doomed = set(teams.doomed_teams(session, user_id))
+    in_workspaces = set(
+        session.scalars(
+            select(Template.team_id)
+            .join(Team, Team.id == Template.team_id)
+            .where(Template.owner_user_id == user_id, Team.is_personal.is_(False))
+        )
+    ) | set(
+        session.scalars(
+            select(VocabularyTerm.team_id)
+            .join(Team, Team.id == VocabularyTerm.team_id)
+            .where(VocabularyTerm.owner_user_id == user_id, Team.is_personal.is_(False))
+        )
+    )
+    for team_id in in_workspaces - doomed:
+        team = session.get(Team, team_id)
+        heir = team.owner_user_id if team.owner_user_id != user_id else None
+        if heir is None:
+            heir = session.scalar(
+                select(TeamMember.user_id)
+                .where(TeamMember.team_id == team_id, TeamMember.user_id != user_id)
+                .order_by(TeamMember.joined_at, TeamMember.id)
+                .limit(1)
+            )
+        if heir is None:
+            continue
+        for model in (Template, VocabularyTerm):
+            session.execute(
+                update(model)
+                .where(model.owner_user_id == user_id, model.team_id == team_id)
+                .values(owner_user_id=heir)
+            )
 
 
 def _give_up(session: Session, user: User, now: datetime) -> None:

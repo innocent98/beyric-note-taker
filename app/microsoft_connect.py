@@ -57,6 +57,7 @@ from app import (
     google_signin,
     graph_http,
     microsoft_alerts,
+    teams,
     tokens,
     vault,
 )
@@ -74,6 +75,8 @@ from app.calendar_connect import (
     _result,
     _safe_return_to,
     _take_flow,
+    default_workspace_id,
+    landing_team,
     other_live_calendar,
     run_disconnect_hooks,
 )
@@ -87,7 +90,7 @@ from app.microsoft_oauth import (
     TenantNotAllowed,
     has_calendar_scope,
 )
-from app.models import CalendarConnection, OAuthFlow, User
+from app.models import CalendarConnection, OAuthFlow, Team, User
 from app.vault import Secret
 
 logger = logging.getLogger(__name__)
@@ -107,8 +110,11 @@ _HOST = re.compile(r"(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2
 _ERROR_CODE = re.compile(r"[A-Za-z0-9_]{1,80}")
 
 
-def other_providers_calendar(session: Session, user: User) -> CalendarConnection | None:
-    return other_live_calendar(session, user.id, PROVIDER)
+def other_providers_calendar(
+    session: Session, user: User, team_id: int
+) -> CalendarConnection | None:
+    """The person's live calendar of another provider IN THIS WORKSPACE, if any."""
+    return other_live_calendar(session, user.id, PROVIDER, team_id)
 
 
 # ---- starting ----
@@ -121,12 +127,16 @@ def start_connect(
     *,
     microsoft: MicrosoftOAuth,
     now: datetime,
+    team_id: int | None = None,
 ) -> tuple[str, str]:
-    """Store a new flow for `user` and return (Microsoft's consent URL, state). Commits. Raises
-    `AlreadyConnected` when another provider's calendar is connected (one calendar at a time) and
-    `ConnectUnavailable` when no encryption key can be used (refused before Microsoft is
-    involved, so nobody consents to something we could not keep)."""
-    if other_providers_calendar(session, user) is not None:
+    """Store a new flow for `user` and return (Microsoft's consent URL, state). Commits. `team_id`
+    is the workspace the connection will belong to (the caller has checked the person is in it);
+    none means their default workspace. Raises `AlreadyConnected` when another provider's calendar
+    is connected in this workspace (one calendar at a time per workspace) and `ConnectUnavailable`
+    when no encryption key can be used (refused before Microsoft is involved, so nobody consents to
+    something we could not keep)."""
+    team_id = default_workspace_id(session, user) if team_id is None else team_id
+    if other_providers_calendar(session, user, team_id) is not None:
         raise AlreadyConnected
     try:
         vault.encrypt("probe", purpose="ms_refresh_token", owner=user.id)
@@ -140,6 +150,7 @@ def start_connect(
             purpose=PURPOSES["calendar"],
             provider=PROVIDER,
             user_id=user.id,
+            team_id=team_id,
             code_verifier=verifier,
             nonce=nonce,
             return_to=_safe_return_to(return_to),
@@ -275,31 +286,35 @@ def finish_connect(
     if not google_signin.flow_cookie_matches(flow_cookie, state):
         return _failure("microsoft_failed")
     back = flow.return_to or "/settings"
+    team_id = flow.team_id if flow.team_id is not None else default_workspace_id(session, user)
+    team = landing_team(session, user.id, team_id)
     if error is not None:
         return _failure(
-            "microsoft_denied" if error == "access_denied" else "microsoft_failed", back
+            "microsoft_denied" if error == "access_denied" else "microsoft_failed", back, team
         )
     if not code:
-        return _failure("microsoft_failed", back)
+        return _failure("microsoft_failed", back, team)
+    if teams.membership(session, user.id, team_id) is None:
+        return _failure("workspace_unavailable", back, team)  # left the workspace during consent
     try:
         grant = microsoft.exchange_connect(
             code=code, code_verifier=flow.code_verifier, nonce=flow.nonce, now=now
         )
     except TenantNotAllowed:
-        return _failure("tenant_not_allowed", back)
+        return _failure("tenant_not_allowed", back, team)
     except ClientMisconfigured as exc:
         if exc.secret_expired:
             microsoft_alerts.secret_expired(now)  # our own secret, not the person's doing
-        return _failure("microsoft_failed", back)
+        return _failure("microsoft_failed", back, team)
     except MicrosoftError:
-        return _failure("microsoft_failed", back)
+        return _failure("microsoft_failed", back, team)
     if not has_calendar_scope(grant.scopes) or grant.refresh_token is None:
         # No refresh token means `offline_access` was not granted: the connection could not last.
-        return _failure("scope_missing", back)
+        return _failure("scope_missing", back, team)
     transport = microsoft.transport
     problem = probe_calendar(grant.access_token, now, transport)
     if problem is not None:
-        return _failure(problem, back)
+        return _failure(problem, back, team)
     label = account_label(grant.access_token, grant, transport)
     domains = (
         tenant_domains(grant.access_token, transport)
@@ -307,35 +322,50 @@ def finish_connect(
         else None
     )
     released: list[ReleasedConnection] = []
-    problem = _store(session, user, grant, label, domains, now, released)
+    problem = _store(session, user, team_id, grant, label, domains, now, released)
     if problem is not None:
         session.rollback()
-        return _failure(problem, back)
+        return _failure(problem, back, team)
     for old in released:  # the old identity's access: nothing to revoke at Microsoft, only hooks
         run_disconnect_hooks(session, old, None)
     logger.info("calendar connected for user %s (microsoft)", user.id)
-    return ConnectResult(_result(back, calendar="connected"))
+    return ConnectResult(_result(back, calendar="connected", **team))
 
 
 def _store(
     session: Session,
     user: User,
+    team_id: int,
     grant: Grant,
     label: str,
     domains: str | None,
     now: datetime,
     released: list[ReleasedConnection],
 ) -> str | None:
-    """Write the connection. None on success, else the error code (nothing is committed then)."""
+    """Write the connection of `user` in workspace `team_id`. None on success, else the error code
+    (nothing is committed then)."""
     identity = grant.identity
-    # The user's own row is the lock for "one live calendar at a time": two tabs finishing two
-    # providers at once queue here, and the second sees the first one's committed connection.
+    # The user's own row is the lock for "one live calendar at a time in a workspace": two tabs
+    # finishing two providers at once queue here, and the second sees the first one's committed
+    # connection.
     session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    if other_providers_calendar(session, user) is not None:
+    # After the user's row (the order every other writer takes them in; the foreign key of a
+    # competing insert shares the team row, so an exclusive lock here would deadlock with it): the
+    # workspace is locked SHARED, which waits for a `teams.leave` in flight (it locks the team
+    # exclusively), and the membership is read again. A leave that committed while the code was
+    # being exchanged must not leave a connection in a workspace the person is no longer in.
+    session.execute(select(Team.id).where(Team.id == team_id).with_for_update(read=True))
+    if teams.membership(session, user.id, team_id) is None:
+        return "workspace_unavailable"
+    if other_providers_calendar(session, user, team_id) is not None:
         return "already_connected"
     conn = session.scalars(
         select(CalendarConnection)
-        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == PROVIDER)
+        .where(
+            CalendarConnection.user_id == user.id,
+            CalendarConnection.team_id == team_id,
+            CalendarConnection.provider == PROVIDER,
+        )
         .with_for_update()
     ).first()
     same_account = (
@@ -356,7 +386,7 @@ def _store(
     except vault.VaultError:
         return "microsoft_failed"
     if conn is None:
-        conn = CalendarConnection(user_id=user.id, provider=PROVIDER)
+        conn = CalendarConnection(user_id=user.id, team_id=team_id, provider=PROVIDER)
         session.add(conn)
     elif not same_account and conn.account_subject is not None:
         released.append(_drop_old_account(session, conn))

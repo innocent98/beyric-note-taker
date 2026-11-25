@@ -1,0 +1,22 @@
+{
+  "note": "Pat is still in X: 409 `team_has_members`, nothing is deleted.",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/teams/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "team_has_members",
+        "message": "Other people are still in this team. Remove them first: you can delete it once you are its only member."
+      }
+    }
+  }
+}

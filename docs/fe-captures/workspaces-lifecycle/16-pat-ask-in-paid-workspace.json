@@ -1,0 +1,24 @@
+{
+  "note": "Pat is on Free but Ada, who owns X, has a plan: Ask passes (the free 'my tasks' answer sits behind the same gate, so no model is called).",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What are my open tasks?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks",
+      "lead": "You have no open tasks assigned to you.",
+      "points": []
+    }
+  }
+}

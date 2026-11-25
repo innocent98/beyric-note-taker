@@ -1,0 +1,31 @@
+{
+  "note": "The personal workspace's cards.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "name": "Weekly planning",
+          "cadence": "Recurring",
+          "next_starts_at": "2026-11-25T11:00:00Z",
+          "next_text": "Wed 25 Nov, 11:00"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "note": "In his personal workspace the same call lists nothing: a share belongs to the workspace it was made for.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents?shared=true",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "documents": []
+    }
+  }
+}

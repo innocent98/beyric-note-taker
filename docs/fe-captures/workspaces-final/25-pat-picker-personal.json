@@ -1,0 +1,33 @@
+{
+  "note": "In his personal workspace: only his own call, none of X's.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2020-01-01",
+      "to_day": "2099-12-31"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings": [
+        {
+          "id": 3,
+          "title": "Pat's own call",
+          "day": "2026-11-25"
+        }
+      ],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

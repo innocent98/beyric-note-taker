@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app import sprints, teams
-from app.models import Project, Sprint, Task, Team
+from app import teams
+from app.models import Project, Sprint, Task
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     Api,
     anon,
@@ -449,20 +449,6 @@ def test_deleting_a_project_with_its_own_length_keeps_its_tasks_in_the_teams_spr
 
 
 # ---- team changes ----
-
-
-def test_joining_another_team_puts_the_tasks_in_its_backlog(session, team, owner, private=None):
-    other = Team(owner_user_id=owner.id)
-    session.add(other)
-    session.flush()
-    current, _ = sprints.ensure_series(session, team, None, TODAY)
-    task = Task(team_id=team.id, title="t", source="manual", sprint_id=current.id, carried=True)
-    session.add(task)
-    session.flush()
-    teams.move_team_content(session, team.id, other.id)
-    session.flush()
-    session.refresh(task)
-    assert (task.team_id, task.sprint_id, task.carried) == (other.id, None, False)
 
 
 def test_a_project_row_is_untouched_by_listing_sprints(api, session, team):

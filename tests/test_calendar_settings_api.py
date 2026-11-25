@@ -11,6 +11,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
+from app import teams, workspace_prefs
 from app.models import CalendarEvent, ScheduledJoin, Template, UserSettings
 from tests import test_calendar_connect as cc
 from tests import test_web as tw
@@ -70,22 +71,23 @@ def add_join(session, event: CalendarEvent, state="scheduled", **fields) -> Sche
     return join
 
 
-def stored_rule(session, user) -> str | None:
+def stored_prefs(session, user):
+    """The person's settings in the workspace their calendar lives in (the default one here): the
+    calendar settings are per person per workspace (`workspace_prefs`)."""
     session.expire_all()
-    row = session.get(UserSettings, user.id)
-    return row.auto_join_rule if row else None
+    return workspace_prefs.for_user(session, user.id, teams.ensure_team(session, user).id)
+
+
+def stored_rule(session, user) -> str | None:
+    return stored_prefs(session, user).auto_join_rule
 
 
 def stored_box(session, user) -> bool | None:
-    session.expire_all()
-    row = session.get(UserSettings, user.id)
-    return row.join_unanswered if row else None
+    return stored_prefs(session, user).join_unanswered
 
 
 def stored_skip(session, user) -> bool | None:
-    session.expire_all()
-    row = session.get(UserSettings, user.id)
-    return row.skip_one_on_ones if row else None
+    return stored_prefs(session, user).skip_one_on_ones
 
 
 def stored_override(session, event) -> bool | None:
@@ -212,8 +214,7 @@ def test_null_puts_the_template_back_to_the_default(web, session, owner, linked)
     response = web.put(SETTINGS_URL, {"calendar_template_id": None})
     assert response.status_code == 200, response.text
     assert response.json()["calendar_template_id"] is None
-    session.expire_all()
-    assert session.get(UserSettings, owner.id).calendar_template_id is None
+    assert stored_prefs(session, owner).calendar_template_id is None
 
 
 def test_another_users_template_is_refused_and_nothing_is_stored(
