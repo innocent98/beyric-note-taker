@@ -110,6 +110,9 @@ TABLE: dict[tuple[str, str], Transition] = {
     (ACTIVE, REFUNDED): _t(ENDED),
     # --- past_due: the 3 days of grace. Change plan and resume are refused (not in the table).
     (PAST_DUE, CHARGE_BLOCKED): _t(PAST_DUE),  # the grace is extended by the caller, with a cap
+    # The first real failure of a row a block (`CHARGE_BLOCKED`) put in the grace while attempt 0
+    # was still to come: the grace is already open, so only the mail and the next attempt follow.
+    (PAST_DUE, CHARGE_FAILED_0): _t(PAST_DUE, SCHEDULE_NEXT_ATTEMPT, NOTIFY_FAILED),
     (PAST_DUE, CHARGE_FAILED_1): _t(PAST_DUE, SCHEDULE_NEXT_ATTEMPT),
     (PAST_DUE, CHARGE_FAILED_2): _t(PAST_DUE, STOP_ATTEMPTS, NOTIFY_LAST_DAY),
     (PAST_DUE, PAYMENT_SUCCEEDED): _t(ACTIVE, START_PERIOD, EXPIRE_LEFTOVER),

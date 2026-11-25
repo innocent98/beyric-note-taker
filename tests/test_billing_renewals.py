@@ -1390,12 +1390,46 @@ def test_the_extension_for_a_block_has_a_cap_and_then_the_plan_lapses_as_told(
         tick(session, due + timedelta(hours=step, seconds=7))
     assert live(session, ada).status == "past_due"  # still inside grace + the cap (3 + 7 days)
     assert notices(session, ada, "billing.lapsed") == []
+    # the last day of the extension is announced with the existing last-day notice, once
+    assert len(notices(session, ada, "billing.last_day")) == 1
 
     tick(session, due + timedelta(days=10, hours=1))
 
     assert live(session, ada) is None  # lapsed, the cap reached
     assert notices(session, ada, "billing.lapsed")
     assert notices(session, ada, "billing.failed") == []  # never told "your payment failed"
+
+
+@pytest.mark.parametrize("then", ["failed", "pending"])  # a real decline, a 3-D Secure page
+def test_blocked_at_the_due_moment_and_then_really_failing_runs_the_whole_dunning(
+    session, ada, admin, providers, bought, then
+):
+    """Third review: the block put the row in `past_due` with attempt 0 still to come. The first
+    real failure must send the mail, schedule day 1 and day 2, send the last-day notice, and the
+    plan must lapse at the normal moment: the machine must have an answer for it."""
+    due = bought
+    providers.usd.charge_outcome = "blocked"
+    tick(session, due + timedelta(seconds=7))
+    assert live(session, ada).status == "past_due"
+    assert notices(session, ada, "billing.failed") == []
+
+    providers.usd.charge_outcome = then
+    tick(session, due + timedelta(hours=1))  # the held charge is tried again and really fails
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 1)
+    assert len(notices(session, ada, "billing.failed")) == 1
+    assert sub.next_charge_at == due + DAY  # the day-1 retry
+
+    providers.usd.charge_outcome = "failed"
+    tick(session, due + DAY + timedelta(seconds=7))
+    assert live(session, ada).retry_count == 2
+    tick(session, due + 2 * DAY + timedelta(seconds=7))
+    sub = live(session, ada)
+    assert (sub.retry_count, sub.next_charge_at) == (3, None)
+    assert len(notices(session, ada, "billing.last_day")) == 1
+
+    tick(session, due + timedelta(hours=73))
+    assert live(session, ada) is None  # lapsed at the normal moment
 
 
 def test_the_blocked_alert_is_sent_once_every_six_hours_not_every_pass(

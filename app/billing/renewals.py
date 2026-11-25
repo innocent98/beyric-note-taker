@@ -36,11 +36,14 @@ order matters, and money is only ever moved by a row we made first:
   (`NothingMoved`: a 4xx, an input check) and holds nothing under our reference: the attempt FAILED
   at once (`_charge_refused`: payment `failed`, the clock moves);
 - the call was refused for a reason that is ours or the provider's, not the person's
-  (`ChargeBlocked`: our key missing or refused, a rate limit): NOT their failure. The payment is
-  closed (`failed`, with no slot), the status machine does not move (no grace, no mail, no retry
-  spent), the admins are told, and the charge is held back `BLOCKED_RETRY` (`next_charge_at`)
-  until a hold would run past the end of the grace: then it counts like any other failed attempt
-  and the ordinary lapse follows (a broken key never holds a plan `active` for ever);
+  (`ChargeBlocked`: our key missing, refused or restricted, a rate limit): NOT their failure. The
+  payment is closed (`failed`, no slot, tagged `blocked-<reference>`), the grace opens for an
+  `active` plan (`CHARGE_BLOCKED`) with no mail and no retry spent, the grace is extended so the
+  person has `BLOCKED_GRACE` after the last block (never more than `BLOCKED_GRACE_CAP` past its
+  normal end), the charge is held back `BLOCKED_RETRY`, and the admins are told. The first REAL
+  failure afterwards is an ordinary attempt (its mail, its retry slots). The last day of the
+  extension is announced with the usual last-day notice, and past the cap the ordinary lapse
+  comes: the code never counts a block as a failed attempt, it only holds and extends;
 - the call got no answer and the lookup by our reference cannot find it, or the provider keeps
   saying `pending` with no page for the payer: the attempt waits `UNRESOLVED_AFTER`, then COUNTS as
   a failed attempt for the clock only (`_note_unresolved` tells the admins; grace, mails, the retry
@@ -502,6 +505,12 @@ def _hold_for_block(session: Session, sub: Subscription, cycle: datetime, now: d
     if sub.grace_ends_at is None or wanted > sub.grace_ends_at:
         _set_grace_end(session, sub, wanted)
     sub.next_charge_at = now + BLOCKED_RETRY
+    if now + BLOCKED_GRACE >= ceiling:
+        # The last day of the extension: the person is told, with the existing last-day notice
+        # (once per period: the same dedupe key as the day-2 failure's), before the plan can lapse.
+        _notify(
+            session, sub, "billing.last_day", "Last day to pay for your plan", LAST_DAY_BODY, cycle
+        )
 
 
 def _note_unresolved(session: Session, payment: Payment, why: str, now: datetime) -> bool:

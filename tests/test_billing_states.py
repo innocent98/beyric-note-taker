@@ -53,6 +53,10 @@ EXPECTED = {
     (s.ACTIVE, s.REFUNDED): (s.ENDED, set()),
     (s.ACTIVE, s.CHARGE_BLOCKED): (s.PAST_DUE, {s.OPEN_GRACE}),  # our key, not the person's failure
     (s.PAST_DUE, s.CHARGE_BLOCKED): (s.PAST_DUE, set()),
+    (s.PAST_DUE, s.CHARGE_FAILED_0): (
+        s.PAST_DUE,
+        {s.SCHEDULE_NEXT_ATTEMPT, s.NOTIFY_FAILED},  # the first real failure after a block
+    ),
     (s.PAST_DUE, s.CHARGE_FAILED_1): (s.PAST_DUE, {s.SCHEDULE_NEXT_ATTEMPT}),
     (s.PAST_DUE, s.CHARGE_FAILED_2): (s.PAST_DUE, {s.STOP_ATTEMPTS, s.NOTIFY_LAST_DAY}),
     (s.PAST_DUE, s.PAYMENT_SUCCEEDED): (s.ACTIVE, {s.START_PERIOD, s.EXPIRE_LEFTOVER}),
@@ -268,3 +272,21 @@ def test_an_active_subscription_past_its_end_waits_for_a_charge_held_back_until_
     assert s.due_action(held, D + timedelta(minutes=1)).kind == s.NONE
     assert s.due_action(held, D + timedelta(hours=1)) == s.Due(s.CHARGE, 0)
     assert s.due_action(snap(), D + timedelta(minutes=1)) == s.Due(s.CHARGE, 0)  # nothing held
+
+
+def test_every_attempt_a_block_can_leave_a_row_waiting_for_has_a_failure_in_the_table():
+    """A block spends no retry, so a `past_due` row can wait for ANY attempt 0, 1 or 2 (and an
+    `active` one for attempt 0): whichever it is, its real failure must be an event the machine
+    answers, or the retries, the mail and the last-day notice are lost (third review)."""
+    for attempt in range(s.LAST_ATTEMPT + 1):
+        got = s.apply(s.PAST_DUE, s.failed_event(attempt))
+        assert got is not None and got.status == s.PAST_DUE, attempt
+    assert s.apply(s.ACTIVE, s.failed_event(0)) is not None
+    first_after_block = s.apply(s.PAST_DUE, s.CHARGE_FAILED_0)
+    assert s.NOTIFY_FAILED in first_after_block.effects  # the person hears of it now
+    assert s.SCHEDULE_NEXT_ATTEMPT in first_after_block.effects
+    assert s.OPEN_GRACE not in first_after_block.effects  # the grace is already open
+    # and a block leaves a `past_due` row where `due_action` asks for the attempt it spared
+    for retry in range(s.LAST_ATTEMPT + 1):
+        row = s.Snapshot(s.PAST_DUE, D, next_charge_at=D, retry_count=retry)
+        assert s.due_action(row, D + timedelta(hours=1)) == s.Due(s.CHARGE, retry)
