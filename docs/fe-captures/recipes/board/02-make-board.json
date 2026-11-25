@@ -1,0 +1,50 @@
+{
+  "note": "Make a board: the same `POST /api/documents` as any draft, with the `board` recipe. 202, `output_type: \"board\"`, `blocks: []` until the worker has written it. MODEL FAKED (slow, so the next call sees `writing`).",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "board",
+      "meeting_ids": [
+        1
+      ]
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 1,
+      "title": "Board",
+      "output_type": "board",
+      "recipe_key": "board",
+      "recipe_id": null,
+      "status": "writing",
+      "edited": false,
+      "meeting_ids": [
+        1
+      ],
+      "created_at": "2026-11-24T19:28:05.663315Z",
+      "updated_at": "2026-11-24T19:28:05.663315Z",
+      "blocks": [],
+      "checks": {
+        "blanks": [],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null,
+      "options": {},
+      "use_brief": false
+    }
+  }
+}

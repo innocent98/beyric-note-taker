@@ -1,0 +1,36 @@
+{
+  "note": "NOT an HTTP exchange: slice S2's `GET /api/documents/{id}/export?format=pdf|docx` is not on this branch. This is `board.to_notes_document` (columns as sections, cards as bullets with kind and owner) rendered by the existing `export.build_file`: what that route will hand back for a board once it calls it.",
+  "content": {
+    "sections": [
+      {
+        "heading": "Pricing and start",
+        "blocks": [
+          "list"
+        ]
+      },
+      {
+        "heading": "Do next",
+        "blocks": [
+          "list"
+        ]
+      },
+      {
+        "heading": "Open questions",
+        "blocks": [
+          "list"
+        ]
+      },
+      {
+        "heading": "Parked",
+        "blocks": [
+          "list"
+        ]
+      }
+    ],
+    "meta": "24 Nov 2026 · 4 columns · 5 cards",
+    "pdf_bytes_start": "%PDF-",
+    "pdf_size_bytes": 12123,
+    "docx_bytes_start": "PK",
+    "docx_size_bytes": 37590
+  }
+}

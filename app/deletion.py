@@ -68,6 +68,7 @@ from app.models import (
     WaitlistEntry,
 )
 from app.pipeline import RECORDING_GRACE, audio_path
+from app.recipes import cleanup as recipe_cleanup
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +251,8 @@ def purge_user(
     session.execute(
         delete(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id.in_(meeting_ids))
     )
+    # Drafts made only from these meetings go with them; other people's cross-meeting drafts stay.
+    recipe_cleanup.delete_drafts_of(session, meeting_ids)
     session.execute(delete(Meeting).where(Meeting.id.in_(meeting_ids)))  # tasks cascade
     # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned
     # by the foreign key.

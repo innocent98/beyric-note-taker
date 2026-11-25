@@ -1,0 +1,27 @@
+{
+  "note": "A member cannot save it: 403 `team_forbidden`.",
+  "client": "cal",
+  "request": {
+    "method": "PUT",
+    "path": "/api/briefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Hijacked"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

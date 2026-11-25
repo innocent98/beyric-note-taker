@@ -6,7 +6,18 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
+
+from app.recipes.blocks import Block
+from app.recipes.picker_spec import PickerSpec, left_out_sentence
 
 
 def _utc(value: datetime) -> datetime:
@@ -1437,3 +1448,121 @@ class LinearOut(BaseModel):
     # The Linear team the tasks go to; null when not connected.
     team_name: str | None
     can_manage: bool
+
+
+# ---- meeting recipes: drafts made from meetings (app/api_recipes.py) ----
+
+_DOC_MAX_ID = 2**31 - 1  # ids are Postgres integers (`services.MAX_ID`)
+DocumentStatus = Literal["writing", "ready", "failed"]
+RecipeOutputType = Literal["document", "email", "table", "board"]
+
+
+class DocumentIn(BaseModel):
+    """Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or
+    `recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the
+    choices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10."""
+
+    recipe_key: str | None = Field(default=None, max_length=32)
+    recipe_id: int | None = Field(default=None, ge=1, le=_DOC_MAX_ID)
+    meeting_ids: list[Annotated[int, Field(ge=1, le=_DOC_MAX_ID)]] = Field(
+        min_length=1, max_length=12
+    )
+    options: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=10)
+    use_brief: bool = True
+    # For a recipe that reads several meetings: the choice the person made in the meeting picker
+    # (`POST /api/recipes/picker/resolve`). The server resolves it again only to count the chosen
+    # meetings the caller cannot read, so the draft can say so (`left_out_count`); it never widens
+    # what is read: only `meeting_ids` the caller can read are used. Refused (422
+    # `meetings_invalid`) for a recipe that uses one meeting.
+    picker: PickerSpec | None = None
+
+
+class DocumentPatch(BaseModel):
+    """The edited draft: every block as it now stands, and optionally a new title. A block may
+    keep the sources it has and may not gain new ones."""
+
+    blocks: list[dict]
+    title: str | None = Field(default=None, max_length=200)
+
+
+class BlankOut(BaseModel):
+    block_index: int
+    what: str
+
+
+class FlagOut(BaseModel):
+    block_index: int
+    # The figure as written in the draft.
+    text: str
+    # `figure`: not in the meeting, notes, tasks or brief. `derived`: looks worked out from figures
+    # that are there (a sum, a length of time in another unit): check it.
+    kind: Literal["figure", "derived"]
+
+
+class DocumentChecks(BaseModel):
+    blanks: list[BlankOut]
+    flags: list[FlagOut]
+
+
+class SharedTeam(BaseModel):
+    id: int
+    name: str
+
+
+class DocumentBrief(BaseModel):
+    id: int
+    title: str
+    output_type: RecipeOutputType
+    recipe_key: str | None
+    recipe_id: int | None
+    status: DocumentStatus
+    edited: bool
+    # For a reader of a shared draft: only the meetings THEY may read (never the others' ids).
+    meeting_ids: list[int]
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
+    # "owner" for the creator, "shared" for a teammate reading a draft shared with their team.
+    access: Literal["owner", "shared"] = "owner"
+    # The creator's name for a shared draft ("Former member" once their account is gone); null for
+    # the creator's own drafts.
+    owner_name: str | None = None
+    # The teams the creator shared it with (read only by the creator; empty for a reader).
+    shared_with: list[SharedTeam] = Field(default_factory=list)
+    # The team the draft was made in (the creator's view; null for a reader or a draft made in the
+    # person's own space with no team record). A draft is shared with this team only.
+    team: SharedTeam | None = None
+
+
+class DocumentOut(DocumentBrief):
+    # Empty until `status` is "ready". Each block has a `type`; see `app/recipes/blocks.py`.
+    blocks: list[Block]
+    # Recomputed from the CURRENT blocks every time: blanks (`[need: ...]`) and figures to check.
+    checks: DocumentChecks
+    # True when a meeting's notes or transcript (or the brief) changed after the draft was made.
+    stale: bool
+    # False when none of the draft's meetings can be opened by the caller (deleted, or not theirs).
+    sources_available: bool
+    # How many chosen meetings the caller could not read or that were not ready: left out.
+    left_out_count: int
+    # Only when status is "failed": a short code and a plain sentence to show.
+    failure_code: str | None
+    failure_message: str | None
+    # What the person chose at the Make dialog, so "Regenerate" can ask again for the same thing.
+    options: dict[str, str | int | float | bool]
+    use_brief: bool
+    # False for a reader of a shared draft: edit, share, discard and regenerate are the creator's.
+    can_edit: bool = True
+    # For the creator of a ready draft: a plain sentence saying why Share cannot be used now (made
+    # in the personal space, the creator left its team), else null. Show it and disable Share.
+    share_blocked: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def left_out_message(self) -> str | None:
+        """A plain sentence for `left_out_count` ("2 meetings were left out because ..."); null for
+        none. It never names a meeting."""
+        return left_out_sentence(self.left_out_count)
+
+
+class DocumentList(BaseModel):
+    documents: list[DocumentBrief]

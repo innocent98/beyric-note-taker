@@ -1,0 +1,40 @@
+{
+  "note": "A project: the meetings its tasks come from. Two readable meetings; the third (Ada's private one) is left out and counted. `X-Team-Id` names the active team, as on `GET /api/meetings`.",
+  "client": "daniel",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 2,
+          "title": "Planning",
+          "day": "2026-11-09"
+        },
+        {
+          "id": 1,
+          "title": "Kick-off",
+          "day": "2026-11-02"
+        }
+      ],
+      "left_out_count": 1,
+      "left_out_message": "1 meeting was left out because you cannot read it or it is not ready.",
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

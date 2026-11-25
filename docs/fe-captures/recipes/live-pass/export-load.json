@@ -1,0 +1,284 @@
+{
+  "alone": [
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.62,
+      "bytes": 18230
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18230
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.6,
+      "bytes": 18233
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18233
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18231
+    }
+  ],
+  "alone-docx": [
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.2,
+      "bytes": 38107
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.23,
+      "bytes": 38107
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.18,
+      "bytes": 38107
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    }
+  ],
+  "alone-board-pdf": [
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 0.55,
+      "bytes": 12820
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 0.54,
+      "bytes": 12820
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 0.54,
+      "bytes": 12818
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 0.55,
+      "bytes": 12818
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 0.56,
+      "bytes": 12820
+    }
+  ],
+  "two-at-once-table-and-board-pdf": [
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18229
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 1.41,
+      "bytes": 12820
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18230
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 1.41,
+      "bytes": 12820
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.6,
+      "bytes": 18231
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 1.39,
+      "bytes": 12818
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18231
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 1.38,
+      "bytes": 12820
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.6,
+      "bytes": 18231
+    },
+    {
+      "what": "board-pdf",
+      "status": 200,
+      "seconds": 1.39,
+      "bytes": 12820
+    }
+  ],
+  "two-at-once-same-pdf": [
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.62,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 1.5,
+      "bytes": 18229
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.63,
+      "bytes": 18229
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 1.46,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 1.47,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.61,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 1.47,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 0.63,
+      "bytes": 18231
+    },
+    {
+      "what": "table-pdf",
+      "status": 200,
+      "seconds": 1.47,
+      "bytes": 18229
+    }
+  ],
+  "two-at-once-docx": [
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.2,
+      "bytes": 38107
+    },
+    {
+      "what": "board-docx",
+      "status": 200,
+      "seconds": 0.63,
+      "bytes": 37760
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    },
+    {
+      "what": "board-docx",
+      "status": 200,
+      "seconds": 0.63,
+      "bytes": 37760
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    },
+    {
+      "what": "board-docx",
+      "status": 200,
+      "seconds": 0.64,
+      "bytes": 37760
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    },
+    {
+      "what": "board-docx",
+      "status": 200,
+      "seconds": 0.63,
+      "bytes": 37760
+    },
+    {
+      "what": "table-docx",
+      "status": 200,
+      "seconds": 0.19,
+      "bytes": 38107
+    },
+    {
+      "what": "board-docx",
+      "status": 200,
+      "seconds": 0.62,
+      "bytes": 37760
+    }
+  ]
+}

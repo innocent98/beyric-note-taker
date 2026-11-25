@@ -46,6 +46,8 @@ describe("which calls carry the team", () => {
     "/api/decisions?status=approved",
     "/api/review?state=checked",
     "/api/session",
+    // The meeting picker's preview is a POST that asks about the active team.
+    "/api/recipes/picker/resolve",
   ])("%s is team-scoped", (path) => {
     expect(isTeamScoped(path)).toBe(true);
   });
@@ -56,6 +58,20 @@ describe("which calls carry the team", () => {
     ["DELETE", "/api/session"],
   ])("%s %s is not: only the READ shows a team", (method, path) => {
     expect(isTeamScoped(path, method)).toBe(false);
+  });
+
+  it("asks for a draft in the tab's team (its brief and recipes), and reads or changes one in none", () => {
+    expect(isTeamScoped("/api/documents", "POST")).toBe(true);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(false);
+    expect(isTeamScoped("/api/documents/5", "GET")).toBe(false);
+    expect(isTeamScoped("/api/documents/5", "PATCH")).toBe(false);
+    expect(isTeamScoped("/api/documents/5/export", "GET")).toBe(false);
+  });
+
+  it("shares a draft with the team it was made in (no header), and stops sharing, lists and reads drafts in none", () => {
+    expect(isTeamScoped("/api/documents/5/share", "POST")).toBe(false);
+    expect(isTeamScoped("/api/documents/5/share", "DELETE")).toBe(false);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(false);
   });
 
   it.each([

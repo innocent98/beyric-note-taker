@@ -31,6 +31,128 @@
         "title": "Accepted",
         "type": "object"
       },
+      "AddCard": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "kind": {
+            "default": "note",
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "const": "add_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "column",
+          "text"
+        ],
+        "title": "AddCard",
+        "type": "object"
+      },
+      "AddColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "op": {
+            "const": "add_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "title": {
+            "maxLength": 2000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "title"
+        ],
+        "title": "AddColumn",
+        "type": "object"
+      },
       "AdminDeleting": {
         "properties": {
           "status": {
@@ -750,6 +872,24 @@
         "title": "BadgesOut",
         "type": "object"
       },
+      "BlankOut": {
+        "properties": {
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_index",
+          "what"
+        ],
+        "title": "BlankOut",
+        "type": "object"
+      },
       "BotNameIn": {
         "additionalProperties": false,
         "properties": {
@@ -821,6 +961,102 @@
         "title": "BotNameOut",
         "type": "object"
       },
+      "BriefImported": {
+        "properties": {
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A PDF's page count; null for other files",
+            "title": "Pages"
+          },
+          "text": {
+            "description": "Review and edit it, then save it with `PUT /api/briefs`",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "The file held more than a brief may: the rest is cut",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "truncated",
+          "pages"
+        ],
+        "title": "BriefImported",
+        "type": "object"
+      },
+      "BriefIn": {
+        "properties": {
+          "text": {
+            "description": "The whole brief; an empty text clears it",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BriefIn",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "max_chars": {
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/RecipeTeam",
+            "description": "Whose brief this is: the active team"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who saved it last; null when none was saved",
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "team",
+          "text",
+          "max_chars",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
       "BroughtBack": {
         "description": "What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No\ncard is made by the call itself (a Personal card is made by the next hourly calendar sync; a\nteam's by the next time an owner or admin shares a meeting of it, or their recording is shared\nautomatically).",
         "properties": {
@@ -832,6 +1068,28 @@
           "team"
         ],
         "title": "BroughtBack",
+        "type": "object"
+      },
+      "Bullets": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "type": {
+            "const": "bullets",
+            "default": "bullets",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Bullets",
         "type": "object"
       },
       "CalendarOut": {
@@ -995,6 +1253,48 @@
         "title": "CalendarOut",
         "type": "object"
       },
+      "Card": {
+        "properties": {
+          "kind": {
+            "default": "note",
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Card",
+        "type": "object"
+      },
       "CarriedQuestion": {
         "properties": {
           "can_update": {
@@ -1088,6 +1388,33 @@
           "line"
         ],
         "title": "CiteOut",
+        "type": "object"
+      },
+      "Column": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Card"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "column",
+            "default": "column",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "cards"
+        ],
+        "title": "Column",
         "type": "object"
       },
       "ConnectIn": {
@@ -1461,6 +1788,74 @@
         "title": "DecisionTaskRef",
         "type": "object"
       },
+      "DeleteCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "op": {
+            "const": "delete_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "card"
+        ],
+        "title": "DeleteCard",
+        "type": "object"
+      },
+      "DeleteColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "op": {
+            "const": "delete_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "column"
+        ],
+        "title": "DeleteColumn",
+        "type": "object"
+      },
       "DisconnectOut": {
         "description": "`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when\nnothing was connected. `revoked` is false when the provider could not be asked to remove the\naccess (Google was unreachable, or the stored key could not be read: `reason` is null) or\ncannot be (Microsoft has no way for an app to remove its own access: `reason` is\n`provider_has_no_revoke`). The data is deleted here regardless; tell the person to also\nremove Beyric at myaccount.google.com/permissions (Google) or in their Microsoft account's\napp permissions (Microsoft). `revoked` is true when the provider confirmed, and also when\nthere was nothing left to revoke (a repeat cannot re-check an earlier failure: act on the\nfirst answer).",
         "properties": {
@@ -1526,6 +1921,616 @@
           "name"
         ],
         "title": "DisplayNameOut",
+        "type": "object"
+      },
+      "DocumentBrief": {
+        "properties": {
+          "access": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "shared"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "meeting_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "shared_with": {
+            "items": {
+              "$ref": "#/components/schemas/SharedTeam"
+            },
+            "title": "Shared With",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedTeam"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "output_type",
+          "recipe_key",
+          "recipe_id",
+          "status",
+          "edited",
+          "meeting_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentBrief",
+        "type": "object"
+      },
+      "DocumentChecks": {
+        "properties": {
+          "blanks": {
+            "items": {
+              "$ref": "#/components/schemas/BlankOut"
+            },
+            "title": "Blanks",
+            "type": "array"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/FlagOut"
+            },
+            "title": "Flags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blanks",
+          "flags"
+        ],
+        "title": "DocumentChecks",
+        "type": "object"
+      },
+      "DocumentIn": {
+        "description": "Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or\n`recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the\nchoices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10.",
+        "properties": {
+          "meeting_ids": {
+            "items": {
+              "maximum": 2147483647.0,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "maxProperties": 10,
+            "title": "Options",
+            "type": "object"
+          },
+          "picker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PickerSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "use_brief": {
+            "default": true,
+            "title": "Use Brief",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_ids"
+        ],
+        "title": "DocumentIn",
+        "type": "object"
+      },
+      "DocumentList": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentBrief"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "documents"
+        ],
+        "title": "DocumentList",
+        "type": "object"
+      },
+      "DocumentOut": {
+        "properties": {
+          "access": {
+            "default": "owner",
+            "enum": [
+              "owner",
+              "shared"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "bullets": "#/components/schemas/Bullets",
+                  "column": "#/components/schemas/Column",
+                  "heading": "#/components/schemas/Heading",
+                  "paragraph": "#/components/schemas/Paragraph",
+                  "table": "#/components/schemas/Table"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Heading"
+                },
+                {
+                  "$ref": "#/components/schemas/Paragraph"
+                },
+                {
+                  "$ref": "#/components/schemas/Bullets"
+                },
+                {
+                  "$ref": "#/components/schemas/Table"
+                },
+                {
+                  "$ref": "#/components/schemas/Column"
+                }
+              ]
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "can_edit": {
+            "default": true,
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/DocumentChecks"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "left_out_count": {
+            "title": "Left Out Count",
+            "type": "integer"
+          },
+          "left_out_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A plain sentence for `left_out_count` (\"2 meetings were left out because ...\"); null for\nnone. It never names a meeting.",
+            "readOnly": true,
+            "title": "Left Out Message"
+          },
+          "meeting_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Meeting Ids",
+            "type": "array"
+          },
+          "options": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Options",
+            "type": "object"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "share_blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Blocked"
+          },
+          "shared_with": {
+            "items": {
+              "$ref": "#/components/schemas/SharedTeam"
+            },
+            "title": "Shared With",
+            "type": "array"
+          },
+          "sources_available": {
+            "title": "Sources Available",
+            "type": "boolean"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedTeam"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "use_brief": {
+            "title": "Use Brief",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "output_type",
+          "recipe_key",
+          "recipe_id",
+          "status",
+          "edited",
+          "meeting_ids",
+          "created_at",
+          "updated_at",
+          "blocks",
+          "checks",
+          "stale",
+          "sources_available",
+          "left_out_count",
+          "failure_code",
+          "failure_message",
+          "options",
+          "use_brief",
+          "left_out_message"
+        ],
+        "title": "DocumentOut",
+        "type": "object"
+      },
+      "DocumentPatch": {
+        "description": "The edited draft: every block as it now stands, and optionally a new title. A block may\nkeep the sources it has and may not gain new ones.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "DocumentPatch",
+        "type": "object"
+      },
+      "EditCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "decision",
+                  "action",
+                  "question",
+                  "note"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "op": {
+            "const": "edit_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "op",
+          "card"
+        ],
+        "title": "EditCard",
         "type": "object"
       },
       "EmailIn": {
@@ -1652,6 +2657,59 @@
           "message"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "FlagOut": {
+        "properties": {
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "figure",
+              "derived"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_index",
+          "text",
+          "kind"
+        ],
+        "title": "FlagOut",
+        "type": "object"
+      },
+      "Heading": {
+        "properties": {
+          "level": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "heading",
+            "default": "heading",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "text"
+        ],
+        "title": "Heading",
         "type": "object"
       },
       "InvitePreview": {
@@ -1822,6 +2880,26 @@
           "invitees"
         ],
         "title": "InvitesIn",
+        "type": "object"
+      },
+      "Item": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Item",
         "type": "object"
       },
       "LanguagePreferencesIn": {
@@ -2986,6 +4064,54 @@
         "title": "MilestonePatch",
         "type": "object"
       },
+      "MoveCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "index": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "op": {
+            "const": "move_card",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "to_column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "To Column",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "op",
+          "card",
+          "to_column",
+          "index"
+        ],
+        "title": "MoveCard",
+        "type": "object"
+      },
       "MoveRequest": {
         "properties": {
           "team_id": {
@@ -3257,6 +4383,48 @@
         "title": "OptOutOut",
         "type": "object"
       },
+      "OptionDef": {
+        "description": "One choice the Make dialog draws for a recipe. `choices` is empty and `default` null for\nkind `text`.",
+        "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "choice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "OptionDef",
+        "type": "object"
+      },
       "OverrideIn": {
         "additionalProperties": false,
         "description": "The person's switch for one meeting: true joins it, false does not, null clears the switch\nso the rule decides again. The field is required (null must be sent on purpose).",
@@ -3277,6 +4445,32 @@
           "override"
         ],
         "title": "OverrideIn",
+        "type": "object"
+      },
+      "Paragraph": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "paragraph",
+            "default": "paragraph",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Paragraph",
         "type": "object"
       },
       "PasswordChanged": {
@@ -3356,6 +4550,171 @@
           "is_you"
         ],
         "title": "PersonOut",
+        "type": "object"
+      },
+      "PickedMeeting": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "day"
+        ],
+        "title": "PickedMeeting",
+        "type": "object"
+      },
+      "PickerPreview": {
+        "properties": {
+          "capped": {
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "left_out_count": {
+            "title": "Left Out Count",
+            "type": "integer"
+          },
+          "left_out_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left Out Message"
+          },
+          "max_meetings": {
+            "title": "Max Meetings",
+            "type": "integer"
+          },
+          "meetings": {
+            "items": {
+              "$ref": "#/components/schemas/PickedMeeting"
+            },
+            "title": "Meetings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "meetings",
+          "left_out_count",
+          "left_out_message",
+          "capped",
+          "max_meetings"
+        ],
+        "title": "PickerPreview",
+        "type": "object"
+      },
+      "PickerSpec": {
+        "description": "Which meetings to use. Exactly one of: `series_id` (a recurring meeting), `project_id`,\n`sprint_id`, a date range (`from_day` and/or `to_day`, `YYYY-MM-DD`, both days included, in the\ncaller's time zone) or `meeting_ids` (hand-picked). At most 12 are used, newest first; a meeting\nthe caller cannot read is left out and counted.",
+        "properties": {
+          "from_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Day"
+          },
+          "meeting_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 100,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Ids"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
+          },
+          "to_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Day"
+          },
+          "tz": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tz"
+          }
+        },
+        "title": "PickerSpec",
         "type": "object"
       },
       "PilotOut": {
@@ -3709,6 +5068,426 @@
         "title": "QuestionPatch",
         "type": "object"
       },
+      "RecipeIn": {
+        "description": "A new recipe. With `key` (a starter's key) the fields left out are taken from that starter:\nthis is how a starter is copied. Without it, `name` and `instruction` are needed.",
+        "properties": {
+          "instruction": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The starter this is a copy of",
+            "title": "Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/OptionDef"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "output_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "document",
+                  "email",
+                  "table",
+                  "board"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Type"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "one",
+                  "many"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "uses_brief": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uses Brief"
+          },
+          "visibility": {
+            "default": "personal",
+            "description": "`team`: the active team's recipe (owners and admins only)",
+            "enum": [
+              "personal",
+              "team"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "title": "RecipeIn",
+        "type": "object"
+      },
+      "RecipeList": {
+        "properties": {
+          "recipes": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeOut"
+            },
+            "title": "Recipes",
+            "type": "array"
+          },
+          "team": {
+            "$ref": "#/components/schemas/RecipeTeam",
+            "description": "The active team: whose recipes and brief these are"
+          }
+        },
+        "required": [
+          "recipes",
+          "team"
+        ],
+        "title": "RecipeList",
+        "type": "object"
+      },
+      "RecipeOut": {
+        "properties": {
+          "can_edit": {
+            "description": "False for a starter, and for a team recipe to a member",
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a starter: name it by `key`",
+            "title": "Id"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The starter's key, or the starter a copy came from",
+            "title": "Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OptionDef"
+            },
+            "title": "Options",
+            "type": "object"
+          },
+          "output_type": {
+            "enum": [
+              "document",
+              "email",
+              "table",
+              "board"
+            ],
+            "title": "Output Type",
+            "type": "string"
+          },
+          "pack": {
+            "anyOf": [
+              {
+                "enum": [
+                  "general",
+                  "school"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A starter's pack; null for a recipe someone wrote",
+            "title": "Pack"
+          },
+          "scope": {
+            "enum": [
+              "one",
+              "many"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "starter",
+              "personal",
+              "team"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "uses_brief": {
+            "title": "Uses Brief",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "pack",
+          "source",
+          "name",
+          "instruction",
+          "output_type",
+          "options",
+          "scope",
+          "uses_brief",
+          "can_edit",
+          "updated_at"
+        ],
+        "title": "RecipeOut",
+        "type": "object"
+      },
+      "RecipePatch": {
+        "description": "Change a recipe: only the fields sent change. Who owns it (personal or team) never does.",
+        "properties": {
+          "instruction": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/OptionDef"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "output_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "document",
+                  "email",
+                  "table",
+                  "board"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Type"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "one",
+                  "many"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "uses_brief": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uses Brief"
+          }
+        },
+        "title": "RecipePatch",
+        "type": "object"
+      },
+      "RecipeTeam": {
+        "properties": {
+          "can_manage": {
+            "description": "Owner or admin of the team: may write its recipes",
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal",
+          "can_manage"
+        ],
+        "title": "RecipeTeam",
+        "type": "object"
+      },
+      "Recolour": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Card",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "action",
+              "question",
+              "note"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "const": "recolour",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "op",
+          "card",
+          "kind"
+        ],
+        "title": "Recolour",
+        "type": "object"
+      },
       "RecordingAckOut": {
         "properties": {
           "recording_acknowledged": {
@@ -3870,6 +5649,46 @@
           "removed_by"
         ],
         "title": "RemovedRecurring",
+        "type": "object"
+      },
+      "RenameColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Column",
+            "type": "integer"
+          },
+          "op": {
+            "const": "rename_column",
+            "title": "Op",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "title": {
+            "maxLength": 2000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "column",
+          "title"
+        ],
+        "title": "RenameColumn",
         "type": "object"
       },
       "ResetIn": {
@@ -4863,6 +6682,24 @@
         "title": "ShareRequest",
         "type": "object"
       },
+      "SharedTeam": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SharedTeam",
+        "type": "object"
+      },
       "SignUp": {
         "additionalProperties": false,
         "properties": {
@@ -4980,6 +6817,71 @@
           "can_manage"
         ],
         "title": "SlackOut",
+        "type": "object"
+      },
+      "Source": {
+        "description": "Where a piece of text was drafted from. `quote` is the first words of the line, so a line\nthat moved can be found again (`ask._quote_row`); `ref` is a decision or task id. `hidden` is\nnever stored and never written by the model: `recipes.visibility.redact` puts it in the place\nof a source the reader of a shared draft may not open (nothing else is set on it).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "line",
+              "meeting",
+              "decision",
+              "task",
+              "hidden"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "meeting_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Id"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "Source",
         "type": "object"
       },
       "SpeakerRename": {
@@ -5181,6 +7083,39 @@
           "tasks_done"
         ],
         "title": "SprintOut",
+        "type": "object"
+      },
+      "Table": {
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/Item"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "type": {
+            "const": "table",
+            "default": "table",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "title": "Table",
         "type": "object"
       },
       "TaskCreate": {
@@ -8111,6 +10046,275 @@
         ]
       }
     },
+    "/api/briefs": {
+      "get": {
+        "description": "The active team's brief (`text` is empty when none was saved). Members read it too: its\nprices and terms appear in the drafts they make. `X-Team-Id` names the team (404 for one the\ncaller is not on).",
+        "operationId": "read_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Brief",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "put": {
+        "description": "Replace the active team's brief (owners and admins; 403 `team_forbidden` for a member).\n422 `brief_too_long` over `max_chars`. The text is data: stored as typed, minus control\ncharacters, and shown to the model only inside a fence.",
+        "operationId": "write_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Brief",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/briefs/import": {
+      "post": {
+        "description": "Read a `.docx`, `.pdf`, `.txt` or `.md` file (multipart, field `file`) into text for the\nbrief. The text comes back for the person to review and edit: **nothing is saved** and the file\nis never stored (not on disk, not in the database). Owners and admins only (the people who can\nsave a brief). The text is data: if saved, the model sees it inside a fence.",
+        "operationId": "import_brief",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefImported"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`too_big`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`file_missing`, `unsupported`, `too_many_pages`, `no_text_layer` (a scanned PDF) or `unreadable`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`import_busy`: try again in a moment"
+          }
+        },
+        "summary": "Import Brief",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
     "/api/calendar": {
       "get": {
         "description": "Everything the calendar settings page shows, in one read (no CSRF header needed): whether\nGoogle Calendar is connected, which Google address, the last time it was read, the last\nfailure in plain words, and the next seven days of synced events, each with whether the bot\nwill join it and why not when it will not. Nothing is fetched from Google here: this reads what\nthe sync job last stored. 404 `calendar_unavailable` while the calendar features are off.",
@@ -9010,6 +11214,926 @@
         "summary": "Hide Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/documents": {
+      "get": {
+        "description": "Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts\nteammates shared with a team the caller is in now (never their own; an unshared one, or one of\na team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts\nmade from that meeting (cross-meeting drafts included; a shared draft only when the caller may\nread that meeting). For the next page pass the smallest `id` as `before_id`.",
+        "operationId": "list_documents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "meeting_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Meeting Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "shared",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shared"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Documents",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "description": "Ask for a draft made from a meeting (or several, for a cross-meeting recipe) by a recipe.\nAnswers 202 with `status: \"writing\"`; the worker writes it and the page polls\n`GET /api/documents/{id}`. The team is the `X-Team-Id` header (404 for one the caller is not\nin), else their default team: it decides whose brief and team recipes are used. Asking again\nfor the same recipe, meetings and options while that draft is still being written returns\nthat draft and starts nothing. Regenerating is a new request and a new draft.",
+        "operationId": "create_document",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Queued (or the draft just asked for is returned): poll `GET` every 2 s."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token; or `plan_inactive`: making documents needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe, team or meeting (a meeting the caller cannot read too)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the meeting's notes are not written"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`recipe_invalid` (name exactly one recipe) or `meetings_invalid`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`recipe_limit`: 20 drafts a day; failed ones and regenerations count"
+          }
+        },
+        "summary": "Create Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}": {
+      "delete": {
+        "description": "Discard a draft. One still being written is cancelled. If the worker has not picked it up\nyet no model was called, so its place in the day's limit is given back; once the worker has\nstarted it, the call may have been made and still counts.",
+        "operationId": "delete_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "get": {
+        "description": "A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.\n`checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.\nThe creator reads it whole. A teammate reading a draft shared with their team (`access:\n\"shared\"`) gets the text with every source of a meeting they cannot read replaced by\n`{\"kind\": \"hidden\"}`, and `can_edit: false`. 404 for anyone else's draft, and for a shared one\nonce it is unshared or the reader has left the team.",
+        "operationId": "get_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "description": "Save the edited draft: send every block as it now stands. Text is cleaned and bounded as\nat generation; a block keeps the sources it had and cannot gain new ones. Marks the draft\n`edited`. The `checks` in the answer are recomputed from what was saved. Refused while the\ndraft is still `writing` (409 `writing`), for one that `failed` (409 `not_ready`) and for a\nboard (409 `use_board`: `PATCH .../board` has the revision check and the row lock).",
+        "operationId": "edit_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`writing`: the draft is still being written; `not_ready`: it failed; `use_board`: a board is edited through `PATCH .../board`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`blocks_invalid`"
+          }
+        },
+        "summary": "Edit Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/board": {
+      "patch": {
+        "description": "Change a board by ONE operation and answer with the whole draft as it now stands (with the\nnew `updated_at`, the `revision` for the next call). `card` numbers cards counting through the\ncolumns from 0; `index` is a place inside the target column. Marks the draft `edited`. Text is\nmade plain and cut to size as at generation; a card keeps its sources when moved or edited and\na new card has none.",
+        "operationId": "edit_board",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "add_card": "#/components/schemas/AddCard",
+                    "add_column": "#/components/schemas/AddColumn",
+                    "delete_card": "#/components/schemas/DeleteCard",
+                    "delete_column": "#/components/schemas/DeleteColumn",
+                    "edit_card": "#/components/schemas/EditCard",
+                    "move_card": "#/components/schemas/MoveCard",
+                    "recolour": "#/components/schemas/Recolour",
+                    "rename_column": "#/components/schemas/RenameColumn"
+                  },
+                  "propertyName": "op"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MoveCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RenameColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteColumn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EditCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteCard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Recolour"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such draft, or not the caller's"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`stale_board` (the board changed since `revision`, or a column or card named is not there), `writing` (still being written), `not_ready` (it failed), `not_a_board`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`revision_required`, `revision_invalid`, `board_full`, `column_full`, `title_empty`, `card_empty`, `last_column`; or `validation_error` for a body that is not one of the operations"
+          }
+        },
+        "summary": "Edit Board",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/export": {
+      "get": {
+        "description": "The draft as Markdown (`md`), plain text (`txt`), CSV, Excel (`xlsx`), Word (`docx`) or PDF\n(the default), from its current blocks, edits included.\n\n`csv` and `xlsx` need a draft with a table (409 `no_table` without one): the CSV holds the\ntable numbered `table` (the first by default), the Excel file holds every table, one sheet\neach. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run\nas a formula is written with a leading apostrophe. Built when asked and never stored; the file\nname is the draft's title, cleaned.",
+        "operationId": "export_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "pdf",
+              "enum": [
+                "md",
+                "txt",
+                "csv",
+                "xlsx",
+                "docx",
+                "pdf"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "table",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 99,
+              "minimum": 0,
+              "title": "Table",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/csv; charset=utf-8": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file. Built for this request and not stored."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such draft (another person's too)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the draft is still being written or failed; `no_table`: CSV and Excel need a draft with a table (and `table` must name one of them)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_failed`: the file could not be built"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_busy`: another file is being built"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_timeout`: it took too long"
+          }
+        },
+        "summary": "Export Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/share": {
+      "delete": {
+        "description": "Stop sharing the draft with every team. Takes effect at once; asking again changes nothing.\nOnly the creator may.",
+        "operationId": "unshare_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Unshare Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "description": "Share the draft, read-only, with **the team it was made in** (`team` on the draft; never\nanother, whatever `X-Team-Id` says): every current member can then open it and read its text and\ntitle, but not the meetings it was drafted from (a source they cannot read shows as hidden, and\na reader who cannot read every source meeting sees a generic title). Only the creator may;\nasking twice changes nothing. Leaving the team, or `DELETE .../share`, ends access at once.",
+        "operationId": "share_document",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: only a finished draft can be shared; `personal_team`: the draft was made in the creator's own space, so there is no team to share it with; `team_left`: the creator is no longer in the team the draft was made in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Share Document",
+        "tags": [
+          "documents"
         ]
       }
     },
@@ -13584,6 +16708,413 @@
         "summary": "Patch Question",
         "tags": [
           "series"
+        ]
+      }
+    },
+    "/api/recipes": {
+      "get": {
+        "description": "The starters (General and School), then the active team's recipes, then the caller's own.\n`X-Team-Id` names the team (404 for one the caller is not on), else their default team.\nArchived recipes are not listed.",
+        "operationId": "list_recipes",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Recipes",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "post": {
+        "description": "Save a recipe: the caller's own, or (`visibility: team`, owners and admins only, 403\n`team_forbidden`) the active team's. Give `key` to copy a starter: whatever you leave out comes\nfrom it. 422 `too_many_recipes` past 100 live ones.",
+        "operationId": "create_recipe",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Create Recipe",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/recipes/picker/resolve": {
+      "post": {
+        "description": "Preview the meetings a cross-meeting recipe would read for this choice: those the caller may\nread, ready, newest first, at most 12. Send the returned ids as `meeting_ids` of\n`POST /api/documents`, together with this body as `picker`, so the draft keeps the\n`left_out_count`.",
+        "operationId": "resolve_meetings",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickerSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickerPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such team, recurring meeting, project or sprint for the caller"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`validation_error` (name exactly one way of choosing), `invalid_date_range`, `invalid_time_zone`"
+          }
+        },
+        "summary": "Resolve Meetings",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/recipes/{recipe_id}": {
+      "delete": {
+        "description": "Archive a recipe (same people as `PUT`): it leaves the list and cannot be used again, and\nthe drafts made from it are untouched.",
+        "operationId": "archive_recipe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Archive Recipe",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "put": {
+        "description": "Change a recipe of the caller's own, or of a team they own or administer (403\n`team_forbidden` for a member, who may still copy its text into a recipe of their own). Only\nthe fields sent change; a copy of a starter stays marked as one.",
+        "operationId": "update_recipe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecipePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: a team recipe is written by owners and admins only"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such recipe (or not yours)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Update Recipe",
+        "tags": [
+          "recipes"
         ]
       }
     },

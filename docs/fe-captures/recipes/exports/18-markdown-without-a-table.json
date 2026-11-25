@@ -1,0 +1,22 @@
+{
+  "note": "Markdown, text, Word and PDF work for any ready draft.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/2/export?format=md",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/markdown; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Thanks for today.md\"; filename*=UTF-8''Thanks%20for%20today.md",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "5468616e",
+    "body": "Thanks for today, Daniel."
+  }
+}

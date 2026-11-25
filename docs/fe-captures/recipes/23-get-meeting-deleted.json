@@ -1,0 +1,110 @@
+{
+  "note": "The only meeting it was made from was deleted: the draft stays, `meeting_ids` is empty and `sources_available` is false (the source links cannot be opened: show them as not available). `checks.flags` is now worked out against nothing, so EVERY figure is flagged, including 50,000 naira and 2026-12-01 which the meeting did say: when `sources_available` is false, do not present the flags as findings. (Slice S7 deletes single-meeting drafts with their meeting; a cross-meeting draft keeps living like this.)",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 2,
+      "title": "Thanks for today, next steps on the onboarding",
+      "output_type": "email",
+      "recipe_key": null,
+      "recipe_id": 1,
+      "status": "ready",
+      "edited": false,
+      "meeting_ids": [],
+      "created_at": "2026-11-24T13:39:09.383728Z",
+      "updated_at": "2026-11-24T13:39:09.545545Z",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Subject: Thanks for today, next steps on the onboarding",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Hi Daniel, thank you for your time today.",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 4,
+              "line": 1,
+              "quote": "Thanks for joining, Daniel.",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "As agreed, the onboarding is 50,000 naira and starts on 2026-12-01. The setup fee is 120,000 naira. Our first call is [need: call date].",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 4,
+              "line": 2,
+              "quote": "We would like the onboarding for 50,000 naira,",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "Ada sends the plan by Friday.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 4,
+                  "line": 3,
+                  "quote": "Agreed. I will send the plan by Friday.",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "checks": {
+        "blanks": [
+          {
+            "block_index": 2,
+            "what": "call date"
+          }
+        ],
+        "flags": [
+          {
+            "block_index": 2,
+            "text": "50,000 naira",
+            "kind": "figure"
+          },
+          {
+            "block_index": 2,
+            "text": "2026-12-01",
+            "kind": "figure"
+          },
+          {
+            "block_index": 2,
+            "text": "120,000 naira",
+            "kind": "figure"
+          }
+        ]
+      },
+      "stale": false,
+      "sources_available": false,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null
+    }
+  }
+}

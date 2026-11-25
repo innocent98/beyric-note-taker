@@ -11,6 +11,8 @@ import { OpenQuestions } from "@/components/app/open-questions";
 import { RecurringHint } from "@/components/app/recurring-hint";
 import { SeriesPicker } from "@/components/app/series-picker";
 import { MeetingTeamCard, teamActionMessage } from "@/components/app/meeting-team-card";
+import { MakeDialog } from "@/components/app/make-dialog";
+import { DraftsGoWithIt, MeetingDocuments } from "@/components/app/meeting-documents";
 import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { transcriptMessage } from "@/components/app/transcript-edit";
@@ -117,6 +119,7 @@ export function MeetingView({
   );
   const busyRef = useRef<Busy>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [makeOpen, setMakeOpen] = useState(false);
   // The transcript editor (lead-designed): edit mode, the last edit's refusal, and the Restore ask.
   const [editingTranscript, setEditingTranscript] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -320,11 +323,21 @@ export function MeetingView({
             language={translation.shown}
             onNotReady={() => void refetch()}
             trailing={
-              m.status === "ready" && m.notes && m.can_share ? (
-                <Button size="md" type="button" onClick={() => setShareOpen(true)}>
-                  <Icon name="send" size={15} />
-                  Share notes
-                </Button>
+              m.status === "ready" && m.notes ? (
+                <>
+                  {/* LEAD-DESIGNED (meeting recipes; the designer's files draw none of it): anyone who can read
+                      the meeting may make a document from it. */}
+                  <Button kind="secondary" size="md" type="button" onClick={() => setMakeOpen(true)}>
+                    <Icon name="plus" size={15} />
+                    Make…
+                  </Button>
+                  {m.can_share ? (
+                    <Button size="md" type="button" onClick={() => setShareOpen(true)}>
+                      <Icon name="send" size={15} />
+                      Share notes
+                    </Button>
+                  ) : null}
+                </>
               ) : null
             }
           />
@@ -580,6 +593,7 @@ export function MeetingView({
                 </>
               ) : null}
             </Card>
+            {m.notes ? <MeetingDocuments meetingId={m.id} /> : null}
             {teams ? (
               <MeetingTeamCard
                 meeting={m}
@@ -734,6 +748,7 @@ export function MeetingView({
               decisions and review items taken from it, and the recording. This cannot be undone.
               {m.tasks_count > 0 ? ` This also deletes its ${plural(m.tasks_count, "task")}.` : ""}
             </p>
+            <DraftsGoWithIt meetingId={m.id} />
             <p>The hours it used stay counted.</p>
             <div className="dec-ask-actions">
               <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => setConfirmingDelete(false)}>
@@ -769,6 +784,9 @@ export function MeetingView({
             void api.meetings.shares.list(initial.id).then(setShares, () => {});
           }}
         />
+      ) : null}
+      {m.status === "ready" && m.notes ? (
+        <MakeDialog open={makeOpen} meetingId={m.id} title={m.title} onClose={() => setMakeOpen(false)} />
       ) : null}
       <Toast message={toast} />
       <Dialog id="series-dialog" title="Add to recurring meeting">

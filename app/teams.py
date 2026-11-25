@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import (
+    DocumentShare,
     Meeting,
     Milestone,
     Project,
@@ -455,6 +456,13 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
             TeamInvite.revoked_at.is_(None),
         )
         .values(revoked_at=now)
+    )
+    # Drafts they shared with this team stop being shared: a share must not come back if they join
+    # again (spec 5.4a: leaving a team ends access at once).
+    session.execute(
+        delete(DocumentShare).where(
+            DocumentShare.shared_by_user_id == user.id, DocumentShare.team_id == old_team_id
+        )
     )
     session.delete(member)
     session.flush()

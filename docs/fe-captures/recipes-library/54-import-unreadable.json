@@ -1,0 +1,32 @@
+{
+  "note": "A damaged file: 422 `unreadable`. A PDF locked with a password, a zip that is not a Word file and a file that takes over 20 seconds to read give the same code (proved in `tests/test_recipe_importer.py`, not captured here).",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "broken.pdf",
+        "bytes": 33,
+        "content_type": "application/pdf"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "unreadable",
+        "message": "We could not read that file. It may be damaged or locked with a password."
+      }
+    }
+  }
+}

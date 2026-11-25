@@ -19,3 +19,6 @@ TOPICS_PROMPT_VERSION = "topics-v1"
 # Correcting the spelling of the owner's vocabulary in a Skribby transcript, for a model that cannot
 # take the vocabulary itself (app/vocabulary_pass.py).
 VOCABULARY_PROMPT_VERSION = "vocabulary-v1"
+# Meeting recipes: making a follow-up email, proposal and the other documents from a meeting
+# (app/recipes/generate.py).
+RECIPE_PROMPT_VERSION = "recipe-v1"

@@ -1,0 +1,30 @@
+{
+  "note": "A meeting whose notes are not written yet: 409 `not_ready`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        5
+      ]
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The notes are not ready yet."
+      }
+    }
+  }
+}

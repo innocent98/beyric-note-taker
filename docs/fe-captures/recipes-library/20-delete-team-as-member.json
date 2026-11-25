@@ -1,0 +1,25 @@
+{
+  "note": "Nor archive one: 403 `team_forbidden`.",
+  "client": "cal",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/recipes/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

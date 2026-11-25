@@ -367,7 +367,8 @@ def check_join(
 ASK = "ask"  # Ask Beyric
 TRANSLATE = "translate"  # a NEW translation (an existing one is only read)
 REWRITE = "rewrite"  # rewriting the notes with a template
-FEATURES = (ASK, TRANSLATE, REWRITE)
+MAKE = "make"  # making a document from a meeting (meeting recipes)
+FEATURES = (ASK, TRANSLATE, REWRITE, MAKE)
 # The states of spec 2.2 in which these features work. `trial`, `pilot` and `active` do
 # everything, and `past_due` (the 3 days after a failed renewal) keeps Ask, translate and rewrite
 # (they use no recorded hours). `lapsed` and `none` (no plan, an expired plan, a used-up or expired

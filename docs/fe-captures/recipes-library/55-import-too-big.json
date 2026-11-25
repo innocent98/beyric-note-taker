@@ -1,0 +1,32 @@
+{
+  "note": "Over 5 MB (`IMPORT_MAX_BYTES`): 413 `too_big`. (The file was 5,100,000 letters x.) Through nginx the edge allows 6 MB for this route and answers 413 itself for more, with its own page, not this JSON.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "huge.txt",
+        "bytes": 5100000,
+        "content_type": "text/plain"
+      }
+    }
+  },
+  "response": {
+    "status": 413,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_big",
+        "message": "That file is too big. Try a smaller one, or paste the text in."
+      }
+    }
+  }
+}

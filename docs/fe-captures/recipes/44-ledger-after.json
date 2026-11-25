@@ -1,0 +1,71 @@
+{
+  "note": "The ledger rows these drafts left (`ai_runs`, kind `recipe`): one per request that was not a double press, whatever its outcome. No draft text is stored there. A failed attempt shows its error class name only.",
+  "content": [
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": 2100,
+      "output_tokens": 260,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": 1
+    },
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": 2100,
+      "output_tokens": 260,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": 2100,
+      "output_tokens": 260,
+      "status": "failed",
+      "error": "JSONDecodeError",
+      "has_user": true,
+      "meeting_id": 2
+    },
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "pending",
+      "error": null,
+      "has_user": true,
+      "meeting_id": 3
+    },
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "pending",
+      "error": null,
+      "has_user": true,
+      "meeting_id": 3
+    },
+    {
+      "kind": "recipe",
+      "model": "gpt-6-luna",
+      "prompt_version": "recipe-v1",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "pending",
+      "error": null,
+      "has_user": true,
+      "meeting_id": 3
+    }
+  ]
+}

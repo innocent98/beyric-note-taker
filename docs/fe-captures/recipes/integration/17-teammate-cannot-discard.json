@@ -1,0 +1,25 @@
+{
+  "note": "404.",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/documents/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

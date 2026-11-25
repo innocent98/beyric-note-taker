@@ -1,0 +1,28 @@
+{
+  "note": "No CSRF token: 403 `csrf_rejected`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1/board",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T19:28:08.223707Z",
+      "op": "delete_card",
+      "card": 0
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

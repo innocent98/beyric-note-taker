@@ -1,0 +1,26 @@
+{
+  "note": "A table number past the last one: 409 `no_table`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=csv&table=2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "7b226572",
+    "body": {
+      "error": {
+        "code": "no_table",
+        "message": "This draft has no table to export that way."
+      }
+    }
+  }
+}

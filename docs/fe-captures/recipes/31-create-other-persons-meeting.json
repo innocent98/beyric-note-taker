@@ -1,0 +1,30 @@
+{
+  "note": "A meeting the caller cannot read: 404 `not_found`, the same as a meeting that does not exist.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        6
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting."
+      }
+    }
+  }
+}
