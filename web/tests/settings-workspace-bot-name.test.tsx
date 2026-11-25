@@ -24,7 +24,10 @@ const PREFS = {
 const field = () => screen.getByRole("textbox", { name: "Note taker name in this workspace" }) as HTMLInputElement;
 
 beforeEach(() => mocks.put.mockReset());
-afterEach(cleanup);
+afterEach(() => {
+  vi.restoreAllMocks();
+  cleanup();
+});
 
 describe("the card", () => {
   it("names the workspace and the default that applies when it is empty", () => {
@@ -52,7 +55,9 @@ describe("the card", () => {
   });
 
   it("shows the server's plain refusal", async () => {
-    mocks.put.mockRejectedValue(new ApiError(422, "bot_name_invalid", "Don't put a web address in the name."));
+    mocks.put.mockImplementation(async () => {
+      throw new ApiError(422, "bot_name_invalid", "Don't put a web address in the name.");
+    });
     render(<SettingsWorkspaceBotName initial={PREFS} workspaceName="Luran" />);
     await userEvent.type(field(), "x.com");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));

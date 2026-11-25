@@ -6333,6 +6333,33 @@
         "title": "TeamSummary",
         "type": "object"
       },
+      "TemplateCopyOut": {
+        "description": "`copied` templates were added to the active workspace, `skipped` already had that name;\n`templates` is the workspace's list afterwards.",
+        "properties": {
+          "copied": {
+            "title": "Copied",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateOut"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "copied",
+          "skipped",
+          "templates"
+        ],
+        "title": "TemplateCopyOut",
+        "type": "object"
+      },
       "TemplateIn": {
         "additionalProperties": false,
         "properties": {
@@ -6389,6 +6416,33 @@
           "instructions"
         ],
         "title": "TemplateOut",
+        "type": "object"
+      },
+      "TermCopyOut": {
+        "description": "`copied` terms were added to the active workspace, `skipped` were there already; `terms` is\nthe workspace's list afterwards.",
+        "properties": {
+          "copied": {
+            "title": "Copied",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/TermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "copied",
+          "skipped",
+          "terms"
+        ],
+        "title": "TermCopyOut",
         "type": "object"
       },
       "TermList": {
@@ -7091,6 +7145,150 @@
           "email"
         ],
         "title": "WaitlistIn",
+        "type": "object"
+      },
+      "WorkspacePrefsIn": {
+        "additionalProperties": false,
+        "description": "What to change; a field that is left out stays as it is. `bot_name` null or empty clears the\nworkspace's own name (the default applies again); `calendar_template_id` null means the\nworkspace's default template, otherwise one of the workspace's own templates (404 `not_found`\nfor any other).",
+        "properties": {
+          "auto_join_rule": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "organizer",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Join Rule"
+          },
+          "bot_name": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          },
+          "calendar_template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Template Id"
+          },
+          "join_unanswered": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Unanswered"
+          },
+          "skip_one_on_ones": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip One On Ones"
+          }
+        },
+        "title": "WorkspacePrefsIn",
+        "type": "object"
+      },
+      "WorkspacePrefsOut": {
+        "description": "The caller's own settings in the active workspace (workspaces design, section 3).\n`bot_name` is the name set for THIS workspace, null when none is set; `bot_name_default` is the\nname that applies then (the caller's own default from Settings > Personal, else the server's).\n`warning` is the soft warning about a name that bot-detection dislikes, null for none.",
+        "properties": {
+          "auto_join_rule": {
+            "enum": [
+              "all",
+              "organizer",
+              "none"
+            ],
+            "title": "Auto Join Rule",
+            "type": "string"
+          },
+          "bot_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          },
+          "bot_name_default": {
+            "title": "Bot Name Default",
+            "type": "string"
+          },
+          "calendar_template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Template Id"
+          },
+          "join_unanswered": {
+            "title": "Join Unanswered",
+            "type": "boolean"
+          },
+          "skip_one_on_ones": {
+            "title": "Skip One On Ones",
+            "type": "boolean"
+          },
+          "team_id": {
+            "title": "Team Id",
+            "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "team_id",
+          "bot_name",
+          "bot_name_default",
+          "warning",
+          "auto_join_rule",
+          "join_unanswered",
+          "skip_one_on_ones",
+          "calendar_template_id"
+        ],
+        "title": "WorkspacePrefsOut",
         "type": "object"
       },
       "WorkspaceRef": {
@@ -15513,7 +15711,7 @@
     },
     "/api/settings/bot-name": {
       "get": {
-        "description": "The name the note taker joins this person's meetings with: their own when set, else null with\nthe server's default beside it (`bot_name_default`).",
+        "description": "The person's default note taker name: used in every workspace that sets none of its own\n(`PUT /api/workspace-prefs`), else null with the server's default beside it\n(`bot_name_default`). It never switches with the workspace.",
         "operationId": "read_bot_name",
         "responses": {
           "200": {
@@ -18394,8 +18592,30 @@
     },
     "/api/templates": {
       "get": {
-        "description": "The caller's templates, sorted by name.",
+        "description": "The active workspace's templates (the `X-Team-Id` header, else the default workspace),\nsorted by name. Every member reads and uses them; owners and admins write them.",
         "operationId": "list_templates",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -18427,6 +18647,16 @@
             },
             "description": "Missing or wrong X-CSRF-Token"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -18445,6 +18675,28 @@
       },
       "post": {
         "operationId": "create_template",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18494,7 +18746,17 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`: only an owner or admin writes"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
           },
           "422": {
             "content": {
@@ -18513,9 +18775,103 @@
         ]
       }
     },
+    "/api/templates/copy-from-personal": {
+      "post": {
+        "description": "Copy the caller's personal-workspace templates into the active workspace (owners and\nadmins). A name already in the workspace is skipped, never overwritten. 409 `personal_team`\nwhen the active workspace is the personal one.",
+        "operationId": "copy_templates_from_personal",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateCopyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: only an owner or admin writes"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Copy Templates From Personal",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
     "/api/templates/{template_id}": {
       "delete": {
-        "description": "Delete a template. Meetings written with it keep their notes and the template name they\nshow; the calendar setting that pointed at it moves to the oldest template left. 409\n`last_template` for the only one.",
+        "description": "Delete a template of the active workspace. Meetings written with it keep their notes and the\ntemplate name they show; a calendar setting that pointed at it moves to the workspace's oldest\ntemplate left. 409 `last_template` for the only one.",
         "operationId": "delete_template",
         "parameters": [
           {
@@ -18525,6 +18881,26 @@
             "schema": {
               "title": "Template Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -18550,7 +18926,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`: only an owner or admin writes"
           },
           "404": {
             "content": {
@@ -18560,7 +18936,7 @@
                 }
               }
             },
-            "description": "Not Found"
+            "description": "A team the caller is not in"
           },
           "409": {
             "content": {
@@ -18589,7 +18965,7 @@
         ]
       },
       "put": {
-        "description": "Replace the name and instructions.",
+        "description": "Replace the name and instructions of one of the active workspace's templates. A template\nof another workspace is a 404.",
         "operationId": "update_template",
         "parameters": [
           {
@@ -18599,6 +18975,26 @@
             "schema": {
               "title": "Template Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -18651,7 +19047,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`: only an owner or admin writes"
           },
           "404": {
             "content": {
@@ -18661,7 +19057,7 @@
                 }
               }
             },
-            "description": "Not Found"
+            "description": "A team the caller is not in"
           },
           "422": {
             "content": {
@@ -18764,8 +19160,30 @@
     },
     "/api/vocabulary": {
       "get": {
-        "description": "The caller's terms, sorted alphabetically.",
+        "description": "The active workspace's terms, sorted alphabetically.",
         "operationId": "list_terms",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -18797,6 +19215,16 @@
             },
             "description": "Missing or wrong X-CSRF-Token"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -18815,6 +19243,28 @@
       },
       "post": {
         "operationId": "add_term",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18864,7 +19314,17 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`: only an owner or admin writes"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
           },
           "422": {
             "content": {
@@ -18883,6 +19343,100 @@
         ]
       }
     },
+    "/api/vocabulary/copy-from-personal": {
+      "post": {
+        "description": "Copy the caller's personal-workspace terms into the active workspace (owners and admins),\nnever doubling one that is there. 409 `personal_team` for the personal workspace itself.",
+        "operationId": "copy_terms_from_personal",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermCopyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`: only an owner or admin writes"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Copy Terms From Personal",
+        "tags": [
+          "vocabulary"
+        ]
+      }
+    },
     "/api/vocabulary/{term_id}": {
       "delete": {
         "operationId": "delete_term",
@@ -18894,6 +19448,26 @@
             "schema": {
               "title": "Term Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -18919,7 +19493,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "`team_forbidden`: only an owner or admin writes"
           },
           "404": {
             "content": {
@@ -19007,6 +19581,182 @@
         "summary": "Join Waitlist",
         "tags": [
           "waitlist"
+        ]
+      }
+    },
+    "/api/workspace-prefs": {
+      "get": {
+        "description": "The caller's settings in the active workspace: their note taker name there, the auto-join\nrule, \"also join invites I haven't answered\", \"skip one-on-ones\" and the calendar template. A\nworkspace where they never changed anything shows their own defaults.",
+        "operationId": "read_workspace_prefs",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePrefsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in, or a template of another workspace"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Workspace Prefs",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Change the caller's settings in the active workspace (CSRF header needed); a field left out\nstays as it is, and nothing of any other workspace is touched. Changing the rule or a box\ndecides the workspace's stored calendar events again, as `PUT /api/calendar/settings` does.",
+        "operationId": "write_workspace_prefs",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspacePrefsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePrefsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in, or a template of another workspace"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`bot_name_invalid`"
+          }
+        },
+        "summary": "Write Workspace Prefs",
+        "tags": [
+          "settings"
         ]
       }
     }
