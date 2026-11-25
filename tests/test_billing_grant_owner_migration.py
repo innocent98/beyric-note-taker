@@ -15,10 +15,12 @@ owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
 
-def test_0065_follows_0064_and_is_the_only_head(scratch_url):
+def test_0065_follows_0064_and_there_is_one_head_above_it(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert script.get_revision("0065").down_revision == "0064"
-    assert script.get_heads() == ["0065"]
+    heads = script.get_heads()
+    assert len(heads) == 1  # later migrations sit on top of 0065, so it need not be the head
+    assert "0065" in {r.revision for r in script.iterate_revisions(heads[0], "base")}
 
 
 def new_user(conn, email, status="active", purged=False):
