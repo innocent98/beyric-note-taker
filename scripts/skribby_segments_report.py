@@ -210,8 +210,12 @@ def report(session: Session, meeting_id: int, offset: float = 0.0) -> str:
         why = f", {note}" if note else ""
         if info.get("one_to_one"):
             why += f", one-to-one naming refused: {info['one_to_one']}"
+        if info.get("unchecked"):
+            why += f", Meet checks not run: {info['unchecked']}"
         if would_be:
-            why += f" (naming by elimination or sole candidate would have said: {would_be})"
+            why += (
+                f" (elimination, sole candidate or one-to-one naming would have said: {would_be})"
+            )
         lines += ["", f"== tag {tag}: {name} [{how}{why}] - {len(by_tag[tag])} segments =="]
         for item in by_tag[tag]:
             given = item.get("speaker_name") or "-"

@@ -39,13 +39,18 @@ unchanged):
 | No tag carries a `speaker_name`, and there are **at least two** tags | When Skribby named a tag the older rules own the meeting (`sole_candidate` and the chain). One tag alone cannot tell one person from a crowd the model merged into it |
 | **Every** tag has exactly one candidate on **every** segment, at least `MIN_SOLE_CANDIDATE_SEGMENTS` (3) segments, and it is not the bot | The sole-candidate evidence, required of all tags, not one. One tag that fails (two names, none, the bot, two lines, a list too long to read) blocks the whole meeting: a meeting that has an unreadable tag is not the clean shape this rule is for |
 | No two tags share a name, so tags and names are as many | Two tags with one candidate is a shared claim (`unresolved` as before) |
-| **Meet's participant list, when it was kept and is readable:** every name is in the call (`not_in_call`) | meeting 29's failure (a name that was not in the call), and the follow-up written in the sole-candidate SOP ("require it to be on the call's participant list") |
-| ...and **nobody else was lit for `meet_timeline.MIN_SECONDS` (30 s) or more** (`extra_speaker`) | the meeting-32 signature: a person who spoke and has no tag of their own means voices were merged into fewer tags. A person who is in the call and silent (an observer) is **no veto**: it uses seconds lit, not the head count |
-| ...and, when the clock check passed, **no tag has a different person clearly on top** of Meet's timeline (`contradicted`, `meet_timeline.verdict`, the bot in the ranking) | the two signals disagree, so one is wrong and we do not know which: swapped names look exactly like this. An unclear timeline (a tie, too little) is no veto: only a clear lean the other way is |
+| **Meet's participant list, when the kept events hold it** (read whether or not `NAME_BY_MEET_TIMELINE` is on; that switch only controls the older timeline-naming rules): every name is in the call (`not_in_call`) | meeting 29's failure (a name that was not in the call), and the follow-up written in the sole-candidate SOP. It needs the names only, so it also runs when the size cap dropped every speaking event (`events_dropped`) |
+| ...and **nobody else was lit for `meet_timeline.MIN_EXTRA_SECONDS` (10 s) or more** (`extra_speaker`) | the meeting-32 signature: a person who spoke and has no tag of their own means voices were merged into fewer tags. Meeting 32's third voice spoke about 30 s inside another's tag, so the timeline rule's 30 s floor would have missed it; 10 s is a veto floor (it refuses, it does not name), a sentence or two, not a cough. A person in the call who is silent (an observer) and the note taker are **no veto**: it uses seconds lit, not the head count |
+| ...and **no tag has a different person clearly on top** of Meet's timeline (`contradicted`, `meet_timeline.verdict`, the bot in the ranking). When the clock check refuses the timeline (`clock_shifted`) it is read at zero shift **and** at the shift that fits best, and either clearly pointing elsewhere refuses | the two signals disagree, so one is wrong and we do not know which: swapped names look exactly like this. An unclear timeline (a tie, too little) is no veto: only a clear lean the other way is |
 | The elimination switch is on | With `SKRIBBY_NAME_BY_ELIMINATION=false` every tag records `elimination_off` and `would_be` holds the name, exactly like elimination and the sole candidate |
 
-Without events (Zoom, Teams, a failed fetch, `NAME_BY_MEET_TIMELINE` off so none were fetched, or events with no
-usable speaking interval) **the shape alone decides**, which is design A of the brief. A tag the rule refused on the
+Without events (Zoom, Teams, a failed fetch) **the shape alone decides**, which is design A of the brief. When events
+were kept but a check could not run, the tags are named and say which checks were skipped, in an `unchecked` key (comma-
+joined: `extra_speaker` when nobody has a speaking interval, `contradicted` when the clock cannot be placed or there is no
+timeline, all three when the participant list is unreadable); the report and the rebuild dry run print it as `Meet checks
+not run: ...`. **In the live path the events are fetched when `NAME_BY_MEET_TIMELINE` or `SPEAKER_LINE_CORRECTION` (with
+`TRANSCRIPT_SOURCE=skribby`) is on** (`SkribbyProvider._events_for_naming`, unchanged, both default on): with both off live,
+no events reach naming and the shape alone decides; the rebuild script and the report always read the saved events. A tag the rule refused on the
 Meet checks gets `one_to_one: <reason>` next to its `unresolved` note in the saved evidence; the report and the rebuild
 dry run print it (`one-to-one naming refused: contradicted`). A meeting whose shape does not fit says nothing extra (no
 new key), so saved evidence of every other meeting is byte-identical to before.
@@ -76,38 +81,43 @@ If the real speaker is not on Skribby's list and the list is two other people, t
 people it believes are in the call. Without events nothing catches that. With events, `not_in_call`, `extra_speaker`
 and `contradicted` catch most of it, but the participant check compares names **exactly after cleaning**: if Meet shows
 a different spelling than Skribby listed (`Ada` versus `Ada Obi`) the rule refuses (`not_in_call`), the safe direction,
-at the cost of a blank on that meeting; the dry run says which. Meet's indicator lags and lights for coughs; the 30 s
-for `extra_speaker` is the timeline rule's own `MIN_SECONDS`, not tuned on this shape.
+at the cost of a blank on that meeting; the dry run says which. Meet's indicator lags and lights for coughs; the 10 s
+for `extra_speaker` is a veto floor chosen from meeting 32's ~30 s third voice, not tuned further.
 
 ## What's involved
 
 | File | Change |
 |---|---|
-| `app/skribby.py` | `_one_to_one` (new); `_earlier_rules` calls it after the chain, records picks as `chosen`/`how: one_to_one` (so `elimination_off` + `would_be` and the timeline rule's agreement check work as for every other route) and writes `one_to_one: <reason>` on a vetoed tag |
-| `app/meet_timeline.py` | `Reading.lit` (seconds each participant was lit in all, no clock needed) and `Reading.shown` now also filled when the clock is refused (`clock_unplaced`, `no_times`), so the participant checks work without a placeable clock. Nothing that read `shown` before runs on a refused reading |
+| `app/skribby.py` | `_one_to_one` (new); `_resolve_tags` reads the kept events for it whether or not the timeline switch is on (`kept`); `_earlier_rules` calls it after the chain, records picks as `chosen`/`how: one_to_one` (so `elimination_off` + `would_be` and the timeline rule's agreement check work as for every other route) and writes `one_to_one: <reason>` on a vetoed tag |
+| `app/meet_timeline.py` | `Reading.lit` (seconds each participant was lit in all, no clock needed), `Reading.lit_known`, `Reading.shifted_cells` (cells at the best shift, when the clock is refused as `clock_shifted`), `MIN_EXTRA_SECONDS`; `Reading.shown` is now also filled when the clock is refused (`clock_unplaced`, `no_times`) and when no participant has a usable speaking interval (`events_dropped`), so the participant checks run there. Nothing that read `shown` before runs on a refused reading |
 | `scripts/skribby_segments_report.py`, `scripts/rebuild_meeting_from_evidence.py` | print `one-to-one naming refused: <reason>`; the report's header text names `one_to_one` |
 | `app/models.py` | docstring lists the `how` values |
-| `tests/test_one_to_one_naming.py` (new, 27), `tests/test_skribby_provider.py` | the old two-unnamed-tags test split: shared candidate stays unnamed, different candidates are now `one_to_one` |
+| `tests/test_one_to_one_naming.py` (new, 40), `tests/test_skribby_provider.py` | the old two-unnamed-tags test split: shared candidate stays unnamed, different candidates are now `one_to_one` |
 | `docs/sop/2026-11-16-skribby-name-sole-candidate.md`, `2026-11-17-name-by-meet-timeline.md` | update lines: the zero-anchor meeting is now named by this rule |
 | `docs/checklist/master-checklist.md` | addendum |
 
 ## Verification
 
-* **Tests** (`tests/test_one_to_one_naming.py`, made-up names, placeholder words; the timeline fixtures are the ones of
+* **Tests** (`tests/test_one_to_one_naming.py`, 40, made-up names, placeholder words; the timeline fixtures are the ones of
   `tests/test_meet_timeline_naming.py`): meeting 46's shape (5 segments each, and laid out with Meet's seconds) names
   both tags `one_to_one`; with Meet agreeing; with no events; three tags for three people; a silent third person in the
-  call; the transcript lines carry the names; **meeting 32's shape** (a third person lit 60 s inside one tag) stays
-  unnamed with `extra_speaker`, and its realistic form (the merged tag lists two names) stays unnamed; a tag whose
-  candidate is the bot, a tag with no candidate, two tags with the same single candidate, a tag with two candidates,
-  fewer than 3 segments (and exactly 3 names), a name missing from one segment, one tag only: all unnamed; elimination
-  off: `elimination_off` + `would_be`; a candidate not in the call (`not_in_call`); swapped names (`contradicted`); an
-  unclear timeline and a refused clock (no veto from the timeline, the attendance checks still ran); timeline rule off;
-  a name spelled in capitals or with spaces; a meeting where Skribby named a tag goes to `sole_candidate` as before.
+  call; a lit note taker; the transcript lines carry the names; **meeting 32's shape** (a third person lit 60 s, and 29 s,
+  inside one tag) stays unnamed with `extra_speaker`, and its realistic form (the merged tag lists two names) stays
+  unnamed; the 10 s floor (9 s and 9.9 s of a third voice name, 10 s and 30 s refuse); a tag whose candidate is the bot,
+  a tag with no candidate, a list over `MAX_CANDIDATES`, two tags with the same single candidate, a tag with two
+  candidates, fewer than 3 segments (and exactly 3 names), a name missing from one segment, one tag only: all unnamed;
+  elimination off: `elimination_off` + `would_be`; a candidate not in the call (`not_in_call`), also with the timeline
+  rule off and with every speaking event dropped; swapped names (`contradicted`), also with a refused clock (read at the
+  best shift too, one test builds a reading where only the shifted cells point elsewhere) and with the timeline rule
+  off; events dropped and a clock that cannot be placed name by shape and record `unchecked`; an unclear timeline; a
+  name spelled in capitals or with spaces; a meeting where Skribby named a tag goes to `sole_candidate` as before.
 * **Each guard fails without it** (undone one at a time by a script, then restored): `not_in_call` (1 test fails),
-  `extra_speaker` (2), `contradicted` (1), the two-tags minimum (1), distinct names (1), bot/3-segment guard (3), the
-  clock-refused skip of the timeline veto (1), the "Skribby named no tag" gate (1).
+  `extra_speaker` (2), the 10 s floor (2), `contradicted` (1), contradiction at the best shift (1), contradiction under
+  a refused clock (3), vetoes reading events with the timeline switch off (2), the `unchecked` record (2), `lit_known`
+  (1), names kept when events are dropped (2), the two-tags minimum (1), distinct names (1), bot/3-segment guard (3),
+  the "Skribby named no tag" gate (1).
 * **Bounded runs on this Mac:** `tests/test_one_to_one_naming.py`, `test_meet_timeline_naming.py`,
-  `test_skribby_provider.py`, `test_speaker_correction.py` all pass (465 tests with the others below); the
+  `test_skribby_provider.py`, `test_speaker_correction.py` all pass; the
   Postgres-backed tests of `tests/test_skribby_evidence.py` and `tests/test_rebuild_meeting_from_evidence.py` error here
   only because this Mac runs no Postgres (connection refused on 5432): they are left to CI. `ruff check .` and
   `ruff format --check .` with the pinned ruff 0.17.3 (CI runs no type checker).
@@ -132,10 +142,12 @@ for `extra_speaker` is the timeline rule's own `MIN_SECONDS`, not tuned on this 
   ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker python scripts/rebuild_meeting_from_evidence.py 46 </dev/null'
   ```
 
-  **A good result:** no `REFUSED`; both tag lines say `named [one_to_one]`; `speakers named: before 0, after 2`; `lines
-  credited to no one` goes to 0; the last line says `DRY RUN: nothing was changed`. If a tag says `NOT named [unresolved,
-  one-to-one naming refused: not_in_call|extra_speaker|contradicted]`, send the line as it is to the lead: that is the
-  rule refusing, with its reason (a spelling difference between Meet's list and Skribby's is the likely `not_in_call`).
+  **A good result:** no `REFUSED`; both tag lines say `named [one_to_one]` (a `Meet checks not run: ...` suffix means
+  it was named with that check skipped: read it to the lead); `speakers named: before 0, after 2`; `lines credited to no
+  one` goes to 0; the last line says `DRY RUN: nothing was changed`. If a tag says `NOT named [unknown, unresolved,
+  one-to-one naming refused: not_in_call|extra_speaker|contradicted, timeline: ...]` (the real shape of the line: `how`,
+  then the note, then the refusal, then the timeline reason), send the line as it is to the lead: that is the rule
+  refusing, with its reason (a spelling difference between Meet's list and Skribby's is the likely `not_in_call`).
 
   Apply (only after a good dry run; keep the backup path it prints):
 

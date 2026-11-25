@@ -325,8 +325,9 @@ def _resolve_tags(
     `elimination_off` for a tag it would have named, and `would_be` holds the name it would have
     taken, so a saved record shows what the switch changed. With the timeline rule on and a tag
     left unnamed, `timeline` says why the speaking indicator did not name it."""
-    reading = _timeline_reading(value, events) if by_timeline and events else None
-    result, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination, reading)
+    kept = _timeline_reading(value, events) if events else None
+    reading = kept if by_timeline else None
+    result, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination, reading, kept)
     if reading is not None:
         _name_by_timeline(result, reading, bot, listed, chosen)
     return result
@@ -358,12 +359,14 @@ def _one_to_one(
     listing: dict[str, dict[str, int]],
     bot: set[str],
     reading: meet_timeline.Reading | None,
-) -> tuple[dict[str, str] | None, str | None]:
+) -> tuple[dict[str, str] | None, str | None, str]:
     """`how` = `one_to_one` (docs/sop/2026-11-25-speaker-naming-one-to-one.md): the meeting where
     Skribby named NO tag itself, so the sole-candidate rule and the timeline rule have no anchor,
     and yet every tag lists exactly one name on every one of its segments, a different one each.
-    `(picks, None)` (tag -> name, every tag) when all of these hold, `(None, why)` when the shape
-    fits but Meet vetoes it, `(None, None)` when the shape does not fit (nothing to say):
+    `(picks, None, unchecked)` (tag -> name, every tag) when all of these hold, `(None, why, "")`
+    when the shape fits but Meet vetoes it, `(None, None, "")` when the shape does not fit
+    (nothing to say). `unchecked` names the Meet checks that could not run (comma-joined, sorted;
+    empty when all ran or no events were kept at all), so a name given without them says so.
 
     * no tag carries a `speaker_name`, and there are at least two tags (one tag cannot tell one
       person from a crowd the model merged);
@@ -371,39 +374,57 @@ def _one_to_one(
       `MIN_SOLE_CANDIDATE_SEGMENTS` of them; a tag that fails (two names, none, the bot, too few
       lines, a list too long to read) blocks the whole meeting;
     * no two tags share the name, so tags and names are as many;
-    * when Meet's participant list is readable (`reading`): every name is in the call
-      (`not_in_call`), nobody else was lit for `MIN_SECONDS` or more (`extra_speaker`: a person
-      who spoke and has no tag, the signature of voices merged into fewer tags), and, when the
-      clock is usable, no tag has a different person clearly on top of Meet's timeline
-      (`contradicted`, `meet_timeline.verdict`). A silent attendee is no veto. Without events
-      (Zoom, Teams, a failed fetch) the shape alone decides."""
+    * when the kept events (`reading`, read whether or not `NAME_BY_MEET_TIMELINE` is on) hold the
+      call's participant list: every name is in the call (`not_in_call`; needs the names only, so
+      it runs even when the size cap dropped every speaking event); nobody else was lit for
+      `meet_timeline.MIN_EXTRA_SECONDS` (`extra_speaker`: a person who spoke and has no tag, the
+      signature of voices merged into fewer tags; a silent attendee and the note taker are no
+      veto; unchecked when nobody has a speaking interval, because then silence is not seen);
+      and no tag has a different person clearly on top of Meet's timeline (`contradicted`,
+      `meet_timeline.verdict`; a refused clock is read at zero and at the shift that fits best and
+      either clearly pointing elsewhere refuses; unchecked when the clock cannot be placed).
+      Without events (Zoom, Teams, a failed fetch) the shape alone decides."""
     if any(given.values()) or len(segments) < 2:
-        return None, None
+        return None, None, ""
     keys: dict[str, str] = {}  # tag -> its one candidate's key
     for tag, count in segments.items():
         candidates = listed.get(tag)
         if not candidates or len(candidates) != 1:
-            return None, None
+            return None, None, ""
         key = next(iter(candidates))
         if key in bot or not listing[tag][key] == count >= MIN_SOLE_CANDIDATE_SEGMENTS:
-            return None, None
+            return None, None, ""
         keys[tag] = key
     if len(set(keys.values())) != len(keys):
-        return None, None
-    if reading is not None and reading.shown:
-        if any(key not in reading.shown for key in keys.values()):
-            return None, "not_in_call"
-        for key, seconds in reading.lit.items():
-            if key not in keys.values() and key not in bot and seconds >= meet_timeline.MIN_SECONDS:
-                return None, "extra_speaker"
-        if not reading.refused:
-            for tag, key in keys.items():
-                top, _ = meet_timeline.verdict(
-                    reading.cells.get(tag, {}), bot, reading.totals.get(tag, 0.0)
-                )
-                if top is not None and top != key:
-                    return None, "contradicted"
-    return {tag: next(iter(listed[tag].values())) for tag in keys}, None
+        return None, None, ""
+    unchecked: set[str] = set()
+    if reading is not None:
+        if not reading.shown:
+            unchecked.update(("not_in_call", "extra_speaker", "contradicted"))
+        else:
+            if any(key not in reading.shown for key in keys.values()):
+                return None, "not_in_call", ""
+            if not reading.lit_known:
+                unchecked.add("extra_speaker")
+            for key, seconds in reading.lit.items():
+                if (
+                    key not in keys.values()
+                    and key not in bot
+                    and seconds >= meet_timeline.MIN_EXTRA_SECONDS
+                ):
+                    return None, "extra_speaker", ""
+            if reading.refused in (None, "clock_shifted"):
+                for tag, key in keys.items():
+                    for cells in (reading.cells, reading.shifted_cells):
+                        top, _ = meet_timeline.verdict(
+                            cells.get(tag, {}), bot, reading.totals.get(tag, 0.0)
+                        )
+                        if top is not None and top != key:
+                            return None, "contradicted", ""
+            else:
+                unchecked.add("contradicted")
+    picks = {tag: next(iter(listed[tag].values())) for tag in keys}
+    return picks, None, ",".join(sorted(unchecked))
 
 
 def _earlier_rules(
@@ -411,12 +432,15 @@ def _earlier_rules(
     own_names: tuple[str, ...],
     by_elimination: bool,
     reading: meet_timeline.Reading | None = None,
+    kept: meet_timeline.Reading | None = None,
 ):
     """Skribby's own name, elimination and the sole candidate: `(result, chosen, listed, bot)`,
     `result` as `_resolve_tags` describes it, `chosen` the name each of those rules picked for a
     tag (also for a tag left unnamed by a shared claim or by the elimination switch), `listed` each
     tag's candidates and `bot` the bot's own names as comparison keys. `reading` is the timeline
-    (`_timeline_reading`) or None: without it only round 1 of the chain runs (see below)."""
+    (`_timeline_reading`) or None: without it only round 1 of the chain runs (see below). `kept` is
+    the same reading made whenever events were kept, even with `NAME_BY_MEET_TIMELINE` off: the
+    one-to-one rule's vetoes read it (that switch only controls the timeline-naming rules)."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -515,7 +539,7 @@ def _earlier_rules(
         if not progress:
             break
     # The chain above starts from a tag Skribby named; this is the meeting where it named none.
-    picks, vetoed = _one_to_one(given, listed, segments, listing, bot, reading)
+    picks, vetoed, unchecked = _one_to_one(given, listed, segments, listing, bot, kept)
     for tag, name in (picks or {}).items():
         chosen[tag], chosen_how[tag] = name, "one_to_one"
     result: dict[str, dict[str, str]] = {}
@@ -528,6 +552,8 @@ def _earlier_rules(
             result[tag] = {"name": "", "how": "unknown", "note": "shared_claim"}
         elif tag in chosen and by_elimination:
             result[tag] = {"name": chosen[tag], "how": chosen_how[tag], "note": ""}
+            if chosen_how[tag] == "one_to_one" and unchecked:
+                result[tag]["unchecked"] = unchecked  # named, but these Meet checks could not run
         elif tag in chosen:
             result[tag] = {
                 "name": "",
@@ -704,7 +730,9 @@ def apply_timeline(
     if not events:
         return result
     reading = _timeline_reading(value, events)
-    earlier, chosen, listed, bot = _earlier_rules(value, own_names, by_elimination, reading)
+    earlier, chosen, listed, bot = _earlier_rules(
+        value, own_names, by_elimination, reading, reading
+    )
     # A tag saved unnamed is read again by today's earlier rules: a meeting saved before the chain
     # (2026-11-23) shows what it would name now. A tag that was named keeps what was saved.
     for tag, info in earlier.items():
