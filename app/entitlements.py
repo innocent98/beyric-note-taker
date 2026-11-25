@@ -41,7 +41,7 @@ are `app/feature_gates.py`.
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import usage
@@ -113,6 +113,27 @@ def mine(user: User, user_id_column, hash_column):
     return or_(user_id_column == user.id, hash_column == usage.email_hash(user.email))
 
 
+def my_grants(user: User):
+    """The grants `user` may SPEND (a `WHERE` clause on `HourGrant`): the ones made for this account
+    (`user_id`). A plan period, a pack and an admin gift belong to the person who paid for or was
+    given them, so they are never matched by an email address: an address changes hands (a Google
+    account's address is rewritten, a mailbox is given to someone new), and the fingerprint kept on
+    the grant would hand a stranger the hours (review S2).
+
+    The one exception is the free hours of an account that was deleted (a `trial` or `pilot` grant
+    whose `user_id` is gone): the person who signs up again with the same address finds them again
+    by the fingerprint, as the design always said. The fingerprint is otherwise only an abuse check
+    (`trial.had_one`: no second trial for an address that had one)."""
+    return or_(
+        HourGrant.user_id == user.id,
+        and_(
+            HourGrant.user_id.is_(None),
+            HourGrant.kind.in_(BACKLOG_KINDS),
+            HourGrant.email_hash == usage.email_hash(user.email),
+        ),
+    )
+
+
 def spend_key(grant: HourGrant) -> tuple:
     """Where a grant stands in the spending order (lower is spent first)."""
     far = datetime.max.replace(tzinfo=UTC)
@@ -131,7 +152,7 @@ def grants_in_force(session: Session, user: User, now: datetime) -> list[list]:
     )
     rows = session.execute(
         select(HourGrant, allocated).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash),
+            my_grants(user),
             HourGrant.starts_at <= now,
             or_(HourGrant.expires_at.is_(None), HourGrant.expires_at > now),
         )

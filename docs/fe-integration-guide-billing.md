@@ -3194,3 +3194,32 @@ Capture 04, the list (trimmed to the one row):
 | The 404 for a test-era invoice PDF, payment read and payment cancel; the lists without the earlier rows; the admin list, `refund_option` and the 409 `before_go_live` | **live over HTTP** (`docs/fe-captures/billing-cutover/` captures 04 to 08, 11, 12), provider scripted (the fake, not a real Paystack or Flutterwave) |
 | `pending_payment` skips a test-era checkout; the setting ignored while `BILLING_LIVE` is false; the first-payment rule; startup refusing a bad or future value | tests on real Postgres (`tests/test_billing_cutover.py`), not captured |
 | Anything against the real providers | **not verified**: no live key was used |
+
+---
+
+## Review fixes of 2026-11-25: stuck renewals and whose hours (S1, S2, N1)
+
+**No endpoint, field or response shape changed.** Three behaviours changed under existing answers; the screens already handle all three, but each has a consequence worth knowing.
+
+1. **A renewal charge nobody can trace no longer freezes the plan (S1).** If the saved-card charge got no answer and the provider cannot find it by our reference, the plan used to stay `active` for ever: no grace, no retries, the pay link answering 502, and a new plan refused. Now the charge is waited on for **6 hours**, then counted as a failed attempt: `GET /api/billing/subscription` moves to `past_due` with `grace_ends_at` = the due moment + 72 h, the person gets the usual "Your payment did not go through" notification and mail, `POST /api/billing/subscription/pay-link` gives a fresh page, and the retries on day 1 and day 2 run as usual. A charge the provider **refuses outright** (a 4xx, a missing key) is the same, at once, with no 6 hours. **What the screen must do:** nothing new. Show the `past_due` banner and **Pay now** exactly as in "The grace and the lapse" above. Be aware the person may see `past_due` up to 6 hours after the due moment on such a charge, while it is being traced, with `active` before that.
+   *If the traced charge turns out to have been paid after all* (a late webhook), it is still settled and the plan is `active` again with a new period; if the person had also paid the pay-link page meanwhile, the second payment is flagged to the admins for a refund (nothing for the screen).
+2. **Hours follow the account, not the email address (S2).** No response changed. A person whose sign-in address changes keeps every hour they paid for; nobody else can spend them by registering the old address. Nothing to show.
+3. **A pack cannot be bought while a refund of the plan's first payment is being processed (N1).** `POST /api/billing/checkout` with `"kind": "pack"` now answers the same 409 `refund_pending` the plan changes and the pay link already give (captured over HTTP against the real routes, provider scripted: `docs/fe-captures/billing-grant-owner/01-pack-checkout-refund-pending-409.json`):
+
+```json
+{
+  "error": {
+    "code": "refund_pending",
+    "message": "A refund of your plan is being processed, so the plan cannot be changed or paid until it is done."
+  }
+}
+```
+
+   Show the `message` and keep the Buy pack button off while the plan has an unsettled refund. Note: `refund_pending` was missing from the error table above. It is a 409 on `POST /api/billing/checkout` (pack, captured above); the same code is raised by the service for plan changes, the change-plan preview and the pay link (`tests/test_billing_refunds.py`), which were not captured over HTTP here.
+
+| Behaviour | Verified |
+|---|---|
+| The 409 `refund_pending` on a pack checkout | **live over HTTP** (test client against the real routes and the real settlement rules, provider scripted: the fake, not a real Paystack or Flutterwave); capture above |
+| The 6-hour give-up, the immediate failure of a refused charge, a late payment still settling | tests on real Postgres with a fake clock (`tests/test_billing_renewals.py`), not captured as HTTP: the screens read the same `past_due` answer as before (captures `billing-subscriptions/50` and `51`) |
+| Hours not following an address | tests on real Postgres (`tests/test_hours_grant_owner.py`); no response to capture |
+| Anything against the real providers | **not verified**: no live key was used. In particular, how a real Paystack or Flutterwave answers a lookup of a reference it never saw is not confirmed (the 6-hour wait covers either answer) |

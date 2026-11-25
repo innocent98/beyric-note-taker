@@ -203,7 +203,7 @@ def sync_cap_gift(session: Session, user: User) -> int:
     _lock_person(session, user)
     gifted = session.scalar(
         select(func.coalesce(func.sum(HourGrant.seconds), 0)).where(
-            entitlements.mine(user, HourGrant.user_id, HourGrant.email_hash),
+            entitlements.my_grants(user),
             HourGrant.kind == "admin_gift",
             HourGrant.reason == CAP_GIFT_REASON,
         )

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "refund_pending",
+    "message": "A refund of your plan is being processed, so the plan cannot be changed or paid until it is done."
+  }
+}

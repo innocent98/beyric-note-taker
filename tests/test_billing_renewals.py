@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import entitlements, hours
-from app.billing import plans, renewals, settle
+from app.billing import plans, renewals, settle, states
 from app.billing import subscriptions as subs
 from app.billing.payments import new_payment
 from app.billing.types import ProviderError, RetryLater
@@ -590,8 +590,9 @@ def test_an_unknown_outcome_does_not_hold_up_the_lapse(session, ada, admin, prov
     due = bought
     providers.usd.charge_outcome = "error"
     tick(session, due + timedelta(seconds=7))
-    # the grace clock only starts with a decided failure: an unknown charge keeps the subscription
-    # `active`, and the clock alone (effective status) is what protects the rest of the product
+    # for the first six hours an unknown charge is waited on and the subscription stays `active`
+    # (the clock alone, the effective status, protects the rest of the product); after that it is
+    # given up and the status machine moves (review S1: it never stays `active` for ever)
     assert status(session, ada, due + timedelta(hours=73)).state == "lapsed"
     tick(session, due + timedelta(hours=7))
     assert notices(session, admin, "admin.billing_unresolved_charge")
@@ -653,6 +654,7 @@ def test_an_attempt_slot_that_is_taken_is_never_charged_twice(
             cycle_end=due,
             attempt=0,
             status=held,
+            created_at=due,  # made by the other worker just now on the test's clock
         )
     )
     session.commit()
@@ -1148,3 +1150,135 @@ def test_the_sweeper_alerts_an_admin_for_a_paid_payment_the_rules_refuse(
 
     assert live(session, ada) is None  # nothing granted
     assert notices(session, admin, "admin.billing_payment_refused")
+
+
+# ---- review S1: an attempt whose outcome cannot be found must end in a defined state -----------
+
+
+def test_a_charge_the_provider_refused_outright_is_a_failed_attempt_at_once(
+    session, ada, admin, providers, bought
+):
+    """A 4xx, a missing key, an input check: the call made no charge, so there is nothing to look
+    up. The attempt failed, the grace opens, the person can pay, and the admins are told."""
+    due = bought
+    providers.usd.charge_outcome = "refused"
+
+    tick(session, due + timedelta(seconds=7))
+
+    [payment] = renewal_payments(session)
+    assert payment.status == "failed"
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 1)
+    assert sub.grace_ends_at == states.grace_end(due)
+    assert sub.next_charge_at == due + DAY
+    assert notices(session, ada, "billing.failed")
+    assert notices(session, admin, "admin.billing_charge_refused")
+
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=1))
+    assert started.url.startswith("https://fake.test/pay/")  # a page, not a 502
+
+    providers.usd.charge_outcome = "successful"  # the day-1 retry is made as the table says
+    tick(session, due + DAY + timedelta(seconds=7))
+    assert len(providers.usd.charges) == 2
+
+
+@pytest.mark.parametrize("silence", ["error", "unknown"])  # ProviderError, OutcomeUnknown
+def test_a_charge_nobody_can_find_is_given_up_after_six_hours_into_the_normal_grace(
+    session, ada, admin, providers, bought, silence
+):
+    """The charge call got no answer and the lookup by our reference finds nothing, for ever. The
+    attempt waits (the provider may be down) but only for UNRESOLVED_AFTER: then it is a failed
+    attempt for the clock, the admins are told, and the plan runs the ordinary 3 days of grace to a
+    lapse. It never stays `active` for ever, and a new plan can be bought once it has lapsed."""
+    due = bought
+    providers.usd.charge_outcome = silence
+
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=5))
+    [payment] = renewal_payments(session)
+    assert payment.status == "pending"  # still waiting: the provider may just be down
+    assert live(session, ada).status == "active"
+    assert notices(session, admin, "admin.billing_unresolved_charge") == []
+
+    tick(session, due + timedelta(hours=7))
+
+    [payment] = renewal_payments(session)
+    assert payment.status == "failed"
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 1)
+    assert sub.grace_ends_at == states.grace_end(due)
+    assert notices(session, ada, "billing.failed")
+    assert notices(session, admin, "admin.billing_unresolved_charge")
+    started = renewals.pay_link(session, ada, settings(), due + timedelta(hours=8))
+    assert started.url.startswith("https://fake.test/pay/")  # the person can pay again
+
+    providers.usd.charge_outcome = "failed"  # the retries are real charges again, and decline
+    tick(session, due + DAY + timedelta(seconds=7))
+    assert len(providers.usd.charges) == 2
+    tick(session, due + 2 * DAY + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=73))
+    assert live(session, ada) is None  # lapsed by the clock
+    new = subs.start_plan_checkout(session, ada, "p20", settings(), due + timedelta(hours=74))
+    assert new.payment.kind == "plan"
+
+
+def test_a_charge_given_up_that_was_paid_after_all_is_still_settled(
+    session, ada, admin, providers, bought
+):
+    """Giving up is for the clock only: a payment the provider later says succeeded (the webhook)
+    is still settled and renews the plan, never lost."""
+    due = bought
+    providers.usd.charge_outcome = "error"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=7))
+    [payment] = renewal_payments(session)
+    assert payment.status == "failed" and live(session, ada).status == "past_due"
+
+    pay(session, providers.usd, payment, due + timedelta(hours=8))
+
+    sub = live(session, ada)
+    assert sub.status == "active" and sub.retry_count == 0
+    assert renewal_payments(session)[0].status == "succeeded"
+    assert len(grants(session, ada, "plan_period")) == 2
+
+
+def test_a_queued_charge_is_given_up_after_six_hours_into_the_grace(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "queued"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=5))
+    assert live(session, ada).status == "active"
+
+    tick(session, due + timedelta(hours=7))
+
+    assert renewal_payments(session)[0].status == "failed"
+    assert live(session, ada).status == "past_due"
+    assert notices(session, admin, "admin.billing_unresolved_charge")
+
+
+def test_giving_up_never_overwrites_a_payment_a_webhook_settled_meanwhile(
+    session, ada, admin, providers, bought, engine, monkeypatch
+):
+    """The lookup fails, and while we waited on it a webhook (another process) settled the payment:
+    the give-up is a conditional update, so it finds nothing to close and leaves `succeeded`."""
+    due = bought
+    providers.usd.charge_outcome = "error"
+    tick(session, due + timedelta(seconds=7))
+    [payment] = renewal_payments(session)
+
+    def settled_elsewhere_then_fail(reference):
+        with Session(engine) as other:
+            row = other.get(Payment, payment.id)
+            row.status = "succeeded"
+            other.commit()
+        raise ProviderError("down")
+
+    monkeypatch.setattr(providers.usd, "verify_reference", settled_elsewhere_then_fail)
+
+    tick(session, due + timedelta(hours=7))
+
+    assert renewal_payments(session)[0].status == "succeeded"  # not overwritten with `failed`
+    assert notices(session, admin, "admin.billing_unresolved_charge") == []
+    assert notices(session, ada, "billing.failed") == []

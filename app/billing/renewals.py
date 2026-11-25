@@ -29,6 +29,19 @@ order matters, and money is only ever moved by a row we made first:
    hours of grace (the period's leftover hours stay usable until its end, no new hours), each
    failure schedules the next attempt, the last one sends the last-day notice.
 
+**An attempt whose outcome cannot be found never freezes the plan** (review S1). Two cases, both
+ending in the status machine instead of waiting for ever:
+
+- the provider says the call made no charge (`NothingMoved`: a 4xx, a missing key, a rate limit)
+  and holds nothing under our reference: the attempt FAILED, at once (`_charge_refused`);
+- the call got no answer and the lookup by our reference cannot find it, or the provider keeps
+  saying `pending` with no page for the payer: the attempt waits `UNRESOLVED_AFTER` (the provider
+  may just be down), then is given up (`_give_up`): the payment is marked `failed`, the admins are
+  told, and the attempt counts as a failure for the clock (grace, day-1 and day-2 retries, lapse).
+  Giving up is for the clock only: a `failed` payment is still settled if the provider later says
+  it was paid (a webhook), and a second charge for the same period is flagged for refund
+  (`PAYMENT_STALE`), never silent.
+
 A subscription with no usable saved card, or whose billing country now routes elsewhere, makes no
 charge: its attempt is a recorded failure, and the person pays through `pay_link` (the provider's
 own page, on the route they are on now). The grace and the lapse run on the clock either way.
@@ -56,7 +69,7 @@ from app.billing import cutover, invoices, plans, refunds, routing, settle, stat
 from app.billing import profile as profiles
 from app.billing.payments import new_payment
 from app.billing.provider import lookup_by_reference, provider_named
-from app.billing.types import OutcomeUnknown, ProviderError, RetryLater
+from app.billing.types import NothingMoved, OutcomeUnknown, ProviderError, RetryLater
 from app.config import Settings
 from app.models import (
     BillingEvent,
@@ -241,7 +254,10 @@ def _attempt(
     if outcome == "wait":
         session.commit()  # nothing changed, except perhaps an admin alert that must be kept
         return
-    if outcome == "open_link":  # a charge is waiting for the payer: its slot counts, no new charge
+    if outcome in ("open_link", "gave_up"):
+        # open_link: a charge is waiting for the payer, its slot counts, no new charge.
+        # gave_up: the charge of this slot could not be found for `UNRESOLVED_AFTER` and is closed:
+        # the slot counts as a failed attempt (the next one charges, under a fresh reference).
         return _fail(session, sub.id, cycle, n, now)
 
     price = plans.renewal_price(session, sub, now)
@@ -291,11 +307,20 @@ def _attempt(
 
     try:
         tx = adapter.charge_saved_method(token, amount, currency, reference, payer_email=email)
+    except NothingMoved as refused:
+        # The provider refused the call (or it was never made): no charge exists, unless an
+        # earlier call under this reference made one, so it is asked once. Nothing found means
+        # the attempt failed: there is nothing for a later pass to wait for.
+        try:
+            tx = lookup_by_reference(adapter, reference)
+        except ProviderError:
+            return _charge_refused(session, payment_id, sub_id, cycle, n, now, refused)
     except (OutcomeUnknown, ProviderError):
         # Unknown outcome: the money may have moved (Flutterwave says so with `OutcomeUnknown`;
         # Paystack's adapter says it with a plain `ProviderError`, so both are treated alike). Ask
-        # by our reference; if even that fails the payment stays pending and the next pass
-        # settles it before anything is charged again.
+        # by our reference; if even that fails the payment stays pending, the next pass settles it
+        # before anything is charged again, and `_settle_open_payments` gives it up after
+        # `UNRESOLVED_AFTER`, so the plan is never frozen on it.
         try:
             tx = lookup_by_reference(adapter, reference)
         except ProviderError:
@@ -354,13 +379,78 @@ def _settle_charge(session: Session, adapter, payment_id: int, tx, now: datetime
     return "paid" if session.get(Payment, payment_id).status == "succeeded" else "unknown"
 
 
+def _charge_refused(
+    session: Session,
+    payment_id: int,
+    sub_id: int,
+    cycle: datetime,
+    n: int,
+    now: datetime,
+    refused: NothingMoved,
+) -> None:
+    """The saved-card charge call was refused and the provider holds nothing under our reference:
+    the attempt failed. The payment is closed (`failed`: a webhook for it would still settle it),
+    the admins are told once (a refusal that repeats for everyone is a key or an adapter problem),
+    and the status machine moves, so the person gets the grace, the mail and the pay link."""
+    closed = session.execute(
+        update(Payment)
+        .where(Payment.id == payment_id, Payment.status == "pending")
+        .values(status="failed")
+    ).rowcount
+    session.commit()
+    if not closed:  # a webhook decided this payment meanwhile: it is not ours to fail
+        return
+    logger.warning("renewal payment %s: charge refused (%s)", payment_id, type(refused).__name__)
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_charge_refused:{payment_id}",
+        "A renewal charge was refused by the provider",
+        f"Renewal payment {payment_id}: the provider refused the saved-card charge, so nothing was "
+        "charged. The attempt counts as failed and the person has the 3 days of grace. If this "
+        "repeats for other people, look at the provider keys and the provider's dashboard.",
+    )
+    session.commit()
+    _fail(session, sub_id, cycle, n, now)
+
+
+def _give_up(session: Session, payment: Payment, why: str) -> bool:
+    """A renewal charge whose outcome nobody could find for `UNRESOLVED_AFTER`: close it as
+    `failed` so the clock can move (the caller then counts it as a failed attempt) and tell the
+    admins, once. Returns False, changing nothing, when the payment is no longer `pending`: a
+    webhook settled it in another process while we waited on the provider, and it is not ours to
+    overwrite (the conditional update, never an attribute set on a row loaded earlier).
+
+    A webhook that later says it was paid still settles a `failed` payment, and a second charge for
+    the same period is then flagged for refund."""
+    closed = session.execute(
+        update(Payment)
+        .where(Payment.id == payment.id, Payment.status == "pending")
+        .values(status="failed")
+    ).rowcount
+    if not closed:
+        session.commit()
+        return False
+    subscriptions._tell_admins(
+        session,
+        f"admin.billing_unresolved_charge:{payment.id}",
+        "A renewal charge was given up on",
+        f"Renewal payment {payment.id} was sent to the provider more than six hours ago and {why}. "
+        "It now counts as a failed attempt: the person has the 3 days of grace and a pay link. "
+        "Look it up by reference in the provider's dashboard: if it was paid, the payment is "
+        "settled when the provider reports it and any second charge is flagged for refund.",
+    )
+    session.commit()
+    return True
+
+
 def _settle_open_payments(
     session: Session, sub: Subscription, now: datetime, settings: Settings
 ) -> str:
     """Resolve renewal payments of this period that are still `pending`. Returns `paid` (one
     settled: the subscription moved on), `open_link` (a charge waits for the payer's own link),
-    `wait` (the provider could not be asked, or a charge is in flight: try again next pass) or
-    `none`."""
+    `gave_up` (a charge in flight that nobody could find, or that stayed `pending` with nothing for
+    the payer, for `UNRESOLVED_AFTER`: closed, to be counted as a failed attempt), `wait` (the
+    provider could not be asked, or a charge is in flight: try again next pass) or `none`."""
     pending = session.scalars(
         select(Payment)
         .where(
@@ -384,20 +474,16 @@ def _settle_open_payments(
             tx = lookup_by_reference(adapter, payment.reference)
         except ProviderError:
             # No answer. "The provider is down" and "the charge call never left, so the provider
-            # has nothing under our reference" look the same, so we cannot tell and we wait; a
-            # human is told once it has been unresolved for six hours.
+            # has nothing under our reference" look the same, so we cannot tell and we wait, but
+            # not for ever: after six hours it is given up (the admins are told).
             if not in_flight:
                 continue
-            result = "wait"
-            if payment.created_at <= now - UNRESOLVED_AFTER:
-                subscriptions._tell_admins(
-                    session,
-                    f"admin.billing_unresolved_charge:{payment.id}",
-                    "A renewal charge has no known outcome",
-                    f"Renewal payment {payment.id} was sent to the provider more than six hours "
-                    "ago and the provider cannot say what became of it. Look it up by reference "
-                    "in the provider's dashboard.",
-                )
+            if payment.created_at <= now - UNRESOLVED_AFTER and _give_up(
+                session, payment, "the provider cannot say what became of it"
+            ):
+                result = "gave_up" if result == "none" else result
+            else:
+                result = "wait"
             continue
         if tx.status == "successful":
             try:
@@ -426,18 +512,15 @@ def _settle_open_payments(
             continue
         elif payment.pay_url and result != "wait":
             result = "open_link"
+        elif (
+            not payment.pay_url
+            and payment.created_at <= now - UNRESOLVED_AFTER
+            and _give_up(session, payment, "has stayed pending with no page for the payer")
+        ):
+            # a charge the provider keeps reporting as pending with nothing for the payer to do
+            result = "gave_up" if result in ("none", "open_link") else result
         else:
             result = "wait"
-            if not payment.pay_url and payment.created_at <= now - UNRESOLVED_AFTER:
-                # a charge the provider keeps reporting as pending with nothing for the payer to do
-                subscriptions._tell_admins(
-                    session,
-                    f"admin.billing_unresolved_charge:{payment.id}",
-                    "A renewal charge has stayed pending",
-                    f"Renewal payment {payment.id} has been pending at the provider for more "
-                    "than six hours with no page for the payer. Look it up by reference in the "
-                    "provider's dashboard.",
-                )
     return result
 
 

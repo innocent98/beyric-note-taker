@@ -31,6 +31,15 @@ class ProviderError(BillingError):
     have moved money. (A money call that got no answer is `OutcomeUnknown`, never this.)"""
 
 
+class NothingMoved(ProviderError):
+    """A call the provider refused outright, or that was never made (a missing key, a 4xx answer, a
+    rate limit, an input check before any request): **nothing happened at the provider**. A
+    `ProviderError` still, so every reader that treats "no answer" as no answer is unchanged; only
+    `renewals._attempt`, after a saved-card CHARGE, tells it from a plain `ProviderError` (the
+    answer was lost: the money may have moved) and records the attempt as failed at once instead of
+    waiting for a lookup that can never find a charge that was never made."""
+
+
 class NoRecord(ProviderError):
     """The provider understood a lookup by our reference and says it has nothing under it (a hosted
     page nobody tried to pay: some providers make a transaction only when the payer attempts one).

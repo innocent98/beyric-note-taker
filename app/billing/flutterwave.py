@@ -54,6 +54,7 @@ from app.billing.types import (
     Checkout,
     IgnoredEvent,
     NoRecord,
+    NothingMoved,
     OutcomeUnknown,
     ProviderError,
     ProviderEvent,
@@ -104,7 +105,7 @@ def _major_text(amount_minor: int) -> str:
     """Whole cents as the number Flutterwave takes: `1800` -> `18`, `999` -> `9.99`, `1850` ->
     `18.5`. Integer arithmetic only. Raises `ProviderError` for anything but a positive int."""
     if type(amount_minor) is not int or not 0 < amount_minor <= _MAX_MINOR:
-        raise ProviderError("the amount must be a positive whole number of cents")
+        raise NothingMoved("the amount must be a positive whole number of cents")
     dollars, cents = divmod(amount_minor, 100)
     return f"{dollars}.{cents:02d}".rstrip("0").rstrip(".")
 
@@ -137,7 +138,7 @@ def _encode(body: Mapping[str, object], amount_text: str | None = None) -> bytes
     text = json.dumps({**body, "amount": marker})
     quoted = json.dumps(marker)
     if text.count(quoted) != 1:  # unreachable unless a field held the marker; never send a guess
-        raise ProviderError("could not encode the amount")
+        raise NothingMoved("could not encode the amount")
     return text.replace(quoted, amount_text).encode()
 
 
@@ -238,7 +239,7 @@ class FlutterwaveProvider:
         settings = self._settings
         key = settings.flutterwave_secret_key.strip()
         if not key:
-            raise ProviderError("FLUTTERWAVE_SECRET_KEY is not set: no call was made")
+            raise NothingMoved("FLUTTERWAVE_SECRET_KEY is not set: no call was made")
         lost = OutcomeUnknown if money else ProviderError
         headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
         content = None
@@ -276,10 +277,10 @@ class FlutterwaveProvider:
         message = _text(answer.get("message")) or ""
         if code >= 500:
             raise lost(f"Flutterwave answered HTTP {code}")
-        if code in (401, 403):
-            raise ProviderError(f"Flutterwave refused the secret key (HTTP {code})")
+        if code in (401, 403):  # refused before it did anything: `NothingMoved`
+            raise NothingMoved(f"Flutterwave refused the secret key (HTTP {code})")
         if code == 429:
-            raise ProviderError("Flutterwave rate limit (HTTP 429)")
+            raise NothingMoved("Flutterwave rate limit (HTTP 429)")
         if code in (400, 404, 422):
             raise RequestRefused(
                 f"Flutterwave refused the request (HTTP {code}): {message[:200]}", message[:200]
@@ -467,15 +468,17 @@ class FlutterwaveProvider:
 
         If the call times out, the charge may still be happening: it is looked up by our reference
         and its state returned; if that fails too, `OutcomeUnknown` (not a `ProviderError`)."""
+        # `NothingMoved` (a `ProviderError`): refused before any request, or by the vendor with a
+        # 401, 403 or 429. No charge exists, so the caller records the attempt as failed at once.
         if currency != CURRENCY:
-            raise ProviderError(f"Flutterwave takes {CURRENCY} here, not {currency}")
+            raise NothingMoved(f"Flutterwave takes {CURRENCY} here, not {currency}")
         amount_text = _major_text(amount_minor)
         if not isinstance(token, str) or not _TOKEN.fullmatch(token):
-            raise ProviderError("the saved card token is not usable")
+            raise NothingMoved("the saved card token is not usable")
         if not isinstance(payer_email, str) or not payer_email.strip():
-            raise ProviderError("the email the card was saved under is required")
+            raise NothingMoved("the email the card was saved under is required")
         if not isinstance(reference, str) or not reference:
-            raise ProviderError("a reference is required")
+            raise NothingMoved("a reference is required")
         body = {
             "token": token,
             "currency": CURRENCY,

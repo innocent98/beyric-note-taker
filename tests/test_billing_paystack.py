@@ -29,6 +29,7 @@ from app.billing.provider import PROVIDER_FACTORIES, provider_named
 from app.billing.types import (
     BadEvent,
     IgnoredEvent,
+    NothingMoved,
     OutcomeUnknown,
     ProviderError,
     WebhookRejected,
@@ -772,6 +773,66 @@ def test_a_charge_answer_with_a_float_amount_is_refused():
     provider, _ = make(ok("charge_authorization_response.json", amount=35247.0))
     with pytest.raises(ProviderError, match="malformed"):
         charge(provider)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (400, {"status": False, "message": "Authorization code not found"}),
+        (401, {"status": False, "message": "Invalid key"}),
+        (403, {"status": False, "message": "Forbidden"}),
+        (404, {"status": False, "message": "Not found"}),
+        (429, {"status": False, "message": "Too many requests"}),
+    ],
+)
+def test_a_charge_paystack_refuses_with_a_4xx_is_nothing_moved(answer):
+    """Review S1: a refused call made no charge, so a caller need not wait for a lookup."""
+    provider, _ = make(answer)
+    with pytest.raises(NothingMoved):
+        charge(provider)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"payer_email": None},
+        {"token": ""},
+        {"currency": "USD"},
+        {"amount_minor": 0},
+        {"reference": "has space"},
+    ],
+)
+def test_a_charge_refused_before_any_call_is_nothing_moved(bad):
+    provider, script = make(ok("charge_authorization_response.json"))
+    with pytest.raises(NothingMoved):
+        charge(provider, **bad)
+    assert script.requests == []
+
+
+def test_a_charge_with_no_key_is_nothing_moved():
+    provider, script = make(ok("charge_authorization_response.json"), secret_key="")
+    with pytest.raises(NothingMoved):
+        charge(provider)
+    assert script.requests == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        httpx.ReadTimeout("slow"),
+        httpx.ConnectError("down"),
+        (500, {"status": False, "message": "boom"}),
+        (503, {}),
+        (200, {"status": True, "message": "x", "data": "not an object"}),
+    ],
+)
+def test_a_charge_with_no_usable_answer_is_not_nothing_moved(answer):
+    """A lost or unreadable answer may still have charged the card: it stays a plain
+    `ProviderError`, which the caller resolves by our reference."""
+    provider, _ = make(answer)
+    with pytest.raises(ProviderError) as caught:
+        charge(provider)
+    assert not isinstance(caught.value, NothingMoved)
 
 
 # ---- refunds ----

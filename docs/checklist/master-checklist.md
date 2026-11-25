@@ -3,6 +3,13 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25 (later): billing review S1 and S2 fixed** (branch `fix/billing-renewal-freeze-and-hours-owner`, SOP `docs/sop/2026-11-25-billing-renewal-freeze-and-hours-owner.md`; PR needs an Opus delta review before merge; migration 0062, data repair only)
+- [x] S1: a renewal charge nobody can trace no longer leaves the plan `active` for ever: a refused charge (new `NothingMoved`: 4xx, key, rate limit, input check) fails the attempt at once; an unanswered one is waited on 6 hours, then given up (payment `failed` by a conditional update, admin alert) and counted as a failed attempt, so grace, retries, mail, pay link and lapse all run; a given-up charge paid later is still settled (5 tests, failing before the fix; adapter tests for Paystack and Flutterwave)
+- [x] S2: paid hours (plan period, pack, admin gift) are spent by account (`entitlements.my_grants`), not by email fingerprint; an orphaned trial or pilot is still found by the fingerprint, and a second trial is still refused to an address that had one (6 tests, failing before the fix); migration 0062 binds any plan or pack grant that lost its owner to its live payer, never overwriting (scratch-DB round trip, one head)
+- [x] N1 (the plain gap only): a pack checkout waits while a refund of the plan's first payment is unsettled (409 `refund_pending`, captured over HTTP in `docs/fe-captures/billing-grant-owner/`)
+- [ ] Not fixed, with reasons in the SOP: N1 rest (pack paid after the plan ended), N2 (cancel during an in-flight renewal), N3 (alias trial abuse), N4 and N6 (vendor facts to prove on the first real payment and refund), N5 (by design), N7 (proration minimum), N8 (day-of-month drift); `start_plan_checkout` still judges the stored status
+- [ ] Opus delta review of this PR (money code) before merge
+
 **Addendum 2026-11-25: billing review M1 fixed** (branch `fix/billing-stale-payment-lock`, SOP `docs/sop/2026-11-25-billing-stale-payment-lock.md`; PR needs an Opus delta review before merge; no migration)
 - [x] Payment row locks in `settle.py` (webhook `_apply` and `settle_transaction`) read the row as it is now (`populate_existing`): a payment a webhook already settled is no longer re-granted, marked "needs refund", or overwritten by a `failed` report (3 tests, failing before the fix)
 - [x] Same one-line fix for the other Payment, Subscription and Refund locks without it (`refunds.py` x6, `invoices.py` x1)
