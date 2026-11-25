@@ -33,7 +33,9 @@
   - [x] Leak guard extended: templates, vocabulary and `/api/workspace-prefs` are workspace data (`tests/test_workspace_leaks.py`)
   - [x] FE guide `docs/fe-integration-guide-workspaces-settings.md` from 44 real captures (`docs/fe-captures/workspaces/settings-*.json`)
   - [x] Browser check at 390 and 1280 px (member view); CI green on the final head: see the PR
-- [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
+- [x] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9) (branch `feature/workspaces-calendar`, SOP `docs/sop/2026-11-24-workspaces-calendar.md`, migration `0075` placeholder, FE guide `docs/fe-integration-guide-workspaces-calendar.md`; nothing verified against a real Google or Microsoft calendar)
+  - [x] T8 connections keyed `(user, workspace, provider)`, connect and callback return per workspace, reference-counted revoke, leave and removal disconnect
+  - [x] T9 chooser `app/calendar_arbitration.py` under a per-person lock, `recorded_in` Upcoming row with Switch here, recurring per workspace, calendar GETs out of `PENDING_SLICE`
 - [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)
 - [ ] W5 Rehearsal on production-shaped data, Opus permission review, FE guide, renumber migrations, ONE PR to `main` (T13)
 

@@ -152,6 +152,17 @@ export function calendarBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-state", file))).response.body as T;
 }
 
+// A capture from the calendar-per-workspace journeys (docs/fe-captures/workspaces/calendar/<file>,
+// `python scripts/capture_workspaces_calendar.py`): the body of the response, or the error it carried.
+export function workspaceCalendarBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/workspaces/calendar", file))).response.body as T;
+}
+
+export function workspaceCalendarError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/workspaces/calendar", file)));
+  return { status: response.status, ...response.body.error };
+}
+
 // A capture from the "add the note taker to your event" tip (docs/fe-captures/bot-invite-tip/<file>):
 // the calendar state or a meeting, with `bot_invite_email` set or `null`.
 export function inviteTipBody<T>(file: string): T {

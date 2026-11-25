@@ -94,6 +94,7 @@ def mark_needs_reconnect(
     alerts.notify_user(
         session,
         conn.user_id,
+        team_id=conn.team_id,
         kind=KIND_DISCONNECTED,
         severity="warning",
         title=text,
@@ -145,6 +146,7 @@ def mark_degraded(session: Session, conn: CalendarConnection, now: datetime) -> 
     alerts.notify_user(
         session,
         conn.user_id,
+        team_id=conn.team_id,
         kind=KIND_DEGRADED,
         severity="warning",
         title=calendar_text.DEGRADED_TEXT,

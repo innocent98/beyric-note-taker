@@ -97,6 +97,31 @@ MICROSOFT_REVOKED_ERROR_TEXT = (
 GENERIC_ERROR_TEXT = "The last check of your calendar did not work. Beyric will try again soon."
 
 
+def workspace_label(name: str, is_personal: bool) -> str:
+    """How a workspace is named in a sentence: the way the workspace switcher names it, so the
+    personal one reads `My team (personal)`."""
+    return f"{name} (personal)" if is_personal else name
+
+
+def recorded_in_text(workspace: str) -> str:
+    """The Upcoming line of an event that another of the person's workspaces records (workspaces
+    design 12.4): said with the workspace's name; the switch that moves it here sits beside it."""
+    return f"Recorded in {workspace}. Switch here instead."
+
+
+def moved_here_text(workspace: str) -> str:
+    """What the person is told right after switching a meeting to this workspace."""
+    return f"Moved here from {workspace}. {workspace} will not record this meeting."
+
+
+def already_recording_text(workspace: str) -> str:
+    """Why a switch is refused: the note taker of the other workspace is already in the meeting."""
+    return (
+        f"{workspace} is already recording this meeting. "
+        "A note taker that is already in the meeting is never moved."
+    )
+
+
 def join_label(decision: JoinDecision) -> str:
     """The short answer to "will the bot join this?": Will join, Off or Cannot join."""
     if decision.join:

@@ -1,0 +1,25 @@
+{
+  "note": "Disconnecting the personal workspace while Luran still uses the same Google account: `revoked` is true but nothing was revoked at Google (the grant is still in use); Luran's calendar stays connected.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/disconnect",
+    "headers": {
+      "X-Team-Id": "1",
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "disconnected",
+      "revoked": true
+    }
+  }
+}

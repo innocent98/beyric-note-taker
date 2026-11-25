@@ -3757,6 +3757,30 @@
         "title": "QuestionPatch",
         "type": "object"
       },
+      "RecordedIn": {
+        "description": "The workspace that records an event instead of the one asked about.",
+        "properties": {
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "team_id": {
+            "title": "Team Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "team_id",
+          "name",
+          "is_personal"
+        ],
+        "title": "RecordedIn",
+        "type": "object"
+      },
       "RecordingAckOut": {
         "properties": {
           "recording_acknowledged": {
@@ -6833,6 +6857,17 @@
             ],
             "title": "Join Id"
           },
+          "moved_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moved Text"
+          },
           "not_recorded_text": {
             "anyOf": [
               {
@@ -6882,6 +6917,27 @@
               }
             ],
             "title": "Reason Text"
+          },
+          "recorded_in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_in_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded In Text"
           },
           "starts_at": {
             "format": "date-time",
@@ -8458,8 +8514,30 @@
     },
     "/api/calendar": {
       "get": {
-        "description": "Everything the calendar settings page shows, in one read (no CSRF header needed): whether\nGoogle Calendar is connected, which Google address, the last time it was read, the last\nfailure in plain words, and the next seven days of synced events, each with whether the bot\nwill join it and why not when it will not. Nothing is fetched from Google here: this reads what\nthe sync job last stored. 404 `calendar_unavailable` while the calendar features are off.",
+        "description": "Everything the calendar settings page shows for the ACTIVE workspace (`X-Team-Id`, else the\ncaller's default one; another workspace's calendar is never shown), in one read (no CSRF header\nneeded): whether\nGoogle Calendar is connected, which Google address, the last time it was read, the last\nfailure in plain words, and the next seven days of synced events, each with whether the bot\nwill join it and why not when it will not. Nothing is fetched from Google here: this reads what\nthe sync job last stored. 404 `calendar_unavailable` while the calendar features are off.",
         "operationId": "calendar_state",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8530,6 +8608,26 @@
             "schema": {
               "title": "Event Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -8613,7 +8711,7 @@
     },
     "/api/calendar/recurring": {
       "get": {
-        "description": "The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting\non the connected calendar with a cadence worked out from its stored times, and its next\noccurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().\ntimeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty\nwhen no calendar is connected or nothing recurs. Nothing is fetched from Google. 404\n`calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone\nname that is not known.",
+        "description": "The Recurring cards of the Meetings screen for the ACTIVE workspace (`X-Team-Id`, else the\ncaller's default one; no CSRF header needed): each recurring meeting on the calendar connected\nin this workspace, except those removed from it, with a cadence worked out from its stored\ntimes, and its next\noccurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().\ntimeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty\nwhen no calendar is connected or nothing recurs. Nothing is fetched from Google. 404\n`calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone\nname that is not known.",
         "operationId": "calendar_recurring",
         "parameters": [
           {
@@ -8633,6 +8731,26 @@
               ],
               "description": "IANA zone name, e.g. Africa/Lagos",
               "title": "Tz"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -8698,6 +8816,28 @@
       "put": {
         "description": "Change the auto-join rule, the boxes \"Also join invites I haven't answered yet\" and \"Skip\none-on-one meetings\", and/or the template for calendar meetings (CSRF header needed); a field\nleft out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so the\npage can redraw from it. A changed `rule` clears the person's per-meeting switches on events\nthat have not started; a changed `rule`, `join_unanswered` or `skip_one_on_ones` then decides\nevery stored event again: joins it now forbids are cancelled and joins it now allows are made\nor revived (the same rules the sync applies; nothing is fetched from Google and no bot is\nsent here; a join whose bot is in is never touched). Choosing a value that is already set\nchanges nothing. 404 `not_found` for a template that is not the caller's own, 404\n`calendar_unavailable` while the calendar features are off.",
         "operationId": "calendar_settings",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8768,7 +8908,7 @@
     },
     "/api/calendar/{provider}/callback": {
       "get": {
-        "description": "Where Google or Microsoft sends the browser back after the consent screen. Public in the\nguard (it answers a signed-out visitor itself) but checked by the single-use `state` (which\nonly finishes at the callback of the provider it was started for), the signed-in user the\nflow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the\nstored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`\n`google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),\n`no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another\nprovider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,\n`scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,\n`wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to\n`/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404\n`calendar_unavailable` while the feature is off.",
+        "description": "Where Google or Microsoft sends the browser back after the consent screen. Public in the\nguard (it answers a signed-out visitor itself) but checked by the single-use `state` (which\nonly finishes at the callback of the provider it was started for), the signed-in user the\nflow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the\nstored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`\n`google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),\n`no_refresh_token`, `wrong_account`, `different_account` (another account of the same provider\nis connected in that workspace) or `already_connected` (another provider's calendar is connected\nin that workspace) or `workspace_unavailable` (the person left the workspace meanwhile); for\nMicrosoft `microsoft_denied`, `microsoft_failed`, `scope_missing`, `no_mailbox` (the account has\nno calendar to read), `tenant_not_allowed`, `wrong_account`, `different_account`,\n`already_connected` or `workspace_unavailable`. When the connection was started from a\nworkspace that is not the person's default one the redirect also carries `team=<id>`: the page\nit returns to is that workspace's. No header is needed: the workspace is remembered with the\nsingle-use `state`. Nobody signed in goes to\n`/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404\n`calendar_unavailable` while the feature is off.",
         "operationId": "calendar_connect_callback",
         "parameters": [
           {
@@ -8894,7 +9034,7 @@
     },
     "/api/calendar/{provider}/connect": {
       "post": {
-        "description": "Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.\n`provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked\nfor, each at the moment its feature is switched on; permissions given earlier are kept. For\nMicrosoft `features` must be `[\"calendar\"]` (there is no Meet feature: 422 `invalid_features`).\nSets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the\ncallback to this browser. 404 `calendar_unavailable` when the calendar features are off (for\nMicrosoft: also while its switch is off, so the route does not exist for anyone), 409\n`calendar_already_connected` when another provider's calendar is connected (one calendar at a\ntime), 503 `calendar_unavailable` when the server cannot store a token safely.",
+        "description": "Start connecting a calendar to the ACTIVE workspace (CSRF header needed; `X-Team-Id` names\nthe workspace, else the caller's default one; a team the caller is not in is 404 `not_found`).\nReturns the consent URL to navigate to. The connection will belong to that workspace and the\ncallback returns to it; a person may connect the same provider, even the same account, in\nseveral workspaces, but only one calendar provider per workspace. `provider` is `google` or\n`microsoft`. For Google only the permissions in `features` are asked\nfor, each at the moment its feature is switched on; permissions given earlier are kept. For\nMicrosoft `features` must be `[\"calendar\"]` (there is no Meet feature: 422 `invalid_features`).\nSets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the\ncallback to this browser. 404 `calendar_unavailable` when the calendar features are off (for\nMicrosoft: also while its switch is off, so the route does not exist for anyone), 409\n`calendar_already_connected` when another provider's calendar is connected IN THIS WORKSPACE\n(one calendar per workspace), 503 `calendar_unavailable` when the server cannot store a token\nsafely.",
         "operationId": "calendar_connect_start",
         "parameters": [
           {
@@ -8908,6 +9048,26 @@
               ],
               "title": "Provider",
               "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -9001,7 +9161,7 @@
     },
     "/api/calendar/{provider}/disconnect": {
       "post": {
-        "description": "Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the\naccess at Google first. Either way it deletes the caller's calendar events, all their\nscheduled joins (every state) and calendar notifications, and the stored token. Meetings\nalready recorded, the hours used and the settings stay; a meeting being recorded right now\ncarries on. Safe to repeat (200 again), and it works while the calendar features are switched\noff. If Google cannot be reached the local deletion still happens and `revoked` is false: tell\nthe person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to\nremove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the\nperson is told to remove Beyric in their Microsoft account's app permissions. `reason` is\nabsent (not null) for Google, so Google's answer keeps its shape.\nAfterwards `connect` works again, for the same or another account.",
+        "description": "Disconnect the caller's calendar IN THE ACTIVE WORKSPACE (CSRF header needed, no body;\n`X-Team-Id` names the workspace). For Google it revokes the access at Google, but only when no\nother connection of the caller (in another workspace) uses the same Google account: then\n`revoked` is true and nothing is called, because the grant is still in use. Either way it\ndeletes the calendar events of this workspace's connection, the scheduled joins filed in this\nworkspace (every state), this workspace's calendar notifications, and the stored token. The\ncaller's other workspaces are untouched. Meetings already recorded, the hours used and the\nsettings stay; a meeting being recorded right now carries on. Safe to repeat (200 again), and\nit works while the calendar features are switched off. If Google cannot be reached the local\ndeletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions. Microsoft cannot be asked to remove its own access: `revoked`\nis false with `reason` `provider_has_no_revoke`, and the\nperson is told to remove Beyric in their Microsoft account's app permissions. `reason` is\nabsent (not null) for Google, so Google's answer keeps its shape.\nAfterwards `connect` works again, for the same or another account.",
         "operationId": "calendar_connect_disconnect",
         "parameters": [
           {
@@ -9015,6 +9175,26 @@
               ],
               "title": "Provider",
               "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -12973,8 +13153,30 @@
     },
     "/api/not-recorded": {
       "get": {
-        "description": "The meetings of the last seven days the note taker did not get into, for the Meetings page\n(no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones\nwhose reason means the meeting was not recorded (recording hours used up, too many note takers\nat once, the link still in use, a note taker from another account already there, the calendar\ndisconnected, a suspended account). Only the caller's own. Each item says why in plain words\nand whether Send now is on offer. Newest first.",
+        "description": "The meetings of the last seven days the note taker did not get into, for the Meetings page\n(no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones\nwhose reason means the meeting was not recorded (recording hours used up, too many note takers\nat once, the link still in use, a note taker from another account already there, the calendar\ndisconnected, a suspended account). Only the caller's own, filed in the ACTIVE workspace\n(`X-Team-Id`; another workspace's are never shown). Each item says why in plain words\nand whether Send now is on offer. Newest first.",
         "operationId": "not_recorded",
+        "parameters": [
+          {
+            "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -18273,7 +18475,7 @@
     },
     "/api/team/members/{user_id}": {
       "delete": {
-        "description": "Remove a member, or leave the team (your own id). They get a fresh team of one; the open\ntasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner\nor admin removes members; only the owner removes an admin; the owner cannot be removed and\ncannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`.",
+        "description": "Remove a member, or leave the team (your own id). They get a fresh team of one; the open\ntasks assigned to them become unassigned; their meetings stay theirs and are unshared. Their\ncalendar connection in this workspace is disconnected and the scheduled joins it planned are\ncancelled; the provider's grant is revoked unless another workspace of theirs uses the same\naccount. An owner\nor admin removes members; only the owner removes an admin; the owner cannot be removed and\ncannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`.",
         "operationId": "remove_member",
         "parameters": [
           {
