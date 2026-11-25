@@ -32,7 +32,7 @@ base.OUT = OUT
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import calendar_prefs, google_oauth  # noqa: E402
+from app import google_oauth, workspace_prefs  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.gcal_sync import apply_batch  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -178,7 +178,7 @@ def run(app, server_base, engine, settings, google) -> None:
     # The same meeting on both calendars, planned by the real materialiser.
     with Session(engine) as session:
         for conn in session.scalars(select(CalendarConnection).order_by(CalendarConnection.id)):
-            prefs = calendar_prefs.for_workspace(session, ada_id, conn.team_id)
+            prefs = workspace_prefs.for_user(session, ada_id, conn.team_id)
             apply_batch(
                 session,
                 conn,

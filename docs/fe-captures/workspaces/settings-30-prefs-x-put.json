@@ -1,0 +1,30 @@
+{
+  "note": "Change the rule and the note taker name for X only.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/workspace-prefs",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "auto_join_rule": "none",
+      "bot_name": "Pat from Platform"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team_id": 4,
+      "bot_name": "Pat from Platform",
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "auto_join_rule": "none",
+      "join_unanswered": false,
+      "skip_one_on_ones": false,
+      "calendar_template_id": null
+    }
+  }
+}

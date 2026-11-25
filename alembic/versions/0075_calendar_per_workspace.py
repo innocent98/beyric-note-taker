@@ -18,14 +18,14 @@ deleted, with their events and the scheduled joins of those events. The workspac
 started from is lost.
 
 Revision ID: 0075
-Revises: 0070
+Revises: 0071
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0075"
-down_revision = "0070"
+down_revision = "0071"
 branch_labels = None
 depends_on = None
 

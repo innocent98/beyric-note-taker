@@ -1,0 +1,23 @@
+{
+  "note": "Owner adds a term to X's vocabulary.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "term": "Luran"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 2,
+      "term": "Luran"
+    }
+  }
+}

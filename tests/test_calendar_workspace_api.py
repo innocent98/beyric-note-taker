@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app import calendar_arbitration, calendar_prefs, gcal_sync, teams
+from app import calendar_arbitration, gcal_sync, teams, workspace_prefs
 from app.models import (
     CalendarConnection,
     CalendarEvent,
@@ -97,7 +97,7 @@ def add_event(session, conn, *, code=CODE, hours=2.0, recurring=None, title="Sta
 
 def plan(session, conn, *events):
     """What the sync does after storing the events: make their joins by the rules as they are."""
-    prefs = calendar_prefs.for_workspace(session, conn.user_id, conn.team_id)
+    prefs = workspace_prefs.for_user(session, conn.user_id, conn.team_id)
     gcal_sync.rerun_rules(session, conn, prefs, list(events), now=now(), settings=SETTINGS)
 
 
@@ -167,7 +167,7 @@ def test_a_person_with_one_calendar_sees_no_recorded_in(web, session, two):
 
 
 def test_the_workspace_that_skips_a_meeting_is_not_said_to_record_it(web, session, two):
-    row = calendar_prefs.for_update(session, web_user(session).id, two.home.id)
+    row = workspace_prefs.row_for_update(session, web_user(session).id, two.home.id)
     row.auto_join_rule = "none"
     session.commit()
     add_event(session, two.conns[two.home.id])

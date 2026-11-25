@@ -40,7 +40,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import calendar_arbitration, calendar_prefs, placement
+from app import calendar_arbitration, placement, workspace_prefs
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
 from app.models import CalendarEvent, ScheduledJoin, User
@@ -124,7 +124,7 @@ def _can_place(
         return False
     if not connection_ok(other):
         return False
-    prefs = calendar_prefs.for_workspace(session, other.user_id, other.team_id)
+    prefs = workspace_prefs.for_user(session, other.user_id, other.team_id)
     decision = will_join(
         event,
         event.override,

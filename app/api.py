@@ -34,6 +34,7 @@ from app import (
     api_teams,
     api_translation,
     api_workspace,
+    api_workspace_prefs,
     auth,
     calendar_api,
     calendar_recurring,
@@ -69,9 +70,11 @@ from app.api_schemas import (
     SessionState,
     ShareRequest,
     TeamRef,
+    TemplateCopyOut,
     TemplateIn,
     TemplateList,
     TemplateOut,
+    TermCopyOut,
     TermList,
     TermOut,
     TranscriptEdit,
@@ -1060,13 +1063,21 @@ def restore_transcript(
 
 # ---- templates ----
 
+_WRITER_ERRORS = {
+    403: {"model": ErrorResponse, "description": "`team_forbidden`: only an owner or admin writes"},
+    404: {"model": ErrorResponse, "description": "A team the caller is not in"},
+}
 
-@router.get("/templates", tags=["templates"])
+
+@router.get("/templates", tags=["templates"], responses={404: _WRITER_ERRORS[404]})
 def list_templates(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TemplateList:
-    """The caller's templates, sorted by name."""
-    rows = services.list_templates(session, user)
+    """The active workspace's templates (the `X-Team-Id` header, else the default workspace),
+    sorted by name. Every member reads and uses them; owners and admins write them."""
+    rows = services.list_templates(session, workspace)
     return TemplateList(templates=[TemplateOut.model_validate(row) for row in rows])
 
 
@@ -1074,33 +1085,57 @@ def list_templates(
     "/templates",
     status_code=201,
     tags=["templates"],
-    responses={400: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def create_template(
     body: TemplateIn,
     response: Response,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TemplateOut:
-    template = services.save_template(session, user, None, body.name, body.instructions)
+    template = services.save_template(session, user, workspace, None, body.name, body.instructions)
     response.headers["Location"] = f"/api/templates/{template.id}"
     return TemplateOut.model_validate(template)
+
+
+@router.post(
+    "/templates/copy-from-personal",
+    tags=["templates"],
+    responses={409: {"model": ErrorResponse, "description": "`personal_team`"}, **_WRITER_ERRORS},
+)
+def copy_templates_from_personal(
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TemplateCopyOut:
+    """Copy the caller's personal-workspace templates into the active workspace (owners and
+    admins). A name already in the workspace is skipped, never overwritten. 409 `personal_team`
+    when the active workspace is the personal one."""
+    copied, skipped, rows = services.copy_templates_from_personal(session, user, workspace)
+    return TemplateCopyOut(
+        copied=copied,
+        skipped=skipped,
+        templates=[TemplateOut.model_validate(row) for row in rows],
+    )
 
 
 @router.put(
     "/templates/{template_id:id}",
     tags=["templates"],
-    responses={code: {"model": ErrorResponse} for code in (400, 404)},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def update_template(
     template_id: int,
     body: TemplateIn,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TemplateOut:
-    """Replace the name and instructions."""
-    template = services.template_or_404(session, user, template_id)
-    services.save_template(session, user, template, body.name, body.instructions)
+    """Replace the name and instructions of one of the active workspace's templates. A template
+    of another workspace is a 404."""
+    template = services.template_or_404(session, workspace, template_id)
+    services.save_template(session, user, workspace, template, body.name, body.instructions)
     return TemplateOut.model_validate(template)
 
 
@@ -1108,30 +1143,33 @@ def update_template(
     "/templates/{template_id:id}",
     status_code=204,
     tags=["templates"],
-    responses={code: {"model": ErrorResponse} for code in (404, 409)},
+    responses={409: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def delete_template(
     template_id: int,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    """Delete a template. Meetings written with it keep their notes and the template name they
-    show; the calendar setting that pointed at it moves to the oldest template left. 409
-    `last_template` for the only one."""
-    services.delete_template(session, user, template_id)
+    """Delete a template of the active workspace. Meetings written with it keep their notes and the
+    template name they show; a calendar setting that pointed at it moves to the workspace's oldest
+    template left. 409 `last_template` for the only one."""
+    services.delete_template(session, user, workspace, template_id)
     return Response(status_code=204)
 
 
 # ---- vocabulary ----
 
 
-@router.get("/vocabulary", tags=["vocabulary"])
+@router.get("/vocabulary", tags=["vocabulary"], responses={404: _WRITER_ERRORS[404]})
 def list_terms(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TermList:
-    """The caller's terms, sorted alphabetically."""
+    """The active workspace's terms, sorted alphabetically."""
     return TermList(
-        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session, user)]
+        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session, workspace)]
     )
 
 
@@ -1139,29 +1177,51 @@ def list_terms(
     "/vocabulary",
     status_code=201,
     tags=["vocabulary"],
-    responses={400: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, **_WRITER_ERRORS},
 )
 def add_term(
     body: NewTerm,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TermOut:
-    row = services.add_term(session, user, body.term)
+    row = services.add_term(session, user, workspace, body.term)
     return TermOut(id=row.id, term=row.term)
+
+
+@router.post(
+    "/vocabulary/copy-from-personal",
+    tags=["vocabulary"],
+    responses={409: {"model": ErrorResponse, "description": "`personal_team`"}, **_WRITER_ERRORS},
+)
+def copy_terms_from_personal(
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TermCopyOut:
+    """Copy the caller's personal-workspace terms into the active workspace (owners and admins),
+    never doubling one that is there. 409 `personal_team` for the personal workspace itself."""
+    copied, skipped, rows = services.copy_terms_from_personal(session, user, workspace)
+    return TermCopyOut(
+        copied=copied,
+        skipped=skipped,
+        terms=[TermOut(id=row.id, term=row.term) for row in rows],
+    )
 
 
 @router.delete(
     "/vocabulary/{term_id:id}",
     status_code=204,
     tags=["vocabulary"],
-    responses={404: {"model": ErrorResponse}},
+    responses={404: {"model": ErrorResponse}, 403: _WRITER_ERRORS[403]},
 )
 def delete_term(
     term_id: int,
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
-    if not services.delete_term(session, user, term_id):
+    if not services.delete_term(session, user, workspace, term_id):
         raise StarletteHTTPException(404, "No such term")
     return Response(status_code=204)
 
@@ -1169,6 +1229,7 @@ def delete_term(
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
 router.include_router(api_settings.router)
+router.include_router(api_workspace_prefs.router)
 router.include_router(api_integrations.router)
 router.include_router(calendar_api.router)
 router.include_router(calendar_api.joins_router)

@@ -1,0 +1,26 @@
+{
+  "note": "A member cannot write: 403 `team_forbidden`.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Mine",
+      "instructions": "Do it."
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

@@ -20,12 +20,11 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import chat_notice
+from app import chat_notice, teams, workspace_prefs
 from app.config import Settings
-from app.models import VocabularyTerm
+from app.models import User
 from app.notes import UNKNOWN_SPEAKER, _clean_segments
 from app.skribby import takes_vocabulary
 
@@ -210,8 +209,11 @@ def send_options(
     bot_name: str | None = None,
     shown_bot_name: str | None = None,
     fallback_shown_bot_name: str | None = None,
+    *,
+    workspace_team_id: int | None = None,
 ) -> dict[str, Any]:
-    """Extra keyword arguments for `provider.send_bot`: the owner's vocabulary, only in `skribby`
+    """Extra keyword arguments for `provider.send_bot`: the vocabulary of the meeting's workspace
+    (`workspace_team_id`; none: the owner's personal workspace), only in `skribby`
     mode, only for a provider that takes it (Skribby's `custom_vocabulary`) and only when the
     configured model is one Skribby lists with it (`skribby.VOCABULARY_MODELS`), because there it is
     Skribby's model that transcribes. Our own transcription reads the vocabulary itself. Reading
@@ -228,7 +230,7 @@ def send_options(
         options["bot_name"] = bot_name
     return (
         options
-        | _vocabulary_options(session, provider, owner_user_id, settings)
+        | _vocabulary_options(session, provider, owner_user_id, settings, workspace_team_id)
         | chat_notice.send_options(
             session,
             provider,
@@ -241,7 +243,11 @@ def send_options(
 
 
 def _vocabulary_options(
-    session: Session | None, provider, owner_user_id: int, settings: Settings
+    session: Session | None,
+    provider,
+    owner_user_id: int,
+    settings: Settings,
+    workspace_team_id: int | None = None,
 ) -> dict[str, Any]:
     if (
         session is None
@@ -254,13 +260,10 @@ def _vocabulary_options(
         # A savepoint: a failed read must not abort the caller's transaction (`place_bot` holds the
         # placement lock and the slot in it).
         with session.begin_nested():
-            terms = list(
-                session.scalars(
-                    select(VocabularyTerm.term)
-                    .where(VocabularyTerm.owner_user_id == owner_user_id)
-                    .order_by(VocabularyTerm.id)
-                )
-            )
+            team_id = workspace_team_id
+            if team_id is None:  # no workspace named: the owner's personal one
+                team_id = teams.ensure_personal_team(session, session.get(User, owner_user_id)).id
+            terms = workspace_prefs.terms(session, team_id)
     except Exception:  # a database hiccup must not stop the bot from being sent
         return {}
     return {"vocabulary": terms} if terms else {}

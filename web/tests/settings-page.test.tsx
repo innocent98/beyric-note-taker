@@ -44,6 +44,9 @@ vi.mock("@/lib/api/server", () => {
         },
       },
       templates: { list: async () => (state.templates ? state.templates() : []) },
+      workspacePrefs: {
+        get: async () => ({ team_id: 2, bot_name: null, bot_name_default: "Beyric Meeting Support", warning: null, auto_join_rule: "all", join_unanswered: false, skip_one_on_ones: false, calendar_template_id: null }),
+      },
       sprints: { list: async () => sprintsBody("09-sprints-first.json") },
       settings: {
         email: { get: async () => ({ notify_email: true }) },
@@ -108,6 +111,22 @@ describe("sidebar", () => {
 });
 
 describe("page", () => {
+  it("is split into This workspace (what switches) and Personal (what never does), the first naming the workspace", async () => {
+    state.answer = async () => connected;
+    const html = await render();
+    expect(html).toContain("This workspace");
+    expect(html).toContain("Settings for My team. They change when you switch workspace.");
+    expect(html).toContain("These follow you into every workspace.");
+    expect(html.indexOf('id="settings-workspace"')).toBeLessThan(html.indexOf('id="settings-personal"'));
+    const at = (marker: string) => html.indexOf(marker);
+    // the calendar, the workspace's own note taker name and sprints are this workspace's ...
+    expect(at("Join automatically")).toBeLessThan(at('id="settings-personal"'));
+    expect(at('id="set-ws-bot-name"')).toBeLessThan(at('id="settings-personal"'));
+    // ... time zone, the default note taker name, language, billing and email are personal
+    expect(at('id="settings-personal"')).toBeLessThan(at('id="set-bot-name"'));
+    expect(at('id="settings-personal"')).toBeLessThan(at('id="email-preferences"'));
+  });
+
   it("draws the Email section below the Calendar section, with the notes-ready switch on", async () => {
     state.answer = async () => connected;
     const html = await render();

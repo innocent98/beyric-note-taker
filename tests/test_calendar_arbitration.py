@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app import calendar_arbitration, calendar_prefs, gcal_sync, teams
+from app import calendar_arbitration, teams, workspace_prefs
 from app.calendar_arbitration import JoinCandidate, choose_workspace
 from app.gcal_sync import apply_batch, rerun_rules
 from app.join_runner import run_due_joins
@@ -89,7 +89,8 @@ CODE = "abc-defg-hij"
 @dataclass
 class Duo:
     user: object
-    template: Template
+    template: Template  # the personal workspace's
+    luran_template: Template
     home: Team
     luran: Team
     a: CalendarConnection  # the personal workspace: connected first
@@ -102,7 +103,10 @@ def make_duo(session, email="ada@example.test") -> Duo:
     session.commit()
     luran = new_team(session, user, "Luran")
     template = Template(owner_user_id=user.id, name="General", instructions="Notes.")
-    session.add(template)
+    luran_template = Template(
+        owner_user_id=user.id, team_id=luran.id, name="General", instructions="Notes."
+    )
+    session.add_all([template, luran_template])
     session.flush()
     session.add(UserSettings(user_id=user.id, calendar_template_id=template.id))
     a = CalendarConnection(user_id=user.id, team_id=home.id, provider="google")
@@ -111,7 +115,7 @@ def make_duo(session, email="ada@example.test") -> Duo:
     b = CalendarConnection(user_id=user.id, team_id=luran.id, provider="google")
     session.add(b)
     session.commit()
-    return Duo(user, template, home, luran, a, b)
+    return Duo(user, template, luran_template, home, luran, a, b)
 
 
 @pytest.fixture
@@ -120,14 +124,14 @@ def duo(session) -> Duo:
 
 
 def set_rule(session, duo, team, rule="all"):
-    row = calendar_prefs.for_update(session, duo.user.id, team.id)
+    row = workspace_prefs.row_for_update(session, duo.user.id, team.id)
     row.auto_join_rule = rule
-    row.calendar_template_id = duo.template.id
+    row.calendar_template_id = (duo.template if team.id == duo.home.id else duo.luran_template).id
     session.commit()
 
 
 def sync(session, conn, *events, now=NOW, settings=SETTINGS, **kwargs):
-    prefs = calendar_prefs.for_workspace(session, conn.user_id, conn.team_id)
+    prefs = workspace_prefs.for_user(session, conn.user_id, conn.team_id)
     return apply_batch(session, conn, batch(*events), prefs, now=now, settings=settings, **kwargs)
 
 
@@ -217,7 +221,7 @@ def test_switching_it_on_in_the_other_workspace_moves_the_join_and_cancels_the_f
     rerun_rules(
         session,
         duo.b,
-        calendar_prefs.for_workspace(session, duo.user.id, duo.luran.id),
+        workspace_prefs.for_user(session, duo.user.id, duo.luran.id),
         [row_b],
         now=NOW,
         settings=SETTINGS,
@@ -235,7 +239,7 @@ def test_clearing_the_switch_gives_the_meeting_back_to_the_first_connected(sessi
     sync(session, duo.a, start_event())
     sync(session, duo.b, start_event())
     row_b = event_of(session, duo.b)
-    prefs_b = calendar_prefs.for_workspace(session, duo.user.id, duo.luran.id)
+    prefs_b = workspace_prefs.for_user(session, duo.user.id, duo.luran.id)
     row_b.override = True
     rerun_rules(session, duo.b, prefs_b, [row_b], now=NOW, settings=SETTINGS)
 
@@ -256,7 +260,7 @@ def test_switching_a_workspace_off_hands_the_meeting_to_the_other_one(session, d
     rerun_rules(
         session,
         duo.a,
-        calendar_prefs.for_workspace(session, duo.user.id, duo.home.id),
+        workspace_prefs.for_user(session, duo.user.id, duo.home.id),
         [row_a],
         now=NOW,
         settings=SETTINGS,
@@ -289,7 +293,7 @@ def test_a_running_bot_is_never_moved_by_a_switch(session, duo):
     rerun_rules(
         session,
         duo.b,
-        calendar_prefs.for_workspace(session, duo.user.id, duo.luran.id),
+        workspace_prefs.for_user(session, duo.user.id, duo.luran.id),
         [row_b],
         now=NOW,
         settings=SETTINGS,
@@ -312,6 +316,7 @@ def test_the_meeting_is_born_in_the_winners_workspace(session, duo):
     session.add(AppState(id=1, autojoin_started_at=datetime(2026, 1, 1, tzinfo=UTC)))
     session.commit()
     set_rule(session, duo, duo.home, "none")  # the first-connected workspace skips it
+    set_rule(session, duo, duo.luran, "all")
     sync(session, duo.a, start_event())
     sync(session, duo.b, start_event())
 
@@ -445,7 +450,3 @@ def test_the_live_code_index_still_holds_for_the_person(session, duo):
     with pytest.raises(IntegrityError):
         session.flush()
     session.rollback()
-
-
-def test_gcal_sync_exports_the_default_settings_for_older_callers():
-    assert gcal_sync.DEFAULT_USER_SETTINGS.auto_join_rule == "all"

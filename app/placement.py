@@ -56,7 +56,15 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import bot_names, entitlements, titles, transcript_source, usage
+from app import (
+    bot_names,
+    entitlements,
+    teams,
+    titles,
+    transcript_source,
+    usage,
+    workspace_prefs,
+)
 from app.bot_provider import (
     BotDuplicate,
     BotId,
@@ -68,7 +76,7 @@ from app.bot_provider import (
     run_within,
 )
 from app.config import Settings, get_settings
-from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
+from app.models import MEETING_SOURCES, Meeting, Template, User
 
 logger = logging.getLogger(__name__)
 
@@ -322,29 +330,37 @@ def could_be_placed(
     return own < settings.user_bot_limit
 
 
-def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int]:
-    """The user and the template to write the notes with. A programming error (a caller that did
-    not check) raises `ValueError`, never a refusal: nothing here is for a person to read."""
+def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int, int]:
+    """The user, the template to write the notes with and the workspace the meeting is born in. A
+    programming error (a caller that did not check) raises `ValueError`, never a refusal: nothing
+    here is for a person to read.
+
+    Templates belong to a workspace, so the template must be one of the workspace the meeting is
+    born in (no workspace named: the recorder's personal one). With none chosen, the person's own
+    choice for that workspace's calendar meetings, else the workspace's oldest template. A calendar
+    join queued before the cutover may still name a template of another workspace: that one is the
+    workspace's default instead of a failure at the moment the bot should join."""
     if req.source not in MEETING_SOURCES:
         raise ValueError("unknown meeting source")
     user = session.get(User, req.user_id)
     if user is None:
         raise ValueError("no such user")
+    workspace_id = req.workspace_team_id or teams.ensure_personal_team(session, user).id
     template_id = req.template_id
     if template_id is None:
-        template_id = session.scalar(
-            select(UserSettings.calendar_template_id).where(UserSettings.user_id == user.id)
-        )
+        template_id = workspace_prefs.default_template_id(session, workspace_id, user.id)
     owned = (
         None
         if template_id is None
         else session.scalar(
-            select(Template.id).where(Template.id == template_id, Template.owner_user_id == user.id)
+            select(Template.id).where(Template.id == template_id, Template.team_id == workspace_id)
         )
     )
+    if owned is None and req.source != "manual":  # a calendar join: never fail at the door
+        owned = workspace_prefs.default_template_id(session, workspace_id, user.id)
     if owned is None:
-        raise ValueError("the template is missing or belongs to someone else")
-    return user, owned
+        raise ValueError("the template is missing or belongs to another workspace")
+    return user, owned, workspace_id
 
 
 def place_bot(
@@ -370,7 +386,7 @@ def place_bot(
     reached the host without an answer (`BotSendUncertain`), the meeting is returned as an
     unconfirmed start (see the module doc) for the worker to settle. If recording the meeting fails
     after a send, the bot is stopped, best effort, before the failure is raised."""
-    user, template_id = _resolve(session, req)
+    user, template_id, workspace_id = _resolve(session, req)
     try:
         reserve_slot(
             session,
@@ -389,7 +405,9 @@ def place_bot(
     provider_label = provider_name(provider)
     # The note taker name for this meeting (the person's own, else the server default): computed
     # once, sent, and stored on the meeting below, so what was sent is what is recorded.
-    sent_name = bot_names.stored_name(effective, user, provider_label)
+    # (the workspace's own name for them, else their default: `workspace_prefs`)
+    prefs = workspace_prefs.for_user(session, user.id, workspace_id)
+    sent_name = bot_names.stored_name(effective, prefs, provider_label)
     try:
         provider_id = provider.send_bot(
             req.meeting_url,
@@ -398,6 +416,7 @@ def place_bot(
                 provider,
                 user.id,
                 effective,
+                workspace_team_id=workspace_id,
                 bot_name=sent_name,
                 shown_bot_name=bot_names.shown_name(
                     effective, provider=provider_label, platform=req.platform, stored=sent_name
@@ -438,7 +457,9 @@ def place_bot(
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),
-        workspace_team_id=req.workspace_team_id,
+        workspace_team_id=workspace_id,
+        # Decision D4: born in a team workspace that shares by default, it is shared from birth
+        shared_team_id=teams.birth_share_team_id(session, user, workspace_id),
     )
     if provider_id is None:
         # The grace counts from after the send, not from the caller's `now`, which was taken

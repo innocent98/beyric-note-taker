@@ -28,7 +28,7 @@
       "rule_text": "Joining all meetings except unanswered invites from outside your organisation",
       "join_unanswered": false,
       "skip_one_on_ones": false,
-      "calendar_template_id": 1,
+      "calendar_template_id": null,
       "auto_join_paused": false,
       "auto_join_paused_text": null,
       "microsoft_enabled": false,

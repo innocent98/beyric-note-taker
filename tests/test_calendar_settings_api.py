@@ -11,8 +11,8 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
-from app import teams
-from app.models import CalendarEvent, ScheduledJoin, Template, UserSettings, WorkspacePrefs
+from app import teams, workspace_prefs
+from app.models import CalendarEvent, ScheduledJoin, Template, UserSettings
 from tests import test_calendar_connect as cc
 from tests import test_web as tw
 from tests.test_api import error_of
@@ -71,27 +71,23 @@ def add_join(session, event: CalendarEvent, state="scheduled", **fields) -> Sche
     return join
 
 
-def stored_prefs(session, user) -> WorkspacePrefs | None:
-    """The person's settings in their default workspace: the one a request with no `X-Team-Id`
-    header writes (the settings are per workspace, `app/calendar_prefs.py`)."""
+def stored_prefs(session, user):
+    """The person's settings in the workspace their calendar lives in (the default one here): the
+    calendar settings are per person per workspace (`workspace_prefs`)."""
     session.expire_all()
-    team = teams.team_of(session, user.id)
-    return session.get(WorkspacePrefs, (team.id, user.id)) if team else None
+    return workspace_prefs.for_user(session, user.id, teams.ensure_team(session, user).id)
 
 
 def stored_rule(session, user) -> str | None:
-    row = stored_prefs(session, user)
-    return row.auto_join_rule if row else None
+    return stored_prefs(session, user).auto_join_rule
 
 
 def stored_box(session, user) -> bool | None:
-    row = stored_prefs(session, user)
-    return row.join_unanswered if row else None
+    return stored_prefs(session, user).join_unanswered
 
 
 def stored_skip(session, user) -> bool | None:
-    row = stored_prefs(session, user)
-    return row.skip_one_on_ones if row else None
+    return stored_prefs(session, user).skip_one_on_ones
 
 
 def stored_override(session, event) -> bool | None:
@@ -181,17 +177,16 @@ def test_each_of_the_three_rules_can_be_chosen(web, session, owner, linked, rule
 def test_a_bad_settings_body_is_422_and_stores_nothing(web, session, owner, linked, body):
     error_of(web.put(SETTINGS_URL, body), 422, "validation_error")
     assert stored_rule(session, owner) in (None, "all")
-    row = stored_prefs(session, owner)
+    session.expire_all()
+    row = session.get(UserSettings, owner.id)
     assert row is None or row.calendar_template_id is None
 
 
 def test_a_user_without_a_settings_row_gets_one(web, session, owner, linked):
     session.expire_all()
     assert session.get(UserSettings, owner.id) is None
-    assert stored_prefs(session, owner) is None
     assert web.put(SETTINGS_URL, {"rule": "none"}).status_code == 200
     assert stored_rule(session, owner) == "none"
-    assert session.get(UserSettings, owner.id) is None  # the person's own defaults are not touched
 
 
 def test_the_rule_can_be_set_before_a_calendar_is_connected(web, session, owner):

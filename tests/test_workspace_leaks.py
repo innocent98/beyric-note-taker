@@ -39,6 +39,9 @@ from app.models import (
     Task,
     Team,
     TeamMember,
+    Template,
+    VocabularyTerm,
+    WorkspacePrefs,
 )
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     anon,
@@ -89,6 +92,10 @@ WORKSPACE_DATA = {
     "/api/calendar",
     "/api/calendar/recurring",
     "/api/not-recorded",
+    # W2: templates, vocabulary and the person's own settings in the workspace
+    "/api/templates",
+    "/api/vocabulary",
+    "/api/workspace-prefs",
 }
 
 # The caller's own account, not a workspace's: sign-in, plan and hours, payments, the personal
@@ -124,13 +131,10 @@ ACCOUNT_LEVEL = {
     "/api/admin/waitlist",
 }
 
-# Moves to the workspace in the slice named (W2: templates, vocabulary and settings). They are the
-# person's own for now and the integration branch is not deployed until that slice has moved them
-# into WORKSPACE_DATA, which this test then enforces.
-PENDING_SLICE = {
-    "/api/templates": "W2",
-    "/api/vocabulary": "W2",
-}
+# Nothing is pending any more: W2 moved templates, vocabulary and the per-workspace settings, and W3
+# the calendar connection, its upcoming list and its recurring cards. A route that must wait for a
+# later slice is added here with the slice's name, and this test then enforces it is moved.
+PENDING_SLICE: dict[str, str] = {}
 
 
 def test_every_get_route_is_classified(app):
@@ -143,7 +147,7 @@ def test_every_get_route_is_classified(app):
     # a route is in one set only
     assert not (WORKSPACE_DATA & ACCOUNT_LEVEL) and not (WORKSPACE_DATA & set(PENDING_SLICE))
     # nothing that carries a meeting's, task's or decision's text is allowed to wait for a slice
-    assert set(PENDING_SLICE) <= {"/api/templates", "/api/vocabulary"}
+    assert not PENDING_SLICE
 
 
 # ---- the cast -----------------------------------------------------------------------------
@@ -229,6 +233,13 @@ def cast(session, template, world) -> Cast:
                 meeting_id=mine.id,
             )
         )
+        session.add(
+            Template(
+                owner_user_id=c.pat.id, team_id=team.id, name=f"{mark} template", instructions="t"
+            )
+        )
+        session.add(VocabularyTerm(owner_user_id=c.pat.id, team_id=team.id, term=f"{mark} term"))
+        session.add(WorkspacePrefs(team_id=team.id, user_id=c.pat.id, bot_name=f"{mark} bot"))
         project = Project(team_id=team.id, name=f"{mark} project", color="#0E6B5E", keywords=[])
         session.add(project)
         session.flush()
@@ -403,6 +414,9 @@ def test_each_workspace_shows_its_own_data_on_the_list_routes(app, session, cast
             "/api/calendar",
             "/api/calendar/recurring",
             "/api/not-recorded",
+            "/api/templates",
+            "/api/vocabulary",
+            "/api/workspace-prefs",
         ):
             assert mark in get(pat, path, team).text, (path, key)
         assert f"TEAM_{key.upper()}" in get(pat, "/api/team", team).text

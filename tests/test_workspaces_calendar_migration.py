@@ -27,10 +27,10 @@ owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
 
-def test_0075_follows_0070_and_is_the_only_head(scratch_url):
+def test_0075_follows_0071_and_is_the_only_head(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
-    assert script.get_revision("0075").down_revision == "0070"
+    assert script.get_revision("0075").down_revision == "0071"
 
 
 def connection(conn, uid, tid, provider="google"):
@@ -47,7 +47,7 @@ def connection(conn, uid, tid, provider="google"):
 def test_0075_lets_one_person_hold_a_provider_in_several_workspaces(scratch_url):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
-    command.upgrade(cfg, "0070")
+    command.upgrade(cfg, "0071")
     with engine.begin() as conn:
         ada = user(conn, "ada@example.test")
         home = team(conn, ada, "Ada", personal=True)
@@ -100,7 +100,7 @@ def test_0075_downgrade_keeps_the_oldest_connection_and_round_trips(scratch_url)
             ),
             {"u": ada, "c": extra},
         )
-    command.downgrade(cfg, "0070")
+    command.downgrade(cfg, "0071")
     with engine.connect() as conn:
         rows = {r[0] for r in conn.execute(text("select id from calendar_connections"))}
         assert rows == {oldest, other}  # the extra one went

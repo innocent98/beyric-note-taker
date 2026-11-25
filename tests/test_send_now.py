@@ -10,7 +10,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import sessionmaker
 
 from app import join_runner, mail_templates
@@ -18,6 +18,7 @@ from app.models import (
     CalendarEvent,
     Meeting,
     ScheduledJoin,
+    Template,
     UsageEntry,
     User,
 )
@@ -377,6 +378,12 @@ def test_a_missing_calendar_template_is_409_template_required(web, session, host
     join = join_row(session, owner_world)
     join.template_id = None
     owner_world.user_settings.calendar_template_id = None
+    # Notes need a template of the join's workspace: with none left there is nothing to use
+    session.execute(
+        update(Template)
+        .where(Template.team_id == join.team_id)
+        .values(deleted_at=datetime.now(UTC))
+    )
     session.commit()
     error_of(web.post(SEND.format(join.id)), 409, "template_required")
     assert host.bots_sent == 0

@@ -56,12 +56,12 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app import (
     alerts,
-    calendar_prefs,
     calendar_providers,
     calendar_states,
     hours,
     organizer_bot,
     titles,
+    workspace_prefs,
 )
 from app.bot_provider import BotProvider, BotProviderError, build_provider, describe_failure
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
@@ -428,7 +428,7 @@ def _gate(session: Session, join: ScheduledJoin, now: datetime, settings: Settin
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     ended = False
     if event is not None:
-        prefs = calendar_prefs.for_workspace(session, join.user_id, join.team_id)
+        prefs = workspace_prefs.for_user(session, join.user_id, join.team_id)
         decision = will_join(
             event,
             event.override,
@@ -586,7 +586,7 @@ def _recheck(
         raw = calendar_providers.cancelled_stub(conn.provider, event.source_event_id)
     join.rechecked_at = now  # committed by apply_batch with the rest
     _touch(join, now)
-    user_settings = calendar_prefs.for_workspace(session, join.user_id, conn.team_id)
+    user_settings = workspace_prefs.for_user(session, join.user_id, conn.team_id)
     try:
         apply_batch(
             session,

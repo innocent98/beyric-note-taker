@@ -22,8 +22,8 @@
         {
           "name": "Weekly planning",
           "cadence": "Recurring",
-          "next_starts_at": "2026-11-25T02:00:00Z",
-          "next_text": "Wed 25 Nov, 02:00"
+          "next_starts_at": "2026-11-25T11:00:00Z",
+          "next_text": "Wed 25 Nov, 11:00"
         }
       ]
     }

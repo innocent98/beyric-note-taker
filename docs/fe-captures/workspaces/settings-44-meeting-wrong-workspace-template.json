@@ -1,0 +1,26 @@
+{
+  "note": "A personal template is not a choice in X: 400 `template_required`.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-nop",
+      "template_id": 6
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "template_required",
+        "message": "Choose a template for the notes."
+      }
+    }
+  }
+}

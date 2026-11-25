@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import accounts, pipeline, services
+from app import accounts, pipeline, services, teams
 from app.models import Meeting, ScheduledJoin, Template, User, UserSettings
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     anon,
@@ -258,7 +258,8 @@ def test_a_rewrite_in_flight_finishes_when_its_template_is_deleted_meanwhile(
 
     def delete_while_the_model_works(**kwargs):
         with Session(engine) as other:  # another request, while this one waits for the model
-            services.delete_template(other, other.get(User, owner.id), second.id)
+            home = teams.personal_team(other, owner.id)
+            services.delete_template(other, other.get(User, owner.id), home, second.id)
         return real_chat(**kwargs)
 
     fake_openai.chat.completions.create = delete_while_the_model_works
@@ -374,7 +375,9 @@ def test_a_deleted_template_cannot_be_chosen_for_calendar_meetings(api, session,
     api.delete(f"/api/templates/{second.id}")
     with Session(session.get_bind()) as other:
         with pytest.raises(Exception) as caught:
-            services.template_or_404(other, other.get(User, template.owner_user_id), second.id)
+            services.template_or_404(
+                other, teams.personal_team(other, template.owner_user_id), second.id
+            )
     assert getattr(caught.value, "status_code", None) == 404
 
 
@@ -384,7 +387,8 @@ def test_a_deleted_template_cannot_be_chosen_for_calendar_meetings(api, session,
 def _delete_in_thread(engine, user_id, template_id, outcome):
     with Session(engine) as session:
         try:
-            services.delete_template(session, session.get(User, user_id), template_id)
+            home = teams.personal_team(session, user_id)
+            services.delete_template(session, session.get(User, user_id), home, template_id)
             outcome.append("deleted")
         except services.Refused as exc:
             outcome.append(exc.code)
