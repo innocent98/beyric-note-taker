@@ -274,12 +274,40 @@ def test_a_clear_contradiction_with_a_name_the_earlier_rules_gave_names_nothing(
 
 def test_no_name_is_given_when_the_timeline_agrees_with_no_named_tag():
     # Skribby named nobody, the sole-candidate rule had no tag to start from: nothing to check the
-    # Meet names or the clock against, so the timeline names nothing.
+    # Meet names or the clock against. A tag whose own candidates do not hold Meet's leader stays
+    # unnamed (`uncorroborated`).
     table = {"0": ([200.0, 0, 0, 0, 0, 0], 220.0), "1": ([0, 0, 0, 150.0, 0, 0], 160.0)}
-    items, spans = layout(table, {"0": [ADA, BO], "1": [CY, DI]}, {})
+    items, spans = layout(table, {"0": [BO, CY], "1": [BO, CY]}, {})
     after = resolve(items, events_record(spans))
     assert names(after) == {"0": "", "1": ""}
     assert after["0"]["timeline"] == "uncorroborated"
+    assert after["1"]["timeline"] == "uncorroborated"
+
+
+def test_without_a_named_tag_a_tag_is_named_when_it_lists_the_person_meet_shows_leading_it():
+    # relaxed 2026-11-25: the tag's own candidate list holds Meet's leader, so Skribby and Meet
+    # agree on that tag (no named tag is needed to prove the spelling and the clock)
+    table = {"0": ([200.0, 0, 0, 0, 0, 0], 220.0), "1": ([0, 0, 0, 150.0, 0, 0], 160.0)}
+    items, spans = layout(table, {"0": [ADA, BO], "1": [CY, DI]}, {})
+    after = resolve(items, events_record(spans))
+    assert names(after) == {"0": ADA, "1": DI}
+    assert after["0"]["how"] == after["1"]["how"] == "meet_timeline"
+
+
+def test_a_clear_contradiction_still_stops_a_meeting_without_a_named_tag():
+    # tag 0 is named by Skribby as Bo but Meet leads it with Ada: `contradicted`, nothing named
+    table = {"0": ([200.0, 3.0, 0, 0, 0, 0], 220.0), "1": ([0, 0, 0, 150.0, 0, 0], 160.0)}
+    items, spans = layout(table, {"0": [BO], "1": [CY, DI]}, {"0": BO})
+    after = resolve(items, events_record(spans))
+    assert after["1"]["name"] == "" and after["1"]["timeline"] == "contradicted"
+
+
+def test_without_a_named_tag_a_leader_the_tag_does_not_list_is_not_a_name():
+    # Meet leads tag 0 with Ada, the tag lists Bo and Cy only: no support from Skribby at all
+    table = {"0": ([200.0, 0, 0, 0, 0, 0], 220.0), "1": ([0, 0, 0, 150.0, 0, 0], 160.0)}
+    items, spans = layout(table, {"0": [BO, CY], "1": [DI, EVE]}, {})
+    after = resolve(items, events_record(spans))
+    assert names(after) == {"0": "", "1": DI}  # tag 1 lists Di, whom Meet leads it with
 
 
 def test_a_tag_carrying_two_names_of_its_own_is_never_named_from_the_timeline():

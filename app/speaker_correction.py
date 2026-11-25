@@ -110,6 +110,24 @@ def known_names(tags: dict, items: list[dict]) -> list[str]:
     return names + [n for item in items if (n := skribby._clean_name(item.get("speaker_name")))]
 
 
+def extra_names(tags: dict, people: dict[str, list[tuple[float, float]]]) -> list[str]:
+    """The people a line may move to although no tag is named after them: only in a meeting whose
+    naming said another person spoke a little (`skribby.EXTRA_SPEAKER_SMALL`, the one-to-one rule
+    with a small extra share), the participants Meet lit for `meet_timeline.MIN_EXTRA_SECONDS` or
+    more whose name is no tag's. They are Meet's own spelling of the name, so a moved line carries
+    the name the call shows. In any other meeting there is none: a line is never moved to a name
+    nobody in the meeting is called by (`resolve_label`)."""
+    if not any(info.get("note") == skribby.EXTRA_SPEAKER_SMALL for info in tags.values()):
+        return []
+    tagged = [info["name"] for info in tags.values() if info.get("name")]
+    return [
+        name
+        for name, spans in people.items()
+        if sum(b - a for a, b in spans) >= meet_timeline.MIN_EXTRA_SECONDS
+        and not any(same_name(name, other) for other in tagged)
+    ]
+
+
 def resolve_label(person: str, known: list[str]) -> str | None:
     """The label a line moved to `person` takes: the spelling a tag or segment already uses for
     EXACTLY that name (the same words, whatever the case, accents or punctuation), else None.
@@ -354,6 +372,7 @@ def assess(
     min_seconds: float = MIN_SECONDS,
     ambiguous_ratio: float = AMBIGUOUS_RATIO,
     bot: frozenset[str] | set[str] = frozenset(),
+    extra: list[str] | None = None,
 ) -> tuple[list[Assessment], dict[str, float]]:
     """Every segment against the timeline: `(assessments, not_timed)`, `not_timed` holding the
     `count` of segments with no tag or no usable times and the `seconds` of those that have times.
@@ -361,11 +380,12 @@ def assess(
     `end`); `tags` is `_resolve_tags`' answer; `spans` is `place(...).spans` (the note taker's
     spans included) and `bot` the note taker's names there. A clear winner who is not the person
     the segment carries is a `move` only when a name already in the meeting is that person
-    (`resolve_label`); else it is `unmatched` and stays."""
+    (`resolve_label`; `extra`, from `extra_names`, adds the people the naming said have no tag);
+    else it is `unmatched` and stays."""
     found: list[Assessment] = []
     not_timed = {"count": 0, "seconds": 0.0}
     indexed = {n: _index(v) for n, v in spans.items()}
-    known = known_names(tags, items)
+    known = known_names(tags, items) + list(extra or [])
     for index, item in enumerate(items):
         tag = tag_of(item)
         a, b = meet_timeline.seconds(item.get("start")), meet_timeline.seconds(item.get("end"))
@@ -455,7 +475,13 @@ def correct(
     if not fit.fine:
         return Correction(refused=CLOCK_SHIFTED, how=placed.how, clock=fit)
     assessments, not_timed = assess(
-        items, tags, placed.spans, min_seconds, ambiguous_ratio, placed.bot
+        items,
+        tags,
+        placed.spans,
+        min_seconds,
+        ambiguous_ratio,
+        placed.bot,
+        extra_names(tags, people),
     )
     moves = {a.index: a.label for a in assessments if a.outcome == "move" and a.label}
     return Correction(moves, None, assessments, not_timed, placed.how, fit)

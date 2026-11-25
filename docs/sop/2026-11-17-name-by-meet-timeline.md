@@ -288,3 +288,11 @@ The corroboration gate ("a meeting where nothing was named gets no timeline name
 was named because each tag lists one different person is named by `how: one_to_one` instead, which uses this module's
 `verdict` only as a veto and adds `Reading.lit`/`Reading.shown` for the participant checks
 (`docs/sop/2026-11-25-speaker-naming-one-to-one.md`).
+
+## Update 2026-11-25 (later): corroboration by the tag's own candidates
+
+The corroboration gate ("at least one named tag the timeline agrees with") still stands as written, with one exception
+(`docs/sop/2026-11-25-speaker-naming-relaxed.md`, gate 9): when it fails as `uncorroborated`, a tag is still named if its own
+candidate list holds the person Meet's timeline leads it with (same 30 s, 20% and 3.0x, same clock check), and the exclusion
+route does not run. `contradicted` still stops everything. The line "A meeting where nothing was named gets no timeline names"
+is therefore true only for a tag whose candidates do not hold Meet's leader.

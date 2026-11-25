@@ -1488,3 +1488,46 @@ def test_a_meeting_whose_lines_would_move_is_still_rebuilt_whatever_the_pass_did
     )
     code, client, out = apply(session, meeting, backups, capsys)
     assert code == 0 and "APPLIED" in out and "32 segments" in out
+
+
+# ---- a person with no tag who spoke a little (docs/sop/2026-11-25-speaker-naming-relaxed.md) ----
+
+
+def test_a_rebuild_marks_a_meeting_incomplete_when_someone_with_no_tag_spoke_a_little(
+    session, owner, template, backups, capsys
+):
+    """Two tags named one-to-one and a third person lit for 8% of the lit time: the transcript is
+    named, the third person's lines move to them, and `speakers_incomplete` stays true."""
+    from tests.test_speaker_naming_relaxed import meeting_46_like
+
+    items, events = meeting_46_like()
+    flat = [
+        {
+            "speaker": i["speaker"],
+            "speaker_name": None,
+            "potential_speaker_names": [n["name"] for n in i["potential_speaker_names"]],
+            "start": i["start"],
+            "end": i["end"],
+            "text": " ".join(
+                f"{word}{index}" for word in "red blue green lilac pink gold teal".split()
+            ),
+        }
+        for index, i in enumerate(items)
+    ]
+    meeting = make_meeting(
+        session, owner, template, recorded_seconds=60, transcript_source="skribby"
+    )
+    keep_evidence(session, meeting, flat, events=events)
+    code, _, out = go([str(meeting.id)], backups, capsys=capsys)  # the dry run first
+    assert code == 0
+    assert "one_to_one, extra_speaker_small" in out
+    assert "speakers incomplete: before yes, after yes" in out
+    assert "Ada Example" not in out and "Cy Example" not in out  # no names, as ever
+    code, _, out = apply(session, meeting, backups, capsys)
+    assert code == 0
+    row = stored(session, meeting)
+    assert row.speakers_incomplete is True  # named, but another person may be under a tag's name
+    text = row.speaker_transcript
+    assert "[Ada Example]: " in text and "[Bo Example]: " in text
+    assert "[Cy Example]: " in text  # the two lines Meet lit only for Cy moved to them
+    assert "Unknown speaker" not in text
