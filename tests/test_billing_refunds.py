@@ -809,6 +809,23 @@ def test_a_plan_with_an_unsettled_refund_cannot_be_changed_or_upgraded(
         assert (refused_.value.status, refused_.value.code) == (409, "refund_pending")
 
 
+def test_a_pack_cannot_be_bought_on_a_plan_with_an_unsettled_refund(session, ada, admin, providers):
+    """Review N1 (the part that is a plain gap): a pack is a new charge on the plan, so it waits
+    like the other charges until the refund of the plan's first payment is settled."""
+    buy_plan(session, ada, providers.usd)
+    payment = payment_of(session)
+    providers.usd.refund_error = OutcomeUnknown("no answer")
+    ask(session, payment, "first_plan_7d", admin, T0 + DAY)
+    checkouts = len(providers.usd.checkouts)
+
+    with pytest.raises(subs.Refused) as refused_:
+        subs.start_pack_checkout(session, ada, "pack10", settings(), T0 + 2 * DAY)
+    session.rollback()
+
+    assert (refused_.value.status, refused_.value.code) == (409, "refund_pending")
+    assert len(providers.usd.checkouts) == checkouts  # no page was made
+
+
 def test_the_clock_does_not_charge_a_plan_with_an_unsettled_refund_and_catches_up_after(
     session, ada, admin, providers
 ):
