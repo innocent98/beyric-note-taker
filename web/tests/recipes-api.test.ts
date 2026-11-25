@@ -37,11 +37,12 @@ describe("which recipe calls carry the team", () => {
     expect(isTeamScoped(path)).toBe(true);
     expect(isTeamScoped(path, "POST")).toBe(true);
   });
-  it("only the request for a draft names a team, among the draft routes", () => {
+  it("names the workspace on every draft route: the list is the workspace's, the request uses its brief", () => {
     expect(isTeamScoped("/api/documents", "POST")).toBe(true);
-    expect(isTeamScoped("/api/documents", "GET")).toBe(false);
-    expect(isTeamScoped("/api/documents/3", "GET")).toBe(false);
-    expect(isTeamScoped("/api/documents/3", "PATCH")).toBe(false);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(true);
+    // a draft opened by its id answers by who may read it; the server ignores the header there
+    expect(isTeamScoped("/api/documents/3", "GET")).toBe(true);
+    expect(isTeamScoped("/api/documents/3", "PATCH")).toBe(true);
   });
 });
 
