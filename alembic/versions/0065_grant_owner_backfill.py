@@ -18,15 +18,15 @@ It binds a grant only when the answer is clear, and never overwrites one:
 The upgrade is a plain data repair, safe to run again. The downgrade does nothing: the values it
 set are correct, and nothing can tell them from the ones that were always there.
 
-Revision ID: 0062
-Revises: 0061
+Revision ID: 0065
+Revises: 0064
 Create Date: 2026-11-25
 """
 
 from alembic import op
 
-revision = "0062"
-down_revision = "0061"
+revision = "0065"
+down_revision = "0064"
 branch_labels = None
 depends_on = None
 

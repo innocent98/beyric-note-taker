@@ -1,4 +1,4 @@
-"""Migration 0062 (review S2): paid hour grants are bound to the account that paid for them.
+"""Migration 0065 (review S2): paid hour grants are bound to the account that paid for them.
 
 Every paid grant is made with its `user_id`, so the backfill is a safety net: it gives a plan or
 pack grant that has lost its `user_id` (a row from before the rule, or a repair) back to the live
@@ -15,10 +15,10 @@ owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
 
-def test_0062_follows_0061_and_is_the_only_head(scratch_url):
+def test_0065_follows_0064_and_is_the_only_head(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
-    assert script.get_revision("0062").down_revision == "0061"
-    assert script.get_heads() == ["0062"]
+    assert script.get_revision("0065").down_revision == "0064"
+    assert script.get_heads() == ["0065"]
 
 
 def new_user(conn, email, status="active", purged=False):
@@ -74,7 +74,7 @@ def test_the_backfill_binds_only_what_a_live_payer_clearly_owns_and_the_round_tr
 ):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
-    command.upgrade(cfg, "0061")
+    command.upgrade(cfg, "0064")
     try:
         _round_trip(cfg, engine)
     finally:
@@ -104,7 +104,7 @@ def _round_trip(cfg, engine):
         trial = grant(conn, "trial")
         gift = grant(conn, "admin_gift")
 
-    command.upgrade(cfg, "0062")
+    command.upgrade(cfg, "0065")
 
     with engine.connect() as conn:
         assert owner_of(conn, by_payment) == ada
@@ -114,8 +114,8 @@ def _round_trip(cfg, engine):
             assert owner_of(conn, untouched) is None, untouched
         assert owner_of(conn, already) == ben  # never overwritten
 
-    command.downgrade(cfg, "0061")
-    command.upgrade(cfg, "0062")  # re-runnable
+    command.downgrade(cfg, "0064")
+    command.upgrade(cfg, "0065")  # re-runnable
     with engine.connect() as conn:
-        assert conn.execute(text("select version_num from alembic_version")).all() == [("0062",)]
+        assert conn.execute(text("select version_num from alembic_version")).all() == [("0065",)]
         assert owner_of(conn, by_payment) == ada

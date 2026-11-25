@@ -1,6 +1,6 @@
 # SOP: a renewal that cannot be traced no longer freezes the plan, and paid hours follow the account (billing review S1 and S2, 2026-11-25)
 
-**What shipped.** S1: a renewal attempt whose outcome nobody can find now ends in the status machine (grace, retries, lapse, admin alert) instead of leaving the subscription `active` for ever. S2: a plan period, a pack and an admin gift are spent by account (`hour_grants.user_id`), never by the fingerprint of an email address; migration 0062 repairs any such grant that lost its owner. Plus one plain gap from the notes (N1: a pack checkout waits for an unsettled refund). Branch `fix/billing-renewal-freeze-and-hours-owner`; PR number in the pull request list. **It is money code: it needs an Opus delta review before merge.** Migration 0062 (data repair only, no schema change). No config.
+**What shipped.** S1: a renewal attempt whose outcome nobody can find now ends in the status machine (grace, retries, lapse, admin alert) instead of leaving the subscription `active` for ever. S2: a plan period, a pack and an admin gift are spent by account (`hour_grants.user_id`), never by the fingerprint of an email address; migration 0065 repairs any such grant that lost its owner. Plus one plain gap from the notes (N1: a pack checkout waits for an unsettled refund). Branch `fix/billing-renewal-freeze-and-hours-owner`; PR number in the pull request list. **It is money code: it needs an Opus delta review before merge.** Migration 0065 (data repair only, no schema change). No config.
 
 ## Why
 
@@ -28,7 +28,7 @@ Rejected: marking every `ProviderError` from a charge as failed at once (a Payst
 
 **S2: spend by account.** `entitlements.my_grants(user)`: `user_id = user.id`, or (the grant lost its `user_id` AND is a `trial` or `pilot` AND carries this address's fingerprint). The second branch keeps the documented design that the free hours of a deleted account are found again by the person who signs up again; paid kinds never use it. Used by `grants_in_force` (spending, status, `check_join`, the allocation order) and by `hours.sync_cap_gift` (so another person's cap gift does not count against this one). `trial.had_one` and `trial.waiting` keep the fingerprint on purpose: it is the abuse check (no second trial for an address that had one). The usage ledger (`usage_entries`) and the backlog anchors (`entitlements.unallocated_seconds`, `pre_pilot_seconds`, `hours.reconcile_backlog`, `_cap_baseline`) are unchanged: they read pilot and trial starts and recorded seconds, not who may spend a paid grant.
 
-**Why a clean account binding is possible.** Every paid grant is created with `user_id` (`subscriptions._grant`, `hours.sync_cap_gift`, `trial.give`), so no schema change is needed. A `user_id` is only emptied by deleting the account, and then the hours must go with it. Migration 0062 therefore only repairs the exceptions: a `plan_period` or `pack` grant with no `user_id` whose source payment's payer, or subscription's owner, is a live account (not `deleted`, not purged); it never overwrites a `user_id`, and skips a grant whose payer and plan owner disagree. A trial, a pilot and an admin gift are left alone. The migration is expected to touch no row on a healthy database; downgrade does nothing (the values it sets are correct).
+**Why a clean account binding is possible.** Every paid grant is created with `user_id` (`subscriptions._grant`, `hours.sync_cap_gift`, `trial.give`), so no schema change is needed. A `user_id` is only emptied by deleting the account, and then the hours must go with it. Migration 0065 therefore only repairs the exceptions: a `plan_period` or `pack` grant with no `user_id` whose source payment's payer, or subscription's owner, is a live account (not `deleted`, not purged); it never overwrites a `user_id`, and skips a grant whose payer and plan owner disagree. A trial, a pilot and an admin gift are left alone. The migration is expected to touch no row on a healthy database; downgrade does nothing (the values it sets are correct).
 
 **N1 (the part that is a plain gap).** `subscriptions.start_pack_checkout` now calls `_refuse_while_refunding` like the upgrade, change and pay link do: 409 `refund_pending` while a refund of the plan's first payment is `pending` or `unknown`.
 
@@ -43,7 +43,7 @@ Rejected: marking every `ProviderError` from a charge as failed at once (a Payst
 | `app/billing/fake.py` | charge outcome `refused` (test double) |
 | `app/entitlements.py`, `app/hours.py` | `my_grants`; `grants_in_force` and `sync_cap_gift` use it |
 | `app/billing/subscriptions.py` | `start_pack_checkout` refuses while a refund is unsettled |
-| `alembic/versions/0062_grant_owner_backfill.py` | the backfill (head: 0062, chain 0061 -> 0062) |
+| `alembic/versions/0065_grant_owner_backfill.py` | the backfill (head: 0065, chain 0064 -> 0065) |
 | `docs/fe-integration-guide-billing.md`, `docs/fe-captures/billing-grant-owner/` | what the screens may now see; the one captured 409 |
 
 ## Verification
@@ -53,7 +53,7 @@ Tests written first and watched failing, then green (real Postgres, fake clock, 
 - `tests/test_billing_renewals.py` (new, 5 tests, 6 cases): a refused charge fails the attempt at once, opens the grace, makes a pay link work and the day-1 retry charge; a charge nobody can find waits 5 hours then is given up at 7 (parametrized for `ProviderError` and `OutcomeUnknown`), runs the grace to a lapse and then allows a new plan; a given-up charge paid later is still settled and renews; a queued charge is given up after 6 hours; a webhook that settles the payment while the lookup fails is not overwritten by the give-up. One existing test seeded a held slot with a real-clock `created_at`; it now uses the test clock.
 - `tests/test_billing_paystack.py`, `tests/test_billing_flutterwave.py` (new): which failures are `NothingMoved` (4xx, 401, 403, 429, missing key, every pre-check) and which are not (timeouts, 5xx, unreadable 200, odd status).
 - `tests/test_hours_grant_owner.py` (new, 6 tests, 10 cases): after an address change and after a deletion the next owner of the address spends nothing (plan period, pack, admin gift, and a trial after an address change); the payer keeps all of it; an orphaned pilot or trial is still found by the fingerprint; another person's cap gift is not counted; a second trial is still refused to an address that had one.
-- `tests/test_billing_grant_owner_migration.py` (new): one head, 0062 after 0061; the backfill binds exactly the clear cases and none of the others; upgrade, downgrade, upgrade again, on a scratch database. `tests/test_migrations.py` passes (single head, models match).
+- `tests/test_billing_grant_owner_migration.py` (new): one head, 0065 after 0064; the backfill binds exactly the clear cases and none of the others; upgrade, downgrade, upgrade again, on a scratch database. `tests/test_migrations.py` passes (single head, models match).
 - `tests/test_billing_refunds.py`, `tests/test_billing_subscriptions_api.py` (new, 1 each): the pack checkout 409 at service level and over HTTP (the capture).
 - Also run and green: `test_entitlements_status`, `test_hours_grants`, `test_hours_enforce`, `test_hours_reserve`, `test_hours_shadow`, `test_billing_subscriptions`, `test_trial`. `ruff check` and `ruff format --check` clean.
 
@@ -61,7 +61,7 @@ Tests written first and watched failing, then green (real Postgres, fake clock, 
 
 ## Operate / roll back
 
-Deploy normally; migration 0062 runs on start and should update 0 rows (count `hour_grants` rows of kind `plan_period` or `pack` with a null `user_id` before and after if you want to see it). New admin alerts to expect: "A renewal charge was refused by the provider" (a pile of these for different people means a key or adapter problem) and "A renewal charge was given up on" (look the reference up in the provider's dashboard). Roll back by reverting the PR; the migration needs no downgrade step.
+Deploy normally; migration 0065 runs on start and should update 0 rows (count `hour_grants` rows of kind `plan_period` or `pack` with a null `user_id` before and after if you want to see it). New admin alerts to expect: "A renewal charge was refused by the provider" (a pile of these for different people means a key or adapter problem) and "A renewal charge was given up on" (look the reference up in the provider's dashboard). Roll back by reverting the PR; the migration needs no downgrade step.
 
 ## Follow-ups
 
