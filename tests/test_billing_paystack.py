@@ -780,7 +780,6 @@ def test_a_charge_answer_with_a_float_amount_is_refused():
     "answer",
     [
         (400, {"status": False, "message": "Authorization code not found"}),
-        (403, {"status": False, "message": "Forbidden"}),
         (404, {"status": False, "message": "Not found"}),
     ],
 )
@@ -796,6 +795,8 @@ def test_a_charge_paystack_refuses_with_a_4xx_is_nothing_moved_and_the_customers
     "answer",
     [
         (401, {"status": False, "message": "Invalid key"}),
+        # 403: a key without the permission, or a server address Paystack does not allow: ours
+        (403, {"status": False, "message": "You do not have permission"}),
         (429, {"status": False, "message": "Too many requests"}),
     ],
 )

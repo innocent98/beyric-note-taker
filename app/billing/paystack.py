@@ -519,8 +519,8 @@ def _data(
     `ProviderError` for a read, `OutcomeUnknown` for a call that moves money. `refused` is what a
     4xx raises and `blocked` what a 401 and a 429 raise: Paystack answered and did nothing."""
     code = response.status_code
-    if code == 401:
-        raise blocked("Paystack refused the secret key (401)")
+    if code in (401, 403):  # a refused key, a key without the permission, a server address
+        raise blocked(f"Paystack refused the secret key ({code})")  # Paystack does not allow: ours
     if code == 429:
         raise blocked(f"Paystack answered {code}")  # rate limited: not processed
     if code >= 500:

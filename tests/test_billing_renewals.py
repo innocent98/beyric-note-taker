@@ -1327,23 +1327,27 @@ def test_the_pay_link_makes_no_second_page_beside_a_charge_nobody_can_find(
     assert len(providers.usd.checkouts) == pages
 
 
-def test_a_charge_blocked_by_our_key_or_a_rate_limit_is_not_the_customers_failure(
+def test_a_charge_blocked_by_our_key_opens_the_grace_without_any_failure_for_the_person(
     session, ada, admin, providers, bought
 ):
-    """A 401 or a missing key (ours) and a 429 (the provider's) say nothing about the person: no
-    grace, no mail, no retry spent. The admins are told and the charge is tried again later."""
+    """A 401 or a missing key (ours) and a 429 (the provider's) say nothing about the person: the
+    grace opens (their leftover hours stay usable, Pay now works) but no retry is spent and no
+    mail says the payment failed. The admins are told and the charge is tried again later."""
     due = bought
     providers.usd.charge_outcome = "blocked"
 
     tick(session, due + timedelta(seconds=7))
 
     sub = live(session, ada)
-    assert (sub.status, sub.retry_count) == ("active", 0)
-    assert sub.next_charge_at is not None and sub.next_charge_at > due + timedelta(seconds=7)
+    assert (sub.status, sub.retry_count) == ("past_due", 0)  # no retry spent
+    assert sub.grace_ends_at == states.grace_end(due)
+    assert sub.next_charge_at == due + timedelta(seconds=7) + renewals.BLOCKED_RETRY
+    assert grants(session, ada, "plan_period")[0].expires_at == sub.grace_ends_at  # hours kept
     assert notices(session, ada, "billing.failed") == []
     assert notices(session, admin, "admin.billing_charge_blocked")
     [payment] = renewal_payments(session)
     assert payment.status == "failed" and payment.attempt is None  # nothing sent; slot is free
+    assert payment.provider_tx_id == f"blocked-{payment.reference}"  # told apart from a page
 
     tick(session, due + timedelta(minutes=2))  # not tried again at once
     assert len(providers.usd.charges) == 1
@@ -1352,28 +1356,103 @@ def test_a_charge_blocked_by_our_key_or_a_rate_limit_is_not_the_customers_failur
     tick(session, due + timedelta(hours=1))
     assert len(providers.usd.charges) == 2
     sub = live(session, ada)
-    assert sub.status == "active" and sub.next_charge_at is None
+    assert sub.status == "active" and sub.next_charge_at is None and sub.grace_ends_at is None
     assert len(grants(session, ada, "plan_period")) == 2
 
 
-def test_a_blocked_charge_is_held_back_only_until_the_grace_would_end(
+def test_a_block_late_in_the_grace_extends_it_so_our_outage_does_not_lapse_the_plan(
     session, ada, admin, providers, bought
 ):
-    """Our key staying broken must not keep an `active` row held and retried for ever: once the
-    hold would run past the grace, the attempt counts like any other and the lapse comes."""
+    due = bought
+    providers.usd.charge_outcome = "failed"  # the first charge is a real decline: the grace opens
+    tick(session, due + timedelta(seconds=7))
+    providers.usd.charge_outcome = "blocked"  # then OUR key breaks
+    tick(session, due + timedelta(hours=71, minutes=45))
+    sub = live(session, ada)
+    assert sub.retry_count == 1  # the blocked pass spent nothing
+    assert sub.grace_ends_at == due + timedelta(hours=71, minutes=45) + timedelta(hours=24)
+
+    tick(session, due + timedelta(hours=73))  # past the normal end: still not lapsed
+    assert live(session, ada).status == "past_due"
+    assert notices(session, ada, "billing.lapsed") == []
+
+    providers.usd.charge_outcome = "successful"  # fixed
+    tick(session, due + timedelta(hours=73, minutes=30))
+    assert live(session, ada).status == "active"
+
+
+def test_the_extension_for_a_block_has_a_cap_and_then_the_plan_lapses_as_told(
+    session, ada, admin, providers, bought
+):
     due = bought
     providers.usd.charge_outcome = "blocked"
-    late = due + timedelta(hours=71, minutes=45)  # a 30-minute hold would pass the grace's end
+    for step in range(0, 24 * 9 + 1, 6):  # a key broken for nine days, a pass every six hours
+        tick(session, due + timedelta(hours=step, seconds=7))
+    assert live(session, ada).status == "past_due"  # still inside grace + the cap (3 + 7 days)
+    assert notices(session, ada, "billing.lapsed") == []
 
-    tick(session, late)
+    tick(session, due + timedelta(days=10, hours=1))
 
-    sub = live(session, ada)
-    assert (sub.status, sub.retry_count) == ("past_due", 1)  # moved by the machine, not held
-    assert notices(session, ada, "billing.failed")
-    assert notices(session, admin, "admin.billing_charge_blocked")
+    assert live(session, ada) is None  # lapsed, the cap reached
+    assert notices(session, ada, "billing.lapsed")
+    assert notices(session, ada, "billing.failed") == []  # never told "your payment failed"
 
-    tick(session, due + timedelta(hours=73))
-    assert live(session, ada) is None  # lapsed at the normal moment
+
+def test_the_blocked_alert_is_sent_once_every_six_hours_not_every_pass(
+    session, ada, admin, providers, bought
+):
+    due = bought
+    providers.usd.charge_outcome = "blocked"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=1))
+    tick(session, due + timedelta(hours=2))
+    assert len(notices(session, admin, "admin.billing_charge_blocked")) == 1
+
+    tick(session, due + timedelta(hours=6, minutes=10))
+
+    assert len(notices(session, admin, "admin.billing_charge_blocked")) == 2
+
+
+def test_an_open_pay_link_page_holds_the_saved_card_retry_for_two_hours(
+    session, ada, admin, providers, bought
+):
+    """A person who opened the page is probably paying it: the retry waits, so the page and the
+    card are not both charged. A page abandoned for two hours no longer holds anything."""
+    due = bought
+    providers.usd.charge_outcome = "failed"
+    tick(session, due + timedelta(seconds=7))  # attempt 0 declined: the grace opens
+    renewals.pay_link(session, ada, settings(), due + timedelta(hours=23, minutes=30))
+    charges = len(providers.usd.charges)
+
+    tick(session, due + DAY + timedelta(seconds=7))  # the day-1 retry is due, the page is open
+    assert len(providers.usd.charges) == charges
+    assert live(session, ada).retry_count == 1  # waiting spends no slot
+
+    tick(session, due + timedelta(hours=25, minutes=40))  # the page is two hours old
+    assert len(providers.usd.charges) == charges + 1
+
+
+def test_a_person_who_cannot_pay_beside_an_unresolved_charge_is_reported_every_day(
+    session, ada, admin, providers, bought
+):
+    """The dead end (the mail says open Billing and pay, the page cannot be made while a charge
+    may exist) must not be silent: the admins are told when it is hit and again each day."""
+    due = bought
+    providers.usd.charge_outcome = "error"
+    tick(session, due + timedelta(seconds=7))
+    tick(session, due + timedelta(hours=7))
+    assert len(notices(session, admin, "admin.billing_unresolved_charge")) == 1
+
+    for later in (8, 9):
+        with pytest.raises(subs.Refused):
+            renewals.pay_link(session, ada, settings(), due + timedelta(hours=later))
+    assert len(notices(session, admin, "admin.billing_payer_blocked")) == 1  # once a day
+
+    tick(session, due + DAY + timedelta(seconds=7))  # the next day's pass reminds them again
+    assert len(notices(session, admin, "admin.billing_unresolved_charge")) == 2
+    with pytest.raises(subs.Refused):
+        renewals.pay_link(session, ada, settings(), due + DAY + timedelta(hours=1))
+    assert len(notices(session, admin, "admin.billing_payer_blocked")) == 2
 
 
 def test_giving_up_never_overwrites_a_payment_a_webhook_settled_meanwhile(
