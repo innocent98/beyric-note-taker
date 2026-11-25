@@ -17,6 +17,7 @@ from app.models import Meeting, Task, Team, TeamInvite, TeamMember
 from app.services import Refused
 from tests.test_api import owner, ready, template  # noqa: F401
 from tests.test_web import make_settings, make_user
+from tests.workspace_plans import subscribe
 
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 
@@ -333,6 +334,7 @@ def test_deleting_the_owner_of_a_flagged_personal_team_with_a_second_member_is_n
 
 def test_handing_a_flagged_personal_team_to_a_member_makes_it_an_ordinary_team(session, owner):
     ada, bola, shared = flagged_personal_with_a_second_member(session)
+    subscribe(session, bola, "plan_20h")  # a team goes only to someone who may own one
     teams.transfer_owner(session, shared.id, bola.id)
     session.commit()
     session.refresh(shared)

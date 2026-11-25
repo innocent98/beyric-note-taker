@@ -65,6 +65,7 @@ def test_the_teams_list_shows_every_membership_with_role_count_personal_and_defa
         "is_personal": False,
         "is_default": False,
         "can_manage": False,
+        "kind": "team",
     }
     personal = by_name["My team"]
     assert personal["is_personal"] is True and personal["role"] == "owner"
