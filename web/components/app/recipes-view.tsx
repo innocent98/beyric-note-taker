@@ -75,6 +75,12 @@ export function RecipesView({ initial, brief }: { initial: RecipeList; brief: Br
       </div>
     );
 
+  // The groups with nothing in them are left out, so the person cannot tell where theirs will appear: say so.
+  const hints = [
+    groups.team.length === 0 && !team.is_personal ? `Team recipes appear here once an owner or admin of ${team.name} saves one for everyone.` : null,
+    groups.mine.length === 0 ? 'My recipes appear here, under the starters, once you copy a starter ("Make a copy to change") or press New recipe.' : null,
+  ].filter((text): text is string => text !== null);
+
   return (
     <div className="stack-md">
       <PageHead title="Recipes" subtitle="What Beyric can make from a meeting. Copy one and change it, or write your own.">
@@ -90,6 +96,11 @@ export function RecipesView({ initial, brief }: { initial: RecipeList; brief: Br
           {group("School", groups.school)}
           {group("Team recipes", groups.team)}
           {group("My recipes", groups.mine)}
+          {hints.map((text) => (
+            <p className="field-hint pick-hint" key={text}>
+              {text}
+            </p>
+          ))}
         </section>
         <Card>
           <RecipeEditor
