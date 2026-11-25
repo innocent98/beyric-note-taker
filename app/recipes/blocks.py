@@ -51,11 +51,14 @@ CARD_KINDS = ("decision", "action", "question", "note")
 
 class BlocksInvalid(Exception):
     """The reply or the edit is not blocks of the shape asked for. `code` is a short word, never
-    anything the model wrote."""
+    anything the model wrote. `detail` is a short sentence about the SHAPE only ("block 7: table 2
+    row 3 has 5 cells for 4 columns"): built from positions and counts, never from the text of a
+    meeting, a brief or a reply, so it is safe to store and to hand back to the model."""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, detail: str | None = None):
         super().__init__(code)
         self.code = code
+        self.detail = detail
 
 
 class Source(BaseModel):
@@ -184,17 +187,28 @@ def _sources(raw: object, allowed: set[tuple]) -> list[Source]:
     return out
 
 
-def _items(raw: object, limit: int, allowed: set[tuple]) -> list[Item]:
-    """Cell-like text with sources: cut, cleaned; empty ones are kept by the caller if it must."""
+def _items(
+    raw: object, limit: int, allowed: set[tuple], fixes: list[str] | None = None
+) -> list[Item]:
+    """Cell-like text with sources: cut, cleaned; empty ones are kept by the caller if it must. When
+    repairing (`fixes` is a list), a bare string or number stands for `{"text": it}`."""
     if not isinstance(raw, dict):
-        raise BlocksInvalid("item")
+        if fixes is not None and isinstance(raw, str | int | float) and not isinstance(raw, bool):
+            fixes.append("a cell or item that was plain text was read as text")
+            return [Item(text=plain(str(raw), limit), sources=[])]
+        raise BlocksInvalid("item", "an item or cell is not an object with text")
     return [Item(text=plain(raw.get("text"), limit), sources=_sources(raw.get("sources"), allowed))]
 
 
-def _block(raw: object, allowed: set[tuple]):
-    """One cleaned block, or None when nothing of it is left. Raises for a wrong shape."""
+def _block(raw: object, allowed: set[tuple], fixes: list[str] | None = None):
+    """One cleaned block, or None when nothing of it is left. Raises for a wrong shape, except when
+    repairing (`fixes` is a list): then what can be read safely is kept, what cannot is dropped, and
+    each repair is noted in `fixes` (shape only, never text)."""
     if not isinstance(raw, dict):
-        raise BlocksInvalid("block")
+        if fixes is not None:
+            fixes.append("a block that was not an object was dropped")
+            return None
+        raise BlocksInvalid("block", "a block is not an object")
     kind = raw.get("type")
     if kind == "heading":
         level = raw.get("level")
@@ -206,42 +220,72 @@ def _block(raw: object, allowed: set[tuple]):
         return Paragraph(text=text, sources=_sources(raw.get("sources"), allowed)) if text else None
     if kind == "bullets":
         if not isinstance(raw.get("items"), list):
-            raise BlocksInvalid("bullets")
-        items = [_items(i, ITEM_CHARS, allowed)[0] for i in raw["items"]]
+            if fixes is not None:
+                fixes.append("a list without items was dropped")
+                return None
+            raise BlocksInvalid("bullets", "a list has no items array")
+        items = [_items(i, ITEM_CHARS, allowed, fixes)[0] for i in raw["items"]]
         items = [i for i in items if i.text][:MAX_BULLETS]
         return Bullets(items=items) if items else None
     if kind == "table":
-        return _table(raw, allowed)
+        return _table(raw, allowed, fixes)
     if kind == "column":
-        return _column(raw, allowed)
-    raise BlocksInvalid("block_type")
+        return _column(raw, allowed, fixes)
+    if fixes is not None:
+        fixes.append("a block of an unknown type was dropped")
+        return None
+    raise BlocksInvalid("block_type", "a block has a type that is not one of the five")
 
 
-def _table(raw: dict, allowed: set[tuple]) -> Table:
+def _table(raw: dict, allowed: set[tuple], fixes: list[str] | None = None) -> Table | None:
     columns, rows = raw.get("columns"), raw.get("rows")
     if not isinstance(columns, list) or not columns or not isinstance(rows, list):
-        raise BlocksInvalid("table")
+        if fixes is not None:
+            fixes.append("a table without columns or rows was dropped")
+            return None
+        raise BlocksInvalid("table", "a table has no columns array or no rows array")
     width = min(len(columns), MAX_COLUMNS)
     headings = [plain(c, COLUMN_HEADING_CHARS) for c in columns[:width]]
     cells: list[list[Cell]] = []
-    for row in rows[:MAX_ROWS]:
-        # A row as long as the columns the model named, even the ones cut above: a row that does
-        # not line up is refused rather than shown under the wrong heading.
-        if not isinstance(row, list) or len(row) != len(columns):
-            raise BlocksInvalid("table_row")
-        cells.append([_items(cell, CELL_CHARS, allowed)[0] for cell in row[:width]])
+    for number, row in enumerate(rows[:MAX_ROWS], start=1):
+        # A row as long as the columns the model named, even the ones cut above. When writing a
+        # draft a ragged row is repaired (short: the missing cells are visible `[need: <column>]`
+        # blanks at the end; long: the extra cells are dropped) and the repair is noted; when
+        # checking a person's edit it is refused rather than shown under the wrong heading.
+        if not isinstance(row, list):
+            if fixes is not None:
+                fixes.append(f"table row {number} was not a list and was dropped")
+                continue
+            raise BlocksInvalid("table_row", f"table row {number} is not a list of cells")
+        if len(row) != len(columns):
+            if fixes is None:
+                raise BlocksInvalid(
+                    "table_row",
+                    f"table row {number} has {len(row)} cells for {len(columns)} columns",
+                )
+            fixes.append(f"table row {number} had {len(row)} cells for {len(columns)} columns")
+        row_cells = [_items(cell, CELL_CHARS, allowed, fixes)[0] for cell in row[:width]]
+        for missing in headings[len(row_cells) :]:
+            row_cells.append(Cell(text=f"[need: {missing or 'value'}]", sources=[]))
+        cells.append(row_cells)
     return Table(columns=headings, rows=cells)
 
 
-def _column(raw: dict, allowed: set[tuple]) -> Column | None:
+def _column(raw: dict, allowed: set[tuple], fixes: list[str] | None = None) -> Column | None:
     cards_raw = raw.get("cards")
     if not isinstance(cards_raw, list):
-        raise BlocksInvalid("column")
+        if fixes is not None:
+            fixes.append("a column without cards was dropped")
+            return None
+        raise BlocksInvalid("column", "a column has no cards array")
     title = plain(raw.get("title"), TITLE_CHARS)
     cards: list[Card] = []
     for card in cards_raw:
         if not isinstance(card, dict):
-            raise BlocksInvalid("card")
+            if fixes is not None:
+                fixes.append("a card that was not an object was dropped")
+                continue
+            raise BlocksInvalid("card", "a card is not an object")
         text = plain(card.get("text"), CARD_CHARS)
         if not text:
             continue
@@ -261,23 +305,37 @@ def _column(raw: dict, allowed: set[tuple]) -> Column | None:
 
 
 def parse_blocks(
-    raw: object, *, allowed_sources: set[tuple], max_blocks: int | None = None
+    raw: object,
+    *,
+    allowed_sources: set[tuple],
+    max_blocks: int | None = None,
+    fixes: list[str] | None = None,
 ) -> list[Block]:
     """The blocks in `raw` (the model's reply, or a person's edit), cleaned and bounded. Raises
     `BlocksInvalid` when `raw` is not a list of blocks of the shapes above, a table row does not
-    match its columns, or nothing is left."""
+    match its columns, or nothing is left.
+
+    Pass `fixes=[]` for a model's reply to REPAIR what can be repaired safely instead of refusing
+    the whole draft (a ragged table row, a plain-text cell, an unreadable block dropped); every
+    repair is appended to `fixes` as a short sentence about the shape. A person's edit passes no
+    `fixes` and is checked strictly. The `BlocksInvalid` that is raised names the block."""
     if not isinstance(raw, list):
-        raise BlocksInvalid("not_a_list")
+        raise BlocksInvalid("not_a_list", "the blocks are not a list")
     limit = max_blocks if max_blocks is not None else get_settings().draft_max_blocks
     out = []
-    for item in raw:
-        block = _block(item, allowed_sources)
+    for number, item in enumerate(raw, start=1):
+        try:
+            block = _block(item, allowed_sources, fixes)
+        except BlocksInvalid as exc:
+            if exc.detail and not exc.detail.startswith("block "):
+                exc.detail = f"block {number}: {exc.detail}"
+            raise
         if block is not None:
             out.append(block)
         if len(out) == limit:
             break
     if not out:
-        raise BlocksInvalid("empty")
+        raise BlocksInvalid("empty", "no block was left after cleaning")
     return out
 
 

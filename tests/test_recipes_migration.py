@@ -164,3 +164,19 @@ def test_0060_adds_the_ledger_link_to_documents_and_the_round_trip_removes_it(sc
     command.upgrade(cfg, "head")
     assert "ledger_run_id" in {c["name"] for c in inspect(engine).get_columns("documents")}
     engine.dispose()
+
+
+def test_0061_adds_the_failure_detail_and_the_round_trip_removes_it(scratch_url):
+    cfg = alembic_config(scratch_url)
+    engine = create_engine(scratch_url)
+    command.upgrade(cfg, "0060")
+    assert "failure_detail" not in {c["name"] for c in inspect(engine).get_columns("documents")}
+    assert ScriptDirectory.from_config(cfg).get_revision("0061").down_revision == "0060"
+    command.upgrade(cfg, "0061")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("documents")}
+    assert columns["failure_detail"]["nullable"] is True
+    command.downgrade(cfg, "0060")
+    assert "failure_detail" not in {c["name"] for c in inspect(engine).get_columns("documents")}
+    command.upgrade(cfg, "head")
+    assert "failure_detail" in {c["name"] for c in inspect(engine).get_columns("documents")}
+    engine.dispose()

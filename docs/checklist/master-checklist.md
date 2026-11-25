@@ -3,6 +3,13 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25: first real-model run of the recipes** (branch `feature/recipes-real-fixes`, SOP `docs/sop/2026-11-24-recipes-integration.md` "First real-model run, 2026-11-25", migration 0061)
+- [x] 17 of 18 starters ready on `gpt-6-luna`, 18 drafts about 0.0265 USD, 5 to 43 s each
+- [x] `proposal` failed as `structure` (cause not seen; the raw reply was not kept): structure checks now repair a ragged table row, a plain-text cell and unreadable blocks instead of refusing; a refused reply is asked for once more with the reason (a second ledger row and a second place in the day's limit); `documents.failure_detail` and the ledger error say why
+- [x] The audit ignores `Meeting N`, `Meeting id: N`, `[D3]`, `[T9]` (9 false flags on `status_report`)
+- [x] `recipes_live.py pass --only KEY` and `failed-<key>.txt` under `--real`
+- [ ] **Re-run `--only proposal` with a real key** (Adebayo) and read `failed-proposal.txt` if it still fails
+
 **Addendum 2026-11-24: Meeting recipes (one complete release; design approved 2026-11-24)** (integration branch `feature/recipes`; spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md`, gap analysis `docs/competitive/claude-meetings-gap-analysis-2026-11-24.md`). Nothing deploys until S7 is done; slices merge into `feature/recipes`, one PR to `main` at the end. Also in flight the same day: transcript and speaker editor, exports and meeting search (#261, #262).
 - [x] S1 Engine (SOP `docs/sop/2026-11-24-recipes-engine.md`, FE guide `docs/fe-integration-guide-recipes.md`; PRs #264, #265 merged into `feature/recipes`): [x] T1 tables and models (migrations 0059, 0060 after main's 0058, `make` gate, `recipe` kind, settings); [x] T2 block schema (`app/recipes/blocks.py`); [x] T3 number audit and blanks; [x] T4 generation; [x] T5 request, queue, worker, cap; [x] T6 draft API (2026-11-24)
 - [x] S2 Documents (PR #266 merged into `feature/recipes`, SOP `docs/sop/2026-11-24-recipes-documents.md`): [x] T7 tables in Word and PDF (2026-11-24); [x] T8 exporters (md, txt, csv, xlsx, docx, pdf) and `GET /api/documents/{id}/export`, FE guide `docs/fe-integration-guide-recipes-documents.md`; [x] T9 document view, structured block editor, polling hook at `/documents/{id}` (2026-11-24; board seam `DocumentBody`)
