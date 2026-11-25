@@ -67,6 +67,10 @@ export function SettingsAutoShare({ initial, teams }: { initial: number | null; 
           for a meeting you unshared.
         </p>
         <p className="set-sub">
+          This includes meetings you record in your Personal workspace. Personal is only yours until you choose a team
+          here: after that, those meetings are shared with the team too and move into its workspace.
+        </p>
+        <p className="set-sub">
           This is your choice for your own meetings. It is used instead of the team-wide &quot;Share new meetings with the
           team&quot; switch on the Team screen; with &quot;No team&quot; that switch applies as before.
         </p>

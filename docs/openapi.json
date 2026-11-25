@@ -3375,6 +3375,11 @@
             ],
             "title": "Shared By"
           },
+          "shared_by_auto_share": {
+            "default": false,
+            "title": "Shared By Auto Share",
+            "type": "boolean"
+          },
           "shared_with_team": {
             "title": "Shared With Team",
             "type": "boolean"

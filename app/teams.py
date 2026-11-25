@@ -668,7 +668,11 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
         else False
     )
     if chosen is not None and (chosen == meeting.workspace_team_id or in_own_personal):
+        already = meeting.shared_team_id == chosen  # born shared by the workspace's own default
         meeting.shared_team_id = chosen  # sharing files it in that team's workspace (models.py)
+        # The page says "by your auto-share rule" only when the rule is what shared it (that write
+        # reset the flag, `models._forget_auto_rule`).
+        meeting.shared_by_auto_rule = not already
         return
     # The meeting's own workspace, not the person's default team: a member records into any
     # workspace they belong to (workspaces design, D3).
