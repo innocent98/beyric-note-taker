@@ -209,8 +209,7 @@ def test_the_report_groups_by_tag_with_the_derived_name_and_why(session, meeting
     assert (
         "== tag 2: Unknown speaker [unknown, elimination_off "
         "(elimination, sole candidate or one-to-one naming would have said: Bo Example)]"
-        " - 1 segments =="
-        in text
+        " - 1 segments ==" in text
     )
     assert "named: Ada Example | possible: -" in text
     assert "named: - | possible: Ada Example, Bo Example" in text
