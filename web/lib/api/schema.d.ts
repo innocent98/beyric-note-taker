@@ -1902,8 +1902,9 @@ export interface paths {
         };
         /**
          * Read Bot Name
-         * @description The name the note taker joins this person's meetings with: their own when set, else null with
-         *     the server's default beside it (`bot_name_default`).
+         * @description The person's default note taker name: used in every workspace that sets none of its own
+         *     (`PUT /api/workspace-prefs`), else null with the server's default beside it
+         *     (`bot_name_default`). It never switches with the workspace.
          */
         get: operations["read_bot_name"];
         /**
@@ -2574,12 +2575,35 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description The caller's templates, sorted by name.
+         * @description The active workspace's templates (the `X-Team-Id` header, else the default workspace),
+         *     sorted by name. Every member reads and uses them; owners and admins write them.
          */
         get: operations["list_templates"];
         put?: never;
         /** Create Template */
         post: operations["create_template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/copy-from-personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Templates From Personal
+         * @description Copy the caller's personal-workspace templates into the active workspace (owners and
+         *     admins). A name already in the workspace is skipped, never overwritten. 409 `personal_team`
+         *     when the active workspace is the personal one.
+         */
+        post: operations["copy_templates_from_personal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2596,15 +2620,16 @@ export interface paths {
         get?: never;
         /**
          * Update Template
-         * @description Replace the name and instructions.
+         * @description Replace the name and instructions of one of the active workspace's templates. A template
+         *     of another workspace is a 404.
          */
         put: operations["update_template"];
         post?: never;
         /**
          * Delete Template
-         * @description Delete a template. Meetings written with it keep their notes and the template name they
-         *     show; the calendar setting that pointed at it moves to the oldest template left. 409
-         *     `last_template` for the only one.
+         * @description Delete a template of the active workspace. Meetings written with it keep their notes and the
+         *     template name they show; a calendar setting that pointed at it moves to the workspace's oldest
+         *     template left. 409 `last_template` for the only one.
          */
         delete: operations["delete_template"];
         options?: never;
@@ -2646,12 +2671,33 @@ export interface paths {
         };
         /**
          * List Terms
-         * @description The caller's terms, sorted alphabetically.
+         * @description The active workspace's terms, sorted alphabetically.
          */
         get: operations["list_terms"];
         put?: never;
         /** Add Term */
         post: operations["add_term"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vocabulary/copy-from-personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Terms From Personal
+         * @description Copy the caller's personal-workspace terms into the active workspace (owners and admins),
+         *     never doubling one that is there. 409 `personal_team` for the personal workspace itself.
+         */
+        post: operations["copy_terms_from_personal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2692,6 +2738,34 @@ export interface paths {
          *     422 `invalid_email` for a malformed address.
          */
         post: operations["join_waitlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Workspace Prefs
+         * @description The caller's settings in the active workspace: their note taker name there, the auto-join
+         *     rule, "also join invites I haven't answered", "skip one-on-ones" and the calendar template. A
+         *     workspace where they never changed anything shows their own defaults.
+         */
+        get: operations["read_workspace_prefs"];
+        /**
+         * Write Workspace Prefs
+         * @description Change the caller's settings in the active workspace (CSRF header needed); a field left out
+         *     stays as it is, and nothing of any other workspace is touched. Changing the rule or a box
+         *     decides the workspace's stored calendar events again, as `PUT /api/calendar/settings` does.
+         */
+        put: operations["write_workspace_prefs"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4942,6 +5016,19 @@ export interface components {
              */
             role: "owner" | "admin" | "member";
         };
+        /**
+         * TemplateCopyOut
+         * @description `copied` templates were added to the active workspace, `skipped` already had that name;
+         *     `templates` is the workspace's list afterwards.
+         */
+        TemplateCopyOut: {
+            /** Copied */
+            copied: number;
+            /** Skipped */
+            skipped: number;
+            /** Templates */
+            templates: components["schemas"]["TemplateOut"][];
+        };
         /** TemplateIn */
         TemplateIn: {
             /** Instructions */
@@ -4962,6 +5049,19 @@ export interface components {
             instructions: string;
             /** Name */
             name: string;
+        };
+        /**
+         * TermCopyOut
+         * @description `copied` terms were added to the active workspace, `skipped` were there already; `terms` is
+         *     the workspace's list afterwards.
+         */
+        TermCopyOut: {
+            /** Copied */
+            copied: number;
+            /** Skipped */
+            skipped: number;
+            /** Terms */
+            terms: components["schemas"]["TermOut"][];
         };
         /** TermList */
         TermList: {
@@ -5204,6 +5304,53 @@ export interface components {
             email: string;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * WorkspacePrefsIn
+         * @description What to change; a field that is left out stays as it is. `bot_name` null or empty clears the
+         *     workspace's own name (the default applies again); `calendar_template_id` null means the
+         *     workspace's default template, otherwise one of the workspace's own templates (404 `not_found`
+         *     for any other).
+         */
+        WorkspacePrefsIn: {
+            /** Auto Join Rule */
+            auto_join_rule?: ("all" | "organizer" | "none") | null;
+            /** Bot Name */
+            bot_name?: string | null;
+            /** Calendar Template Id */
+            calendar_template_id?: number | null;
+            /** Join Unanswered */
+            join_unanswered?: boolean | null;
+            /** Skip One On Ones */
+            skip_one_on_ones?: boolean | null;
+        };
+        /**
+         * WorkspacePrefsOut
+         * @description The caller's own settings in the active workspace (workspaces design, section 3).
+         *     `bot_name` is the name set for THIS workspace, null when none is set; `bot_name_default` is the
+         *     name that applies then (the caller's own default from Settings > Personal, else the server's).
+         *     `warning` is the soft warning about a name that bot-detection dislikes, null for none.
+         */
+        WorkspacePrefsOut: {
+            /**
+             * Auto Join Rule
+             * @enum {string}
+             */
+            auto_join_rule: "all" | "organizer" | "none";
+            /** Bot Name */
+            bot_name: string | null;
+            /** Bot Name Default */
+            bot_name_default: string;
+            /** Calendar Template Id */
+            calendar_template_id: number | null;
+            /** Join Unanswered */
+            join_unanswered: boolean;
+            /** Skip One On Ones */
+            skip_one_on_ones: boolean;
+            /** Team Id */
+            team_id: number;
+            /** Warning */
+            warning: string | null;
         };
         /**
          * WorkspaceRef
@@ -13532,7 +13679,10 @@ export interface operations {
     list_templates: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13565,6 +13715,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Malformed request */
             422: {
                 headers: {
@@ -13579,7 +13738,10 @@ export interface operations {
     create_template: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13616,8 +13778,85 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`: only an owner or admin writes */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    copy_templates_from_personal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateCopyOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: only an owner or admin writes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13639,7 +13878,10 @@ export interface operations {
     update_template: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 template_id: number;
             };
@@ -13678,7 +13920,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`: only an owner or admin writes */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13687,7 +13929,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Found */
+            /** @description A team the caller is not in */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -13710,7 +13952,10 @@ export interface operations {
     delete_template: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 template_id: number;
             };
@@ -13734,7 +13979,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`: only an owner or admin writes */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13743,7 +13988,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not Found */
+            /** @description A team the caller is not in */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -13844,7 +14089,10 @@ export interface operations {
     list_terms: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13877,6 +14125,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Malformed request */
             422: {
                 headers: {
@@ -13891,7 +14148,10 @@ export interface operations {
     add_term: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13928,8 +14188,85 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`: only an owner or admin writes */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    copy_terms_from_personal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermCopyOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: only an owner or admin writes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13951,7 +14288,10 @@ export interface operations {
     delete_term: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 term_id: number;
             };
@@ -13975,7 +14315,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description `team_forbidden`: only an owner or admin writes */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14045,6 +14385,128 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_workspace_prefs: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePrefsOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in, or a template of another workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_workspace_prefs: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspacePrefsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePrefsOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in, or a template of another workspace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `bot_name_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -25,7 +25,14 @@
   - [x] T3 Every list, count, badge, Ask and notification narrowed; strict route guard `tests/test_workspace_leaks.py` (calendar, templates and vocabulary GETs are listed as pending W2/W3)
   - [x] T4 Web: header everywhere, auto-switch with toast, switcher unread dots (PR B; looked at in a real browser at 1280 and 390 px; SOP section "Task 4")
   - [x] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`, `docs/fe-captures/workspaces/`)
-- [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7)
+- [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7) (SOP `docs/sop/2026-11-24-workspaces-settings.md`, migration `0071` placeholder; branch `feature/workspaces-settings`)
+  - [x] T5 Templates and vocabulary per workspace: owners and admins write, members read and use; new workspaces start with the seeded defaults; copy-from-personal; `templates.team_id` NOT NULL (`tests/test_workspace_templates.py`)
+  - [x] T6 The pipeline, translation, rewrite, Send now and the mails read the meeting's workspace; works after the recorder left (`tests/test_workspace_pipeline.py`)
+  - [x] T7 Per-person-per-workspace prefs (`workspace_prefs`, `/api/workspace-prefs`), `JoinSettings` reads the connection's workspace, Settings split into "This workspace" and "Personal" (`tests/test_workspace_prefs.py`)
+  - [x] D4 A meeting born in a team workspace is shared with it from birth; personal stays private; existing meetings unchanged; "keep private" stays private (`tests/test_workspace_birth_share.py`)
+  - [x] Leak guard extended: templates, vocabulary and `/api/workspace-prefs` are workspace data (`tests/test_workspace_leaks.py`)
+  - [x] FE guide `docs/fe-integration-guide-workspaces-settings.md` from 44 real captures (`docs/fe-captures/workspaces/settings-*.json`)
+  - [x] Browser check at 390 and 1280 px (member view); CI green on the final head: see the PR
 - [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
 - [x] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12) (branch `feature/workspaces-lifecycle`, SOP `docs/sop/2026-11-24-workspaces-lifecycle.md`, FE guide `docs/fe-integration-guide-workspaces-lifecycle.md`, 36 live captures `docs/fe-captures/workspaces-lifecycle/`; no migration; verified locally and in a real browser at 390 and 1280 px, the `make` gate pending the recipes merge)
   - [x] T10 Plan limit: `Plan.max_owned_teams` through the live plan (Free 0, Starter 3, Pro 10, Scale unlimited; a trial is Free; members never count; a lapse or downgrade never removes a team; hand-overs checked); Make-a-team card shows the allowance and the upgrade message

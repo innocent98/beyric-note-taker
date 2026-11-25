@@ -32,6 +32,8 @@ from app import (
     send_now,
     services,
     titles,
+    workspace_context,
+    workspace_prefs,
 )
 from app.api_schemas import ErrorResponse
 from app.db import get_session
@@ -41,8 +43,8 @@ from app.models import (
     CalendarConnection,
     CalendarEvent,
     ScheduledJoin,
+    Team,
     User,
-    UserSettings,
 )
 from app.services import get_bot_provider
 
@@ -447,7 +449,7 @@ def calendar_connect_disconnect(
     )
 
 
-def _join_settings(prefs: UserSettings | None, request: Request) -> JoinSettings:
+def _join_settings(prefs: workspace_prefs.Prefs, request: Request) -> JoinSettings:
     return JoinSettings.for_user(
         prefs, teams_join_enabled=request.app.state.settings.teams_join_enabled
     )
@@ -513,14 +515,23 @@ def _upcoming(
     return [_upcoming_item(row, join_settings, now, joins.get(row.id)) for row in rows]
 
 
+def _prefs_workspace(session: Session, user: User, conn) -> int:
+    """The workspace whose settings the calendar screen shows and changes: the connection's, else
+    the person's default one."""
+    if conn is not None:
+        return conn.team_id
+    return workspace_context.require(session, user, None).id
+
+
 def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut:
     """The whole state, as `GET /api/calendar` and `PUT /api/calendar/settings` answer."""
     conn = calendar_connect.live_calendar_connection(session, user)
-    prefs = session.get(UserSettings, user.id)
-    rule = prefs.auto_join_rule if prefs else "all"
-    join_unanswered = prefs.join_unanswered if prefs else False
-    skip_one_on_ones = prefs.skip_one_on_ones if prefs else False
-    template_id = prefs.calendar_template_id if prefs else None
+    # The person's settings in the workspace the connection lives in (else their default workspace)
+    prefs = workspace_prefs.for_user(session, user.id, _prefs_workspace(session, user, conn))
+    rule = prefs.auto_join_rule
+    join_unanswered = prefs.join_unanswered
+    skip_one_on_ones = prefs.skip_one_on_ones
+    template_id = prefs.calendar_template_id
     # Paused when the scheduler (the process that sends the bots) has recorded that auto-join is
     # off. Read from the database only: `web` keeps the environment it was started with, and a
     # restart of `scheduler` alone, as the runbook says, must be enough in both directions.
@@ -586,6 +597,67 @@ def calendar_state(
     return _calendar_out(request, session, user)
 
 
+def apply_prefs(
+    session: Session,
+    user: User,
+    conn: CalendarConnection | None,
+    team_id: int,
+    app_settings,
+    *,
+    rule: str | None = None,
+    join_unanswered: bool | None = None,
+    skip_one_on_ones: bool | None = None,
+    set_template: bool = False,
+    calendar_template_id: int | None = None,
+    commit: bool = True,
+) -> workspace_prefs.WorkspacePrefs:
+    """Change the person's auto-join settings IN workspace `team_id` (`workspace_prefs`) and, when
+    their calendar connection lives there (`conn`), act on it: a changed rule clears their
+    per-meeting switches on events that have not started, and a changed rule, `join_unanswered` or
+    `skip_one_on_ones` decides the stored events again (joins it now forbids are cancelled, joins it
+    now allows are made or revived; a join whose bot is in is never touched); a chosen template
+    reaches the joins of that workspace that have not sent a bot. A value that is already set
+    changes nothing. Used by `PUT /api/calendar/settings` and `PUT /api/workspace-prefs`, so the
+    two cannot differ. Commits unless `commit` is false."""
+    prefs = workspace_prefs.row_for_update(session, user.id, team_id)
+    now = _now()
+    rule_changed = rule is not None and rule != prefs.auto_join_rule
+    unanswered_changed = join_unanswered is not None and join_unanswered != prefs.join_unanswered
+    skip_changed = skip_one_on_ones is not None and skip_one_on_ones != prefs.skip_one_on_ones
+    if rule is not None:
+        prefs.auto_join_rule = rule
+    if join_unanswered is not None:
+        prefs.join_unanswered = join_unanswered
+    if skip_one_on_ones is not None:
+        prefs.skip_one_on_ones = skip_one_on_ones
+    if set_template:
+        prefs.calendar_template_id = calendar_template_id
+        gcal_sync.set_join_template(
+            session, user.id, calendar_template_id, team_id=team_id, commit=False
+        )
+    if conn is not None and conn.team_id != team_id:
+        conn = None  # another workspace's calendar: nothing to re-decide here
+    if rule_changed:
+        session.execute(
+            update(CalendarEvent)
+            .where(CalendarEvent.user_id == user.id, CalendarEvent.starts_at > now)
+            .values(override=None)
+        )
+    if (rule_changed or unanswered_changed or skip_changed) and conn is not None:
+        events = session.scalars(
+            select(CalendarEvent).where(
+                CalendarEvent.connection_id == conn.id,
+                CalendarEvent.user_id == user.id,
+                CalendarEvent.status != "cancelled",
+                CalendarEvent.ends_at > now,
+            )
+        ).all()
+        gcal_sync.rerun_rules(session, conn, prefs, list(events), now=now, settings=app_settings)
+    elif commit:
+        session.commit()
+    return prefs
+
+
 @router.put("/settings", responses=SETTINGS_RESPONSES)
 def calendar_settings(
     body: SettingsIn,
@@ -606,52 +678,22 @@ def calendar_settings(
     `calendar_unavailable` while the calendar features are off."""
     _calendar_on(request, google)
     set_template = "calendar_template_id" in body.model_fields_set
-    if set_template and body.calendar_template_id is not None:
-        services.template_or_404(session, user, body.calendar_template_id)
-    prefs = session.get(UserSettings, user.id)
-    if prefs is None:
-        prefs = UserSettings(
-            user_id=user.id, auto_join_rule="all", join_unanswered=False, skip_one_on_ones=False
-        )
-        session.add(prefs)
-    now = _now()
-    rule_changed = body.rule is not None and body.rule != prefs.auto_join_rule
-    unanswered_changed = (
-        body.join_unanswered is not None and body.join_unanswered != prefs.join_unanswered
-    )
-    skip_changed = (
-        body.skip_one_on_ones is not None and body.skip_one_on_ones != prefs.skip_one_on_ones
-    )
-    if body.rule is not None:
-        prefs.auto_join_rule = body.rule
-    if body.join_unanswered is not None:
-        prefs.join_unanswered = body.join_unanswered
-    if body.skip_one_on_ones is not None:
-        prefs.skip_one_on_ones = body.skip_one_on_ones
-    if set_template:
-        prefs.calendar_template_id = body.calendar_template_id
-        gcal_sync.set_join_template(session, user.id, body.calendar_template_id, commit=False)
     conn = calendar_connect.live_calendar_connection(session, user)
-    if rule_changed:
-        session.execute(
-            update(CalendarEvent)
-            .where(CalendarEvent.user_id == user.id, CalendarEvent.starts_at > now)
-            .values(override=None)
-        )
-    if (rule_changed or unanswered_changed or skip_changed) and conn is not None:
-        events = session.scalars(
-            select(CalendarEvent).where(
-                CalendarEvent.connection_id == conn.id,
-                CalendarEvent.user_id == user.id,
-                CalendarEvent.status != "cancelled",
-                CalendarEvent.ends_at > now,
-            )
-        ).all()
-        gcal_sync.rerun_rules(
-            session, conn, prefs, list(events), now=now, settings=request.app.state.settings
-        )
-    else:
-        session.commit()
+    team_id = _prefs_workspace(session, user, conn)
+    if set_template and body.calendar_template_id is not None:
+        services.template_or_404(session, session.get(Team, team_id), body.calendar_template_id)
+    apply_prefs(
+        session,
+        user,
+        conn,
+        team_id,
+        request.app.state.settings,
+        rule=body.rule,
+        join_unanswered=body.join_unanswered,
+        skip_one_on_ones=body.skip_one_on_ones,
+        set_template=set_template,
+        calendar_template_id=body.calendar_template_id,
+    )
     return _calendar_out(request, session, user)
 
 
@@ -687,7 +729,7 @@ def calendar_event_override(
         ).first()
     if row is None:
         raise StarletteHTTPException(404, "No such event")
-    prefs = session.get(UserSettings, user.id)
+    prefs = workspace_prefs.for_user(session, user.id, conn.team_id)
     join_settings = _join_settings(prefs, request)
     now = _now()
     # With the switch on, only what the event itself is can still say no: that is "not joinable".
@@ -698,7 +740,7 @@ def calendar_event_override(
     gcal_sync.rerun_rules(
         session,
         conn,
-        prefs or gcal_sync.DEFAULT_USER_SETTINGS,
+        prefs,
         [row],
         now=now,
         settings=request.app.state.settings,

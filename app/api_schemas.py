@@ -475,6 +475,15 @@ class TemplateList(BaseModel):
     templates: list[TemplateOut]
 
 
+class TemplateCopyOut(BaseModel):
+    """`copied` templates were added to the active workspace, `skipped` already had that name;
+    `templates` is the workspace's list afterwards."""
+
+    copied: int
+    skipped: int
+    templates: list[TemplateOut]
+
+
 # ---- vocabulary ----
 
 
@@ -490,6 +499,15 @@ class TermOut(BaseModel):
 
 
 class TermList(BaseModel):
+    terms: list[TermOut]
+
+
+class TermCopyOut(BaseModel):
+    """`copied` terms were added to the active workspace, `skipped` were there already; `terms` is
+    the workspace's list afterwards."""
+
+    copied: int
+    skipped: int
     terms: list[TermOut]
 
 
@@ -1488,3 +1506,35 @@ class LinearOut(BaseModel):
     # The Linear team the tasks go to; null when not connected.
     team_name: str | None
     can_manage: bool
+
+
+# ---- per-person-per-workspace preferences ----
+
+
+class WorkspacePrefsOut(BaseModel):
+    """The caller's own settings in the active workspace (workspaces design, section 3).
+    `bot_name` is the name set for THIS workspace, null when none is set; `bot_name_default` is the
+    name that applies then (the caller's own default from Settings > Personal, else the server's).
+    `warning` is the soft warning about a name that bot-detection dislikes, null for none."""
+
+    team_id: int
+    bot_name: str | None
+    bot_name_default: str
+    warning: str | None
+    auto_join_rule: Literal["all", "organizer", "none"]
+    join_unanswered: bool
+    skip_one_on_ones: bool
+    calendar_template_id: int | None
+
+
+class WorkspacePrefsIn(Body):
+    """What to change; a field that is left out stays as it is. `bot_name` null or empty clears the
+    workspace's own name (the default applies again); `calendar_template_id` null means the
+    workspace's default template, otherwise one of the workspace's own templates (404 `not_found`
+    for any other)."""
+
+    bot_name: str | None = Field(default=None, max_length=2000)
+    auto_join_rule: Literal["all", "organizer", "none"] | None = None
+    join_unanswered: bool | None = None
+    skip_one_on_ones: bool | None = None
+    calendar_template_id: int | None = None

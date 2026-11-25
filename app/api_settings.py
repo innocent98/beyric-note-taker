@@ -170,8 +170,9 @@ def _bot_name_out(request: Request, user: User) -> BotNameOut:
 
 @router.get("/bot-name")
 def read_bot_name(request: Request, user: User = Depends(auth.current_user)) -> BotNameOut:
-    """The name the note taker joins this person's meetings with: their own when set, else null with
-    the server's default beside it (`bot_name_default`)."""
+    """The person's default note taker name: used in every workspace that sets none of its own
+    (`PUT /api/workspace-prefs`), else null with the server's default beside it
+    (`bot_name_default`). It never switches with the workspace."""
     return _bot_name_out(request, user)
 
 

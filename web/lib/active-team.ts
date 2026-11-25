@@ -24,9 +24,9 @@ export const ACTIVE_TEAM_HEADER = "x-active-team";
 export const SHELL_DEFAULT_TEAM = "data-default-team";
 
 // Pages whose content is one team's: they carry `?team=` in the URL. The Meetings list (the home page
-// `/`), Decisions and Review follow the team too; the meeting page, Ask and Notifications do not (a
+// `/`), Decisions, Review, Templates and Vocabulary follow the team too; the meeting page, Ask and Notifications do not (a
 // meeting opens by its link whatever team is active).
-export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings"] as const;
+export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/templates", "/vocabulary"] as const;
 
 // The largest id the API accepts in `X-Team-Id` (`MAX_ID` in app/services.py): beyond it the server
 // answers 422, so such a value (a hand-edited URL or storage) counts as no team at all.

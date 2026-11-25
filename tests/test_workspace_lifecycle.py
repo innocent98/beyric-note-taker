@@ -310,11 +310,11 @@ def test_a_class_is_a_team_that_shares_by_default_and_says_so(app, session, worl
     assert get(pat, "/api/team", team=team.id).json()["kind"] == "class"
 
 
-def test_an_ordinary_team_stays_a_team_that_does_not_share_by_default(app, session, world):
+def test_an_ordinary_team_shares_by_default_as_a_class_does(app, session, world):
     subscribe(session, world.pat, "plan_20h")
     body = call(sign_in(app, PAT), "POST", "/api/teams", body={"name": "Crew"}).json()
     team = session.get(Team, body["id"])
-    assert body["kind"] == "team" and team.kind == "team" and team.share_new_meetings is False
+    assert body["kind"] == "team" and team.kind == "team" and team.share_new_meetings is True
 
 
 def test_a_class_counts_toward_the_owned_team_limit(app, session, world):

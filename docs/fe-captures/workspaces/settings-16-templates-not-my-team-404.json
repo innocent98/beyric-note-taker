@@ -1,0 +1,22 @@
+{
+  "note": "A workspace the caller is not in: 404 `not_found`.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/templates",
+    "headers": {
+      "X-Team-Id": "3",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}
