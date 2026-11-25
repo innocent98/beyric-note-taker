@@ -30,7 +30,7 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_ask import NOTES as ASK_NOTES
 from tests.test_ask import model, passages_of, post  # noqa: F401
-from tests.test_multi_team_leaks import PAT, QUINN, multi_team_on, new_team, world  # noqa: F401
+from tests.test_multi_team_leaks import PAT, QUINN, new_team, world  # noqa: F401
 from tests.test_series import MONDAY, fixed_clock, meeting_in, question_in, task_in  # noqa: F401
 from tests.test_team_visibility import sign_in
 from tests.test_topics import THEN, FakeTopics, message_of, numbers_of, run, week
@@ -58,6 +58,7 @@ def test_ask_finds_a_meeting_shared_to_x_through_x_and_never_one_the_asker_may_n
     mark(world.in_z, "ZULUMARK")
     session.commit()
     pat = sign_in(app, PAT)
+    pat.client.headers["X-Team-Id"] = str(world.x.id)  # Ask searches the active workspace
     assert post(pat, "What was said about pricing?").status_code == 200
     seen = passages_text(model.calls[0])
     assert "XRAYMARK" in seen

@@ -23,15 +23,24 @@ exists. The platform admin has no route into drafts (`is_admin` is not consulted
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from app.models import Document, DocumentMeeting, DocumentShare, Meeting, TeamMember, User
+from app.models import (
+    Document,
+    DocumentMeeting,
+    DocumentShare,
+    Meeting,
+    Team,
+    TeamMember,
+    User,
+)
 from app.recipes import blocks as blocks_mod
 from app.visibility import visible_meetings
 
 
-def _shared_to(user: User):
-    """`documents.id` of the drafts shared to a team `user` is in, by someone still in that team."""
+def _shared_to(user: User, team_id: int | None = None):
+    """`documents.id` of the drafts shared to a team `user` is in, by someone still in that team.
+    `team_id`: only the drafts shared to that one team (the active workspace of a list)."""
     sharer, mine, doc = aliased(TeamMember), aliased(TeamMember), aliased(Document)
-    return (
+    query = (
         select(DocumentShare.document_id)
         .join(mine, and_(mine.team_id == DocumentShare.team_id, mine.user_id == user.id))
         .join(doc, doc.id == DocumentShare.document_id)
@@ -44,6 +53,9 @@ def _shared_to(user: User):
         )
         .where(doc.owner_user_id == DocumentShare.shared_by_user_id)
     )
+    if team_id is not None:
+        query = query.where(DocumentShare.team_id == team_id)
+    return query
 
 
 def readable_clause(user: User):
@@ -51,9 +63,22 @@ def readable_clause(user: User):
     return or_(Document.owner_user_id == user.id, Document.id.in_(_shared_to(user)))
 
 
-def shared_clause(user: User):
-    """Drafts someone else shared with `user` (not their own)."""
-    return and_(Document.owner_user_id != user.id, Document.id.in_(_shared_to(user)))
+def shared_clause(user: User, team_id: int | None = None):
+    """Drafts someone else shared with `user` (not their own); with `team_id`, only those shared to
+    that team."""
+    return and_(Document.owner_user_id != user.id, Document.id.in_(_shared_to(user, team_id)))
+
+
+def made_in_clause(user: User, team: Team):
+    """The caller's own drafts that belong to workspace `team`: made in it, or (a draft whose team
+    record is gone, `documents.team_id` is set null when a team is deleted) made in the caller's
+    own personal workspace."""
+    if team.is_personal and team.owner_user_id == user.id:
+        return and_(
+            Document.owner_user_id == user.id,
+            or_(Document.team_id == team.id, Document.team_id.is_(None)),
+        )
+    return and_(Document.owner_user_id == user.id, Document.team_id == team.id)
 
 
 def can_read_document(session: Session, user: User, doc: Document) -> bool:

@@ -30,6 +30,7 @@ from app.models import (
     Meeting,
     Notification,
     ScheduledJoin,
+    Template,
     UsageEntry,
     User,
     UserSettings,
@@ -1204,7 +1205,12 @@ def test_a_user_row_reaches_the_runner_with_the_users_own_template_not_anothers(
     join.template_id = ben.template.id  # a tampered row: a template that is not Ada's
     session.commit()
     run(session, host, cal, at(-1))
-    assert host.bots_sent == 0 and state_of(session, join) == ("failed", "no_template")
+    # Ben's template is never used: the join falls back to the workspace's own default template
+    # (workspaces design: a join queued with a template of another workspace is not a failure)
+    assert host.bots_sent == 1
+    meeting = session.scalars(select(Meeting).where(Meeting.owner_user_id == ada.user.id)).one()
+    assert meeting.template_id != ben.template.id
+    assert session.get(Template, meeting.template_id).team_id == meeting.workspace_team_id
     assert User is not None and Session is not None
 
 

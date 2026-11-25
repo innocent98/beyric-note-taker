@@ -1,0 +1,22 @@
+{
+  "note": "Made in her personal workspace: nobody to share with, 409 `personal_team`.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents/2/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "This draft was made in your own space. Make it in a team workspace to share it with that team."
+      }
+    }
+  }
+}

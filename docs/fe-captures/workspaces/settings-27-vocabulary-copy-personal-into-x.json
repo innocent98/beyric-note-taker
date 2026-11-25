@@ -1,0 +1,31 @@
+{
+  "note": "Owner copies the personal terms into X.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary/copy-from-personal",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "copied": 1,
+      "skipped": 0,
+      "terms": [
+        {
+          "id": 3,
+          "term": "Beyric"
+        },
+        {
+          "id": 2,
+          "term": "Luran"
+        }
+      ]
+    }
+  }
+}

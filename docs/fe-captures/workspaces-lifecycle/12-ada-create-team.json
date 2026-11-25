@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Reading group"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 6,
+      "name": "Reading group",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": true,
+      "kind": "team"
+    }
+  }
+}

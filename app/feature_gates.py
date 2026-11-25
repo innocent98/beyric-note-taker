@@ -14,6 +14,12 @@ inside the function that makes the model call, never only in a route, so every w
 - `make`: `recipes.service.request_draft`, before anything is written or counted. Reached by
   `POST /api/documents`. The worker is not gated: a queued draft was allowed when it was asked for.
 
+A workspace widens two of them (workspaces design 12.6, decided by Adebayo): `ask` and `make` also
+pass for a member of a workspace whose OWNER is on a plan, so a free student can Ask and Make on a
+class a lecturer pays for. The caller passes `workspace=` (the meeting's workspace for Make, the
+active one for Ask). `translate` and `rewrite` stay the caller's own, and the daily caps stay per
+caller. Hours and plans stay per person.
+
 Not gated, on purpose (spec 2.3): reading, search, export, tasks, decisions, an existing
 translation, a retry of a failed meeting, and Review's "add the corrected spelling" (no model).
 The translation worker is not gated either: a queued translation was allowed when it was asked for.
@@ -59,12 +65,15 @@ def require(
     user: User,
     feature: str,
     *,
+    workspace=None,
     now: datetime | None = None,
     settings: Settings | None = None,
 ) -> None:
     """Let the call go on, or raise `Refused` 403 `plan_inactive` (enforce only). Returns at once
-    under `off`. Reads only: the caller keeps whatever transaction or lock it holds (a caller
-    holding a row lock rolls back when this raises)."""
+    under `off`. `workspace` (a `Team`, the active workspace or a team id) lets `ask` and `make`
+    pass on the strength of the workspace owner's plan; see the module docstring. Reads only: the
+    caller keeps whatever transaction or lock it holds (a caller holding a row lock rolls back
+    when this raises)."""
     settings = settings or get_settings()
     mode = settings.feature_gates_mode
     if mode == "off":
@@ -74,7 +83,9 @@ def require(
     if mode == "shadow":
         try:
             with session.begin_nested():
-                decision = entitlements.gate(session, user, feature, now, max_poll)
+                decision = entitlements.gate(
+                    session, user, feature, now, max_poll, workspace=workspace
+                )
         except Exception as exc:
             # The class and the user id only: a database error's text carries bound parameters,
             # and one of them is the email fingerprint.
@@ -93,7 +104,7 @@ def require(
                 decision.state,
             )
         return
-    if not entitlements.gate(session, user, feature, now, max_poll).allowed:
+    if not entitlements.gate(session, user, feature, now, max_poll, workspace=workspace).allowed:
         from app.services import Refused  # services imports this module: a top import would loop
 
         raise Refused(403, PLAN_INACTIVE, plan_inactive_message(feature))

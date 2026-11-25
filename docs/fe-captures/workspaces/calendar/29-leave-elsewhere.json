@@ -1,0 +1,21 @@
+{
+  "note": "Ada leaves Elsewhere: her connection there and its joins are gone, and the Google grant of THAT account is revoked (no other workspace of hers uses it). Her other workspaces are untouched.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/team/members/1",
+    "headers": {
+      "X-Team-Id": "3",
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": ""
+  }
+}

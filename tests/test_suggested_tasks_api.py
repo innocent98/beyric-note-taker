@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from app import teams
 from app.models import MailOutbox, Project, Task, UserSettings
 from tests.test_api_tasks import (  # noqa: F401  (fixtures used by name)
     MEMBER_EMAIL,
@@ -357,6 +358,7 @@ def test_accepting_keeps_the_project_and_sprint_a_person_chose_while_it_waited(
 def own_meeting_of(session, template, person):
     meeting = ready(session, template)
     meeting.owner_user_id = person.id
+    meeting.workspace_team_id = teams.ensure_personal_team(session, person).id
     session.commit()
     return meeting
 

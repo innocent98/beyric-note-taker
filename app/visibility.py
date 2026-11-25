@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.orm import Session
 
-from app import titles
+from app import birth_workspace, titles
 from app.models import Meeting, Team, TeamMember, User
 
 MANAGER_ROLES = ("owner", "admin")
@@ -97,34 +97,41 @@ def visible_meetings(user: User) -> Select[tuple[Meeting]]:
 
 @dataclass(frozen=True)
 class ActiveTeam:
-    """The team a LIST is about (the `X-Team-Id` header, else the person's default team): its id and
-    whether it is the caller's own personal team. Made by `team_admin.active_team`."""
+    """The workspace a LIST is about (the `X-Team-Id` header, else the person's personal
+    workspace): its id and whether it is the caller's own personal team. Made by
+    `team_admin.active_team`."""
 
     id: int
     personal: bool
 
 
-def active_team_clause(user: User, active: ActiveTeam) -> ColumnElement[bool]:
-    """Which meetings belong on the active team's list: for an ordinary team, those shared to it or
-    owned by (moved to) it, whoever recorded them; for the caller's personal team, only those they
-    recorded that no team has (neither shared nor moved). It only NARROWS a list: always combine it
-    with the read rule (`readable_in`), never use it alone."""
-    if active.personal:
-        return and_(
-            Meeting.owner_user_id == user.id,
-            Meeting.shared_team_id.is_(None),
-            Meeting.owner_team_id.is_(None),
-        )
-    return in_team_clause(active.id)
+def in_workspace(user: User, team: ActiveTeam | Team) -> ColumnElement[bool]:
+    """The one `where` condition for "the caller may read this meeting AND it lives in this
+    workspace" (workspaces design, sections 3 and 12.1). `team` is the active workspace (a `Team`
+    or the `ActiveTeam` of a list). The workspace is the meeting's CONTAINER (`workspace_team_id`);
+    who may read it is still `can_read_clause`: the header only narrows, it never widens, so a
+    teammate's unshared meeting in the team's workspace is not listed for anyone but its recorder.
+    Meetings, search, Ask, decisions, review items, tasks' meetings and every count and badge
+    filter through this one function: a count equals its list, and nothing of another workspace is
+    ever on screen."""
+    return and_(can_read_clause(user), Meeting.workspace_team_id == team.id)
 
 
-def readable_in(user: User, active: ActiveTeam | None) -> ColumnElement[bool]:
-    """The `where` condition for "the caller may read this meeting AND it is on the active team's
-    list" (`active` None: every meeting they may read, as before). Meetings, decisions, review
-    items and the sidebar counts all filter through this one function: a count equals its list."""
-    if active is None:
-        return can_read_clause(user)
-    return and_(can_read_clause(user), active_team_clause(user, active))
+def active_or_default(session: Session, user: User, active: ActiveTeam | None) -> ActiveTeam:
+    """The workspace a service-level list narrows by. A route passes the `ActiveTeam` it got from
+    `team_admin.active_team`; a caller that names none (an old page, a script) gets the caller's
+    default workspace, never "everything the caller may read"."""
+    if active is not None:
+        return active
+    team_id = birth_workspace.default_workspace_id(session.connection(), user.id)
+    team = session.get(Team, team_id)
+    return ActiveTeam(id=team_id, personal=team.is_personal and team.owner_user_id == user.id)
+
+
+def readable_in(user: User, active: ActiveTeam) -> ColumnElement[bool]:
+    """`in_workspace` for the `ActiveTeam` a list was given. There is no `None` any more: every
+    list is about one workspace (call `active_or_default` first when you may have none)."""
+    return in_workspace(user, active)
 
 
 def owns(session: Session, user: User, meeting: Meeting) -> bool:
@@ -141,6 +148,21 @@ def owns(session: Session, user: User, meeting: Meeting) -> bool:
     if role is None:
         return False
     return meeting.owner_user_id == user.id or role in MANAGER_ROLES
+
+
+def in_meeting_workspace(session: Session, user: User, meeting: Meeting) -> bool:
+    """True while `user` is a current member of the workspace the meeting is filed in. What a
+    meeting is written with (its workspace's templates and vocabulary) is read for the person who
+    asks only if they still belong to that workspace: a recorder who left, or anyone who never was
+    in it, gets nothing of it, whatever they may otherwise do with the meeting."""
+    return (
+        session.scalar(
+            select(TeamMember.id).where(
+                TeamMember.team_id == meeting.workspace_team_id, TeamMember.user_id == user.id
+            )
+        )
+        is not None
+    )
 
 
 def recorded_by(session: Session, user: User, meeting: Meeting) -> bool:
@@ -180,25 +202,27 @@ def scope_team_of(
     session: Session, meeting: Meeting, *, personal_is_private: bool = True
 ) -> int | None:
     """The ordinary team a meeting belongs to for a recurring meeting's row ("scope"): the team that
-    owns it, else the team it is shared to; None for a private meeting, which is its recorder's
-    personal scope (docs/superpowers/specs/2026-11-14-series-follow-meetings.md section 3). A
-    meeting "shared" to its recorder's OWN personal team (migration 0043 made every solo team of
-    one personal, and `apply_share_default` still shares to the default team) is private: nobody
-    else is in that team. `personal_is_private=False` is the flag-off reading, the raw columns, as
-    before. `series_scope_clause` is the same rule as a query: change them together."""
+    owns it, else the team it is shared to, else the team's workspace it was recorded into (a
+    private meeting kept in a team's workspace stays in that team's scope); None for a meeting
+    filed in its recorder's own personal workspace, which is their personal scope
+    (docs/superpowers/specs/2026-11-14-series-follow-meetings.md section 3). A meeting "shared" to
+    its recorder's OWN personal team is private: nobody else is in that team.
+    `personal_is_private=False` is the flag-off reading, the raw columns, as before.
+    `series_scope_clause` is the same rule as a query: change them together."""
     if meeting.owner_team_id is not None:
         return meeting.owner_team_id
     shared = meeting.shared_team_id
-    if shared is None or not personal_is_private:
+    if not personal_is_private:
         return shared
+    home = shared if shared is not None else meeting.workspace_team_id
     own_personal = session.scalar(
         select(Team.id).where(
-            Team.id == shared,
+            Team.id == home,
             Team.is_personal.is_(True),
             Team.owner_user_id == meeting.owner_user_id,
         )
     )
-    return None if own_personal is not None else shared
+    return None if own_personal is not None else home
 
 
 def series_scope_clause(team: Team) -> ColumnElement[bool]:
@@ -206,14 +230,16 @@ def series_scope_clause(team: Team) -> ColumnElement[bool]:
     owned by it. A personal team: those its owner recorded that no other team has (not shared to
     another team, not moved; one shared to this personal team itself is private). Narrows only:
     always combine with `can_read_clause` for a reader. A series row of this team may hold exactly
-    these meetings, and no others."""
+    these meetings, and no others. A private meeting filed in a team's workspace (workspaces
+    design) is in that team's scope, not in its recorder's personal one."""
     if team.is_personal:
         return and_(
             Meeting.owner_user_id == team.owner_user_id,
             or_(Meeting.shared_team_id.is_(None), Meeting.shared_team_id == team.id),
             Meeting.owner_team_id.is_(None),
+            Meeting.workspace_team_id == team.id,
         )
-    return in_team_clause(team.id)
+    return or_(in_team_clause(team.id), Meeting.workspace_team_id == team.id)
 
 
 def is_shared(meeting: Meeting) -> bool:

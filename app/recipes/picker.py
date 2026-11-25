@@ -38,7 +38,7 @@ from app import series as series_rules
 from app.ask import transcript_of
 from app.models import Meeting, Project, Series, Sprint, Task, Team, User, UserSettings
 from app.recipes.picker_spec import MAX_MEETINGS, PickerSpec
-from app.visibility import active_team_clause, can_read_clause, readable_in
+from app.visibility import can_read_clause, readable_in
 
 # The newest meetings looked at before the cap: a team with hundreds of meetings in one scope does
 # not load them all to offer twelve.
@@ -126,7 +126,9 @@ def _sprint_scope(session: Session, user: User, team_id: int | None, sprint_id: 
         )
     )
     held = and_(
-        Meeting.created_at >= start, Meeting.created_at < before, active_team_clause(user, active)
+        Meeting.created_at >= start,
+        Meeting.created_at < before,
+        Meeting.workspace_team_id == active.id,
     )
     return _Scope(planned | held)
 
@@ -163,6 +165,10 @@ def resolve_meetings(
     else:
         scope = _days_scope(session, user, team_id, spec)
 
+    # Only the active workspace's meetings are offered (a recurring meeting, project or sprint of
+    # another workspace, or a meeting id from another one, is left out and counted).
+    here = Meeting.workspace_team_id == team_admin.my_membership(session, user, team_id).team_id
+    scope = _Scope(and_(scope.clause, here), scope.counts_unreadable)
     rows = list(
         session.scalars(
             select(Meeting)
@@ -176,7 +182,7 @@ def resolve_meetings(
         # an id that is not readable and an id that does not exist look the same: left out
         readable = set(
             session.scalars(
-                select(Meeting.id).where(Meeting.id.in_(unique_ids), can_read_clause(user))
+                select(Meeting.id).where(Meeting.id.in_(unique_ids), can_read_clause(user), here)
             )
         )
         left_out = len(unique_ids) - len(readable)

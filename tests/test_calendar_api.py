@@ -313,6 +313,10 @@ def test_each_item_has_title_times_platform_and_the_join_answer(web, session, li
         "join_id": None,
         "can_send_now": False,
         "not_recorded_text": None,
+        # the same meeting on the calendar of another workspace of the person: not the case here
+        "recorded_in": None,
+        "recorded_in_text": None,
+        "moved_text": None,
     }
 
 
@@ -453,6 +457,9 @@ def test_upcoming_never_returns_attendee_addresses_description_or_zoom_passcode(
         "join_id",
         "can_send_now",
         "not_recorded_text",
+        "recorded_in",
+        "recorded_in_text",
+        "moved_text",
     }  # no description, location, attendees, link or passcode field exists to fill
 
 

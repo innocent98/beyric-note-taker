@@ -79,7 +79,7 @@ LAYOUT = [
             "FLUTTERWAVE_PUBLIC_KEY",
         ],
     ),
-    ("Feature switches", ["MULTI_TEAM_ENABLED", "SERIES_FOLLOW_MEETINGS"]),
+    ("Feature switches", ["SERIES_FOLLOW_MEETINGS"]),
     (
         "Optional",
         [
@@ -172,8 +172,12 @@ REQUIRED = ("POSTGRES_PASSWORD", "SESSION_SECRET", "SKRIBBY_API_KEY", "OPENAI_AP
 # (docs/sop/2026-11-21-remove-pilot-expiry.md): the job is gone, so a leftover line of any value
 # is removed. A server .env that still holds one starts fine either way: `Settings` ignores names
 # it does not know.
+# `MULTI_TEAM_ENABLED` went the same way with the workspaces release (2026-11-24, see
+# docs/sop/2026-11-24-workspaces-foundation.md): a person may always belong to several teams, so a
+# leftover line of any value is removed.
 UNUSED_PREFIX = "VEXA_"
 UNUSED_NAMES = (
+    "MULTI_TEAM_ENABLED",
     "BOT_NAME",
     "BOT_PROVIDER",
     "PAID_PLANS_OPEN_ON",

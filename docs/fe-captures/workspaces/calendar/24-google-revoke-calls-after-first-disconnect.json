@@ -1,0 +1,6 @@
+{
+  "note": "What the fake Google was asked to revoke so far (the proof that the first disconnect revoked nothing).",
+  "content": {
+    "revoked_tokens": 0
+  }
+}

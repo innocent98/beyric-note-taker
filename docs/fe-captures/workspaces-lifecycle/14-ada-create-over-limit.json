@@ -1,0 +1,24 @@
+{
+  "note": "Over the limit: 409 `team_limit` naming the plan to upgrade to.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "One too many"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "team_limit",
+        "message": "Your plan owns up to 3 teams and you have 3. Upgrade to the Pro plan to own up to 10 teams."
+      }
+    }
+  }
+}

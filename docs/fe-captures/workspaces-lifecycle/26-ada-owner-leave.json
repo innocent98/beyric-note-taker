@@ -1,0 +1,23 @@
+{
+  "note": "An owner cannot leave: 409 `owner_cannot_leave` (the message now says she may delete it once she is alone).",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/team/members/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "owner_cannot_leave",
+        "message": "You own this team. Ask the pilot admin to hand it to someone else before you leave, or delete it once you are its only member."
+      }
+    }
+  }
+}

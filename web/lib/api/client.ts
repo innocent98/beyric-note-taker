@@ -71,6 +71,7 @@ import type {
   SlackState,
   TasksSettings,
   Template,
+  TemplateCopy,
   Brief,
   BriefImported,
   Recipe,
@@ -92,9 +93,12 @@ import type {
   InviteRole,
   TemplateInput,
   Term,
+  TermCopy,
   Translation,
   TranslationLanguage,
   TranscriptEdit,
+  WorkspacePrefs,
+  WorkspacePrefsInput,
 } from "./types";
 import type { BoardDocument, BoardOp } from "../board";
 import type {
@@ -180,33 +184,29 @@ type Call = { body?: unknown; form?: FormData; query?: Query; write?: boolean; a
 export const TEAM_HEADER = "X-Team-Id";
 export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
 
-// The routes that read `X-Team-Id` (docs/fe-integration-guide-teams.md section 10): the team's own
-// routes, tasks (list and create), projects, milestones, sprints, series (list and create), the
-// integrations and a meeting's milestones. Joining by invitation names its team in the token, a
-// task, a series or a meeting is read through its own team, so those go without.
-// Also the READS that show one team at a time: the Meetings list, the Decisions log, the Review list and
-// the session (its sidebar `badges`). A read only: creating a meeting, hiding a decision or checking a
-// review item is about that one thing, never about a team.
+// Every route names its workspace in `X-Team-Id` EXCEPT the ones that are the person's own, whatever
+// workspace is active (workspaces design, section 7): signing in and out, the public and token routes
+// (sign-up, password, verify, waitlist, the pilot, the Google sign-in, mail opt-out), billing, the
+// platform admin, the list of the person's workspaces itself, the team invitation preview and
+// accept (they name their team in the token), the settings that are the person's profile (name,
+// email, language, time zone, the recording acknowledgement) and the calendar providers' redirect
+// back. `GET /api/session` is scoped (its badges and unread counts are the active workspace's);
+// logging in and out are not. Sending the header to a route that does not read it is harmless: the
+// server ignores it. A route that does read it answers 404 "No such team." for a team the person
+// left, which sends the tab back to its default workspace (`onTeamGone`).
+const PERSONAL_ONLY = [
+  /^\/api\/(auth|billing|admin|pilot|waitlist|signup|verify-email|password|mail)(\/|$)/,
+  /^\/api\/teams$/,
+  /^\/api\/team\/invites\/(preview|accept)$/,
+  /^\/api\/settings\/(name|email|language|time-zone|recording-ack)$/,
+  /^\/api\/calendar\/[a-z]+\/callback$/,
+];
+
 export function isTeamScoped(path: string, method = "GET"): boolean {
   const p = path.split("?", 1)[0];
-  // The meeting picker's preview is a read sent as a POST: it asks about the active team's series, projects and sprints.
-  if (p === "/api/recipes/picker/resolve") return true;
-  if (/^\/api\/team\/invites\/(preview|accept)$/.test(p)) return false;
-  if (/^\/api\/(meetings|decisions|review|session)$/.test(p)) return method === "GET";
-  // Asking for a draft names whose brief and team recipes it reads: the tab's team (a read of a draft is not).
-  if (p === "/api/documents") return method === "POST";
-  return (
-    /^\/api\/team(\/|$)/.test(p) ||
-    /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
-    // The recipe library and the team brief are the active team's; so is asking for a draft (whose brief and team
-    // recipes it uses). Reading or editing a draft is about the draft, not a team.
-    /^\/api\/(recipes|briefs)(\/|$)/.test(p) ||
-    (p === "/api/documents" && method === "POST") ||
-    /^\/api\/(tasks|series)$/.test(p) ||
-    p === "/api/tasks/export" ||
-    p === "/api/series/removed" ||
-    /^\/api\/meetings\/\d+\/milestones$/.test(p)
-  );
+  if (!p.startsWith("/api/")) return false;
+  if (p === "/api/session") return method === "GET";
+  return !PERSONAL_ONLY.some((re) => re.test(p));
 }
 
 export type Api = ReturnType<typeof createApi>;
@@ -450,6 +450,15 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
       // second delete of the same template is a 404.
       remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
+      // Owners and admins of a team workspace: copy the person's personal templates into it, never
+      // overwriting a name that is there. 403 `team_forbidden` for a member; 409 `personal_team`.
+      copyFromPersonal: () => request<TemplateCopy>("POST", "/api/templates/copy-from-personal", { write: true }),
+    },
+    // What a person sets once per workspace (the active one): note taker name, auto-join rule and its
+    // two boxes, the calendar template. A field left out stays; `bot_name: null` clears it.
+    workspacePrefs: {
+      get: () => request<WorkspacePrefs>("GET", "/api/workspace-prefs"),
+      put: (body: WorkspacePrefsInput) => request<WorkspacePrefs>("PUT", "/api/workspace-prefs", { body, write: true }),
     },
     // Meeting recipes (docs/fe-integration-guide-recipes-library.md). `team` names the team a call is about in
     // place of the tab's: the Make dialog's switch. A member's write to a team recipe or the brief is 403
@@ -579,10 +588,14 @@ export function createApi(options: ApiOptions = {}) {
       confirm: (id: number) => request<Milestone>("POST", `/api/milestones/${id}/confirm`, { body: {}, write: true }),
     },
     // The teams a person belongs to (docs/fe-integration-guide-teams.md section 9): the switcher's list and
-    // "Create a team" (409 `team_limit` at three owned teams, 422 `invalid_name`, 409 `multi_team_disabled`).
+    // "Create a team" (409 `team_limit` at the plan's owned-team allowance, 422 `invalid_name`; `kind` `class`
+    // makes a class) and "Delete team" (owner only, nobody else in it: 409 `team_has_members`, 409
+    // `personal_team`, 403 `team_forbidden`; docs/fe-integration-guide-workspaces-lifecycle.md).
     teams: {
       list: () => request<TeamList>("GET", "/api/teams"),
-      create: (name: string) => request<TeamSummary>("POST", "/api/teams", { body: { name }, write: true }),
+      create: (name: string, kind: "team" | "class" = "team") =>
+        request<TeamSummary>("POST", "/api/teams", { body: { name, kind }, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/teams/${id}`, { write: true }),
     },
     // The Team screen (docs/fe-integration-guide-team.md). A member is addressed by `user_id`.
     // `team` on a call names the team it is about in place of the tab's (the meeting page: the meeting's).
@@ -806,6 +819,7 @@ export function createApi(options: ApiOptions = {}) {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,
       add: (term: string) => request<Term>("POST", "/api/vocabulary", { body: { term }, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/vocabulary/${id}`, { write: true }),
+      copyFromPersonal: () => request<TermCopy>("POST", "/api/vocabulary/copy-from-personal", { write: true }),
     },
   };
 }

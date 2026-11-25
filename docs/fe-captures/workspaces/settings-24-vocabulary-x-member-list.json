@@ -1,0 +1,24 @@
+{
+  "note": "A member reads it: it is used for every meeting recorded in X.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/vocabulary",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "terms": [
+        {
+          "id": 2,
+          "term": "Luran"
+        }
+      ]
+    }
+  }
+}

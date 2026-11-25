@@ -13,7 +13,17 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import auth, signup, sprints, team_admin, team_invites, teams, titles
+from app import (
+    auth,
+    calendar_connect,
+    google_oauth,
+    signup,
+    sprints,
+    team_admin,
+    team_invites,
+    teams,
+    titles,
+)
 from app.api_schemas import (
     AcceptInviteIn,
     ErrorResponse,
@@ -63,6 +73,7 @@ def _team_out(session: Session, me: TeamMember, now: datetime) -> TeamOut:
         id=team.id,
         name=team.name,
         is_personal=teams.is_personal_of(team, me.user_id),
+        kind=team.kind,
         share_new_meetings=team.share_new_meetings,
         reminders_on=team.reminders_on,
         reminder_timing=team.reminder_timing,
@@ -115,12 +126,12 @@ def update_team(
     Changing a sprint setting redraws the open sprints. The default applies,
     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
     member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
-    keeps its name while multi-team is on: 409 `personal_team` for a `name` on it."""
+    keeps its name: 409 `personal_team` for a `name` on it."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     team = session.get(Team, me.team_id)
     if body.name is not None:
-        if teams.multi_team_enabled() and teams.is_personal_of(team, user.id):
+        if teams.is_personal_of(team, user.id):
             raise Refused(
                 409,
                 "personal_team",
@@ -234,15 +245,20 @@ def remove_member(
     team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> Response:
     """Remove a member, or leave the team (your own id). They get a fresh team of one; the open
-    tasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner
+    tasks assigned to them become unassigned; their meetings stay theirs and are unshared. Their
+    calendar connection in this workspace is disconnected and the scheduled joins it planned are
+    cancelled; the provider's grant is revoked unless another workspace of theirs uses the same
+    account. An owner
     or admin removes members; only the owner removes an admin; the owner cannot be removed and
     cannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`."""
     me = team_admin.my_membership(session, user, team_id)
     target = team_admin.member_of_my_team(session, me, user_id)
     team_admin.remove_member(session, me, target, _now())
     session.commit()
+    calendar_connect.settle_released(session, google)  # the provider side, after the commit
     return Response(status_code=204)
 
 

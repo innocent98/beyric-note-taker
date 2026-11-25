@@ -54,7 +54,6 @@ from tests.test_api import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     PAT,
-    multi_team_on,
     new_team,
     world,
 )

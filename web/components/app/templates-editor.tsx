@@ -5,18 +5,38 @@ import { Alert, Button, Card, Field, Icon, PageHead, TextareaField } from "@/com
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Template } from "@/lib/api/types";
+import { plural } from "@/lib/format";
 
 const NAME_MAX = 100;
 const INSTRUCTIONS_MAX = 4000;
 
 type Selected = number | "new";
 
+// The workspace the templates belong to. Members read and use them; owners and admins write them
+// (the server answers 403 `team_forbidden` otherwise, so a member is never shown the controls).
+export type TemplatesWorkspace = { name: string; isPersonal: boolean; canEdit: boolean };
+const PERSONAL: TemplatesWorkspace = { name: "your personal workspace", isPersonal: true, canEdit: true };
+
 // Templates as the designer draws them: the list on the left, the editor for the chosen template
 // on the right, "Add template" at the top. Limits are the server's (name 100, instructions 4000), so
 // a 422 should not happen. "Delete template" is the designer's red text button on the left of the
 // foot. The design deletes at once; here a saved template asks first (inline, like the Decisions
 // log), because a delete cannot be undone. An unsaved new template is only discarded.
-export function TemplatesEditor({ initial }: { initial: Template[] }) {
+//   Per workspace (workspaces design, section 3), LEAD-DESIGNED, the designer's files draw none of it:
+//   a member sees the same list and the chosen template's name and instructions read-only, with one
+//   notice line naming who can change them, and no Add, Save or Delete; an owner or admin of a team
+//   workspace also gets "Copy from my personal workspace" beside "Add template" (an existing
+//   secondary button), whose result is one `Alert` line. No new style.
+export function TemplatesEditor({
+  initial,
+  workspace = PERSONAL,
+}: {
+  initial: Template[];
+  workspace?: TemplatesWorkspace;
+}) {
+  const canEdit = workspace.canEdit;
+  const [copyNote, setCopyNote] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
   const [templates, setTemplates] = useState(initial);
   const [selected, setSelected] = useState<Selected>(initial[0]?.id ?? "new");
   const [name, setName] = useState(initial[0]?.name ?? "");
@@ -79,9 +99,35 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
     setDeleting(false);
   }
 
+  async function copyFromPersonal() {
+    if (copying) return;
+    setCopying(true);
+    setError(null);
+    setCopyNote(null);
+    try {
+      const result = await api.templates.copyFromPersonal();
+      setTemplates(result.templates);
+      if (selected === "new" || !result.templates.some((t) => t.id === selected)) {
+        const first = result.templates[0];
+        setSelected(first?.id ?? "new");
+        setName(first?.name ?? "");
+        setInstructions(first?.instructions ?? "");
+      }
+      setCopyNote(
+        result.copied === 0
+          ? "Nothing to copy: every personal template is already here."
+          : `Copied ${plural(result.copied, "template")} from your personal workspace.` +
+              (result.skipped > 0 ? ` ${result.skipped} already here, left as they were.` : ""),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+    setCopying(false);
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || !canEdit) return;
     setPending(true);
     setError(null);
     setSaved(false);
@@ -106,13 +152,24 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
   return (
     <div className="stack-md">
       <PageHead title="Templates" subtitle="Instructions tell the notes writer what to focus on.">
-        <Button size="md" type="button" onClick={() => choose("new")}>
-          <Icon name="plus" size={14} />
-          Add template
-        </Button>
+        {canEdit && !workspace.isPersonal ? (
+          <Button kind="secondary" size="md" type="button" disabled={copying} onClick={() => void copyFromPersonal()}>
+            {copying ? "Copying..." : "Copy from my personal workspace"}
+          </Button>
+        ) : null}
+        {canEdit ? (
+          <Button size="md" type="button" onClick={() => choose("new")}>
+            <Icon name="plus" size={14} />
+            Add template
+          </Button>
+        ) : null}
       </PageHead>
+      {!canEdit ? (
+        <Alert kind="info">{`Only owners and admins of ${workspace.name} can change its templates. You can use them for your meetings.`}</Alert>
+      ) : null}
+      {copyNote ? <Alert kind="info">{copyNote}</Alert> : null}
       <div className="split">
-        <section className="card split-list" aria-label="Your templates">
+        <section className="card split-list" aria-label={workspace.isPersonal ? "Your templates" : `Templates of ${workspace.name}`}>
           {templates.map((t) => (
             <button
               key={t.id}
@@ -141,6 +198,7 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
               label="Name"
               required
               maxLength={NAME_MAX}
+              readOnly={!canEdit}
               placeholder="e.g. Weekly sync"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -151,10 +209,12 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
               rows={7}
               required
               maxLength={INSTRUCTIONS_MAX}
+              readOnly={!canEdit}
               placeholder="What should the notes focus on?"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
             />
+            {canEdit ? (
             <div className="form-foot tpl-foot">
               <div className="tpl-foot-left">
                 {confirming ? (
@@ -182,6 +242,7 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
                 </Button>
               </div>
             </div>
+            ) : null}
           </form>
         </Card>
       </div>

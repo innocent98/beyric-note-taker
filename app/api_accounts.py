@@ -25,6 +25,7 @@ from app import (
     ratelimit,
     services,
     signup,
+    workspace_context,
 )
 from app.api_schemas import (
     Accepted,
@@ -43,7 +44,7 @@ from app.api_schemas import (
     WaitlistIn,
 )
 from app.db import get_session
-from app.models import User
+from app.models import Team, User
 
 logger = logging.getLogger(__name__)
 
@@ -366,12 +367,14 @@ LIST_DEFAULT, LIST_MAX = 50, 100
 def list_notifications(
     limit: int = Query(LIST_DEFAULT, ge=1, le=LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    workspace: Team = Depends(workspace_context.current),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> NotificationList:
-    """The caller's notifications, newest first. For the next page pass `before_id` =
-    `next_before_id`."""
-    rows = notifications.list_notifications(session, user, limit + 1, before_id)
+    """The active workspace's notifications, newest first (the `X-Team-Id` header, else the
+    personal workspace; 404 `not_found` for a team the caller is not in). For the next page pass
+    `before_id` = `next_before_id`."""
+    rows = notifications.list_notifications(session, user, workspace.id, limit + 1, before_id)
     page = rows[:limit]
     return NotificationList(
         notifications=[NotificationOut.model_validate(row) for row in page],
@@ -385,11 +388,13 @@ def list_notifications(
     tags=["notifications"],
 )
 def read_all_notifications(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    workspace: Team = Depends(workspace_context.current),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> UnreadCount:
-    """Mark all of the caller's notifications read."""
-    notifications.mark_all_read(session, user, _now())
-    return UnreadCount(unread_notifications=notifications.unread_count(session, user))
+    """Mark all of the active workspace's notifications read (the other workspaces' stay unread)."""
+    notifications.mark_all_read(session, user, workspace.id, _now())
+    return UnreadCount(unread_notifications=notifications.unread_count(session, user, workspace.id))
 
 
 @router.post(

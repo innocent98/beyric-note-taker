@@ -127,7 +127,7 @@ export function DocumentView({ initial }: { initial: DocumentDraft }) {
         meeting_ids: doc.meeting_ids,
         options: doc.options,
         use_brief: doc.use_brief,
-      });
+      }, doc.team?.id);
       router.push(`/documents/${made.id}`);
     } catch (caught) {
       setProblem(errorMessage(caught));

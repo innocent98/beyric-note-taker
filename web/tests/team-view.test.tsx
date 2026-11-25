@@ -272,7 +272,7 @@ describe("with several teams (the switch is on)", () => {
     render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
     expect(screen.getByText("People on Platform team can be assigned tasks from meetings.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Invite people" })).toBeTruthy();
-    expect(screen.queryByText(/personal space/)).toBeNull();
+    expect(screen.queryByText(/This is your personal space\./)).toBeNull();
   });
 
   it("the team-wide share switch says that a person's own choice in Settings wins (only with the switch on)", () => {

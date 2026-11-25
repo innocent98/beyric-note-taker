@@ -194,15 +194,29 @@ def plan_of(session, statement, parameters) -> str:
 
 
 def test_ask_candidates_and_the_list_search_are_both_planned_on_the_index(session, owner, template):
-    for n in range(30):
-        ready(session, template, title=f"Meeting {n}", notes=f"## Summary\nWord{n} pricing")
+    """Ask is narrowed to one workspace and the list to the caller's readable meetings; the rare
+    word must still be found through the GIN index. Planner statistics matter, so the table is
+    filled (800 meetings of one workspace) and analysed: a plan on 30 unanalysed rows says nothing
+    about which index the planner prefers."""
     user = session.get(User, owner.id)
+    ready(session, template, title="Rare", notes="## Summary\nZanzibar pricing")
+    session.execute(
+        text(
+            "insert into meetings (owner_user_id, workspace_team_id, url, platform, native_id, "
+            "template_id, status, step, notes, title) "
+            "select owner_user_id, workspace_team_id, url, platform, native_id || g, template_id, "
+            "'ready', 'done', '## Summary' || E'\\n' || 'Filler text number ' || g, 'Filler ' || g "
+            "from meetings, generate_series(1, 800) g where title = 'Rare'"
+        )
+    )
+    session.commit()
+    session.execute(text("analyze meetings"))
     asked = captured_sql(
-        session, lambda: ask.candidates(session, user, ["pric"], None, None, False)
+        session, lambda: ask.candidates(session, user, ["zanzib"], None, None, False)
     )
     listed = captured_sql(
         session,
-        lambda: services.list_meetings(session, user, 51, None, None, None, None, "pricing"),
+        lambda: services.list_meetings(session, user, 51, None, None, None, None, "zanzibar"),
     )
     for name, seen in (("Ask candidates", asked), ("list search", listed)):
         searches = [s for s in seen if "meeting_search_text" in s[0]]

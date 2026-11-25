@@ -570,7 +570,7 @@ def create(
     team_id: int | None = None,
 ) -> Task:
     """A manual task in the caller's team (`team_id`, a team the route has checked they belong to;
-    none: their default team). Anyone on the team may make one. Left out, the sprint
+    none: their default workspace). Anyone on the team may make one. Left out, the sprint
     follows the due date (the Backlog without one); `None` is the Backlog and an id is that sprint,
     which must be an open sprint of the team's series for the task's project. Commits."""
     team = session.get(Team, team_id) if team_id is not None else teams.ensure_team(session, user)

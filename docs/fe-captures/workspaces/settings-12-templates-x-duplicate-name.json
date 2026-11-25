@@ -1,0 +1,26 @@
+{
+  "note": "A name is unique in the workspace whoever wrote it: 400 `duplicate_name`.",
+  "as": "Quinn",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Board meeting",
+      "instructions": "again"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "duplicate_name",
+        "message": "A template with that name already exists."
+      }
+    }
+  }
+}

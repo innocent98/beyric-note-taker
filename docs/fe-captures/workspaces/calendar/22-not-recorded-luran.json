@@ -1,0 +1,23 @@
+{
+  "note": "The meetings the note taker missed are the workspace's own (none here).",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": []
+    }
+  }
+}

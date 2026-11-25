@@ -23,23 +23,32 @@ user id), so a ciphertext copied into another user's row opens for nobody. No co
 is ever logged or put in a URL we build: results come back as a short code in the query string
 (`?calendar=connected`, `?calendar_error=scope_missing`).
 
-A reconnect updates the user's one Google row rather than adding another. A different Google
-account than before also drops the old account's events and the joins that had not started,
-because they belong to a calendar that is no longer connected, and revokes the old refresh token
-at Google. Setting `last_sync_at` to null asks the sync loop for a first sync.
+A connection belongs to ONE workspace (a team; workspaces design, section 4): a person holds at
+most one connection per provider in each workspace and may hold the same provider, even the same
+account, in several. The flow remembers the workspace it was started from (`oauth_flows.team_id`,
+looked up by the unforgeable state, so the callback needs no header), files the connection there and
+sends the browser back to it (`?team=<id>` unless that is the person's default workspace anyway).
+The refusals below apply per workspace.
 
-`disconnect` is the user's own "Disconnect Google" (spec 7.9, 12.2). Under a row lock it deletes
-the user's events, every scheduled join in every state and the calendar-kind notifications, and
-empties the connection row (status `disconnected`, no token, no Google identity), then COMMITS.
-Only after the commit, with no transaction or lock open, does it revoke the refresh token at
-Google (best effort) and run the `ON_DISCONNECT` hooks, so a slow Google never holds a database
-connection or blocks a concurrent connect. Meetings, usage and settings stay.
+A reconnect updates the person's Google row IN THAT WORKSPACE rather than adding another. A
+different Google account than before also drops the old account's events and the joins that had not
+started, because they belong to a calendar that is no longer connected, and revokes the old refresh
+token at Google. Setting `last_sync_at` to null asks the sync loop for a first sync.
+
+`disconnect` is the user's own "Disconnect Google" for one workspace (spec 7.9, 12.2). Under a row
+lock it deletes that connection's events, the scheduled joins filed in that workspace and its
+calendar-kind notices, and empties the connection row (status `disconnected`, no token, no Google
+identity), then COMMITS. Only after the commit, with no transaction or lock open, does it revoke the
+refresh token at Google (best effort, and ONLY when no other connection of the person still uses the
+same account: the grant is reference counted, workspaces design 12.3) and run the `ON_DISCONNECT`
+hooks, so a slow Google never holds a database connection or blocks a concurrent connect. Meetings,
+usage and settings stay.
 """
 
 import logging
 import secrets
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -47,7 +56,15 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import calendar_providers, calendar_states, google_oauth, google_signin, tokens, vault
+from app import (
+    calendar_providers,
+    calendar_states,
+    google_oauth,
+    google_signin,
+    teams,
+    tokens,
+    vault,
+)
 from app.config import Settings
 from app.gcal_client import AccessTokenCache
 from app.google_oauth import CALENDAR_SCOPE, MEET_SCOPE, GoogleError, GoogleOAuth
@@ -58,6 +75,7 @@ from app.models import (
     Notification,
     OAuthFlow,
     ScheduledJoin,
+    Team,
     User,
 )
 from app.vault import Secret
@@ -97,6 +115,9 @@ class ReleasedConnection:
     meet_subscription_name: str | None
     token: Secret | None
     had_token: bool
+    # Another workspace of the person stands on the same provider account: the grant is not ours to
+    # revoke (`grant_still_used`); the hooks of this connection still run.
+    keep_grant: bool = False
 
 
 # Called after a disconnect, or after a dead connection was replaced by another Google account, as
@@ -139,13 +160,17 @@ class AlreadyConnected(Exception):
     (Outlook spec 6.3)."""
 
 
-def other_live_calendar(session: Session, user_id: int, provider: str) -> CalendarConnection | None:
-    """The user's live calendar of a provider other than `provider`, if any: a connection that
-    still works or only needs reconnecting, and that gives the calendar feature. A Meet-only Google
-    row and a `disconnected` row of any provider do not count."""
+def other_live_calendar(
+    session: Session, user_id: int, provider: str, team_id: int
+) -> CalendarConnection | None:
+    """The user's live calendar IN THIS WORKSPACE of a provider other than `provider`, if any: a
+    connection that still works or only needs reconnecting, and that gives the calendar feature. A
+    Meet-only Google row and a `disconnected` row of any provider do not count. Another workspace's
+    calendar never counts: Google in one and Outlook in another is allowed."""
     rows = session.scalars(
         select(CalendarConnection).where(
             CalendarConnection.user_id == user_id,
+            CalendarConnection.team_id == team_id,
             CalendarConnection.provider != provider,
             CalendarConnection.status.in_((*LIVE_STATUSES, "needs_reconnect")),
         )
@@ -153,13 +178,17 @@ def other_live_calendar(session: Session, user_id: int, provider: str) -> Calend
     return next((row for row in rows if "calendar" in granted_features(row)), None)
 
 
-def live_calendar_connection(session: Session, user: User) -> CalendarConnection | None:
-    """The user's calendar connection if it gives the calendar feature (one made only for Meet is
-    not a connected calendar), else None. Only providers with a registry row are considered."""
+def live_calendar_connection(
+    session: Session, user: User, team_id: int
+) -> CalendarConnection | None:
+    """The user's calendar connection IN THIS WORKSPACE if it gives the calendar feature (one made
+    only for Meet is not a connected calendar), else None. Only providers with a registry row are
+    considered."""
     rows = session.scalars(
         select(CalendarConnection)
         .where(
             CalendarConnection.user_id == user.id,
+            CalendarConnection.team_id == team_id,
             CalendarConnection.provider.in_(tuple(calendar_providers.PROVIDERS)),
             CalendarConnection.status != "disconnected",
         )
@@ -168,9 +197,24 @@ def live_calendar_connection(session: Session, user: User) -> CalendarConnection
     return next((row for row in rows if "calendar" in granted_features(row)), None)
 
 
+def default_workspace_id(session: Session, user: User) -> int:
+    """The person's default workspace (`teams.default_membership`), a personal one made if they
+    somehow have none: where a connect that names no workspace files its connection."""
+    return teams.ensure_team(session, user).id
+
+
 def _result(path: str, **query: str) -> str:
     """`path` with `query` added after any query it already has."""
     return path + ("&" if "?" in path else "?") + urlencode(query)
+
+
+def landing_team(session: Session, user_id: int, team_id: int | None) -> dict[str, str]:
+    """`team=<id>` for the page the browser returns to, unless that is the workspace the page picks
+    on its own (the person's default one), so nothing about a one-workspace person changes."""
+    if team_id is None:
+        return {}
+    default = teams.default_membership(session, user_id)
+    return {} if default is not None and default.team_id == team_id else {"team": str(team_id)}
 
 
 def _safe_return_to(value: str | None) -> str:
@@ -180,8 +224,10 @@ def _safe_return_to(value: str | None) -> str:
     return value if ok else DEFAULT_RETURN_TO
 
 
-def _failure(code: str, path: str = DEFAULT_RETURN_TO) -> ConnectResult:
-    return ConnectResult(_result(path, calendar_error=code), code)
+def _failure(
+    code: str, path: str = DEFAULT_RETURN_TO, team: dict[str, str] | None = None
+) -> ConnectResult:
+    return ConnectResult(_result(path, calendar_error=code, **(team or {})), code)
 
 
 # ---- starting ----
@@ -195,18 +241,24 @@ def start_connect(
     *,
     google: GoogleOAuth,
     now: datetime,
+    team_id: int | None = None,
 ) -> tuple[str, str]:
     """Store a new flow for `user` and return (Google's consent URL, state). Commits.
 
-    `features` are `calendar` and/or `meet`. The flow's purpose is `calendar` whenever the
-    calendar is asked for (Meet then rides along and counts only if it is granted), else
-    `meet_scope`. Raises `ValueError` for no features or an unknown one, `AlreadyConnected` when
-    asking for the calendar while another provider's calendar is connected, and
-    `ConnectUnavailable` when no encryption key can be used."""
+    `team_id` is the workspace the connection will belong to (the caller has checked the person is
+    in it); none means their default workspace. `features` are `calendar` and/or `meet`. The flow's
+    purpose is `calendar` whenever the calendar is asked for (Meet then rides along and counts only
+    if it is granted), else `meet_scope`. Raises `ValueError` for no features or an unknown one,
+    `AlreadyConnected` when asking for the calendar while another provider's calendar is connected
+    in this workspace, and `ConnectUnavailable` when no encryption key can be used."""
     wanted = list(dict.fromkeys(features))
     if not wanted or any(feature not in FEATURE_SCOPES for feature in wanted):
         raise ValueError("features must be calendar and/or meet")
-    if "calendar" in wanted and other_live_calendar(session, user.id, "google") is not None:
+    team_id = default_workspace_id(session, user) if team_id is None else team_id
+    if (
+        "calendar" in wanted
+        and other_live_calendar(session, user.id, "google", team_id) is not None
+    ):
         raise AlreadyConnected
     try:
         vault.encrypt("probe", purpose="refresh_token", owner=user.id)
@@ -220,6 +272,7 @@ def start_connect(
             purpose=PURPOSES["calendar" if "calendar" in wanted else "meet"],
             provider="google",
             user_id=user.id,
+            team_id=team_id,
             code_verifier=verifier,
             nonce=nonce,
             return_to=_safe_return_to(return_to),
@@ -288,54 +341,79 @@ def finish_connect(
     if not google_signin.flow_cookie_matches(flow_cookie, state):
         return _failure("google_failed")
     back = flow.return_to or DEFAULT_RETURN_TO
+    # The workspace the connect was started from; a flow begun before the column existed has none
+    # and files into the person's default workspace.
+    team_id = flow.team_id if flow.team_id is not None else default_workspace_id(session, user)
+    team = landing_team(session, user.id, team_id)
     if error is not None:
-        return _failure("google_denied", back)
+        return _failure("google_denied", back, team)
     if not code:
-        return _failure("google_failed", back)
+        return _failure("google_failed", back, team)
+    if teams.membership(session, user.id, team_id) is None:
+        # They left (or were removed from) the workspace while the consent screen was open: nothing
+        # is exchanged and nothing is filed in a workspace they are not in.
+        return _failure("workspace_unavailable", back)
     try:
         grant = google.exchange_connect(
             code=code, code_verifier=flow.code_verifier, nonce=flow.nonce, now=now
         )
     except GoogleError:
-        return _failure("google_failed", back)
+        return _failure("google_failed", back, team)
     if REQUIRED_SCOPE[flow.purpose] not in grant.scopes:
-        return _failure("scope_missing", back)
+        return _failure("scope_missing", back, team)
     released: list[ReleasedConnection] = []
-    problem = _store(session, user, grant, flow.purpose, settings, now, released)
+    problem = _store(session, user, team_id, grant, flow.purpose, settings, now, released)
     if problem is not None:
         session.rollback()
-        return _failure(problem, back)
+        return _failure(problem, back, team)
     for old in released:  # the old account's access, now that the new connection is committed
         _release_at_google(session, old, google)
     logger.info("calendar connected for user %s", user.id)
-    return ConnectResult(_result(back, calendar="connected"))
+    return ConnectResult(_result(back, calendar="connected", **team))
 
 
 def _store(
     session: Session,
     user: User,
+    team_id: int,
     grant: google_oauth.Grant,
     purpose: str,
     settings: Settings,
     now: datetime,
     released: list[ReleasedConnection],
 ) -> str | None:
-    """Write the connection. None on success, else the error code (nothing is committed then).
-    An old account's connection that was replaced is appended to `released` for the caller to
-    revoke after the commit."""
+    """Write the connection of `user` in workspace `team_id`. None on success, else the error code
+    (nothing is committed then). An old account's connection that was replaced is appended to
+    `released` for the caller to revoke after the commit."""
     identity = grant.identity
     email = identity.email.strip().lower()
     domain = identity.hosted_domain.strip().lower() if identity.hosted_domain else None
     if len(email) > MAX_EMAIL_CHARS or (domain and len(domain) > MAX_DOMAIN_CHARS):
         return "google_failed"
-    # The user's own row is the lock for "one live calendar at a time": two tabs finishing two
-    # providers at once queue here, and the second sees the first one's committed connection.
+    # The user's own row is the lock for "one live calendar at a time in a workspace": two tabs
+    # finishing two providers at once queue here, and the second sees the first one's committed
+    # connection.
     session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    if purpose == "calendar" and other_live_calendar(session, user.id, "google") is not None:
+    # After the user's row (the order every other writer takes them in; the foreign key of a
+    # competing insert shares the team row, so an exclusive lock here would deadlock with it): the
+    # workspace is locked SHARED, which waits for a `teams.leave` in flight (it locks the team
+    # exclusively), and the membership is read again. A leave that committed while the code was
+    # being exchanged must not leave a connection in a workspace the person is no longer in.
+    session.execute(select(Team.id).where(Team.id == team_id).with_for_update(read=True))
+    if teams.membership(session, user.id, team_id) is None:
+        return "workspace_unavailable"
+    if (
+        purpose == "calendar"
+        and other_live_calendar(session, user.id, "google", team_id) is not None
+    ):
         return "already_connected"
     conn = session.scalars(
         select(CalendarConnection)
-        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == "google")
+        .where(
+            CalendarConnection.user_id == user.id,
+            CalendarConnection.team_id == team_id,
+            CalendarConnection.provider == "google",
+        )
         .with_for_update()
     ).first()
     same_account = conn is not None and conn.account_subject == identity.sub
@@ -380,7 +458,7 @@ def _store(
     except vault.VaultError:
         return "google_failed"
     if conn is None:
-        conn = CalendarConnection(user_id=user.id, provider="google")
+        conn = CalendarConnection(user_id=user.id, team_id=team_id, provider="google")
         session.add(conn)
     elif not same_account and conn.account_subject is not None:
         released.append(_drop_old_account(session, conn))
@@ -450,6 +528,9 @@ def _release_at_google(
     this call leaves the token live at Google with no copy here; that window is a few
     milliseconds and the same advice applies."""
     revoked = True
+    if released.keep_grant:
+        run_disconnect_hooks(session, released, None)
+        return True
     if released.had_token:
         revoked = False
         if google is not None and released.token is not None:
@@ -491,15 +572,19 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
     the Meet subscription of the old account is forgotten. Returns what the caller must revoke
     at Google once the replacement is committed (the old token may still be alive there even
     though the connection died)."""
-    released = _release(conn)
+    released = replace(_release(conn), keep_grant=grant_still_used(session, conn))
     _forget_meet_subscription(conn)
     own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
     # Only this connection's joins: another provider's connection keeps its own. A join with no
-    # event (its event row aged out) cannot be told apart, so it goes only when no other calendar
-    # of the user is live.
+    # event (its event row aged out) cannot be told apart from another connection's of the same
+    # workspace, so it goes only when no other calendar is live in this workspace (a join of
+    # another workspace is never this connection's).
     mine = ScheduledJoin.calendar_event_id.in_(own_events)
-    if other_live_calendar(session, conn.user_id, conn.provider) is None:
-        mine = or_(mine, ScheduledJoin.calendar_event_id.is_(None))
+    if other_live_calendar(session, conn.user_id, conn.provider, conn.team_id) is None:
+        mine = or_(
+            mine,
+            (ScheduledJoin.calendar_event_id.is_(None)) & (ScheduledJoin.team_id == conn.team_id),
+        )
     session.execute(
         delete(ScheduledJoin).where(
             ScheduledJoin.user_id == conn.user_id,
@@ -515,49 +600,92 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
 # ---- disconnecting ----
 
 
-def disconnect(
-    session: Session, user: User, google: GoogleOAuth | None, provider: str = "google"
-) -> bool:
-    """The user's own "Disconnect Google". Commits. Idempotent: with no connection, or one that
-    is already disconnected, it only repeats the deletions (nothing is created).
+def grant_still_used(session: Session, conn: CalendarConnection) -> bool:
+    """Whether another live connection of the same person uses the same provider account as
+    `conn` (in another workspace): disconnecting `conn` then must not revoke the provider's grant,
+    because revoking one token takes the whole grant of that account with it (workspaces design
+    12.3: the grant is reference counted). A connection that is `disconnected`, holds no token or
+    names no account (a fresh row) counts for nothing. Call it BEFORE `conn` is emptied."""
+    if conn.account_subject is None:
+        return False
+    other = session.scalars(
+        select(CalendarConnection.id).where(
+            CalendarConnection.user_id == conn.user_id,
+            CalendarConnection.provider == conn.provider,
+            CalendarConnection.id != conn.id,
+            CalendarConnection.status != "disconnected",
+            CalendarConnection.refresh_token_enc.is_not(None),
+            CalendarConnection.account_subject == conn.account_subject,
+            CalendarConnection.tenant_id.is_not_distinct_from(conn.tenant_id),
+        )
+    ).first()
+    return other is not None
 
-    Order: lock the row, copy the token into memory, delete the user's events, every scheduled
-    join in every state and the calendar-kind notifications, empty the row, COMMIT; only then
-    revoke the token at Google and run the hooks (see `_release_at_google`). A running meeting
-    is a `meetings` row and is never touched. Every statement is scoped to `user`: nobody
-    else's rows are reachable. `google` is None when no Google client is configured; the local
+
+def disconnect(
+    session: Session,
+    user: User,
+    google: GoogleOAuth | None,
+    provider: str = "google",
+    team_id: int | None = None,
+) -> bool:
+    """The user's own "Disconnect Google" in one workspace (`team_id`; none means their default
+    workspace). Commits. Idempotent: with no connection there, or one that is already disconnected,
+    it only repeats the deletions (nothing is created).
+
+    Order: lock the row, copy the token into memory, delete the connection's events, every
+    scheduled join filed in this workspace in every state and this workspace's calendar-kind
+    notices, empty the row, COMMIT; only then revoke the token at Google and run the hooks (see
+    `_release_at_google`). A running meeting is a `meetings` row and is never touched. Every
+    statement is scoped to `user` AND the workspace: nobody else's rows, and none of the person's
+    other workspaces, are reachable. `google` is None when no Google client is configured; the local
     deletion still happens.
+
+    The grant at the provider is revoked only when no other connection of the person uses the same
+    account (`grant_still_used`); then `revoked` is True without a call, because nothing is left to
+    remove until the last workspace using the account lets go.
 
     Returns False when Google could not be asked to revoke a token that existed, so the person
     can be told to remove the app at myaccount.google.com/permissions; True otherwise (including
     when nothing was left to revoke: a repeat cannot re-check an earlier failure)."""
+    if team_id is None:
+        team_id = default_workspace_id(session, user)
     conn = session.scalars(
         select(CalendarConnection)
-        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == provider)
+        .where(
+            CalendarConnection.user_id == user.id,
+            CalendarConnection.team_id == team_id,
+            CalendarConnection.provider == provider,
+        )
         .with_for_update()
     ).first()
     released = _release(conn) if conn is not None else None
-    # With another calendar of the user still live (Outlook while Google is being disconnected for
-    # Meet, or a disconnect aimed at a provider that is not the connected one), only THIS
-    # connection's events and their joins go: the other calendar's rows, joins and notifications
-    # stay, or its auto-join would silently stop while its row still says `connected`.
-    other_live = other_live_calendar(session, user.id, provider) is not None
-    if other_live:
-        if conn is not None:
-            own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+    keep_grant = conn is not None and grant_still_used(session, conn)
+    # With another calendar of the user still live in this workspace (Outlook while Google is being
+    # disconnected for Meet, or a disconnect aimed at a provider that is not the connected one),
+    # only THIS connection's events and their joins go: the other calendar's rows, joins and
+    # notices stay, or its auto-join would silently stop while its row still says `connected`.
+    other_live = other_live_calendar(session, user.id, provider, team_id) is not None
+    if conn is not None:
+        own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+        if other_live:
             session.execute(
                 delete(ScheduledJoin).where(
                     ScheduledJoin.user_id == user.id,
                     ScheduledJoin.calendar_event_id.in_(own_events),
                 )
             )
-            session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
-    else:
-        session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
-        session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
+        session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    if not other_live:
+        session.execute(
+            delete(ScheduledJoin).where(
+                ScheduledJoin.user_id == user.id, ScheduledJoin.team_id == team_id
+            )
+        )
         session.execute(
             delete(Notification).where(
                 Notification.user_id == user.id,
+                Notification.team_id == team_id,
                 Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
             )
         )
@@ -583,6 +711,11 @@ def disconnect(
     if released is None:
         return True
     logger.info("calendar disconnected for user %s", user.id)
+    if keep_grant:
+        # Another workspace still stands on this account: its grant is not ours to revoke yet. The
+        # hooks still run (they undo what THIS connection set up, such as its Meet subscription).
+        run_disconnect_hooks(session, released, None)
+        return True
     if provider == "microsoft":
         # Microsoft has no revoke call an app can use for its own grant (spec 4.6): only the hooks
         # run, and a token that existed is reported as not revoked so the person is told where to
@@ -590,3 +723,57 @@ def disconnect(
         run_disconnect_hooks(session, released, None)
         return not released.had_token
     return _release_at_google(session, released, google)
+
+
+# ---- leaving a workspace ----
+
+# `session.info` key: what `detach_workspace` released and the route must settle after its commit.
+RELEASED_KEY = "calendar_released"
+
+
+def detach_workspace(session: Session, user_id: int, team_id: int) -> None:
+    """The person leaves workspace `team_id` (or is removed from it): THEIR calendar connection
+    there is deleted with its events, the scheduled joins filed there are removed in every state
+    (a meeting already recorded or running is a `meetings` row and stays), and the calendar notices
+    of that workspace go. Their connections in other workspaces are untouched. In the caller's
+    transaction, no commit; the provider-side clean-up (the grant revoked only when no other
+    connection of theirs uses the account, and the `ON_DISCONNECT` hooks) is parked on
+    `session.info` for `settle_released`, which the route calls after it has committed."""
+    conns = list(
+        session.scalars(
+            select(CalendarConnection)
+            .where(CalendarConnection.user_id == user_id, CalendarConnection.team_id == team_id)
+            .with_for_update()
+        )
+    )
+    parked = session.info.setdefault(RELEASED_KEY, [])
+    for conn in conns:
+        parked.append((_release(conn), grant_still_used(session, conn), conn.provider))
+        session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    session.execute(
+        delete(ScheduledJoin).where(
+            ScheduledJoin.user_id == user_id, ScheduledJoin.team_id == team_id
+        )
+    )
+    session.execute(
+        delete(Notification).where(
+            Notification.user_id == user_id,
+            Notification.team_id == team_id,
+            Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+        )
+    )
+    for conn in conns:
+        session.delete(conn)
+    session.flush()
+
+
+def settle_released(session: Session, google: GoogleOAuth | None) -> None:
+    """After the commit of a leave or removal: for each connection `detach_workspace` released,
+    revoke the provider's grant (Google only; Microsoft has no revoke) unless another connection of
+    the person still uses the account, and run the hooks. Best effort, as `disconnect`: the local
+    deletion is what was asked for. A no-op when nothing was parked."""
+    for released, keep_grant, provider in session.info.pop(RELEASED_KEY, []):
+        if keep_grant or provider == "microsoft":
+            run_disconnect_hooks(session, released, None)
+        else:
+            _release_at_google(session, released, google)

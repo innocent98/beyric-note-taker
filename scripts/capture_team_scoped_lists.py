@@ -4,7 +4,7 @@
 
 Same method as `capture_teams_api.py`: a scratch database with the real migrations, the real app
 under uvicorn on a free local port, httpx for every call, every exchange saved to
-`docs/fe-captures/team-scoped-lists/NN-name.json`. `MULTI_TEAM_ENABLED=true` is set for THIS run only.
+`docs/fe-captures/team-scoped-lists/NN-name.json`.
 
 Shows that the Meetings list, the Decisions log, the Review list and the sidebar badges follow the
 active team (the `X-Team-Id` header), that a meeting opened by its link still opens, and that a team
@@ -46,7 +46,6 @@ admin_url, scratch_url = database_urls(sys.argv[1] if len(sys.argv) > 1 else "")
 os.environ["DATABASE_URL"] = scratch_url
 os.environ["OWNER_EMAIL"] = ADA
 os.environ["OWNER_PASSWORD"] = PASSWORD
-os.environ["MULTI_TEAM_ENABLED"] = "true"
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
@@ -364,21 +363,6 @@ def run(base: str, seeded: dict, engine) -> None:
     pat.call(
         "badges-no-header", "GET", "/api/session", note="No header: the default team's badges."
     )
-
-    # ---- the switch off: nothing narrows ----
-    switch = teams.multi_team_enabled
-    teams.multi_team_enabled = lambda: False
-    try:
-        shown(
-            pat.call(
-                "meetings-switch-off",
-                "GET",
-                "/api/meetings",
-                note="With the switch OFF and no header the list is what it always was: everything Pat may read.",
-            )
-        )
-    finally:
-        teams.multi_team_enabled = switch
 
     # ---- renaming a team ----
     ada.call(

@@ -23,7 +23,6 @@ from app import (
     tasks,
     tasks_csv,
     team_admin,
-    teams,
     timezones,
     titles,
     workspace,
@@ -164,8 +163,8 @@ def _task_or_404(session: Session, user: User, task_id: int) -> Task:
     return task
 
 
-def _team_people(session: Session, user: User, team_id: int | None = None) -> list[PersonOut]:
-    team = session.get(Team, team_id) if team_id is not None else teams.ensure_team(session, user)
+def _team_people(session: Session, user: User, team_id: int) -> list[PersonOut]:
+    team = session.get(Team, team_id)
     return [
         PersonOut(user_id=m.user_id, name=m.display_name, is_you=m.user_id == user.id)
         for m in tasks.members_of(session, team.id)
@@ -205,11 +204,9 @@ def list_tasks(
     """The tasks the caller can see: those assigned to them, those from meetings they can read,
     and their team's manual tasks. Newest first; for the next page pass `before_id` =
     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-    suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
-    in) only that team's board, its people and its counts; without it, every team's tasks the
-    caller can see, as before (`people` are then the default team's)."""
-    if team_id is not None:
-        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
+    suggested task is in no count. Only the active workspace's board, its people and its counts:
+    the `X-Team-Id` header (404 for a team the caller is not in), else the default workspace."""
+    team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs
     rows, more = tasks.list_tasks(
         session,
         user,
@@ -256,7 +253,8 @@ def export_tasks(
     user: User = Depends(auth.current_user),
 ) -> Response:
     """The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
-    and the same `X-Team-Id` scoping as `GET /api/tasks` (suggested tasks left out, newest first),
+    and the same workspace scoping as `GET /api/tasks` (the `X-Team-Id` header, else the personal
+    workspace; suggested tasks left out, newest first),
     every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
     Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
     are filled only when the caller may read that meeting, as on the screen; the date is in the
@@ -264,8 +262,7 @@ def export_tasks(
 
     UTF-8 with a byte order mark. A cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage
     return gets a single quote in front so a spreadsheet shows it as text instead of running it."""
-    if team_id is not None:
-        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
+    team_id = team_admin.my_membership(session, user, team_id).team_id  # 404: not theirs
     zone = _zone(session, user)
     rows: list[list[object]] = []
     before: int | None = None
@@ -337,10 +334,9 @@ def create_task(
     user: User = Depends(auth.current_user),
 ) -> TaskOut:
     """Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
-    is not in) or, without it, the caller's default team. Anyone on the team may. It has no
+    is not in) or, without it, the caller's default workspace. Anyone on the team may. It has no
     meeting."""
-    if team_id is not None:
-        team_admin.my_membership(session, user, team_id)
+    team_id = team_admin.my_membership(session, user, team_id).team_id
     zone = _zone(session, user)
     try:
         task = tasks.create(

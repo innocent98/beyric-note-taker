@@ -1,0 +1,33 @@
+{
+  "note": "A date range is the Meetings list's own rule: in X, the meeting shared to X.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes/picker/resolve",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "from_day": "2020-01-01",
+      "to_day": "2099-12-31"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings": [
+        {
+          "id": 1,
+          "title": "Platform planning call",
+          "day": "2026-11-25"
+        }
+      ],
+      "left_out_count": 0,
+      "left_out_message": null,
+      "capped": false,
+      "max_meetings": 12
+    }
+  }
+}

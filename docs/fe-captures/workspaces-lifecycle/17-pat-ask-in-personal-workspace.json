@@ -1,0 +1,25 @@
+{
+  "note": "The same person in their own personal workspace: refused, 403 `plan_inactive`.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What are my open tasks?"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "plan_inactive",
+        "message": "Asking Beyric needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."
+      }
+    }
+  }
+}

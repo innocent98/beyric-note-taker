@@ -1,0 +1,29 @@
+{
+  "note": "NOT a real bot: Luran's join was set to `joined` directly with a meeting row. A note taker that is already in is never moved: 409 `already_recording`, nothing changes.",
+  "client": "Ada, signed in",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/1/override",
+    "headers": {
+      "X-Team-Id": "1",
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "already_recording",
+        "message": "Luran is already recording this meeting. A note taker that is already in the meeting is never moved."
+      }
+    }
+  }
+}

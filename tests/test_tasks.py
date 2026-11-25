@@ -144,6 +144,9 @@ def daniel(session, team):
 
 def make_meeting(session, owner, *, notes=NOTES, created=NOW, **fields):
     template = session.scalars(select(Template)).first()
+    # Shared with the owner's team unless a test says otherwise (`shared_team_id=None`): the
+    # people a meeting's action items may go to are the team's only when the meeting is shared.
+    fields.setdefault("shared_team_id", teams.team_of(session, owner.id).id)
     meeting = Meeting(
         owner_user_id=owner.id,
         url="u",
@@ -690,13 +693,15 @@ def test_the_model_has_the_tables_the_migration_makes(session):
     assert Task.__table__.c.meeting_id.foreign_keys.pop().ondelete == "CASCADE"
 
 
-def test_a_private_meetings_title_is_not_in_the_mail_but_whose_it_was_is(session, owner, daniel):
-    meeting = make_meeting(session, owner, title="Secret layoffs")
+def test_a_private_meeting_in_a_team_workspace_gives_its_tasks_and_mail_to_nobody_else(
+    session, owner, daniel
+):
+    """Kept private (not shared) in the team's workspace: a teammate named in the notes is not
+    handed the task, mailed about it, or shown its title."""
+    meeting = make_meeting(session, owner, title="Secret layoffs", shared_team_id=None)
     run(session, meeting)
-    _, mailer = deliver(session)
-    message = mailer.sent[0][0]
-    assert "Secret layoffs" not in message.subject + message.text + message.html
-    assert "A meeting of Ada Lovelace" in message.text
+    assert queued(session) == []
+    assert all(task.assignee_user_id != daniel.id for task in all_tasks(session, meeting))
 
 
 def test_a_shared_meetings_mail_names_the_meeting_and_who_recorded_it(session, owner, daniel, team):

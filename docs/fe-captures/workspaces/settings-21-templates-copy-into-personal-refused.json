@@ -1,0 +1,23 @@
+{
+  "note": "Nothing to copy into the personal workspace: 409 `personal_team`.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates/copy-from-personal",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "This is your personal workspace: there is nothing to copy into."
+      }
+    }
+  }
+}

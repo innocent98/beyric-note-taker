@@ -1,0 +1,28 @@
+{
+  "note": "His personal workspace has a brief of its own (empty): not X's.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/briefs",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team": {
+        "id": 2,
+        "name": "My team",
+        "is_personal": true,
+        "can_manage": true
+      },
+      "text": "",
+      "max_chars": 12000,
+      "updated_at": null,
+      "updated_by": null
+    }
+  }
+}

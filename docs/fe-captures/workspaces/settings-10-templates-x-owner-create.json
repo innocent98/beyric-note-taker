@@ -1,0 +1,25 @@
+{
+  "note": "The owner creates one: 201.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Board meeting",
+      "instructions": "List the votes and who proposed each."
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 17,
+      "name": "Board meeting",
+      "instructions": "List the votes and who proposed each."
+    }
+  }
+}

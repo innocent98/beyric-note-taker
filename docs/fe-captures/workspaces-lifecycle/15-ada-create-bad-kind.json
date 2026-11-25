@@ -1,0 +1,31 @@
+{
+  "note": "An unknown `kind` is a 422 validation error.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Odd",
+      "kind": "school"
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "kind",
+            "message": "Input should be 'team' or 'class'"
+          }
+        ]
+      }
+    }
+  }
+}

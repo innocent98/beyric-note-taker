@@ -27,6 +27,7 @@ from app import deletion, series_mail, teams, topics, visibility
 from app import series as series_rules
 from app.models import (
     MailOutbox,
+    Meeting,
     SeriesAgendaItem,
     SeriesReminder,
     SeriesTopic,
@@ -53,7 +54,6 @@ from tests.test_ask import model, post  # noqa: F401  (model: a fixture used by 
 from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
     PAT,
     QUINN,
-    multi_team_on,
     world,
 )
 from tests.test_multi_team_moved import NoBot
@@ -519,8 +519,10 @@ def test_ask_never_answers_a_member_of_x_from_an_occurrence_of_another_scope(
     assert post(ada_api, "zanzibar plan").json()["kind"] == "none"
     assert model.calls == []
     # and Ask's own count of what it can search is Ada's readable meetings, none of the others
+    in_x = visibility.in_workspace(world.ada, world.x)  # Ada's default workspace is X
+    ready_in_x = select(Meeting).where(in_x, Meeting.status == "ready")
     assert ada_api.get("/api/ask/scope").json()["meetings"] == len(
-        list(session.scalars(visibility.visible_meetings(world.ada)))
+        list(session.scalars(ready_in_x))
     )
 
 

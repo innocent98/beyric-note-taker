@@ -47,6 +47,41 @@
 - [ ] **Common words stay slow** (18 to 44 s on the unkind synthetic data; the list's common-word search is slower than in 261's one-`OR` shape); a stored generated `tsvector` column measured under 230 ms in every case, costs a table rewrite and 2x table size, is recommended as the next PR (0058), NOT built without Adebayo's yes
 - [ ] **Not verified:** the real server's build time and the deploy script path
 
+**Addendum 2026-11-24: WORKSPACES release** (integration branch `feature/workspaces`; spec `docs/superpowers/specs/2026-11-24-workspaces-design.md`, plan `docs/superpowers/plans/2026-11-24-workspaces.md`; one release, nothing deploys until W5 is done):
+- [x] W1 Foundation (SOP `docs/sop/2026-11-24-workspaces-foundation.md`, migration `0062`, chained after the recipes release's `0061`)
+  - [x] T1 Columns, models, backfill migration and the cutover rehearsal test (`tests/test_workspaces_migration.py`); verified locally on a scratch Postgres, not on production data
+  - [x] T2 One workspace context (`app/workspace_context.py`), `MULTI_TEAM_ENABLED` removed (`.env.example`, `deploy/README.md`, `scripts/clean_env.py`)
+  - [x] T3 Every list, count, badge, Ask and notification narrowed; strict route guard `tests/test_workspace_leaks.py` (calendar, templates and vocabulary GETs are listed as pending W2/W3)
+  - [x] T4 Web: header everywhere, auto-switch with toast, switcher unread dots (PR B; looked at in a real browser at 1280 and 390 px; SOP section "Task 4")
+  - [x] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`, `docs/fe-captures/workspaces/`)
+- [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7) (SOP `docs/sop/2026-11-24-workspaces-settings.md`, migration `0063`; branch `feature/workspaces-settings`)
+  - [x] T5 Templates and vocabulary per workspace: owners and admins write, members read and use; new workspaces start with the seeded defaults; copy-from-personal; `templates.team_id` NOT NULL (`tests/test_workspace_templates.py`)
+  - [x] T6 The pipeline, translation, rewrite, Send now and the mails read the meeting's workspace; works after the recorder left (`tests/test_workspace_pipeline.py`)
+  - [x] T7 Per-person-per-workspace prefs (`workspace_prefs`, `/api/workspace-prefs`), `JoinSettings` reads the connection's workspace, Settings split into "This workspace" and "Personal" (`tests/test_workspace_prefs.py`)
+  - [x] D4 A meeting born in a team workspace is shared with it from birth; personal stays private; existing meetings unchanged; "keep private" stays private (`tests/test_workspace_birth_share.py`)
+  - [x] Leak guard extended: templates, vocabulary and `/api/workspace-prefs` are workspace data (`tests/test_workspace_leaks.py`)
+  - [x] FE guide `docs/fe-integration-guide-workspaces-settings.md` from 44 real captures (`docs/fe-captures/workspaces/settings-*.json`)
+  - [x] Browser check at 390 and 1280 px (member view); CI green on the final head: see the PR
+- [x] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9) (branch `feature/workspaces-calendar`, SOP `docs/sop/2026-11-24-workspaces-calendar.md`, migration `0064`, FE guide `docs/fe-integration-guide-workspaces-calendar.md`; nothing verified against a real Google or Microsoft calendar)
+  - [x] T8 connections keyed `(user, workspace, provider)`, connect and callback return per workspace, reference-counted revoke, leave and removal disconnect
+  - [x] T9 chooser `app/calendar_arbitration.py` under a per-person lock, `recorded_in` Upcoming row with Switch here, recurring per workspace, calendar GETs out of `PENDING_SLICE`
+- [x] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12) (branch `feature/workspaces-lifecycle`, SOP `docs/sop/2026-11-24-workspaces-lifecycle.md`, FE guide `docs/fe-integration-guide-workspaces-lifecycle.md`, 36 live captures `docs/fe-captures/workspaces-lifecycle/`; no migration; verified locally and in a real browser at 390 and 1280 px, the `make` gate pending the recipes merge)
+  - [x] T10 Plan limit: `Plan.max_owned_teams` through the live plan (Free 0, Starter 3, Pro 10, Scale unlimited; a trial is Free; members never count; a lapse or downgrade never removes a team; hand-overs checked); Make-a-team card shows the allowance and the upgrade message
+  - [x] T11 Delete a workspace (owner, nobody else in it; meetings go home or are deleted when the recorder is gone), leave and removal rules, personal space protected, classes (`kind`, share default on, one `workspaceWords` helper)
+  - [x] T12 Feature-gate rule for members: `ask` and `make` pass on a workspace whose owner has a plan; `translate` and `rewrite` caller-only; caps per caller; all three modes
+  - [x] `recipes/service.py` `request_draft` passes the chosen meetings' workspace to the Make gate (W5, `docs/sop/2026-11-25-workspaces-release.md`)
+- [ ] W5 Final integration: merge `main` (recipes), re-chain migrations, rehearsal, Opus permission review, privacy and terms, FE guide, ONE PR to `main` (T13) (branch `feature/workspaces-final`, SOP `docs/sop/2026-11-25-workspaces-release.md`; PR and head in the line below once open; **not merged: waits for his typed word**)
+  - [x] `origin/main` merged (recipes, migrations to `0061`); conflicts resolved keeping both sides
+  - [x] Migrations re-chained: workspaces core `0062`, settings `0063`, calendar `0064` (one head; no test asserts a head by number)
+  - [x] Cutover rehearsal on production-shaped data: 401 users, 4,800 meetings, 280 calendar connections, 32 checks all ok, visibility checksum identical before and after, downgrade and upgrade again clean (`scripts/rehearse_workspaces_cutover.py`, `docs/fe-captures/workspaces-cutover/cutover-rehearsal.txt`); **not run on real production data**
+  - [x] Recipes meet workspaces: picker uses the workspace container, drafts list per workspace, Make gate by the meetings' workspace, leak guard covers briefs, recipes and drafts
+  - [x] Opus review of every permission path; findings and fixes in the SOP
+  - [x] Privacy policy and terms made true for workspaces (both copies, tested equal; `TERMS_VERSION` 2026-11-25; no notice-of-change promise)
+  - [x] FE guide `docs/fe-integration-guide-workspaces.md` section 10 from 32 live captures (`docs/fe-captures/workspaces-final/`)
+  - [x] Notifications follow their meeting's workspace after share, move, move back, leave and workspace delete (`teams.refile_notifications`, no migration; tests in `tests/test_workspace_review_fixes.py`); a leaver loses calendar connection and joins in the workspace (tested); still open and cosmetic: a note about a meeting its holder can no longer read, while still a member of its workspace, stays in that workspace's bell
+  - [ ] CI green on the final head, then his typed "merge #N"; after deploy: server check `alembic current` shows `0064 (head)`
+  - [ ] **Not verified:** a real Google or Microsoft calendar in two workspaces; real production data; a model-written draft for a member of a paid workspace
+
 **Addendum 2026-11-24: skip one-on-one meetings** (branch `feature/skip-one-on-ones`, SOP `docs/sop/2026-11-24-skip-one-on-ones.md`, migration 0056, **Alembic head now 0056**):
 - [x] Per-person checkbox "Skip one-on-one meetings" under the rule box (`user_settings.skip_one_on_ones`, off by default); skips an event with exactly two people INVITED (count, not attendance), under `all` and `organizer`; 0 (solo) and 1 are not skipped
 - [x] `will_join` reason `one_on_one` (Off, visible muted line on the Upcoming row); the per-meeting switch still wins both ways; `JoinSettings.for_user` is still the one constructor (sync, API, runner re-check, organiser bot, mail)

@@ -295,18 +295,26 @@ def test_0007_names_are_unique_per_owner_not_globally(scratch_url):
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(text("insert into users (email) values ('second@example.test')"))
+        conn.execute(
+            text(
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'second@example.test'"
+            )
+        )
         # The second user may have a "General" template and the same vocabulary term.
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'x' from users where email = 'second@example.test'"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'x' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
-        conn.execute(  # but not twice for one owner
+        conn.execute(  # but not twice for one owner in one workspace
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'y' from users where email = 'second@example.test'"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'y' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     engine.dispose()
@@ -346,8 +354,15 @@ def test_0007_downgrade_fails_when_two_users_share_a_template_name(scratch_url):
         conn.execute(text("insert into users (email) values ('second@example.test')"))
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'General', 'x' from users where email = 'second@example.test'"
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'second@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, t.id, 'General', 'x' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'second@example.test'"
             )
         )
     with pytest.raises(sa.exc.IntegrityError):
@@ -558,17 +573,19 @@ def test_template_soft_delete_frees_the_name_and_downgrades_cleanly(scratch_url)
         # "General" is seeded live for the owner: a deleted row may share its name, a live may not
         conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions, deleted_at)"
-                " values (:o, 'General', 'old', now())"
+                "insert into templates (owner_user_id, team_id, name, instructions, deleted_at)"
+                " select owner_user_id, team_id, 'General', 'old', now() from templates"
+                " where owner_user_id = :o and name = 'General' and deleted_at is null"
             ),
             {"o": owner},
         )
     with pytest.raises(sa.exc.IntegrityError):
         with engine.begin() as conn:
-            conn.execute(
+            conn.execute(  # the same name in the same workspace as the live "General"
                 text(
-                    "insert into templates (owner_user_id, name, instructions)"
-                    " values (:o, 'General', 'again')"
+                    "insert into templates (owner_user_id, team_id, name, instructions)"
+                    " select owner_user_id, team_id, 'General', 'again' from templates"
+                    " where owner_user_id = :o and name = 'General' and deleted_at is null"
                 ),
                 {"o": owner},
             )
@@ -616,19 +633,23 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
         user = conn.execute(
             text("insert into users (email) values ('m@example.test') returning id")
         ).scalar()
+        workspace = conn.execute(
+            text("insert into teams (owner_user_id, is_personal) values (:u, true) returning id"),
+            {"u": user},
+        ).scalar()
         template = conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "values (:u, 'T', 'x') returning id"
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "values (:u, :t, 'T', 'x') returning id"
             ),
-            {"u": user},
+            {"u": user, "t": workspace},
         ).scalar()
         meeting = conn.execute(
             text(
-                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
-                "values (:u, 'u', 'zoom', '1', :t) returning id"
+                "insert into meetings (owner_user_id, workspace_team_id, url, platform, "
+                "native_id, template_id) values (:u, :w, 'u', 'zoom', '1', :t) returning id"
             ),
-            {"u": user, "t": template},
+            {"u": user, "w": workspace, "t": template},
         ).scalar()
         insert = (
             "insert into meeting_translations (meeting_id, language, source_hash) "
@@ -1030,10 +1051,16 @@ def test_0027_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly
         conn.execute(text("insert into users (email, status) values ('b@example.test', 'active')"))
         conn.execute(
             text(
-                "insert into calendar_connections (user_id, provider, account_subject, tenant_id, "
-                "account_kind) select id, 'microsoft', 'oid-1', "
-                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users "
-                "where email = 'b@example.test'"
+                "insert into teams (owner_user_id, is_personal) "
+                "select id, true from users where email = 'b@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, team_id, provider, account_subject, "
+                "tenant_id, account_kind) select u.id, t.id, 'microsoft', 'oid-1', "
+                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users u join teams t "
+                "on t.owner_user_id = u.id where u.email = 'b@example.test'"
             )
         )
     for sql in (
@@ -1364,18 +1391,23 @@ def test_0036_link_rows_go_with_either_side(scratch_url):
     with engine.begin() as conn:
         conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
         conn.execute(
-            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
-        )
-        conn.execute(
             text(
-                "insert into templates (owner_user_id, name, instructions) "
-                "select id, 'T', 'x' from users where email = 'a@example.test'"
+                "insert into teams (name, owner_user_id) select 'T', id from users "
+                "where email = 'a@example.test'"
             )
         )
         conn.execute(
             text(
-                "insert into meetings (owner_user_id, url, platform, native_id, template_id, "
-                "status, step) select u.id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
+                "insert into templates (owner_user_id, team_id, name, instructions) "
+                "select u.id, tm.id, 'T', 'x' from users u join teams tm "
+                "on tm.owner_user_id = u.id where u.email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, workspace_team_id, url, platform, "
+                "native_id, template_id, status, step) "
+                "select u.id, t.team_id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
                 "from users u join templates t on t.owner_user_id = u.id "
                 "where u.email = 'a@example.test'"
             )

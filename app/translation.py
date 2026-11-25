@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import openai
+from fastapi import HTTPException
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 from openai import OpenAI
@@ -39,10 +40,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import ai_runs, entitlements, feature_gates, visibility
+from app import ai_runs, entitlements, feature_gates, visibility, workspace_prefs
 from app.ai_versions import TRANSLATE_PROMPT_VERSION
 from app.config import get_settings
-from app.models import AiRun, Meeting, MeetingTranslation, User, VocabularyTerm
+from app.models import AiRun, Meeting, MeetingTranslation, User
 from app.notes import HEADINGS as SECTIONS
 from app.notes import NONE_NOTED as NONE_NOTED_SOURCE
 from app.services import Refused
@@ -555,6 +556,8 @@ def request_translation(
     answer 202. The feature gate (`FEATURE_GATES_MODE`, 403 `plan_inactive`) applies only to a NEW
     translation, after those two answers. Commits."""
     now = now or datetime.now(UTC)
+    if not visibility.in_meeting_workspace(session, user, meeting):
+        raise HTTPException(404, "No such meeting")  # its workspace's vocabulary is not theirs
     if language not in TARGETS:
         raise Refused(422, "language_unsupported", unsupported_message())
     if meeting.status != "ready" or not meeting.notes:
@@ -682,11 +685,9 @@ def _read_job(session: Session, row: MeetingTranslation, now: datetime) -> _Job 
         row.status, row.failure_code, row.updated_at = "failed", "not_ready", now
         session.commit()
         return None
-    terms = list(
-        session.scalars(
-            select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
-        )
-    )
+    terms = workspace_prefs.terms(
+        session, meeting.workspace_team_id
+    )  # the workspace's, not the recorder's
     return _Job(
         id=row.id,
         meeting_id=meeting.id,

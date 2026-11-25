@@ -72,7 +72,7 @@ def backups(tmp_path):
 
 
 def test_a_dry_run_prints_key_names_only_and_changes_nothing(tmp_path):
-    text = REQUIRED_TEXT + "AUDIO_RETENTION_DAYS=7\nMULTI_TEAM_ENABLED=true\n# a comment\n\n"
+    text = REQUIRED_TEXT + "AUDIO_RETENTION_DAYS=7\nSERIES_FOLLOW_MEETINGS=true\n# a comment\n\n"
     path = write_env(tmp_path, text)
     result = run(path)
     assert result.returncode == 0
@@ -87,7 +87,7 @@ def test_the_dry_run_report_lists_every_kind_of_key_by_name(tmp_path):
     text = (
         REQUIRED_TEXT
         + "POLL_INTERVAL_SECONDS=30\nPAYSTACK_WEBHOOK_SECRET=\nMADE_UP_KEY=hidden-FAKE-value\n"
-        + "MULTI_TEAM_ENABLED=true\nMULTI_TEAM_ENABLED=true\n"
+        + "SERIES_FOLLOW_MEETINGS=true\nSERIES_FOLLOW_MEETINGS=true\n"
         + "VEXA_API_KEY=hidden-FAKE-leftover\nBOT_PROVIDER=skribby\n"
     )
     result = run(write_env(tmp_path, text))
@@ -95,7 +95,7 @@ def test_the_dry_run_report_lists_every_kind_of_key_by_name(tmp_path):
     assert "removed, same as the code default (1): POLL_INTERVAL_SECONDS" in out
     assert "empty line that means the same as none (1): PAYSTACK_WEBHOOK_SECRET" in out
     assert "not recognised (1): MADE_UP_KEY" in out
-    assert "(1): MULTI_TEAM_ENABLED" in out  # the duplicate
+    assert "(1): SERIES_FOLLOW_MEETINGS" in out  # the duplicate
     assert "no longer read by the app (2): VEXA_API_KEY, BOT_PROVIDER" in out
     assert "hidden-FAKE-value" not in out + result.stderr
     assert "hidden-FAKE-leftover" not in out + result.stderr
@@ -167,7 +167,7 @@ def test_apply_makes_a_mode_600_backup_first_and_a_mode_600_file(tmp_path):
 
 
 def test_apply_twice_changes_nothing_the_second_time(tmp_path):
-    path = write_env(tmp_path, "# noise\n" + REQUIRED_TEXT + "MULTI_TEAM_ENABLED=true\n")
+    path = write_env(tmp_path, "# noise\n" + REQUIRED_TEXT + "SERIES_FOLLOW_MEETINGS=true\n")
     assert run(path, "--apply").returncode == 0
     first = path.read_bytes()
     again = run(path, "--apply")
@@ -178,7 +178,7 @@ def test_apply_twice_changes_nothing_the_second_time(tmp_path):
 
 
 def test_the_last_of_two_duplicate_keys_is_the_value_kept(tmp_path):
-    text = REQUIRED_TEXT + "HOURS_MODE=enforce\nMULTI_TEAM_ENABLED=true\nHOURS_MODE=off\n"
+    text = REQUIRED_TEXT + "HOURS_MODE=enforce\nSERIES_FOLLOW_MEETINGS=true\nHOURS_MODE=off\n"
     path = write_env(tmp_path, text)
     assert run(path, "--apply").returncode == 0
     new = path.read_text()
@@ -266,7 +266,7 @@ def test_the_bot_limit_and_teams_lines_that_equal_the_default_now_go(tmp_path):
 
 
 def test_leftover_keys_of_the_removed_bot_host_are_dropped_and_named_without_values(tmp_path):
-    path = write_env(tmp_path, REQUIRED_TEXT + LEFTOVER_TEXT + "MULTI_TEAM_ENABLED=true\n")
+    path = write_env(tmp_path, REQUIRED_TEXT + LEFTOVER_TEXT + "SERIES_FOLLOW_MEETINGS=true\n")
     dry = run(path)
     assert dry.returncode == 0
     assert (
@@ -280,7 +280,7 @@ def test_leftover_keys_of_the_removed_bot_host_are_dropped_and_named_without_val
     new = path.read_text()
     for gone in ("VEXA_", "BOT_NAME=", "BOT_PROVIDER", "COMPOSE_PROFILES"):
         assert gone not in new
-    assert "MULTI_TEAM_ENABLED=true\n" in new and f"POSTGRES_PASSWORD={PG}\n" in new
+    assert "SERIES_FOLLOW_MEETINGS=true\n" in new and f"POSTGRES_PASSWORD={PG}\n" in new
     assert "Not recognised" not in new
     assert_no_secret(result)
 
@@ -304,6 +304,18 @@ def test_leftover_pilot_expiry_lines_are_dropped_whatever_their_value(tmp_path):
     new = path.read_text()
     assert "PAID_PLANS_OPEN_ON" not in new and "PILOT_EXPIRY" not in new
     assert f"POSTGRES_PASSWORD={PG}\n" in new
+
+
+def test_a_leftover_multi_team_switch_is_dropped_whatever_its_value(tmp_path):
+    """The multi-team switch was removed with the workspaces release: it is no longer read."""
+    for value in ("true", "false"):
+        (tmp_path / value).mkdir()
+        path = write_env(tmp_path / value, REQUIRED_TEXT + f"MULTI_TEAM_ENABLED={value}\n")
+        dry = run(path)
+        assert dry.returncode == 0
+        assert "removed, no longer read by the app (1): MULTI_TEAM_ENABLED" in dry.stdout
+        assert run(path, "--apply").returncode == 0
+        assert "MULTI_TEAM_ENABLED" not in path.read_text()
 
 
 def test_a_leftover_with_a_dollar_or_a_quote_does_not_block_apply(tmp_path):
@@ -411,11 +423,11 @@ def untouched(path, tmp_path, text):
 )
 def test_a_missing_required_key_refuses_and_names_it(tmp_path, missing):
     text = "".join(line for line in REQUIRED_TEXT.splitlines(True) if not line.startswith(missing))
-    path = write_env(tmp_path, text + "MULTI_TEAM_ENABLED=true\n")
+    path = write_env(tmp_path, text + "SERIES_FOLLOW_MEETINGS=true\n")
     result = run(path, "--apply")
     assert result.returncode != 0
     assert f"MISSING REQUIRED (1): {missing}" in result.stdout
-    untouched(path, tmp_path, text + "MULTI_TEAM_ENABLED=true\n")
+    untouched(path, tmp_path, text + "SERIES_FOLLOW_MEETINGS=true\n")
     assert_no_secret(result)
 
 
@@ -506,12 +518,12 @@ def test_a_write_failure_never_prints_a_traceback_or_a_value(tmp_path, monkeypat
 
 
 def test_the_new_file_would_never_drop_a_key_it_was_given():
-    plan = clean_env.Plan(clean_env.parse(REQUIRED_TEXT + "MULTI_TEAM_ENABLED=true\n"))
+    plan = clean_env.Plan(clean_env.parse(REQUIRED_TEXT + "SERIES_FOLLOW_MEETINGS=true\n"))
     with pytest.raises(clean_env.EnvError):
-        plan.check_nothing_lost(plan.render().replace("MULTI_TEAM_ENABLED=true\n", ""))
+        plan.check_nothing_lost(plan.render().replace("SERIES_FOLLOW_MEETINGS=true\n", ""))
     with pytest.raises(clean_env.EnvError):
         plan.check_nothing_lost(
-            plan.render().replace("MULTI_TEAM_ENABLED=true", "MULTI_TEAM_ENABLED=no")
+            plan.render().replace("SERIES_FOLLOW_MEETINGS=true", "SERIES_FOLLOW_MEETINGS=no")
         )
 
 

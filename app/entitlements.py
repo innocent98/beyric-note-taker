@@ -50,8 +50,11 @@ from app.models import (
     LIVE_SUBSCRIPTION_STATUSES,
     HourGrant,
     Meeting,
+    Plan,
     ScheduledJoin,
     Subscription,
+    Team,
+    TeamMember,
     UsageAllocation,
     UsageEntry,
     User,
@@ -233,10 +236,10 @@ def _take_off(held: list[list], to_spend: int) -> None:
         to_spend -= taken
 
 
-def _subscription_state(session: Session, user: User, now: datetime) -> str | None:
-    """What the person's subscription is at `now` by the clock (`states.effective_status`): their
-    live one, else the newest one that ended. None when they never had one."""
-    sub = session.scalars(
+def _newest_subscription(session: Session, user: User) -> Subscription | None:
+    """The person's live subscription, else the newest one that ended; None when they never had
+    one."""
+    return session.scalars(
         select(Subscription)
         .where(Subscription.user_id == user.id)
         .order_by(
@@ -244,8 +247,9 @@ def _subscription_state(session: Session, user: User, now: datetime) -> str | No
         )
         .limit(1)
     ).first()
-    if sub is None:
-        return None
+
+
+def _effective_status(sub: Subscription, now: datetime) -> str:
     return states.effective_status(
         states.Snapshot(
             status=sub.status,
@@ -257,6 +261,13 @@ def _subscription_state(session: Session, user: User, now: datetime) -> str | No
         ),
         now,
     )
+
+
+def _subscription_state(session: Session, user: User, now: datetime) -> str | None:
+    """What the person's subscription is at `now` by the clock (`states.effective_status`): their
+    live one, else the newest one that ended. None when they never had one."""
+    sub = _newest_subscription(session, user)
+    return None if sub is None else _effective_status(sub, now)
 
 
 def status(session: Session, user: User, now: datetime, max_poll_seconds: int = 6 * 3600) -> Status:
@@ -390,6 +401,11 @@ TRANSLATE = "translate"  # a NEW translation (an existing one is only read)
 REWRITE = "rewrite"  # rewriting the notes with a template
 MAKE = "make"  # making a document from a meeting (meeting recipes)
 FEATURES = (ASK, TRANSLATE, REWRITE, MAKE)
+# The features a member may use on a workspace whose OWNER has a live plan, without paying
+# themselves (workspaces design 12.6, decided): reading a class's notes is no use to a student who
+# cannot Ask or Make from them. `translate` and `rewrite` stay the caller's own. Hours, plans and
+# the daily caps stay per person; this only widens who passes the gate on someone else's workspace.
+WORKSPACE_FEATURES = frozenset({ASK, MAKE})
 # The states of spec 2.2 in which these features work. `trial`, `pilot` and `active` do
 # everything, and `past_due` (the 3 days after a failed renewal) keeps Ask, translate and rewrite
 # (they use no recorded hours). `lapsed` and `none` (no plan, an expired plan, a used-up or expired
@@ -409,21 +425,68 @@ def state_allows(state: str, unlimited: bool = False) -> bool:
     return unlimited or state in OPEN_STATES
 
 
+def _workspace_team(session: Session, workspace) -> Team | None:
+    """The team a `workspace` argument names: a `Team`, anything with an `id` (the active
+    workspace of `app/visibility.py`), or a team id. None for no workspace or one that is gone."""
+    if workspace is None:
+        return None
+    if isinstance(workspace, Team):
+        return workspace
+    return session.get(Team, workspace if isinstance(workspace, int) else workspace.id)
+
+
+def owner_has_live_plan(session: Session, team: Team, now: datetime | None = None) -> bool:
+    """True when the person who owns `team` is on a plan now: `active` (paid, hours spent or not),
+    in the 3 grace days after a failed renewal (`past_due`), or an admin. A trial, a pilot grant,
+    packs and gifts alone are hours, not a plan, and an owner whose plan lapsed or ended covers
+    nobody. Pure reading."""
+    now = now or datetime.now(UTC)
+    owner = session.get(User, team.owner_user_id)
+    if owner is None or owner.status == "deleted":
+        return False
+    s = status(session, owner, now)
+    return s.unlimited or s.state in ("active", "past_due")
+
+
+def _covered_by_workspace(session: Session, user: User, workspace, now: datetime) -> bool:
+    """The caller is a member of `workspace` and its owner is on a plan (see `WORKSPACE_FEATURES`).
+    Membership is checked here too, whoever resolved the workspace: naming a team is never enough.
+    The caller's own personal workspace is owned by themselves, so it never covers anyone."""
+    team = _workspace_team(session, workspace)
+    if team is None or team.owner_user_id == user.id:
+        return False
+    member = session.scalar(
+        select(TeamMember.id).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
+    )
+    return member is not None and owner_has_live_plan(session, team, now)
+
+
 def gate(
     session: Session,
     user: User,
     feature: str,
     now: datetime,
     max_poll_seconds: int = 6 * 3600,
+    *,
+    workspace=None,
 ) -> GateDecision:
     """Whether `user` (the person pressing the button, not the meeting's recorder) may use
-    `feature` now, with the state that decided it. Pure reading. All three features answer alike
-    today; `feature` is checked so a typo cannot silently open or close a gate, and so a feature
-    can get its own rule later."""
+    `feature` now, with the state that decided it. Pure reading. `feature` is checked so a typo
+    cannot silently open or close a gate. `ask` and `make` also pass for a member of `workspace`
+    whose owner is on a plan (`WORKSPACE_FEATURES`; state `workspace_owner`); the other features
+    answer for the caller alone, whatever workspace is named."""
     if feature not in FEATURES:
         raise ValueError(f"unknown feature {feature!r}")
     s = status(session, user, now, max_poll_seconds)
-    return GateDecision(state_allows(s.state, s.unlimited), "unlimited" if s.unlimited else s.state)
+    if state_allows(s.state, s.unlimited):
+        return GateDecision(True, "unlimited" if s.unlimited else s.state)
+    if (
+        feature in WORKSPACE_FEATURES
+        and workspace is not None
+        and _covered_by_workspace(session, user, workspace, now)
+    ):
+        return GateDecision(True, "workspace_owner")
+    return GateDecision(False, s.state)
 
 
 def can(
@@ -432,6 +495,34 @@ def can(
     feature: str,
     now: datetime,
     max_poll_seconds: int = 6 * 3600,
+    *,
+    workspace=None,
 ) -> bool:
     """`gate(...).allowed`: the question every gated route asks (`app/feature_gates.py`)."""
-    return gate(session, user, feature, now, max_poll_seconds).allowed
+    return gate(session, user, feature, now, max_poll_seconds, workspace=workspace).allowed
+
+
+# ---- plan allowances and the workspace rule of the feature gates (workspaces design 5, 12.6) ----
+
+
+def live_plan(session: Session, user: User, now: datetime | None = None) -> Plan | None:
+    """The plan the person is on at `now`: the plan of their subscription while it is `active` or in
+    its 3 grace days (`past_due`), judged by the clock as everywhere in billing. None for a person
+    with no plan: never subscribed, an ended or lapsed plan, a trial or a pilot grant (those are
+    hours, not a plan). Pure reading."""
+    now = now or datetime.now(UTC)
+    sub = _newest_subscription(session, user)
+    if sub is None or _effective_status(sub, now) not in states.LIVE:
+        return None
+    return session.get(Plan, sub.plan_code)
+
+
+def max_owned_teams(session: Session, user: User, now: datetime | None = None) -> int | None:
+    """How many team workspaces the person may own besides their personal one: their live plan's
+    `max_owned_teams` (Free 0, a trial counts as Free; None = unlimited). An admin is never limited.
+    A lapse or a downgrade lowers this number but never touches a workspace that exists: it only
+    stops the person making more (`teams.create_owned_team`)."""
+    if user.is_admin:
+        return None
+    plan = live_plan(session, user, now)
+    return 0 if plan is None else plan.max_owned_teams

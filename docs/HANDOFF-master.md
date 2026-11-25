@@ -2,6 +2,69 @@
 
 **Updated 2026-11-21 about 16:30 WAT by the twenty-fifth lead: read the FIRST update block below, then the nine after it.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
 
+## WORKSPACES RELEASE (W5 final integration), 2026-11-25: short block for the lead, then the lead-26 handoff folded in below
+
+**What it is.** One PR, `feature/workspaces-final` into `main`, carrying all four workspace slices and the merge with the recipes release. **It is not merged: it waits for Adebayo's typed "merge #N".** PR number, head and CI result are in the checklist entry "W5 Final integration". SOP: `docs/sop/2026-11-25-workspaces-release.md` (decisions, the cutover rehearsal with row counts, the permission review and what it found, the privacy and terms claims each with its test). FE guide: `docs/fe-integration-guide-workspaces.md` (section 10 from 32 live captures in `docs/fe-captures/workspaces-final/`).
+
+- **Migrations:** `0062` workspaces core, `0063` settings, `0064` calendar per workspace, chained after the recipes release's `0061`. One head. After deploy the server must say `0064 (head)`.
+- **Server steps before merge (he runs them):** none for nginx (no new location; the recipes import location is already live) and no new env variable. Optional: delete the `MULTI_TEAM_ENABLED=` line from the server `.env` (the app ignores it; `scripts/clean_env.py` removes it). Migrations run on deploy and take about a second per few thousand meetings on an idle database (rehearsed); if the deploy step times out, rerun it. Check after deploy, one command: `ssh haven-respite 'cd /opt/beyric-note-taker && git rev-parse --short HEAD && docker compose ps && docker compose exec -T web alembic current </dev/null'`.
+- **What users see on day one:** every account has a personal workspace; old meetings keep exactly who could read them (nothing is published); a person's calendar connection, templates and vocabulary sit in their default workspace (copied once); the web names the workspace on every call. Privacy and terms pages changed (`TERMS_VERSION` 2026-11-25): no promise to notify anyone.
+- **Not verified:** real production data (the rehearsal ran on synthetic data shaped like it), a real Google or Microsoft calendar in two workspaces, a model-written draft for a free member of a paid workspace.
+- **Open for Adebayo:** (1) a saved "auto-share with team X" still publishes a meeting recorded in the PERSONAL workspace to that team (a test asserts it on purpose; D4 says personal stays private): keep or limit it? (2) at cutover a member's calendar, and their private templates and vocabulary (copied), land in their default team workspace, and later calendar meetings are born shared when the team's share setting is on: tell pilot users first? (3) personal recipes show in every workspace. Notifications now follow their meeting's workspace (fixed in this PR). The Opus review's other findings (keep-private tasks, drafts mixing workspaces, calendar grant on reconnect, delete-workspace clean-up) are fixed with tests: SOP section "Permission review".
+
+## Handoff to lead-26 (folded in from `docs/HANDOFF-lead-26.md`, which was untracked) (written 2026-11-25 by lead-25)
+
+Start here. Then read `docs/HANDOFF-master.md` (older blocks) and the memory index. Adebayo's rules and the
+global rules in `~/.claude/CLAUDE.md` all apply (no AI attribution, no `claude/` branches, fast local checks only,
+main merges only on his typed word, sessions open PRs but never merge).
+
+### Current state (2026-11-25)
+- `main` = `910b4fce` (#280). CI and deploy green. Recipes release is live (migrations to 0061).
+- No open PRs. Slice PRs W1 #270, W1-web #274, W2 #278, W2-fixes #279, W3 #277, W4 #276 are all merged into
+  `feature/workspaces` (head `8d9da73d`). All slice branches, worktrees and finished sessions are removed.
+- Kept branches: `main`, `feature/workspaces` (the integration branch), `feature/bot-leave-when-only-bots` (his, not mine).
+- Merging `main` into `feature/workspaces` CONFLICTS (expected: migrations and checklist/docs). That is W5's first job.
+
+### In flight
+- **W5 (workspaces final integration)** was just started by lead-25. Find it with `list_sessions {linked:true}` (name `workspaces-w5`).
+  Its brief is the "Pending" section below. It opens ONE PR `feature/workspaces` -> `main` and stops.
+- **Proposal recipe real-model re-run** is waiting on Adebayo. He must `git pull` main and run the live script with
+  `--only proposal` using his own capped OpenAI key (never pasted in chat), then remove the scratch container
+  `recipes-live-pg`. Read `docs/fe-captures/recipes/live-pass-real/results.json` and `failed-proposal.txt` afterwards.
+  His 2026-11-25 12:10 run failed with `model_error`, 0 tokens, cost 0: OpenAI answered `401 Incorrect API key`, and the key it
+  echoed back begins with `LLM_API_`, so the value he set was the variable name text instead of the key (probably pasted
+  `LLM_API_KEY=...` into the value). The repair logic was NOT tested. Tell him to re-run with the key alone as the value.
+  The scratch container `recipes-live-pg` is already gone.
+- Server check after #280 deploy (give him one command): `ssh haven-respite 'cd /opt/beyric-note-taker && git rev-parse --short HEAD && docker compose ps && docker compose exec -T web alembic current </dev/null'`
+  expect `910b4fc` and `0061 (head)`. Not yet confirmed by him.
+
+### Decisions taken (also in memory)
+- Recipes: 18 starters, custom/team recipes, tables, exports, sharing, cross-meeting (max 12), board. One release, not gated on real ratings. Done.
+- Workspaces: teams are containers of everything; plan limits on OWNED workspaces (Free 0, Starter 3, Pro 10, Scale unlimited; trial = Free;
+  joining is free); members record into any workspace on their own hours; team workspaces share meetings by default with per-meeting keep-private;
+  class workspaces for schools (not an LMS); free members may use Ask/recipes when the workspace OWNER has a live plan; hours and plans stay per person.
+  Specs: `docs/superpowers/specs/2026-11-24-workspaces-design.md` (sections 3, 4, 8, 12 are the contract) and the plan beside it in `plans/`.
+- One cutover release, no dark shipping. Lawyer items never block. Merge on his typed word only.
+
+### Pending (ordered)
+1. **W5**: `git fetch`; merge `origin/main` into `feature/workspaces`; re-chain the workspace migrations after `0061`
+   (the placeholders 0070, 0071, 0075, 0080 become 0062..0065, check actual names); rehearse the cutover migration on
+   production-shaped data; run the strict leak guard `tests/test_workspace_leaks.py`; check privacy and terms pages for wording;
+   strong Opus review of every permission path; write `docs/fe-integration-guide-workspaces.md` (real captured responses only);
+   SOPs, master checklist, handoff. Then ONE PR to `main`. Do not merge it.
+2. After his typed "merge #N": watch the deploy (migrations run on deploy, about 20 min, rerun if cancelled by the step limit), give him the server check.
+3. Known follow-ups from reviewers: ~~notifications keep their birth workspace after share, move or leave~~ (fixed in the W5 PR, `teams.refile_notifications`); ~~confirm a leaver loses calendar joins~~ (confirmed and tested in the W5 PR).
+4. Parked: CRM (ask pilot users), Google verification, Microsoft publisher verification, lawyer items, billing review.
+
+### How we work here
+- Locally run only lint, format, type-check and the tests of touched files. Never the full suite, shards or e2e. CI does the rest.
+- "Green" check: verify the check count and that every status is `COMPLETED`; GitHub can show green before checks register.
+- Merge helper: `mergepr.sh` in the repo root (untracked, guarded squash merge). `gh pr merge` auto-merge is disabled on the repo.
+- Stacked PRs: retarget the child to main before merging its base with `--delete-branch`.
+- Archive sessions with the exact `session` label on re-issue (the hook rewrites the input; call once, then again with the quoted input).
+- Cleanup duty: when a PR merges, archive its session, remove its worktree, delete its branch (never a base of an open PR).
+- Untracked clutter in the main checkout root (`add_import_nginx.py`, `mergepr.sh`, `review.html`, `spike/`, `.playwright-mcp/`, `docs/ui/...html`) is Adebayo's or old; leave unless he says.
+
 ## RECIPES RELEASE (meeting recipes), 2026-11-24, integration slice S7: short block for the lead
 
 **What it is.** One release that turns a meeting into editable, source-linked documents (eighteen starters, team recipes and brief, file import, cross-meeting recipes, a board, sharing, exports). All slices are on integration branch `feature/recipes`; S7's PR (`feature/recipes-integration`) goes into it, then the lead opens the ONE PR `feature/recipes` into `main`. Nothing is user-visible until that merges. Spec `docs/superpowers/specs/2026-11-24-meeting-recipes-design.md`, plan `docs/superpowers/plans/2026-11-24-meeting-recipes.md`, SOPs `docs/sop/2026-11-24-recipes-*.md` (engine, documents, library, cross-meeting, board, **integration**), FE guide `docs/fe-integration-guide-recipes.md` (one guide, real captures), checklist addendum in `docs/checklist/master-checklist.md`.

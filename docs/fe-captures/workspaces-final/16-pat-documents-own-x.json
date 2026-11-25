@@ -1,0 +1,19 @@
+{
+  "note": "His own drafts in X: none yet.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "documents": []
+    }
+  }
+}
