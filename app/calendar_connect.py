@@ -75,6 +75,7 @@ from app.models import (
     Notification,
     OAuthFlow,
     ScheduledJoin,
+    Team,
     User,
 )
 from app.vault import Secret
@@ -389,16 +390,18 @@ def _store(
     domain = identity.hosted_domain.strip().lower() if identity.hosted_domain else None
     if len(email) > MAX_EMAIL_CHARS or (domain and len(domain) > MAX_DOMAIN_CHARS):
         return "google_failed"
-    # The workspace is locked (as `teams.leave` locks it) and the membership read again: a leave
-    # that committed while the code was being exchanged must not leave a connection in a workspace
-    # the person is no longer in.
-    teams._lock_teams(session, team_id)
-    if teams.membership(session, user.id, team_id) is None:
-        return "workspace_unavailable"
     # The user's own row is the lock for "one live calendar at a time in a workspace": two tabs
     # finishing two providers at once queue here, and the second sees the first one's committed
     # connection.
     session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    # After the user's row (the order every other writer takes them in; the foreign key of a
+    # competing insert shares the team row, so an exclusive lock here would deadlock with it): the
+    # workspace is locked SHARED, which waits for a `teams.leave` in flight (it locks the team
+    # exclusively), and the membership is read again. A leave that committed while the code was
+    # being exchanged must not leave a connection in a workspace the person is no longer in.
+    session.execute(select(Team.id).where(Team.id == team_id).with_for_update(read=True))
+    if teams.membership(session, user.id, team_id) is None:
+        return "workspace_unavailable"
     if (
         purpose == "calendar"
         and other_live_calendar(session, user.id, "google", team_id) is not None
