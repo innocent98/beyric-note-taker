@@ -211,4 +211,29 @@ export function resetToDefaultTeam(): void {
   window.location.href = `${url.pathname}${url.search}${url.hash}`;
 }
 
+// ---- Opening a meeting of another workspace ----------------------------------------------------------------------
+// A meeting opened by its id (a link, an email, a notification, an Ask source chip) answers with its own workspace
+// (`workspace` of `GET /api/meetings/{id}`, workspaces design 12.2). When that is not the workspace this tab is on,
+// the tab SWITCHES to it and says so: "Switched to <name>". Pure, so a test runs the real rule.
+export function switchedMessage(name: string): string {
+  return `Switched to ${name}`;
+}
+
+export type MeetingSwitch = { kind: "none" } | { kind: "switch"; remember: number | null; message: string };
+
+// `workspace` is the meeting's (null when the reader is not a member of it: nothing to switch to), `activeId` the
+// workspace this tab is on now, `defaultId` the one a link without a choice opens (remembering it is "no choice"),
+// `teams` the person's workspaces (a workspace not among them is never switched to).
+export function planMeetingSwitch(args: {
+  workspace: { id: number; name: string } | null;
+  activeId: number | null;
+  defaultId: number | null;
+  teams: { id: number }[];
+}): MeetingSwitch {
+  const { workspace, activeId, defaultId, teams } = args;
+  if (workspace === null || !teams.some((t) => t.id === workspace.id)) return { kind: "none" };
+  if (workspace.id === (activeId ?? defaultId)) return { kind: "none" };
+  return { kind: "switch", remember: workspace.id === defaultId ? null : workspace.id, message: switchedMessage(workspace.name) };
+}
+
 export const TEAM_GONE_MESSAGE = "That team is no longer available to you, so you are back on your default team.";

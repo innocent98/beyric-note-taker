@@ -56,3 +56,21 @@ Deploy: normal; the migration is long and `deploy.sh` backs up first. Roll back:
 - A person who leaves a team keeps recording into it through a calendar connection filed there until W3 disconnects the connection on leave (accepted until W3).
 
 W2 (templates, vocabulary, settings), W3 (calendar, arbitration), W4 (limits, lifecycle, gate), W5 (integration). Old `scripts/capture_*` still reference the removed flag. The web (PR B) must send `X-Team-Id` on every non-personal route and switch on `workspace_team_id`.
+
+---
+
+## Task 4: the web (PR B)
+
+**What shipped.** The web names its workspace on every route that is not the person's own, switches to a meeting's workspace when one is opened by its id, and shows unread notifications of the other workspaces in the switcher. Branch `feature/workspaces-web`, base `feature/workspaces`. No new dependency, no backend change (the API fields it reads shipped in PR A). FE guide: `docs/fe-integration-guide-workspaces.md`, every body from `docs/fe-captures/workspaces/` (`scripts/capture_workspaces.py`).
+
+| Decision | Choice |
+|---|---|
+| Which calls carry `X-Team-Id` | `isTeamScoped` (`web/lib/api/client.ts`) is now "every `/api/*` call except the person's own" (sign-in/out, auth, billing, admin, public and token routes, `GET`/`POST /api/teams`, invitation preview/accept, the profile settings, the provider callbacks). Routes that only open one thing by id, and the ones W2/W3 will scope (templates, vocabulary, calendar, settings), carry it too: the server ignores it where it does not read it. |
+| Auto-switch | `planMeetingSwitch` (`web/lib/active-team.ts`, pure) and `MeetingWorkspaceSync` (rendered in `MeetingView`): on opening a meeting whose `workspace` is not the tab's, store it (the default workspace is stored as "no choice") and toast "Switched to <name>". Nothing when the meeting is already in the tab's workspace, when `workspace` is null (reader not a member) or when it is not among the person's workspaces. |
+| Switcher dots | `useWorkspaceUnread` reads `other_workspaces` from `GET /api/session` when the switcher appears and whenever the tab changes workspace. An OTHER workspace with unread gets "(N unread)" in its option and one small dot sits on the select; none when nothing is unread. A failed read draws nothing. |
+
+**LEAD-DESIGNED, not in the designer's file (for the designer to review):** the toast wording "Switched to <name>" (the designer's own toast component), the switcher's "(N unread)" option suffix, and the dot on the select's corner (`.team-switch-dot`, one rule in `web/styles/components.css`, tokens only).
+
+**Verification.** `npm run lint` (3 old warnings in `scripts/parity-meeting-delete.mjs`), `npm run typecheck`, and named vitest files only: `team-header` (the new scoping rule), new `workspace-switch` (11 tests on the real captures: header on Ask/templates/vocabulary/notifications/calendar/settings, the person's own routes carry none, the switch and the toast, the dots), `team-switcher`, `active-team`, `team-proxy`, `team-server`, `team-scoped-screens`, `shell-drawer`, `meeting-team-card`, `meeting-view`, `meeting-series`, `meeting-milestones`, `ask`, `ask-page`, `public-shell`, `decisions-review-shell`, `team-view`, `teams-view`, `tasks-view` (413 tests, all green). Looked at in a real browser (the Next dev server over the real backend and the capture database, signed in as the capture's test account) at **1280 and 390 px**: the dot and options on the sidebar and the top-bar switcher, opening a meeting of Platform team from the personal workspace showed the toast "Switched to Platform team", moved the switcher and stored the tab's choice; no horizontal overflow at 390. **Not checked:** dark mode, a screen reader, other widths, the live site.
+
+**Follow-ups.** The server-rendered sidebar badges on a page with no `?team=` (the meeting page, Ask, Notifications) still count the default workspace; they follow the tab's workspace only on the team pages (pre-existing; a later slice may carry the tab's workspace in a cookie). `POST /api/meetings` born-in-workspace was not run live (needs the bot provider).
