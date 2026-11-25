@@ -5,11 +5,11 @@ import { GateText } from "@/components/billing/gate-text";
 import { Alert, Button, Card, Icon, TextareaField } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import type { Brief, BriefImported } from "@/lib/api/types";
-import { recipeErrorMessage } from "@/lib/recipes";
+import { briefWords, recipeErrorMessage } from "@/lib/recipes";
 
 const number = (n: number) => n.toLocaleString("en-US");
 
-// The team's brief: the reference text the model may use besides the meeting (services, prices, terms, house
+// The workspace's brief ("My brief" in a person's own space): the reference text the model may use besides the meeting (services, prices, terms, house
 // style). LEAD-DESIGNED (the designer's files draw none of recipes), built from the Templates editor's parts.
 // Owners and admins write it; a member reads it (`team.can_manage`). "Import from a file" turns a Word, PDF,
 // text or Markdown file into text and shows it for review: nothing is saved until the person puts it in the
@@ -26,6 +26,7 @@ export function BriefEditor({ initial }: { initial: Brief }) {
   const [importing, setImporting] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const team = current.team;
+  const words = briefWords(team);
   const over = text.length - current.max_chars;
   const dirty = text !== current.text;
 
@@ -73,10 +74,12 @@ export function BriefEditor({ initial }: { initial: Brief }) {
     <Card>
       <div className="stack-md brief-editor">
         <div>
-          <h2 className="brief-title">Team brief</h2>
+          <h2 className="brief-title">{words.title}</h2>
           <p className="field-hint">
-            What Beyric may use besides the meeting: your services, prices, terms, house style, a past proposal.
-            {" "}Everyone on {team.name} can read this, and it is used in the drafts they make.
+            Facts about your business that Beyric can use when it writes: services, prices, terms, house style, a past proposal.
+            {team.is_personal
+              ? " Only you can read this, and it is used in the drafts you make."
+              : ` Everyone on ${team.name} can read this, and it is used in the drafts they make.`}
           </p>
         </div>
         {error ? (
@@ -86,7 +89,7 @@ export function BriefEditor({ initial }: { initial: Brief }) {
         ) : null}
         <TextareaField
           id="brief-text"
-          label="Team brief"
+          label={words.title}
           hideLabel
           rows={7}
           readOnly={!team.can_manage}

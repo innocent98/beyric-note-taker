@@ -3,12 +3,23 @@
 
 ## Status snapshot (2026-11-13 addendum below; 2026-11-10, 00:15 WAT, reconciled against `main` at `176387e`; the 2026-11-07 detail below is history)
 
+**Addendum 2026-11-25: Recipes page understandable at first sight** (branch `feature/recipes-page-simple`, branched from `origin/main` with `fix/workspace-follows-documents-and-recipes` merged in so the PRs do not conflict; SOP `docs/sop/2026-11-25-recipes-page-simple.md`, walkthrough `docs/guides/recipes-and-documents-walkthrough.md`; web only, no backend, no migration; PR number in the PR; **not merged: waits for his typed word**)
+- [x] Owner feedback: "bad UX, a child could not grab a thing": brief first, twenty starters, own recipes hidden below, greyed-out read-only form
+- [x] One-line explanation at the top; My recipes and Team recipes first with plain empty states and one button; the 18 ready-made recipes under one shut heading with a search box
+- [x] A ready-made (or team) recipe is described in words (what it does, what you get, what it asks, what facts it can use); one primary button "Use this recipe" makes the person's own copy; "Change it before saving" keeps the old unsaved path (and the team-visibility choice)
+- [x] The brief moved under the recipes and is "My brief" / "Workspace brief" with a plain one-line description
+- [x] Make window: My recipes, then Team recipes, ready-made behind a link once the person has their own; opens on the recipe made last in this browser
+- [x] Vitest updated deliberately (recipes-view, make-dialog, brief-editor); typecheck and lint clean; looked at live at 1280 and 390 px with before/after screenshots in `docs/guides/img/`
+- [ ] CI green on the final head, then his typed "merge #N"
+- [ ] Not done: recipe descriptions written by hand per starter (the first sentence of the instruction is used); "recently used" is per browser, not stored on the server
+
 **Addendum 2026-11-25: Documents, Recipes, Ask and Notifications follow the active workspace** (branch `fix/workspace-follows-documents-and-recipes`, SOP `docs/sop/2026-11-25-workspace-follows-documents-and-recipes.md`, walkthrough `docs/guides/recipes-and-documents-walkthrough.md`; web only, no migration; PR number below once open; **not merged: waits for his typed word**)
 - [x] Cause reproduced live: `TEAM_PAGES` lacked these pages, so sidebar links had no `?team=` and the server render read the default workspace while browser calls read the chosen one
 - [x] The four pages are team pages (`requireTeamOwner`, views keyed by workspace); `/documents/[id]` moves the tab to the draft's workspace; tests first, touched tests green
 - [x] Recipe list hint under the list (where My recipes and Team recipes appear); owner walkthrough with 10 live screenshots
 - [ ] CI green on the final head, then his typed "merge #N"
-- [ ] Suggestions left open: reorder the long recipe list, personal label for the brief box, check `/series/[id]` and the other views' state on "follow"
+- [x] Reorder the long recipe list and the personal label for the brief box: done in the Recipes page redesign below
+- [ ] Suggestions left open: check `/series/[id]` and the other views' state on "follow"
 
 **Addendum 2026-11-25: billing review M1 fixed** (branch `fix/billing-stale-payment-lock`, SOP `docs/sop/2026-11-25-billing-stale-payment-lock.md`; PR needs an Opus delta review before merge; no migration)
 - [x] Payment row locks in `settle.py` (webhook `_apply` and `settle_transaction`) read the row as it is now (`populate_existing`): a payment a webhook already settled is no longer re-granted, marked "needs refund", or overwritten by a `failed` report (3 tests, failing before the fix)

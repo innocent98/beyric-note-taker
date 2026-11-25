@@ -59,6 +59,7 @@ const team = (id: number, name: string, extra = {}) => ({
 
 beforeEach(() => {
   Object.values(mocks).forEach((fn) => fn.mockReset());
+  window.localStorage.clear();
   mocks.list.mockResolvedValue(starters);
   mocks.brief.mockResolvedValue(savedBrief);
   mocks.teams.mockResolvedValue({ teams: [team(2, "My team")], can_create_more: 0 });
@@ -115,16 +116,37 @@ describe("the recipes", () => {
     expect(screen.queryByRole("group", { name: "Team recipes" })).toBeNull();
   });
 
-  it("adds the team's recipes and the person's own after the starters", async () => {
+  it("puts the person's own and the team's recipes first, and shuts the ready-made ones", async () => {
     mocks.list.mockResolvedValue({ ...withTeam, recipes: [...withTeam.recipes, personal] });
-    await open();
+    render(<MakeDialog open meetingId={7} title="Onboarding call" onClose={vi.fn()} />);
+    const mine = await screen.findByRole("group", { name: "My recipes" });
+    expect(within(mine).getByRole("radio", { name: /Weekly note/ })).toBeTruthy();
     const teams = screen.getByRole("group", { name: "Team recipes" });
-    expect(within(teams).getAllByRole("radio").map((r) => r.getAttribute("aria-label") ?? r.closest("label")?.textContent)).toEqual([
+    expect(within(teams).getAllByRole("radio").map((r) => r.closest("label")?.textContent)).toEqual([
       expect.stringContaining("House proposal"),
       expect.stringContaining("Admin recipe"),
     ]);
-    const mine = screen.getByRole("group", { name: "My recipes" });
-    expect(within(mine).getByRole("radio", { name: /Weekly note/ })).toBeTruthy();
+    // order on the screen: mine, then the team's
+    expect(mine.compareDocumentPosition(teams) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the person's own recipe is the one chosen, and the ready-made ones wait behind a button
+    expect((within(mine).getByRole("radio", { name: /Weekly note/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole("group", { name: "General" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Ready-made recipes \(/ }));
+    const general = screen.getByRole("group", { name: "General" });
+    expect(teams.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(general).getByRole("radio", { name: /Follow-up email/ })).toBeTruthy();
+  });
+
+  it("opens on the recipe made last in this browser, even a ready-made one, and remembers a new one", async () => {
+    mocks.list.mockResolvedValue({ ...withTeam, recipes: [...withTeam.recipes, personal] });
+    window.localStorage.setItem("beyric.make.last-recipe", "proposal");
+    render(<MakeDialog open meetingId={7} title="Onboarding call" onClose={vi.fn()} />);
+    const proposal = (await screen.findByRole("radio", { name: /^Proposal/ })) as HTMLInputElement;
+    expect(proposal.checked).toBe(true);
+    await userEvent.click(screen.getByRole("radio", { name: /Weekly note/ }));
+    await make();
+    await waitFor(() => expect(mocks.make).toHaveBeenCalled());
+    expect(window.localStorage.getItem("beyric.make.last-recipe")).toBe(String(personal.id));
   });
 
   it("starts on the first recipe and shows its choices at their defaults", async () => {
@@ -218,8 +240,8 @@ describe("making the draft", () => {
 
   it("asks for a recipe row by id", async () => {
     mocks.list.mockResolvedValue({ ...starters, recipes: [...starters.recipes, personal] });
-    await open();
-    await userEvent.click(screen.getByRole("radio", { name: /Weekly note/ }));
+    render(<MakeDialog open meetingId={7} title="Onboarding call" onClose={vi.fn()} />);
+    await screen.findByRole("radio", { name: /Weekly note/ }); // the person's own recipe is the one chosen
     await userEvent.type(screen.getByLabelText("Client"), "Daniel");
     await make();
     await waitFor(() => expect(mocks.make).toHaveBeenCalled());
