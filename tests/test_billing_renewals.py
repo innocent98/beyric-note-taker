@@ -1414,22 +1414,71 @@ def test_blocked_at_the_due_moment_and_then_really_failing_runs_the_whole_dunnin
     assert notices(session, ada, "billing.failed") == []
 
     providers.usd.charge_outcome = then
-    tick(session, due + timedelta(hours=1))  # the held charge is tried again and really fails
+    failed_at = due + timedelta(hours=1)
+    tick(session, failed_at)  # the held charge is tried again and really fails
     sub = live(session, ada)
     assert (sub.status, sub.retry_count) == ("past_due", 1)
     assert len(notices(session, ada, "billing.failed")) == 1
-    assert sub.next_charge_at == due + DAY  # the day-1 retry
+    assert sub.next_charge_at == failed_at + DAY  # day 1, counted from this failure
+    assert sub.grace_ends_at == failed_at + timedelta(hours=72)  # the mail's three days
 
     providers.usd.charge_outcome = "failed"
-    tick(session, due + DAY + timedelta(seconds=7))
+    tick(session, failed_at + DAY)
     assert live(session, ada).retry_count == 2
-    tick(session, due + 2 * DAY + timedelta(seconds=7))
+    tick(session, failed_at + 2 * DAY)
     sub = live(session, ada)
     assert (sub.retry_count, sub.next_charge_at) == (3, None)
     assert len(notices(session, ada, "billing.last_day")) == 1
 
-    tick(session, due + timedelta(hours=73))
-    assert live(session, ada) is None  # lapsed at the normal moment
+    tick(session, failed_at + timedelta(hours=73))
+    assert live(session, ada) is None  # lapsed at the end of the three days
+
+
+def test_a_real_decline_after_a_long_block_gets_the_full_grace_and_a_day_between_retries(
+    session, ada, admin, providers, bought
+):
+    """Fourth review: the failed mail promises "we will try your card again tomorrow and the day
+    after" and 3 days of usable hours. After a block of three days that must still be TRUE: the
+    first real failure re-anchors the dunning on itself (grace to 72 hours from it, within the cap),
+    and the retries are a day apart, not an hour apart."""
+    due = bought
+    providers.usd.charge_outcome = "blocked"
+    for step in range(0, 24 * 3 + 1, 6):  # our key broken for three days
+        tick(session, due + timedelta(hours=step, seconds=7))
+    assert live(session, ada).retry_count == 0
+
+    providers.usd.charge_outcome = "failed"  # fixed, and the card is really declined
+    failed_at = due + timedelta(days=3, hours=1)
+    tick(session, failed_at)
+
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 1)
+    assert sub.grace_ends_at == failed_at + timedelta(hours=72)  # the mail's 3 days, from now
+    assert sub.next_charge_at == failed_at + DAY  # day 1 is a day later
+    assert len(notices(session, ada, "billing.failed")) == 1
+    assert grants(session, ada, "plan_period")[0].expires_at == sub.grace_ends_at  # hours kept
+
+    tick(session, failed_at + DAY)
+    sub = live(session, ada)
+    assert sub.retry_count == 2 and sub.next_charge_at == failed_at + 2 * DAY
+    tick(session, failed_at + 2 * DAY)
+    sub = live(session, ada)
+    assert (sub.retry_count, sub.next_charge_at) == (3, None)
+    assert len(notices(session, ada, "billing.last_day")) == 1
+    tick(session, failed_at + timedelta(hours=73))
+    assert live(session, ada) is None  # lapses 72 hours after the real failure
+
+
+def test_a_failure_after_a_short_block_keeps_the_ordinary_timeline_when_not_extended(
+    session, ada, admin, providers, bought
+):
+    """No block, no change: the normal grace and the day-1 retry at the due moment + 24 hours."""
+    due = bought
+    providers.usd.charge_outcome = "failed"
+    tick(session, due + timedelta(seconds=7))
+    sub = live(session, ada)
+    assert sub.grace_ends_at == states.grace_end(due)
+    assert sub.next_charge_at == due + DAY
 
 
 def test_the_blocked_alert_is_sent_once_every_six_hours_not_every_pass(

@@ -727,13 +727,27 @@ def _fail(session: Session, sub_id: int, cycle: datetime, n: int, now: datetime)
     if transition is None:
         session.rollback()
         return
+    after_block = (
+        sub.status == states.PAST_DUE and n == 0
+    )  # the grace a block opened, no retry used
     sub.retry_count = n + 1
     sub.status = transition.status
     sub.updated_at = now
     if states.OPEN_GRACE in transition.effects:
         _open_grace(session, sub, cycle)
+    if after_block:
+        # The first real failure after a block (`CHARGE_BLOCKED` opened the grace and spent no
+        # retry): the failed mail promises 3 days and a retry each day, counted from NOW, so the
+        # grace is re-anchored on this failure (still within the cap past its normal end).
+        wanted = min(now + states.GRACE, states.grace_end(cycle) + BLOCKED_GRACE_CAP)
+        if sub.grace_ends_at is None or wanted > sub.grace_ends_at:
+            _set_grace_end(session, sub, wanted)
     if states.SCHEDULE_NEXT_ATTEMPT in transition.effects:
-        sub.next_charge_at = max(states.attempt_time(cycle, n + 1), now + MIN_RETRY_GAP)
+        if sub.grace_ends_at is not None and sub.grace_ends_at > states.grace_end(cycle):
+            # a grace a block moved: the dunning is counted from the failures, a day apart
+            sub.next_charge_at = now + states.ATTEMPT_OFFSETS[1]
+        else:
+            sub.next_charge_at = max(states.attempt_time(cycle, n + 1), now + MIN_RETRY_GAP)
     if states.STOP_ATTEMPTS in transition.effects:
         sub.next_charge_at = None
     if states.NOTIFY_FAILED in transition.effects:
