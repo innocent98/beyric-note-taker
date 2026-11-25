@@ -1,0 +1,21 @@
+{
+  "note": "The default list is the caller's OWN drafts.",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "documents": []
+    }
+  }
+}

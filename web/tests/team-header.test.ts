@@ -46,6 +46,8 @@ describe("which calls carry the team", () => {
     "/api/decisions?status=approved",
     "/api/review?state=checked",
     "/api/session",
+    // The meeting picker's preview is a POST that asks about the active team.
+    "/api/recipes/picker/resolve",
   ])("%s is team-scoped", (path) => {
     expect(isTeamScoped(path)).toBe(true);
   });
@@ -84,6 +86,16 @@ describe("which calls carry the team", () => {
     ["POST", "/api/meetings/12/share"],
   ])("%s %s is workspace-scoped", (method, path) => {
     expect(isTeamScoped(path, method)).toBe(true);
+  });
+
+  it("names the workspace on every recipe, brief and draft call (the server ignores it where the call is about one draft)", () => {
+    expect(isTeamScoped("/api/documents", "POST")).toBe(true);
+    expect(isTeamScoped("/api/documents", "GET")).toBe(true);
+    expect(isTeamScoped("/api/documents/5", "GET")).toBe(true);
+    expect(isTeamScoped("/api/documents/5/share", "POST")).toBe(true);
+    expect(isTeamScoped("/api/recipes/picker/resolve", "POST")).toBe(true);
+    expect(isTeamScoped("/api/recipes", "GET")).toBe(true);
+    expect(isTeamScoped("/api/briefs", "GET")).toBe(true);
   });
 
   it.each([

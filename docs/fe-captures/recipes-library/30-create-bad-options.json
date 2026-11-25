@@ -1,0 +1,40 @@
+{
+  "note": "A choice whose `kind` is not `text` or `choice`: 422 `validation_error` with the field path `options.x.kind`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/recipes",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "x",
+      "instruction": "x",
+      "options": {
+        "x": {
+          "label": "X",
+          "kind": "slider"
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "options.x.kind",
+            "message": "Input should be 'text' or 'choice'"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -195,7 +195,6 @@ export interface paths {
          * Ask Question
          * @description Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
          *     tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.
-         *     Only the active workspace is searched (the `X-Team-Id` header, else the default workspace).
          */
         post: operations["ask_question"];
         delete?: never;
@@ -213,9 +212,8 @@ export interface paths {
         };
         /**
          * Ask Scope
-         * @description What a question searches: the ready meetings of the active workspace (the `X-Team-Id`
-         *     header, else the default workspace) the caller may read, their decisions and tasks, and the
-         *     question chips. No model call.
+         * @description What a question searches: the ready meetings the caller may read, their decisions and
+         *     tasks, and the question chips. No model call.
          */
         get: operations["ask_scope"];
         put?: never;
@@ -277,6 +275,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/briefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Brief
+         * @description The active team's brief (`text` is empty when none was saved). Members read it too: its
+         *     prices and terms appear in the drafts they make. `X-Team-Id` names the team (404 for one the
+         *     caller is not on).
+         */
+        get: operations["read_brief"];
+        /**
+         * Write Brief
+         * @description Replace the active team's brief (owners and admins; 403 `team_forbidden` for a member).
+         *     422 `brief_too_long` over `max_chars`. The text is data: stored as typed, minus control
+         *     characters, and shown to the model only inside a fence.
+         */
+        put: operations["write_brief"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/briefs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Brief
+         * @description Read a `.docx`, `.pdf`, `.txt` or `.md` file (multipart, field `file`) into text for the
+         *     brief. The text comes back for the person to review and edit: **nothing is saved** and the file
+         *     is never stored (not on disk, not in the database). Owners and admins only (the people who can
+         *     save a brief). The text is data: if saved, the model sees it inside a fence.
+         */
+        post: operations["import_brief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar": {
         parameters: {
             query?: never;
@@ -286,9 +335,7 @@ export interface paths {
         };
         /**
          * Calendar State
-         * @description Everything the calendar settings page shows for the ACTIVE workspace (`X-Team-Id`, else the
-         *     caller's default one; another workspace's calendar is never shown), in one read (no CSRF header
-         *     needed): whether
+         * @description Everything the calendar settings page shows, in one read (no CSRF header needed): whether
          *     Google Calendar is connected, which Google address, the last time it was read, the last
          *     failure in plain words, and the next seven days of synced events, each with whether the bot
          *     will join it and why not when it will not. Nothing is fetched from Google here: this reads what
@@ -339,10 +386,8 @@ export interface paths {
         };
         /**
          * Calendar Recurring
-         * @description The Recurring cards of the Meetings screen for the ACTIVE workspace (`X-Team-Id`, else the
-         *     caller's default one; no CSRF header needed): each recurring meeting on the calendar connected
-         *     in this workspace, except those removed from it, with a cadence worked out from its stored
-         *     times, and its next
+         * @description The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting
+         *     on the connected calendar with a cadence worked out from its stored times, and its next
          *     occurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().
          *     timeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty
          *     when no calendar is connected or nothing recurs. Nothing is fetched from Google. 404
@@ -402,15 +447,10 @@ export interface paths {
          *     flow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the
          *     stored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`
          *     `google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),
-         *     `no_refresh_token`, `wrong_account`, `different_account` (another account of the same provider
-         *     is connected in that workspace) or `already_connected` (another provider's calendar is connected
-         *     in that workspace) or `workspace_unavailable` (the person left the workspace meanwhile); for
-         *     Microsoft `microsoft_denied`, `microsoft_failed`, `scope_missing`, `no_mailbox` (the account has
-         *     no calendar to read), `tenant_not_allowed`, `wrong_account`, `different_account`,
-         *     `already_connected` or `workspace_unavailable`. When the connection was started from a
-         *     workspace that is not the person's default one the redirect also carries `team=<id>`: the page
-         *     it returns to is that workspace's. No header is needed: the workspace is remembered with the
-         *     single-use `state`. Nobody signed in goes to
+         *     `no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another
+         *     provider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,
+         *     `scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,
+         *     `wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to
          *     `/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404
          *     `calendar_unavailable` while the feature is off.
          */
@@ -434,20 +474,15 @@ export interface paths {
         put?: never;
         /**
          * Calendar Connect Start
-         * @description Start connecting a calendar to the ACTIVE workspace (CSRF header needed; `X-Team-Id` names
-         *     the workspace, else the caller's default one; a team the caller is not in is 404 `not_found`).
-         *     Returns the consent URL to navigate to. The connection will belong to that workspace and the
-         *     callback returns to it; a person may connect the same provider, even the same account, in
-         *     several workspaces, but only one calendar provider per workspace. `provider` is `google` or
-         *     `microsoft`. For Google only the permissions in `features` are asked
+         * @description Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.
+         *     `provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked
          *     for, each at the moment its feature is switched on; permissions given earlier are kept. For
          *     Microsoft `features` must be `["calendar"]` (there is no Meet feature: 422 `invalid_features`).
          *     Sets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the
          *     callback to this browser. 404 `calendar_unavailable` when the calendar features are off (for
          *     Microsoft: also while its switch is off, so the route does not exist for anyone), 409
-         *     `calendar_already_connected` when another provider's calendar is connected IN THIS WORKSPACE
-         *     (one calendar per workspace), 503 `calendar_unavailable` when the server cannot store a token
-         *     safely.
+         *     `calendar_already_connected` when another provider's calendar is connected (one calendar at a
+         *     time), 503 `calendar_unavailable` when the server cannot store a token safely.
          */
         post: operations["calendar_connect_start"];
         delete?: never;
@@ -467,18 +502,14 @@ export interface paths {
         put?: never;
         /**
          * Calendar Connect Disconnect
-         * @description Disconnect the caller's calendar IN THE ACTIVE WORKSPACE (CSRF header needed, no body;
-         *     `X-Team-Id` names the workspace). For Google it revokes the access at Google, but only when no
-         *     other connection of the caller (in another workspace) uses the same Google account: then
-         *     `revoked` is true and nothing is called, because the grant is still in use. Either way it
-         *     deletes the calendar events of this workspace's connection, the scheduled joins filed in this
-         *     workspace (every state), this workspace's calendar notifications, and the stored token. The
-         *     caller's other workspaces are untouched. Meetings already recorded, the hours used and the
-         *     settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again), and
-         *     it works while the calendar features are switched off. If Google cannot be reached the local
-         *     deletion still happens and `revoked` is false: tell the person to remove Beyric at
-         *     myaccount.google.com/permissions. Microsoft cannot be asked to remove its own access: `revoked`
-         *     is false with `reason` `provider_has_no_revoke`, and the
+         * @description Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the
+         *     access at Google first. Either way it deletes the caller's calendar events, all their
+         *     scheduled joins (every state) and calendar notifications, and the stored token. Meetings
+         *     already recorded, the hours used and the settings stay; a meeting being recorded right now
+         *     carries on. Safe to repeat (200 again), and it works while the calendar features are switched
+         *     off. If Google cannot be reached the local deletion still happens and `revoked` is false: tell
+         *     the person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to
+         *     remove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the
          *     person is told to remove Beyric in their Microsoft account's app permissions. `reason` is
          *     absent (not null) for Google, so Google's answer keeps its shape.
          *     Afterwards `connect` works again, for the same or another account.
@@ -560,6 +591,158 @@ export interface paths {
          */
         post: operations["hide_decision"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Documents
+         * @description Drafts, newest first. With no filter, or `mine=true`: the caller's own. `shared=true`: drafts
+         *     teammates shared with a team the caller is in now (never their own; an unshared one, or one of
+         *     a team they left, is not listed). Both true: the two together. With `meeting_id`, only drafts
+         *     made from that meeting (cross-meeting drafts included; a shared draft only when the caller may
+         *     read that meeting). For the next page pass the smallest `id` as `before_id`.
+         */
+        get: operations["list_documents"];
+        put?: never;
+        /**
+         * Create Document
+         * @description Ask for a draft made from a meeting (or several, for a cross-meeting recipe) by a recipe.
+         *     Answers 202 with `status: "writing"`; the worker writes it and the page polls
+         *     `GET /api/documents/{id}`. The team is the `X-Team-Id` header (404 for one the caller is not
+         *     in), else their default team: it decides whose brief and team recipes are used. Asking again
+         *     for the same recipe, meetings and options while that draft is still being written returns
+         *     that draft and starts nothing. Regenerating is a new request and a new draft.
+         */
+        post: operations["create_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document
+         * @description A draft: its `status` (poll every 2 seconds while `writing`), and when `ready` its `blocks`.
+         *     `checks` is the audit of the blocks as they stand now: blanks to fill and figures to check.
+         *     The creator reads it whole. A teammate reading a draft shared with their team (`access:
+         *     "shared"`) gets the text with every source of a meeting they cannot read replaced by
+         *     `{"kind": "hidden"}`, and `can_edit: false`. 404 for anyone else's draft, and for a shared one
+         *     once it is unshared or the reader has left the team.
+         */
+        get: operations["get_document"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description Discard a draft. One still being written is cancelled. If the worker has not picked it up
+         *     yet no model was called, so its place in the day's limit is given back; once the worker has
+         *     started it, the call may have been made and still counts.
+         */
+        delete: operations["delete_document"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit Document
+         * @description Save the edited draft: send every block as it now stands. Text is cleaned and bounded as
+         *     at generation; a block keeps the sources it had and cannot gain new ones. Marks the draft
+         *     `edited`. The `checks` in the answer are recomputed from what was saved. Refused while the
+         *     draft is still `writing` (409 `writing`), for one that `failed` (409 `not_ready`) and for a
+         *     board (409 `use_board`: `PATCH .../board` has the revision check and the row lock).
+         */
+        patch: operations["edit_document"];
+        trace?: never;
+    };
+    "/api/documents/{document_id}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Board
+         * @description Change a board by ONE operation and answer with the whole draft as it now stands (with the
+         *     new `updated_at`, the `revision` for the next call). `card` numbers cards counting through the
+         *     columns from 0; `index` is a place inside the target column. Marks the draft `edited`. Text is
+         *     made plain and cut to size as at generation; a card keeps its sources when moved or edited and
+         *     a new card has none.
+         */
+        patch: operations["edit_board"];
+        trace?: never;
+    };
+    "/api/documents/{document_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Document
+         * @description The draft as Markdown (`md`), plain text (`txt`), CSV, Excel (`xlsx`), Word (`docx`) or PDF
+         *     (the default), from its current blocks, edits included.
+         *
+         *     `csv` and `xlsx` need a draft with a table (409 `no_table` without one): the CSV holds the
+         *     table numbered `table` (the first by default), the Excel file holds every table, one sheet
+         *     each. A CSV is UTF-8 with a byte order mark so Excel reads it right, and a cell that could run
+         *     as a formula is written with a leading apostrophe. Built when asked and never stored; the file
+         *     name is the draft's title, cleaned.
+         */
+        get: operations["export_document"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share Document
+         * @description Share the draft, read-only, with **the team it was made in** (`team` on the draft; never
+         *     another, whatever `X-Team-Id` says): every current member can then open it and read its text and
+         *     title, but not the meetings it was drafted from (a source they cannot read shows as hidden, and
+         *     a reader who cannot read every source meeting sees a generic title). Only the creator may;
+         *     asking twice changes nothing. Leaving the team, or `DELETE .../share`, ends access at once.
+         */
+        post: operations["share_document"];
+        /**
+         * Unshare Document
+         * @description Stop sharing the draft with every team. Takes effect at once; asking again changes nothing.
+         *     Only the creator may.
+         */
+        delete: operations["unshare_document"];
         options?: never;
         head?: never;
         patch?: never;
@@ -717,9 +900,7 @@ export interface paths {
          *     bot of the account's is already in that meeting), `meeting_has_note_taker` (another account's
          *     bot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a
          *     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
-         *     when the bot host did not take the bot. The meeting is born in the active workspace (the
-         *     `X-Team-Id` header, else the default one): a member may record into any workspace they belong
-         *     to, on their own hours.
+         *     when the bot host did not take the bot.
          */
         post: operations["create_meeting"];
         delete?: never;
@@ -1288,8 +1469,7 @@ export interface paths {
          *     (no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones
          *     whose reason means the meeting was not recorded (recording hours used up, too many note takers
          *     at once, the link still in use, a note taker from another account already there, the calendar
-         *     disconnected, a suspended account). Only the caller's own, filed in the ACTIVE workspace
-         *     (`X-Team-Id`; another workspace's are never shown). Each item says why in plain words
+         *     disconnected, a suspended account). Only the caller's own. Each item says why in plain words
          *     and whether Send now is on offer. Newest first.
          */
         get: operations["not_recorded"];
@@ -1310,9 +1490,8 @@ export interface paths {
         };
         /**
          * List Notifications
-         * @description The active workspace's notifications, newest first (the `X-Team-Id` header, else the
-         *     personal workspace; 404 `not_found` for a team the caller is not in). For the next page pass
-         *     `before_id` = `next_before_id`.
+         * @description The caller's notifications, newest first. For the next page pass `before_id` =
+         *     `next_before_id`.
          */
         get: operations["list_notifications"];
         put?: never;
@@ -1334,7 +1513,7 @@ export interface paths {
         put?: never;
         /**
          * Read All Notifications
-         * @description Mark all of the active workspace's notifications read (the other workspaces' stay unread).
+         * @description Mark all of the caller's notifications read.
          */
         post: operations["read_all_notifications"];
         delete?: never;
@@ -1508,6 +1687,84 @@ export interface paths {
         patch: operations["patch_question"];
         trace?: never;
     };
+    "/api/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recipes
+         * @description The starters (General and School), then the active team's recipes, then the caller's own.
+         *     `X-Team-Id` names the team (404 for one the caller is not on), else their default team.
+         *     Archived recipes are not listed.
+         */
+        get: operations["list_recipes"];
+        put?: never;
+        /**
+         * Create Recipe
+         * @description Save a recipe: the caller's own, or (`visibility: team`, owners and admins only, 403
+         *     `team_forbidden`) the active team's. Give `key` to copy a starter: whatever you leave out comes
+         *     from it. 422 `too_many_recipes` past 100 live ones.
+         */
+        post: operations["create_recipe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recipes/picker/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Meetings
+         * @description Preview the meetings a cross-meeting recipe would read for this choice: those the caller may
+         *     read, ready, newest first, at most 12. Send the returned ids as `meeting_ids` of
+         *     `POST /api/documents`, together with this body as `picker`, so the draft keeps the
+         *     `left_out_count`.
+         */
+        post: operations["resolve_meetings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recipes/{recipe_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Recipe
+         * @description Change a recipe of the caller's own, or of a team they own or administer (403
+         *     `team_forbidden` for a member, who may still copy its text into a recipe of their own). Only
+         *     the fields sent change; a copy of a starter stays marked as one.
+         */
+        put: operations["update_recipe"];
+        post?: never;
+        /**
+         * Archive Recipe
+         * @description Archive a recipe (same people as `PUT`): it leaves the list and cannot be used again, and
+         *     the drafts made from it are untouched.
+         */
+        delete: operations["archive_recipe"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/review": {
         parameters: {
             query?: never;
@@ -1638,17 +1895,17 @@ export interface paths {
          *     (those with no known next date last, by name). The unfinished-task and open-question counts
          *     cover only what the caller may read. A recurring meeting appears once the calendar's event
          *     has a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header
-         *     names the workspace (404 for one the caller is not in); without it, the default one.
+         *     names the team (404 for one the caller is not in); without it, the default team's.
          */
         get: operations["list_series"];
         put?: never;
         /**
          * Create Series
          * @description Make a recurring meeting by hand (a meeting is then attached with
-         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the workspace (404 for one the
-         *     caller is not in), else the default one. With `SERIES_FOLLOW_MEETINGS` on only an owner or
-         *     admin makes a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal
-         *     one. 409 `series_limit`.
+         *     `PUT /api/meetings/{id}/series`). The `X-Team-Id` header names the team (404 for one the caller
+         *     is not in), else the default team. With `SERIES_FOLLOW_MEETINGS` on only an owner or admin makes
+         *     a team's recurring meeting (403 `team_forbidden`); anyone makes their own personal one. 409
+         *     `series_limit`.
          */
         post: operations["create_series"];
         delete?: never;
@@ -1854,12 +2111,9 @@ export interface paths {
          *     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
          *     it names the user and reports their recorded hours (`usage`).
          *
-         *     The active workspace (`active_workspace`) is the `X-Team-Id` header's, else the person's
-         *     default one (their only team, else their personal workspace: the one the web opens on, the same
-         *     as `is_default` in `GET /api/teams`). `badges` and `unread_notifications` count that workspace
-         *     only, and `other_workspaces` lists the rest with their unread count (the switcher's dot). A team
-         *     the caller is not in is NOT an error here (this call is every page's first): it answers the
-         *     default workspace. Every other route with no header acts on that same default workspace.
+         *     The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
+         *     (with multi-team off and no header: everything they can see, as before). A team the caller is
+         *     not in is NOT an error here (this call is every page's first): it counts the default team.
          */
         get: operations["read_session"];
         put?: never;
@@ -1902,7 +2156,8 @@ export interface paths {
          * Write Auto Share
          * @description Choose the team new meetings are shared to automatically (one at most), or null for none. The
          *     caller must belong to it and it must not be their personal space. It applies once, when a
-         *     meeting's notes are first written; a meeting already written is not touched.
+         *     meeting's notes are first written; a meeting already written is not touched. 409
+         *     `multi_team_disabled` while the switch is off.
          */
         put: operations["write_auto_share"];
         post?: never;
@@ -1921,9 +2176,8 @@ export interface paths {
         };
         /**
          * Read Bot Name
-         * @description The person's default note taker name: used in every workspace that sets none of its own
-         *     (`PUT /api/workspace-prefs`), else null with the server's default beside it
-         *     (`bot_name_default`). It never switches with the workspace.
+         * @description The name the note taker joins this person's meetings with: their own when set, else null with
+         *     the server's default beside it (`bot_name_default`).
          */
         get: operations["read_bot_name"];
         /**
@@ -2230,15 +2484,16 @@ export interface paths {
          * @description The tasks the caller can see: those assigned to them, those from meetings they can read,
          *     and their team's manual tasks. Newest first; for the next page pass `before_id` =
          *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-         *     suggested task is in no count. Only the active workspace's board, its people and its counts:
-         *     the `X-Team-Id` header (404 for a team the caller is not in), else the default workspace.
+         *     suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
+         *     in) only that team's board, its people and its counts; without it, every team's tasks the
+         *     caller can see, as before (`people` are then the default team's).
          */
         get: operations["list_tasks"];
         put?: never;
         /**
          * Create Task
          * @description Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
-         *     is not in) or, without it, the caller's default workspace. Anyone on the team may. It has no
+         *     is not in) or, without it, the caller's default team. Anyone on the team may. It has no
          *     meeting.
          */
         post: operations["create_task"];
@@ -2258,8 +2513,7 @@ export interface paths {
         /**
          * Export Tasks
          * @description The tasks of the Tasks screen as a CSV file: the same tasks, through the same visibility rule
-         *     and the same workspace scoping as `GET /api/tasks` (the `X-Team-Id` header, else the personal
-         *     workspace; suggested tasks left out, newest first),
+         *     and the same `X-Team-Id` scoping as `GET /api/tasks` (suggested tasks left out, newest first),
          *     every one of them, not one page. Columns: Title, Status (To do, In progress, Done), Assignee,
          *     Due date (YYYY-MM-DD), Project, Sprint, Meeting title, Meeting date. The meeting title and date
          *     are filled only when the caller may read that meeting, as on the screen; the date is in the
@@ -2360,7 +2614,7 @@ export interface paths {
          *     Changing a sprint setting redraws the open sprints. The default applies,
          *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
          *     member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
-         *     keeps its name: 409 `personal_team` for a `name` on it.
+         *     keeps its name while multi-team is on: 409 `personal_team` for a `name` on it.
          */
         patch: operations["update_team"];
         trace?: never;
@@ -2515,10 +2769,7 @@ export interface paths {
         /**
          * Remove Member
          * @description Remove a member, or leave the team (your own id). They get a fresh team of one; the open
-         *     tasks assigned to them become unassigned; their meetings stay theirs and are unshared. Their
-         *     calendar connection in this workspace is disconnected and the scheduled joins it planned are
-         *     cancelled; the provider's grant is revoked unless another workspace of theirs uses the same
-         *     account. An owner
+         *     tasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner
          *     or admin removes members; only the owner removes an admin; the owner cannot be removed and
          *     cannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`.
          */
@@ -2552,37 +2803,12 @@ export interface paths {
         put?: never;
         /**
          * Create Team
-         * @description Make a team the caller owns, as many as their plan allows besides the personal one (Free 0,
-         *     Starter 3, Pro 10, Scale unlimited; 409 `team_limit` with a message naming the plan to upgrade
-         *     to), 422 `invalid_name` for an empty name.
+         * @description Make a team the caller owns. At most three teams per account besides the personal one (409
+         *     `team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused
+         *     then), 422 `invalid_name` for an empty name.
          */
         post: operations["create_team"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/teams/{team_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Team
-         * @description Delete a team workspace. Only its owner, and only when nobody else is in it (409
-         *     `team_has_members`); the personal space cannot be deleted (409 `personal_team`). Its tasks,
-         *     projects, series and integrations go with it. Its meetings go back to the people who recorded
-         *     them, private, in their personal workspaces; a meeting whose recorder's account is gone is
-         *     deleted. Deleting never depends on a plan: a lapsed plan keeps every workspace until its owner
-         *     deletes it.
-         */
-        delete: operations["delete_team"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2597,35 +2823,12 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description The active workspace's templates (the `X-Team-Id` header, else the default workspace),
-         *     sorted by name. Every member reads and uses them; owners and admins write them.
+         * @description The caller's templates, sorted by name.
          */
         get: operations["list_templates"];
         put?: never;
         /** Create Template */
         post: operations["create_template"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/templates/copy-from-personal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Copy Templates From Personal
-         * @description Copy the caller's personal-workspace templates into the active workspace (owners and
-         *     admins). A name already in the workspace is skipped, never overwritten. 409 `personal_team`
-         *     when the active workspace is the personal one.
-         */
-        post: operations["copy_templates_from_personal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2642,16 +2845,15 @@ export interface paths {
         get?: never;
         /**
          * Update Template
-         * @description Replace the name and instructions of one of the active workspace's templates. A template
-         *     of another workspace is a 404.
+         * @description Replace the name and instructions.
          */
         put: operations["update_template"];
         post?: never;
         /**
          * Delete Template
-         * @description Delete a template of the active workspace. Meetings written with it keep their notes and the
-         *     template name they show; a calendar setting that pointed at it moves to the workspace's oldest
-         *     template left. 409 `last_template` for the only one.
+         * @description Delete a template. Meetings written with it keep their notes and the template name they
+         *     show; the calendar setting that pointed at it moves to the oldest template left. 409
+         *     `last_template` for the only one.
          */
         delete: operations["delete_template"];
         options?: never;
@@ -2693,33 +2895,12 @@ export interface paths {
         };
         /**
          * List Terms
-         * @description The active workspace's terms, sorted alphabetically.
+         * @description The caller's terms, sorted alphabetically.
          */
         get: operations["list_terms"];
         put?: never;
         /** Add Term */
         post: operations["add_term"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/vocabulary/copy-from-personal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Copy Terms From Personal
-         * @description Copy the caller's personal-workspace terms into the active workspace (owners and admins),
-         *     never doubling one that is there. 409 `personal_team` for the personal workspace itself.
-         */
-        post: operations["copy_terms_from_personal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2766,34 +2947,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspace-prefs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read Workspace Prefs
-         * @description The caller's settings in the active workspace: their note taker name there, the auto-join
-         *     rule, "also join invites I haven't answered", "skip one-on-ones" and the calendar template. A
-         *     workspace where they never changed anything shows their own defaults.
-         */
-        get: operations["read_workspace_prefs"];
-        /**
-         * Write Workspace Prefs
-         * @description Change the caller's settings in the active workspace (CSRF header needed); a field left out
-         *     stays as it is, and nothing of any other workspace is touched. Changing the rule or a box
-         *     decides the workspace's stored calendar events again, as `PUT /api/calendar/settings` does.
-         */
-        put: operations["write_workspace_prefs"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2813,6 +2966,44 @@ export interface components {
              * @constant
              */
             status: "check_your_email";
+        };
+        /** AddCard */
+        AddCard: {
+            /** Column */
+            column: number;
+            /** Index */
+            index?: number | null;
+            /**
+             * Kind
+             * @default note
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "add_card";
+            /** Owner */
+            owner?: string | null;
+            /** Revision */
+            revision?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** AddColumn */
+        AddColumn: {
+            /** Index */
+            index?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "add_column";
+            /** Revision */
+            revision?: string | null;
+            /** Title */
+            title: string;
         };
         /** AdminDeleting */
         AdminDeleting: {
@@ -3060,6 +3251,13 @@ export interface components {
             /** Tasks New */
             tasks_new: number;
         };
+        /** BlankOut */
+        BlankOut: {
+            /** Block Index */
+            block_index: number;
+            /** What */
+            what: string;
+        };
         /** BotNameIn */
         BotNameIn: {
             /** Bot Name */
@@ -3081,6 +3279,48 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** BriefImported */
+        BriefImported: {
+            /**
+             * Pages
+             * @description A PDF's page count; null for other files
+             */
+            pages: number | null;
+            /**
+             * Text
+             * @description Review and edit it, then save it with `PUT /api/briefs`
+             */
+            text: string;
+            /**
+             * Truncated
+             * @description The file held more than a brief may: the rest is cut
+             */
+            truncated: boolean;
+        };
+        /** BriefIn */
+        BriefIn: {
+            /**
+             * Text
+             * @description The whole brief; an empty text clears it
+             */
+            text: string;
+        };
+        /** BriefOut */
+        BriefOut: {
+            /** Max Chars */
+            max_chars: number;
+            /** @description Whose brief this is: the active team */
+            team: components["schemas"]["RecipeTeam"];
+            /** Text */
+            text: string;
+            /** Updated At */
+            updated_at: string | null;
+            /**
+             * Updated By
+             * @description Who saved it last; null when none was saved
+             */
+            updated_by: string | null;
+        };
         /**
          * BroughtBack
          * @description What `POST /api/series/removed/{id}/bring-back` did: the scope whose mark was cleared. No
@@ -3090,6 +3330,16 @@ export interface components {
          */
         BroughtBack: {
             team: components["schemas"]["SeriesTeam"];
+        };
+        /** Bullets */
+        Bullets: {
+            /** Items */
+            items: components["schemas"]["Item"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "bullets";
         };
         /**
          * CalendarOut
@@ -3167,6 +3417,21 @@ export interface components {
             /** Upcoming */
             upcoming: components["schemas"]["UpcomingEvent"][];
         };
+        /** Card */
+        Card: {
+            /**
+             * Kind
+             * @default note
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /** Owner */
+            owner?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
+        };
         /** CarriedQuestion */
         CarriedQuestion: {
             /** Can Update */
@@ -3196,6 +3461,18 @@ export interface components {
             target: "transcript" | "notes";
             /** Title */
             title: string;
+        };
+        /** Column */
+        Column: {
+            /** Cards */
+            cards: components["schemas"]["Card"][];
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "column";
         };
         /**
          * ConnectIn
@@ -3327,6 +3604,30 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DeleteCard */
+        DeleteCard: {
+            /** Card */
+            card: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "delete_card";
+            /** Revision */
+            revision?: string | null;
+        };
+        /** DeleteColumn */
+        DeleteColumn: {
+            /** Column */
+            column: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "delete_column";
+            /** Revision */
+            revision?: string | null;
+        };
         /**
          * DisconnectOut
          * @description `status` is always `disconnected`: the call is safe to repeat, and also answers 200 when
@@ -3360,6 +3661,199 @@ export interface components {
         DisplayNameOut: {
             /** Name */
             name: string | null;
+        };
+        /** DocumentBrief */
+        DocumentBrief: {
+            /**
+             * Access
+             * @default owner
+             * @enum {string}
+             */
+            access: "owner" | "shared";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited */
+            edited: boolean;
+            /** Id */
+            id: number;
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Recipe Id */
+            recipe_id: number | null;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /** Shared With */
+            shared_with?: components["schemas"]["SharedTeam"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "writing" | "ready" | "failed";
+            team?: components["schemas"]["SharedTeam"] | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DocumentChecks */
+        DocumentChecks: {
+            /** Blanks */
+            blanks: components["schemas"]["BlankOut"][];
+            /** Flags */
+            flags: components["schemas"]["FlagOut"][];
+        };
+        /**
+         * DocumentIn
+         * @description Ask for a draft. Name the recipe by `recipe_key` (a starter, such as `follow_up_email`) or
+         *     `recipe_id` (a recipe of the caller's or of their active team): exactly one. `options` are the
+         *     choices of the Make dialog (tone, recipient...): text, numbers or true/false, at most 10.
+         */
+        DocumentIn: {
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /** Options */
+            options?: {
+                [key: string]: string | number | boolean;
+            };
+            picker?: components["schemas"]["PickerSpec"] | null;
+            /** Recipe Id */
+            recipe_id?: number | null;
+            /** Recipe Key */
+            recipe_key?: string | null;
+            /**
+             * Use Brief
+             * @default true
+             */
+            use_brief: boolean;
+        };
+        /** DocumentList */
+        DocumentList: {
+            /** Documents */
+            documents: components["schemas"]["DocumentBrief"][];
+        };
+        /** DocumentOut */
+        DocumentOut: {
+            /**
+             * Access
+             * @default owner
+             * @enum {string}
+             */
+            access: "owner" | "shared";
+            /** Blocks */
+            blocks: (components["schemas"]["Heading"] | components["schemas"]["Paragraph"] | components["schemas"]["Bullets"] | components["schemas"]["Table"] | components["schemas"]["Column"])[];
+            /**
+             * Can Edit
+             * @default true
+             */
+            can_edit: boolean;
+            checks: components["schemas"]["DocumentChecks"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited */
+            edited: boolean;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Detail */
+            failure_detail?: string | null;
+            /** Failure Message */
+            failure_message: string | null;
+            /** Id */
+            id: number;
+            /** Left Out Count */
+            left_out_count: number;
+            /**
+             * Left Out Message
+             * @description A plain sentence for `left_out_count` ("2 meetings were left out because ..."); null for
+             *     none. It never names a meeting.
+             */
+            readonly left_out_message: string | null;
+            /** Meeting Ids */
+            meeting_ids: number[];
+            /** Options */
+            options: {
+                [key: string]: string | number | boolean;
+            };
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Recipe Id */
+            recipe_id: number | null;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /** Share Blocked */
+            share_blocked?: string | null;
+            /** Shared With */
+            shared_with?: components["schemas"]["SharedTeam"][];
+            /** Sources Available */
+            sources_available: boolean;
+            /** Stale */
+            stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "writing" | "ready" | "failed";
+            team?: components["schemas"]["SharedTeam"] | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Use Brief */
+            use_brief: boolean;
+        };
+        /**
+         * DocumentPatch
+         * @description The edited draft: every block as it now stands, and optionally a new title. A block may
+         *     keep the sources it has and may not gain new ones.
+         */
+        DocumentPatch: {
+            /** Blocks */
+            blocks: {
+                [key: string]: unknown;
+            }[];
+            /** Title */
+            title?: string | null;
+        };
+        /** EditCard */
+        EditCard: {
+            /** Card */
+            card: number;
+            /** Kind */
+            kind?: ("decision" | "action" | "question" | "note") | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "edit_card";
+            /** Owner */
+            owner?: string | null;
+            /** Revision */
+            revision?: string | null;
+            /** Text */
+            text?: string | null;
         };
         /** EmailIn */
         EmailIn: {
@@ -3411,6 +3905,30 @@ export interface components {
             field: string;
             /** Message */
             message: string;
+        };
+        /** FlagOut */
+        FlagOut: {
+            /** Block Index */
+            block_index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "figure" | "derived";
+            /** Text */
+            text: string;
+        };
+        /** Heading */
+        Heading: {
+            /** Level */
+            level: number;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "heading";
         };
         /**
          * InvitePreview
@@ -3471,6 +3989,13 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "member";
+        };
+        /** Item */
+        Item: {
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
         };
         /** LanguagePreferencesIn */
         LanguagePreferencesIn: {
@@ -3687,9 +4212,6 @@ export interface components {
             translations: components["schemas"]["TranslationBrief"][];
             /** Worker Stale */
             worker_stale: boolean;
-            workspace?: components["schemas"]["WorkspaceRef"] | null;
-            /** Workspace Team Id */
-            workspace_team_id: number;
         };
         /** MeetingList */
         MeetingList: {
@@ -3865,6 +4387,22 @@ export interface components {
             /** Project Id */
             project_id?: number | null;
         };
+        /** MoveCard */
+        MoveCard: {
+            /** Card */
+            card: number;
+            /** Index */
+            index: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "move_card";
+            /** Revision */
+            revision?: string | null;
+            /** To Column */
+            to_column: number;
+        };
         /** MoveRequest */
         MoveRequest: {
             /** Team Id */
@@ -3981,18 +4519,26 @@ export interface components {
              */
             status: "unsubscribed";
         };
-        /** OtherWorkspace */
-        OtherWorkspace: {
-            /** Id */
-            id: number;
-            /** Is Personal */
-            is_personal: boolean;
-            /** Kind */
-            kind: string;
-            /** Name */
-            name: string;
-            /** Unread Notifications */
-            unread_notifications: number;
+        /**
+         * OptionDef
+         * @description One choice the Make dialog draws for a recipe. `choices` is empty and `default` null for
+         *     kind `text`.
+         */
+        OptionDef: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
+            /** Default */
+            default?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "choice";
+            /** Label */
+            label: string;
         };
         /**
          * OverrideIn
@@ -4002,6 +4548,18 @@ export interface components {
         OverrideIn: {
             /** Override */
             override: boolean | null;
+        };
+        /** Paragraph */
+        Paragraph: {
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paragraph";
         };
         /** PasswordChanged */
         PasswordChanged: {
@@ -4038,6 +4596,54 @@ export interface components {
             name: string;
             /** User Id */
             user_id: number;
+        };
+        /** PickedMeeting */
+        PickedMeeting: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+        };
+        /** PickerPreview */
+        PickerPreview: {
+            /** Capped */
+            capped: boolean;
+            /** Left Out Count */
+            left_out_count: number;
+            /** Left Out Message */
+            left_out_message: string | null;
+            /** Max Meetings */
+            max_meetings: number;
+            /** Meetings */
+            meetings: components["schemas"]["PickedMeeting"][];
+        };
+        /**
+         * PickerSpec
+         * @description Which meetings to use. Exactly one of: `series_id` (a recurring meeting), `project_id`,
+         *     `sprint_id`, a date range (`from_day` and/or `to_day`, `YYYY-MM-DD`, both days included, in the
+         *     caller's time zone) or `meeting_ids` (hand-picked). At most 12 are used, newest first; a meeting
+         *     the caller cannot read is left out and counted.
+         */
+        PickerSpec: {
+            /** From Day */
+            from_day?: string | null;
+            /** Meeting Ids */
+            meeting_ids?: number[] | null;
+            /** Project Id */
+            project_id?: number | null;
+            /** Series Id */
+            series_id?: number | null;
+            /** Sprint Id */
+            sprint_id?: number | null;
+            /** To Day */
+            to_day?: string | null;
+            /** Tz */
+            tz?: string | null;
         };
         /** PilotOut */
         PilotOut: {
@@ -4156,16 +4762,145 @@ export interface components {
             resolved?: boolean | null;
         };
         /**
-         * RecordedIn
-         * @description The workspace that records an event instead of the one asked about.
+         * RecipeIn
+         * @description A new recipe. With `key` (a starter's key) the fields left out are taken from that starter:
+         *     this is how a starter is copied. Without it, `name` and `instruction` are needed.
          */
-        RecordedIn: {
+        RecipeIn: {
+            /** Instruction */
+            instruction?: string | null;
+            /**
+             * Key
+             * @description The starter this is a copy of
+             */
+            key?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: components["schemas"]["OptionDef"];
+            } | null;
+            /** Output Type */
+            output_type?: ("document" | "email" | "table" | "board") | null;
+            /** Scope */
+            scope?: ("one" | "many") | null;
+            /** Uses Brief */
+            uses_brief?: boolean | null;
+            /**
+             * Visibility
+             * @description `team`: the active team's recipe (owners and admins only)
+             * @default personal
+             * @enum {string}
+             */
+            visibility: "personal" | "team";
+        };
+        /** RecipeList */
+        RecipeList: {
+            /** Recipes */
+            recipes: components["schemas"]["RecipeOut"][];
+            /** @description The active team: whose recipes and brief these are */
+            team: components["schemas"]["RecipeTeam"];
+        };
+        /** RecipeOut */
+        RecipeOut: {
+            /**
+             * Can Edit
+             * @description False for a starter, and for a team recipe to a member
+             */
+            can_edit: boolean;
+            /**
+             * Id
+             * @description Null for a starter: name it by `key`
+             */
+            id: number | null;
+            /** Instruction */
+            instruction: string;
+            /**
+             * Key
+             * @description The starter's key, or the starter a copy came from
+             */
+            key: string | null;
+            /** Name */
+            name: string;
+            /** Options */
+            options: {
+                [key: string]: components["schemas"]["OptionDef"];
+            };
+            /**
+             * Output Type
+             * @enum {string}
+             */
+            output_type: "document" | "email" | "table" | "board";
+            /**
+             * Pack
+             * @description A starter's pack; null for a recipe someone wrote
+             */
+            pack: ("general" | "school") | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "one" | "many";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "starter" | "personal" | "team";
+            /** Updated At */
+            updated_at: string | null;
+            /** Uses Brief */
+            uses_brief: boolean;
+        };
+        /**
+         * RecipePatch
+         * @description Change a recipe: only the fields sent change. Who owns it (personal or team) never does.
+         */
+        RecipePatch: {
+            /** Instruction */
+            instruction?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Options */
+            options?: {
+                [key: string]: components["schemas"]["OptionDef"];
+            } | null;
+            /** Output Type */
+            output_type?: ("document" | "email" | "table" | "board") | null;
+            /** Scope */
+            scope?: ("one" | "many") | null;
+            /** Uses Brief */
+            uses_brief?: boolean | null;
+        };
+        /** RecipeTeam */
+        RecipeTeam: {
+            /**
+             * Can Manage
+             * @description Owner or admin of the team: may write its recipes
+             */
+            can_manage: boolean;
+            /** Id */
+            id: number;
             /** Is Personal */
             is_personal: boolean;
             /** Name */
             name: string;
-            /** Team Id */
-            team_id: number;
+        };
+        /** Recolour */
+        Recolour: {
+            /** Card */
+            card: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decision" | "action" | "question" | "note";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "recolour";
+            /** Revision */
+            revision?: string | null;
         };
         /** RecordingAckOut */
         RecordingAckOut: {
@@ -4240,6 +4975,20 @@ export interface components {
             /** Removed By */
             removed_by: string | null;
             team: components["schemas"]["SeriesTeam"];
+            /** Title */
+            title: string;
+        };
+        /** RenameColumn */
+        RenameColumn: {
+            /** Column */
+            column: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "rename_column";
+            /** Revision */
+            revision?: string | null;
             /** Title */
             title: string;
         };
@@ -4447,7 +5196,6 @@ export interface components {
         };
         /** SessionState */
         SessionState: {
-            active_workspace: components["schemas"]["WorkspaceRef"] | null;
             /** Authenticated */
             authenticated: boolean;
             badges: components["schemas"]["BadgesOut"] | null;
@@ -4455,8 +5203,6 @@ export interface components {
             csrf_token: string;
             /** Multi Team */
             multi_team: boolean;
-            /** Other Workspaces */
-            other_workspaces: components["schemas"]["OtherWorkspace"][] | null;
             /** Unread Notifications */
             unread_notifications: number | null;
             usage: components["schemas"]["UsageOut"] | null;
@@ -4577,6 +5323,13 @@ export interface components {
             /** Team Id */
             team_id?: number | null;
         };
+        /** SharedTeam */
+        SharedTeam: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
         /** SignUp */
         SignUp: {
             /**
@@ -4612,6 +5365,28 @@ export interface components {
             last_posted_at: string | null;
             /** Status */
             status: string | null;
+        };
+        /**
+         * Source
+         * @description Where a piece of text was drafted from. `quote` is the first words of the line, so a line
+         *     that moved can be found again (`ask._quote_row`); `ref` is a decision or task id. `hidden` is
+         *     never stored and never written by the model: `recipes.visibility.redact` puts it in the place
+         *     of a source the reader of a shared draft may not open (nothing else is set on it).
+         */
+        Source: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "line" | "meeting" | "decision" | "task" | "hidden";
+            /** Line */
+            line?: number | null;
+            /** Meeting Id */
+            meeting_id?: number | null;
+            /** Quote */
+            quote?: string | null;
+            /** Ref */
+            ref?: number | null;
         };
         /**
          * SpeakerRename
@@ -4696,6 +5471,18 @@ export interface components {
             tasks_done: number;
             /** Tasks Total */
             tasks_total: number;
+        };
+        /** Table */
+        Table: {
+            /** Columns */
+            columns: string[];
+            /** Rows */
+            rows: components["schemas"]["Item"][][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "table";
         };
         /** TaskCreate */
         TaskCreate: {
@@ -4848,12 +5635,6 @@ export interface components {
         };
         /** TeamCreate */
         TeamCreate: {
-            /**
-             * Kind
-             * @default team
-             * @enum {string}
-             */
-            kind: "team" | "class";
             /** Name */
             name: string;
         };
@@ -4888,15 +5669,7 @@ export interface components {
         /** TeamList */
         TeamList: {
             /** Can Create More */
-            can_create_more: number | null;
-            /** Limit Message */
-            limit_message: string | null;
-            /** Max Owned Teams */
-            max_owned_teams: number | null;
-            /** Owned Teams */
-            owned_teams: number;
-            /** Plan Name */
-            plan_name: string | null;
+            can_create_more: number;
             /** Teams */
             teams: components["schemas"]["TeamSummary"][];
         };
@@ -4962,12 +5735,6 @@ export interface components {
              * @default false
              */
             is_personal: boolean;
-            /**
-             * Kind
-             * @default team
-             * @enum {string}
-             */
-            kind: "team" | "class";
             /** Member Count */
             member_count: number;
             /**
@@ -5035,11 +5802,6 @@ export interface components {
             is_default: boolean;
             /** Is Personal */
             is_personal: boolean;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "team" | "class";
             /** Member Count */
             member_count: number;
             /** Name */
@@ -5049,19 +5811,6 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member";
-        };
-        /**
-         * TemplateCopyOut
-         * @description `copied` templates were added to the active workspace, `skipped` already had that name;
-         *     `templates` is the workspace's list afterwards.
-         */
-        TemplateCopyOut: {
-            /** Copied */
-            copied: number;
-            /** Skipped */
-            skipped: number;
-            /** Templates */
-            templates: components["schemas"]["TemplateOut"][];
         };
         /** TemplateIn */
         TemplateIn: {
@@ -5083,19 +5832,6 @@ export interface components {
             instructions: string;
             /** Name */
             name: string;
-        };
-        /**
-         * TermCopyOut
-         * @description `copied` terms were added to the active workspace, `skipped` were there already; `terms` is
-         *     the workspace's list afterwards.
-         */
-        TermCopyOut: {
-            /** Copied */
-            copied: number;
-            /** Skipped */
-            skipped: number;
-            /** Terms */
-            terms: components["schemas"]["TermOut"][];
         };
         /** TermList */
         TermList: {
@@ -5250,8 +5986,6 @@ export interface components {
             id: number;
             /** Join Id */
             join_id?: number | null;
-            /** Moved Text */
-            moved_text?: string | null;
             /** Not Recorded Text */
             not_recorded_text?: string | null;
             /** Platform */
@@ -5263,9 +5997,6 @@ export interface components {
             platform_label: string | null;
             /** Reason Text */
             reason_text: string | null;
-            recorded_in?: components["schemas"]["RecordedIn"] | null;
-            /** Recorded In Text */
-            recorded_in_text?: string | null;
             /**
              * Starts At
              * Format: date-time
@@ -5343,67 +6074,6 @@ export interface components {
             email: string;
             /** Name */
             name?: string | null;
-        };
-        /**
-         * WorkspacePrefsIn
-         * @description What to change; a field that is left out stays as it is. `bot_name` null or empty clears the
-         *     workspace's own name (the default applies again); `calendar_template_id` null means the
-         *     workspace's default template, otherwise one of the workspace's own templates (404 `not_found`
-         *     for any other).
-         */
-        WorkspacePrefsIn: {
-            /** Auto Join Rule */
-            auto_join_rule?: ("all" | "organizer" | "none") | null;
-            /** Bot Name */
-            bot_name?: string | null;
-            /** Calendar Template Id */
-            calendar_template_id?: number | null;
-            /** Join Unanswered */
-            join_unanswered?: boolean | null;
-            /** Skip One On Ones */
-            skip_one_on_ones?: boolean | null;
-        };
-        /**
-         * WorkspacePrefsOut
-         * @description The caller's own settings in the active workspace (workspaces design, section 3).
-         *     `bot_name` is the name set for THIS workspace, null when none is set; `bot_name_default` is the
-         *     name that applies then (the caller's own default from Settings > Personal, else the server's).
-         *     `warning` is the soft warning about a name that bot-detection dislikes, null for none.
-         */
-        WorkspacePrefsOut: {
-            /**
-             * Auto Join Rule
-             * @enum {string}
-             */
-            auto_join_rule: "all" | "organizer" | "none";
-            /** Bot Name */
-            bot_name: string | null;
-            /** Bot Name Default */
-            bot_name_default: string;
-            /** Calendar Template Id */
-            calendar_template_id: number | null;
-            /** Join Unanswered */
-            join_unanswered: boolean;
-            /** Skip One On Ones */
-            skip_one_on_ones: boolean;
-            /** Team Id */
-            team_id: number;
-            /** Warning */
-            warning: string | null;
-        };
-        /**
-         * WorkspaceRef
-         * @description A workspace (a team) as the switcher and the toast name it.
-         */
-        WorkspaceRef: {
-            /** Id */
-            id: number;
-            /** Is Personal */
-            is_personal: boolean;
-            /** Kind */
-            kind: string;
-            /** Name */
-            name: string;
         };
     };
     responses: never;
@@ -5990,10 +6660,7 @@ export interface operations {
     ask_question: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6062,10 +6729,7 @@ export interface operations {
     ask_scope: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6229,13 +6893,189 @@ export interface operations {
             };
         };
     };
-    calendar_state: {
+    read_brief: {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_brief: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    import_brief: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefImported"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `too_big` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `file_missing`, `unsupported`, `too_many_pages`, `no_text_layer` (a scanned PDF) or `unreadable` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `import_busy`: try again in a moment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calendar_state: {
+        parameters: {
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6291,10 +7131,7 @@ export interface operations {
     calendar_event_override: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 event_id: number;
             };
@@ -6368,10 +7205,7 @@ export interface operations {
                 /** @description IANA zone name, e.g. Africa/Lagos */
                 tz?: string | null;
             };
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6427,10 +7261,7 @@ export interface operations {
     calendar_settings: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6552,10 +7383,7 @@ export interface operations {
     calendar_connect_start: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 provider: "google" | "microsoft";
             };
@@ -6635,10 +7463,7 @@ export interface operations {
     calendar_connect_disconnect: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 provider: "google" | "microsoft";
             };
@@ -6693,7 +7518,7 @@ export interface operations {
                 before_id?: number | null;
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6857,11 +7682,625 @@ export interface operations {
             };
         };
     };
+    list_documents: {
+        parameters: {
+            query?: {
+                meeting_id?: number | null;
+                mine?: boolean | null;
+                shared?: boolean | null;
+                before_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIn"];
+            };
+        };
+        responses: {
+            /** @description Queued (or the draft just asked for is returned): poll `GET` every 2 s. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token; or `plan_inactive`: making documents needs a live plan or trial (only when the server runs `FEATURE_GATES_MODE=enforce`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe, team or meeting (a meeting the caller cannot read too) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the meeting's notes are not written */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `recipe_invalid` (name exactly one recipe) or `meetings_invalid` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `recipe_limit`: 20 drafts a day; failed ones and regenerations count */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `writing`: the draft is still being written; `not_ready`: it failed; `use_board`: a board is edited through `PATCH .../board` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `blocks_invalid` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_board: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveCard"] | components["schemas"]["RenameColumn"] | components["schemas"]["AddColumn"] | components["schemas"]["DeleteColumn"] | components["schemas"]["AddCard"] | components["schemas"]["EditCard"] | components["schemas"]["DeleteCard"] | components["schemas"]["Recolour"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such draft, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `stale_board` (the board changed since `revision`, or a column or card named is not there), `writing` (still being written), `not_ready` (it failed), `not_a_board` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `revision_required`, `revision_invalid`, `board_full`, `column_full`, `title_empty`, `card_empty`, `last_column`; or `validation_error` for a body that is not one of the operations */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_document: {
+        parameters: {
+            query?: {
+                format?: "md" | "txt" | "csv" | "xlsx" | "docx" | "pdf";
+                table?: number;
+            };
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. Built for this request and not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "text/csv; charset=utf-8": string;
+                    "text/markdown; charset=utf-8": string;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such draft (another person's too) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the draft is still being written or failed; `no_table`: CSV and Excel need a draft with a table (and `table` must name one of them) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_failed`: the file could not be built */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_busy`: another file is being built */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_timeout`: it took too long */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    share_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: only a finished draft can be shared; `personal_team`: the draft was made in the creator's own space, so there is no team to share it with; `team_left`: the creator is no longer in the team the draft was made in */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unshare_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_linear: {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -6911,7 +8350,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7010,7 +8449,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7058,7 +8497,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7157,7 +8596,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7207,7 +8646,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7306,7 +8745,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7422,7 +8861,7 @@ export interface operations {
                 q?: string | null;
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -7471,10 +8910,7 @@ export interface operations {
     create_meeting: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -7929,7 +9365,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -8037,7 +9473,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `personal_team`, `already_moved`, `meeting_not_ready` */
+            /** @description `personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9179,7 +10615,7 @@ export interface operations {
                 project_id?: number | null;
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9229,7 +10665,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9283,7 +10719,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9342,7 +10778,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9407,7 +10843,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -9471,10 +10907,7 @@ export interface operations {
     not_recorded: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9524,10 +10957,7 @@ export interface operations {
                 limit?: number;
                 before_id?: number | null;
             };
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9574,10 +11004,7 @@ export interface operations {
     read_all_notifications: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9850,7 +11277,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9900,7 +11327,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -9954,7 +11381,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -10015,7 +11442,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -10074,7 +11501,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -10206,13 +11633,307 @@ export interface operations {
             };
         };
     };
+    list_recipes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_recipe: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_meetings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickerSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickerPreview"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such team, recurring meeting, project or sprint for the caller */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `validation_error` (name exactly one way of choosing), `invalid_date_range`, `invalid_time_zone` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_recipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecipeOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    archive_recipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recipe_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden`: a team recipe is written by owners and admins only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such recipe (or not yours) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_review: {
         parameters: {
             query?: {
                 state?: "open" | "checked";
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10534,7 +12255,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10584,7 +12305,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -10638,7 +12359,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -11257,7 +12978,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -11506,7 +13227,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `personal_team` */
+            /** @description `personal_team`, `multi_team_disabled` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12394,7 +14115,7 @@ export interface operations {
                 project?: number | null;
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12453,7 +14174,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -12536,7 +14257,7 @@ export interface operations {
                 before_id?: number | null;
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12586,7 +14307,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12642,7 +14363,7 @@ export interface operations {
                 format?: "csv";
             };
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12944,7 +14665,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -12994,7 +14715,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -13048,7 +14769,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -13238,7 +14959,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -13297,7 +15018,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -13376,7 +15097,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path?: never;
@@ -13426,7 +15147,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -13494,7 +15215,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
                 "X-Team-Id"?: number | null;
             };
             path: {
@@ -13642,7 +15363,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_limit` */
+            /** @description `multi_team_disabled`, `team_limit` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13662,87 +15383,10 @@ export interface operations {
             };
         };
     };
-    delete_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not logged in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `team_forbidden`: not the owner */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description No such team (of the caller's) */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `personal_team`, `team_has_members`, `meeting_active` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Malformed request */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `recording_delete_failed` */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     list_templates: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -13775,15 +15419,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Malformed request */
             422: {
                 headers: {
@@ -13798,10 +15433,7 @@ export interface operations {
     create_template: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -13838,85 +15470,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden`: only an owner or admin writes */
+            /** @description Missing or wrong X-CSRF-Token */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Malformed request */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    copy_templates_from_personal: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TemplateCopyOut"];
-                };
-            };
-            /** @description Not logged in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `team_forbidden`: only an owner or admin writes */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `personal_team` */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13938,10 +15493,7 @@ export interface operations {
     update_template: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -13980,7 +15532,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden`: only an owner or admin writes */
+            /** @description Missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13989,7 +15541,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A team the caller is not in */
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -14012,10 +15564,7 @@ export interface operations {
     delete_template: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -14039,7 +15588,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden`: only an owner or admin writes */
+            /** @description Missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14048,7 +15597,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A team the caller is not in */
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -14149,10 +15698,7 @@ export interface operations {
     list_terms: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -14185,15 +15731,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Malformed request */
             422: {
                 headers: {
@@ -14208,10 +15745,7 @@ export interface operations {
     add_term: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -14248,85 +15782,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden`: only an owner or admin writes */
+            /** @description Missing or wrong X-CSRF-Token */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Malformed request */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    copy_terms_from_personal: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TermCopyOut"];
-                };
-            };
-            /** @description Not logged in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `team_forbidden`: only an owner or admin writes */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `personal_team` */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14348,10 +15805,7 @@ export interface operations {
     delete_term: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
+            header?: never;
             path: {
                 term_id: number;
             };
@@ -14375,7 +15829,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `team_forbidden`: only an owner or admin writes */
+            /** @description Missing or wrong X-CSRF-Token */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14445,128 +15899,6 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    read_workspace_prefs: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspacePrefsOut"];
-                };
-            };
-            /** @description Not logged in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Missing or wrong X-CSRF-Token */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in, or a template of another workspace */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Malformed request */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    write_workspace_prefs: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The workspace (team) this request is about. Omitted: the caller's default workspace (their only team, else their only ordinary team, else their personal one). A team the caller is not in is 404 `not_found`. */
-                "X-Team-Id"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspacePrefsIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspacePrefsOut"];
-                };
-            };
-            /** @description Not logged in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Missing or wrong X-CSRF-Token */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description A team the caller is not in, or a template of another workspace */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description `bot_name_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

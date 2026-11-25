@@ -1,6 +1,6 @@
 # SOP: Calendar per workspace (slice W3, tasks 8 and 9)
 
-**What shipped.** A calendar connection belongs to one workspace; one person may connect the same provider (even the same account) in several; an event held in several of their workspaces is recorded exactly once by a fixed rule; the Upcoming list says where; leaving a workspace takes the member's connection with them. Branch `feature/workspaces-calendar`, PR into `feature/workspaces`. Migration `0075` (placeholder, chained on `0071` (W2's); W2 uses `0071+`, W4 `0080+`; whichever merges second re-chains). Spec `docs/superpowers/specs/2026-11-24-workspaces-design.md` sections 4 and 12.3, 12.4.
+**What shipped.** A calendar connection belongs to one workspace; one person may connect the same provider (even the same account) in several; an event held in several of their workspaces is recorded exactly once by a fixed rule; the Upcoming list says where; leaving a workspace takes the member's connection with them. Branch `feature/workspaces-calendar`, PR into `feature/workspaces`. Migration `0064` (placeholder, chained on `0063` (W2's); W2 uses `0063+`, W4 `0080+`; whichever merges second re-chains). Spec `docs/superpowers/specs/2026-11-24-workspaces-design.md` sections 4 and 12.3, 12.4.
 
 ## Why
 `calendar_connections` was unique per `(user, provider)` and every calendar read took "the person's connection", so a workspace could not have its own calendar, and the same event on two calendars could have two bots. Worst failures: another workspace's calendar data shown, or a meeting recorded twice.
@@ -21,7 +21,7 @@
 | Recurring | cards come from the workspace's connection and hide recurring ids in `series_ignored` for that workspace (it was already per team). |
 
 ## What's involved
-`alembic/versions/0075_calendar_per_workspace.py`; `app/models.py`; `app/calendar_connect.py`, `app/microsoft_connect.py`, `app/calendar_api.py`, `app/calendar_recurring.py`, `app/calendar_text.py`, `app/calendar_arbitration.py` (new), `app/gcal_sync.py`, `app/join_runner.py`, `app/calendar_states.py`, `app/organizer_bot.py`, `app/alerts.py`, `app/teams.py`, `app/api_team.py`, `web/components/app/calendar-upcoming.tsx`; `docs/openapi.json`, `web/lib/api/schema.d.ts`; `scripts/capture_workspaces_calendar.py` (and a `team=` argument on the recorder in `capture_calendar_connect.py`); tests `test_calendar_workspaces.py`, `test_calendar_arbitration.py`, `test_calendar_workspace_api.py`, `test_workspaces_calendar_migration.py`, `test_workspace_leaks.py` (calendar GETs moved out of `PENDING_SLICE`), `web/tests/calendar-upcoming.test.tsx`.
+`alembic/versions/0064_calendar_per_workspace.py`; `app/models.py`; `app/calendar_connect.py`, `app/microsoft_connect.py`, `app/calendar_api.py`, `app/calendar_recurring.py`, `app/calendar_text.py`, `app/calendar_arbitration.py` (new), `app/gcal_sync.py`, `app/join_runner.py`, `app/calendar_states.py`, `app/organizer_bot.py`, `app/alerts.py`, `app/teams.py`, `app/api_team.py`, `web/components/app/calendar-upcoming.tsx`; `docs/openapi.json`, `web/lib/api/schema.d.ts`; `scripts/capture_workspaces_calendar.py` (and a `team=` argument on the recorder in `capture_calendar_connect.py`); tests `test_calendar_workspaces.py`, `test_calendar_arbitration.py`, `test_calendar_workspace_api.py`, `test_workspaces_calendar_migration.py`, `test_workspace_leaks.py` (calendar GETs moved out of `PENDING_SLICE`), `web/tests/calendar-upcoming.test.tsx`.
 
 ## UI (lead-designed, none in the designer's files)
 On a row another workspace records: the server's line "Recorded in X. Switch here instead." (the row's `meta-line`), a secondary "Switch here" button (the same write as the switch), the switch shown `Off`; after a switch a muted `moved_text` line; a refusal shows in the list's error line. No new CSS or tokens. Looked at in a real browser at 390 and 1280 px against the real backend with a fake Google.
@@ -30,7 +30,7 @@ On a row another workspace records: the server's line "Recorded in X. Switch her
 Scratch Postgres 16 (Docker, removed afterwards); only named test files, never the full suite. Mutation checks: removing the workspace filter from `live_calendar_connection` fails the leak guard; removing the advisory lock fails the race test. **Not verified:** any real Google or Microsoft calendar (consent, token, event bodies are fakes or synthetic), a real running bot, production data, the server, and every test file CI runs that I did not.
 
 ## Operate / roll back
-Deploy with the release (migration `0075` is metadata only). `alembic downgrade 0070` keeps each person's oldest connection per provider and deletes the extra ones with their events and joins. Reconnect behaviour of existing one-workspace people is unchanged.
+Deploy with the release (migration `0064` is metadata only). `alembic downgrade 0062` keeps each person's oldest connection per provider and deletes the extra ones with their events and joins. Reconnect behaviour of existing one-workspace people is unchanged.
 
 ## Follow-ups
 - The Settings calendar card does not say which workspace it belongs to (needs a design line).

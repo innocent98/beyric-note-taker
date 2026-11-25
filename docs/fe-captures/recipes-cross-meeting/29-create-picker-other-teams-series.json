@@ -1,0 +1,33 @@
+{
+  "note": "A `picker` naming another team's recurring meeting: 404 `not_found`.",
+  "client": "eve",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "status_report",
+      "meeting_ids": [
+        21
+      ],
+      "picker": {
+        "series_id": 1
+      }
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting."
+      }
+    }
+  }
+}

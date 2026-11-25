@@ -1,0 +1,31 @@
+{
+  "note": "Both: 422 `recipe_invalid`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "recipe_id": 1,
+      "meeting_ids": [
+        1
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "recipe_invalid",
+        "message": "Name the recipe with exactly one of recipe_key and recipe_id."
+      }
+    }
+  }
+}

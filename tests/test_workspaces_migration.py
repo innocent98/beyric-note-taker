@@ -1,4 +1,4 @@
-"""Migration 0070 (workspaces core): the cutover rehearsal on a seeded, production-shaped dataset.
+"""Migration 0062 (workspaces core): the cutover rehearsal on a seeded, production-shaped dataset.
 
 Runs the real migration on the scratch database, like the other migration tests. The dataset has
 several people, personal and ordinary teams, shared, moved and private meetings, calendar
@@ -32,10 +32,10 @@ scratch_url = migrations.scratch_url
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 
 
-def test_0070_is_the_only_head_and_follows_0058(scratch_url):
+def test_0062_is_the_only_head_and_follows_0061(scratch_url):
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     assert len(script.get_heads()) == 1
-    assert script.get_revision("0070").down_revision == "0058"
+    assert script.get_revision("0062").down_revision == "0061"
 
 
 def one(conn, sql, **params):
@@ -266,10 +266,10 @@ def visibility_columns(conn):
     ).all()
 
 
-def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url):
+def test_0062_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
-    command.upgrade(cfg, "0058")
+    command.upgrade(cfg, "0061")
     ids = seed(engine)
     with engine.connect() as conn:
         before = snapshot(conn)
@@ -279,7 +279,7 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         vocab_before = one(conn, "select count(*) from vocabulary_terms")
         teams_before = {r[0] for r in conn.execute(text("select id from teams"))}
 
-    command.upgrade(cfg, "0070")
+    command.upgrade(cfg, "0062")
 
     with engine.connect() as conn:
         after = snapshot(conn)
@@ -435,8 +435,8 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
         assert limits["plan_100h"] is None
         assert one(conn, "select count(*) from meetings where workspace_team_id is null") == 0
 
-    # ---- the round trip: the downgrade drops what 0070 made, the upgrade makes it again
-    command.downgrade(cfg, "0058")
+    # ---- the round trip: the downgrade drops what 0062 made, the upgrade makes it again
+    command.downgrade(cfg, "0061")
     insp = inspect(engine)
     assert "workspace_prefs" not in insp.get_table_names()
     assert "workspace_team_id" not in {c["name"] for c in insp.get_columns("meetings")}
@@ -465,7 +465,7 @@ def test_0070_cutover_rehearsal_keeps_every_row_and_every_visibility(scratch_url
     engine.dispose()
 
 
-def test_0070_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
+def test_0062_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
     cfg = alembic_config(scratch_url)
     engine = create_engine(scratch_url)
     command.upgrade(cfg, "head")
@@ -473,6 +473,6 @@ def test_0070_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
     assert {"workspace_prefs"} <= set(insp.get_table_names())
     team_columns = {c["name"]: c for c in insp.get_columns("teams")}
     assert team_columns["kind"]["nullable"] is False
-    command.downgrade(cfg, "0058")
+    command.downgrade(cfg, "0061")
     command.upgrade(cfg, "head")
     engine.dispose()

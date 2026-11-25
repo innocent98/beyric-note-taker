@@ -1,0 +1,21 @@
+{
+  "note": "Nothing is shared yet.",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents?shared=true",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "documents": []
+    }
+  }
+}

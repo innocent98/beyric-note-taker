@@ -1,0 +1,134 @@
+{
+  "note": "The creator's view. `access` is `owner`, `can_edit` true, `shared_with` empty, `owner_name` null. Line sources carry `quote`.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 2,
+      "title": "Follow-up email",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
+      "recipe_id": null,
+      "status": "ready",
+      "edited": false,
+      "meeting_ids": [
+        9
+      ],
+      "created_at": "2026-11-24T22:00:21.266421Z",
+      "updated_at": "2026-11-24T22:00:21.396397Z",
+      "access": "owner",
+      "owner_name": null,
+      "shared_with": [],
+      "team": {
+        "id": 2,
+        "name": "Acme Sales"
+      },
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Subject: Thanks for today, next steps",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Hi there,",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Thank you for your time today. Here is a short recap of what we covered.",
+          "sources": [
+            {
+              "kind": "line",
+              "meeting_id": 9,
+              "line": 1,
+              "quote": "The acquisition of Orion for 9 million dollars",
+              "ref": null
+            }
+          ]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 9,
+                  "line": 1,
+                  "quote": "The acquisition of Orion for 9 million dollars",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 9,
+                  "line": 1,
+                  "quote": "The acquisition of Orion for 9 million dollars",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "The acquisition of Orion for 9 million dollars stays between us.",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 9,
+                  "line": 1,
+                  "quote": "The acquisition of Orion for 9 million dollars",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Next step: [need: date of the next step]",
+          "sources": []
+        },
+        {
+          "type": "paragraph",
+          "text": "Kind regards",
+          "sources": []
+        }
+      ],
+      "checks": {
+        "blanks": [
+          {
+            "block_index": 4,
+            "what": "date of the next step"
+          }
+        ],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": null,
+      "failure_message": null,
+      "options": {},
+      "use_brief": true,
+      "can_edit": true,
+      "share_blocked": null,
+      "left_out_message": null
+    }
+  }
+}

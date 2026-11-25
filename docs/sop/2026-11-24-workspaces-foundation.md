@@ -1,6 +1,6 @@
 # SOP: Workspaces foundation (slice W1)
 
-**What shipped (PR A, Tasks 1 to 3; Task 4 web follows in PR B).** A team becomes the container of everything. Every meeting, notification, template, vocabulary term, calendar connection and scheduled join now carries its workspace (a team); the active workspace is **required context on every route** (the `X-Team-Id` header, else the personal workspace, never "no narrowing"); lists, counts, badges, Ask and the bell narrow by it through one function. The multi-team switch is removed (it was on in production already). Branch `feature/workspaces-foundation`, base `feature/workspaces`. Migration `0070` (placeholder number; the lead renumbers).
+**What shipped (PR A, Tasks 1 to 3; Task 4 web follows in PR B).** A team becomes the container of everything. Every meeting, notification, template, vocabulary term, calendar connection and scheduled join now carries its workspace (a team); the active workspace is **required context on every route** (the `X-Team-Id` header, else the personal workspace, never "no narrowing"); lists, counts, badges, Ask and the bell narrow by it through one function. The multi-team switch is removed (it was on in production already). Branch `feature/workspaces-foundation`, base `feature/workspaces`. Migration `0062` (placeholder number; the lead renumbers).
 
 Spec: `docs/superpowers/specs/2026-11-24-workspaces-design.md` (sections 3, 4, 8, 12). Plan: `docs/superpowers/plans/2026-11-24-workspaces.md`.
 
@@ -28,7 +28,7 @@ A team was only a partial workspace: meetings listed per team but Ask, notificat
 
 | Path | Change |
 |---|---|
-| `alembic/versions/0070_workspaces_core.py` | columns, `workspace_prefs`, backfill, downgrade (copies of templates/vocabulary are dropped or taken out of use) |
+| `alembic/versions/0062_workspaces_core.py` | columns, `workspace_prefs`, backfill, downgrade (copies of templates/vocabulary are dropped or taken out of use) |
 | `app/models.py` | `Meeting.workspace_team_id`, `Notification/Template/VocabularyTerm/CalendarConnection/ScheduledJoin.team_id`, `Team.kind`, `Plan.max_owned_teams`, `WorkspacePrefs`; templates unique on `(owner, team, name)`, vocabulary on `(owner, team, term)` |
 | `app/workspace_context.py` (new) | `requested_team`, `require`, `current` |
 | `app/birth_workspace.py` (new) | the column defaults |

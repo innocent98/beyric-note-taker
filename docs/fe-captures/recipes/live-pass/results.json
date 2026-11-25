@@ -1,0 +1,703 @@
+{
+  "model": "LiveModel (stand-in, NOT a real model)",
+  "rows": [
+    {
+      "key": "follow_up_email",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "email",
+      "status": "ready",
+      "blocks": 6,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1832,
+      "output_tokens_estimated": 412,
+      "cost_usd_estimated": 0.00039,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.41,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 410,
+          "seconds": 0.11
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37627,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 8931,
+          "seconds": 0.68
+        }
+      },
+      "document_id": 1
+    },
+    {
+      "key": "proposal",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 16,
+      "blanks": [
+        "when",
+        "when"
+      ],
+      "flags": [
+        {
+          "text": "450,000 naira",
+          "kind": "figure"
+        }
+      ],
+      "input_tokens_estimated": 1813,
+      "output_tokens_estimated": 1322,
+      "cost_usd_estimated": 0.00084,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.32,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 1546,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 38410,
+          "seconds": 0.22
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 15793,
+          "seconds": 0.61
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 257,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5772,
+          "seconds": 0.11
+        }
+      },
+      "document_id": 2
+    },
+    {
+      "key": "requirements",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 14,
+      "blanks": [
+        "owner",
+        "owner"
+      ],
+      "flags": [],
+      "input_tokens_estimated": 1590,
+      "output_tokens_estimated": 1187,
+      "cost_usd_estimated": 0.00075,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.27,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 1278,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 38242,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 14331,
+          "seconds": 0.59
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 247,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5127,
+          "seconds": 0.02
+        }
+      },
+      "document_id": 3
+    },
+    {
+      "key": "marketing_post",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 2,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1782,
+      "output_tokens_estimated": 122,
+      "cost_usd_estimated": 0.00024,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.17,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 104,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37422,
+          "seconds": 0.26
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 7951,
+          "seconds": 0.56
+        }
+      },
+      "document_id": 4
+    },
+    {
+      "key": "decision_memo",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 10,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1453,
+      "output_tokens_estimated": 802,
+      "cost_usd_estimated": 0.00055,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.28,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 783,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37815,
+          "seconds": 0.19
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 10371,
+          "seconds": 0.57
+        }
+      },
+      "document_id": 5
+    },
+    {
+      "key": "sop",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 6,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1460,
+      "output_tokens_estimated": 503,
+      "cost_usd_estimated": 0.0004,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.28,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 500,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37667,
+          "seconds": 0.19
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 9411,
+          "seconds": 0.53
+        }
+      },
+      "document_id": 6
+    },
+    {
+      "key": "action_tracker",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "table",
+      "status": "ready",
+      "blocks": 2,
+      "blanks": [
+        "due date",
+        "due date"
+      ],
+      "flags": [],
+      "input_tokens_estimated": 1453,
+      "output_tokens_estimated": 525,
+      "cost_usd_estimated": 0.00041,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.3,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 766,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37896,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 12195,
+          "seconds": 0.54
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 660,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5397,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 7
+    },
+    {
+      "key": "board",
+      "pack": "general",
+      "scope": "one",
+      "output_type": "board",
+      "status": "ready",
+      "blocks": 4,
+      "blanks": [
+        "date"
+      ],
+      "flags": [],
+      "input_tokens_estimated": 1655,
+      "output_tokens_estimated": 452,
+      "cost_usd_estimated": 0.00039,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.29,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 542,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37760,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 12817,
+          "seconds": 0.54
+        }
+      },
+      "document_id": 8
+    },
+    {
+      "key": "status_report",
+      "pack": "general",
+      "scope": "many",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 8,
+      "blanks": [
+        "owner",
+        "due",
+        "owner",
+        "due"
+      ],
+      "flags": [],
+      "input_tokens_estimated": 1383,
+      "output_tokens_estimated": 788,
+      "cost_usd_estimated": 0.00053,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.31,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 704,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37785,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 12415,
+          "seconds": 0.54
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 201,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5084,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 9
+    },
+    {
+      "key": "client_briefing",
+      "pack": "general",
+      "scope": "many",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 8,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1382,
+      "output_tokens_estimated": 730,
+      "cost_usd_estimated": 0.0005,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.31,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 595,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37585,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 10033,
+          "seconds": 0.52
+        }
+      },
+      "document_id": 10
+    },
+    {
+      "key": "study_guide",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 8,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1459,
+      "output_tokens_estimated": 733,
+      "cost_usd_estimated": 0.00051,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.31,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 854,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37844,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 10616,
+          "seconds": 0.56
+        }
+      },
+      "document_id": 11
+    },
+    {
+      "key": "flashcards",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "table",
+      "status": "ready",
+      "blocks": 2,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1414,
+      "output_tokens_estimated": 607,
+      "cost_usd_estimated": 0.00044,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.16,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 967,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37874,
+          "seconds": 0.2
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 11261,
+          "seconds": 0.57
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 911,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5324,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 12
+    },
+    {
+      "key": "practice_quiz",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 4,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1451,
+      "output_tokens_estimated": 417,
+      "cost_usd_estimated": 0.00035,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.17,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 501,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37663,
+          "seconds": 0.2
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 9420,
+          "seconds": 0.52
+        }
+      },
+      "document_id": 13
+    },
+    {
+      "key": "glossary",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "table",
+      "status": "ready",
+      "blocks": 2,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1423,
+      "output_tokens_estimated": 874,
+      "cost_usd_estimated": 0.00058,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.3,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 1443,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37903,
+          "seconds": 0.2
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 12214,
+          "seconds": 0.55
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 1361,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5377,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 14
+    },
+    {
+      "key": "assignments",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "table",
+      "status": "ready",
+      "blocks": 2,
+      "blanks": [
+        "due date",
+        "due date"
+      ],
+      "flags": [],
+      "input_tokens_estimated": 1443,
+      "output_tokens_estimated": 680,
+      "cost_usd_estimated": 0.00048,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.3,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 1097,
+          "seconds": 0.02
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37934,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 12225,
+          "seconds": 0.54
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 1002,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5406,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 15
+    },
+    {
+      "key": "revision_plan",
+      "pack": "school",
+      "scope": "many",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 4,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1091,
+      "output_tokens_estimated": 389,
+      "cost_usd_estimated": 0.0003,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.3,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 316,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37691,
+          "seconds": 0.21
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 11349,
+          "seconds": 0.54
+        },
+        "csv": {
+          "status": 200,
+          "bytes": 149,
+          "seconds": 0.01
+        },
+        "xlsx": {
+          "status": 200,
+          "bytes": 5051,
+          "seconds": 0.01
+        }
+      },
+      "document_id": 16
+    },
+    {
+      "key": "class_recap",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "email",
+      "status": "ready",
+      "blocks": 6,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1477,
+      "output_tokens_estimated": 409,
+      "cost_usd_estimated": 0.00035,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.3,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 386,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37617,
+          "seconds": 0.22
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 9167,
+          "seconds": 0.54
+        }
+      },
+      "document_id": 17
+    },
+    {
+      "key": "class_faq",
+      "pack": "school",
+      "scope": "one",
+      "output_type": "document",
+      "status": "ready",
+      "blocks": 4,
+      "blanks": [],
+      "flags": [],
+      "input_tokens_estimated": 1431,
+      "output_tokens_estimated": 420,
+      "cost_usd_estimated": 0.00035,
+      "ledger_status": "ok",
+      "seconds_fake_model": 0.16,
+      "exports": {
+        "md": {
+          "status": 200,
+          "bytes": 516,
+          "seconds": 0.01
+        },
+        "docx": {
+          "status": 200,
+          "bytes": 37667,
+          "seconds": 0.19
+        },
+        "pdf": {
+          "status": 200,
+          "bytes": 9656,
+          "seconds": 0.51
+        }
+      },
+      "document_id": 18
+    }
+  ]
+}

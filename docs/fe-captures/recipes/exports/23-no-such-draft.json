@@ -1,0 +1,26 @@
+{
+  "note": "No such draft: 404, the same body.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/999999/export?format=md",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "7b226572",
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

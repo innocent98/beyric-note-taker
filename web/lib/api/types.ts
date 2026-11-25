@@ -99,6 +99,15 @@ export type TranslationLanguage = Translation["language"];
 export type Notice = Schemas["NotificationOut"];
 export type NoticeList = Schemas["NotificationList"];
 
+// A recipe draft (docs/fe-integration-guide-recipes.md): the blocks, the checks, the status.
+export type DocumentDraft = Schemas["DocumentOut"];
+export type DocumentBlock = DocumentDraft["blocks"][number];
+export type DocumentList = Schemas["DocumentList"];
+export type DocumentRow = Schemas["DocumentBrief"];
+export type DocumentSource = Schemas["Source"];
+export type DocumentItem = Schemas["Item"];
+export type DocumentRequest = Schemas["DocumentIn"];
+export type DocumentExportFormat = "md" | "txt" | "csv" | "xlsx" | "docx" | "pdf";
 export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"]["parameters"]["query"]>["format"]>;
 export type Pilot = Schemas["PilotOut"];
 export type PilotState = Pilot["state"];
@@ -141,3 +150,18 @@ export type AskCite = Schemas["CiteOut"];
 export type AskPoint = Schemas["PointOut"];
 export type AskAnswer = Schemas["AskOut"];
 export type AskScope = Schemas["ScopeOut"];
+
+// The meeting picker of cross-meeting recipes (docs/fe-integration-guide-recipes-cross-meeting.md).
+export type PickerSpec = Schemas["PickerSpec"];
+export type PickerPreview = Schemas["PickerPreview"];
+export type PickedMeeting = Schemas["PickedMeeting"];
+// Meeting recipes: the recipe library, the team brief and the brief file import
+// (docs/fe-integration-guide-recipes-library.md).
+export type Recipe = Schemas["RecipeOut"];
+export type RecipeList = Schemas["RecipeList"];
+export type RecipeInput = Schemas["RecipeIn"];
+export type RecipeChanges = Schemas["RecipePatch"];
+export type RecipeOption = Schemas["OptionDef"];
+export type RecipeTeam = Schemas["RecipeTeam"];
+export type Brief = Schemas["BriefOut"];
+export type BriefImported = Schemas["BriefImported"];

@@ -1,0 +1,21 @@
+{
+  "note": "Eve's list has none of Ada's drafts.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "documents": []
+    }
+  }
+}

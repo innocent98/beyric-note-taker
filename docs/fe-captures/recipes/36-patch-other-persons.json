@@ -1,0 +1,33 @@
+{
+  "note": "Same for editing: 404.",
+  "client": "eve",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "x",
+          "sources": []
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such document."
+      }
+    }
+  }
+}

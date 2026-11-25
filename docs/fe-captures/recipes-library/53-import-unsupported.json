@@ -1,0 +1,32 @@
+{
+  "note": "Only .docx, .pdf, .txt and .md: 422 `unsupported`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/briefs/import",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "multipart": {
+        "field": "file",
+        "filename": "old.doc",
+        "bytes": 22,
+        "content_type": "application/octet-stream"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "unsupported",
+        "message": "Beyric reads .docx, .pdf, .txt and .md files. Save the file in one of these."
+      }
+    }
+  }
+}

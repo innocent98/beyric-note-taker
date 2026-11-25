@@ -1,0 +1,127 @@
+{
+  "note": "409 `use_board`: a board is changed one step at a time through `PATCH /api/documents/{id}/board` (it carries the revision check). The plain whole-document save would let a stale screen undo a move.",
+  "client": "ada (creator)",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/6",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "blocks": [
+        {
+          "type": "column",
+          "title": "What we decided",
+          "cards": [
+            {
+              "text": "Of course. We run a logistics company with forty drivers and two dispatchers. Today everything is on WhatsApp and paper.",
+              "kind": "decision",
+              "owner": null,
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 2,
+                  "quote": "Of course. We run a logistics company with",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "We can set up both. The onboarding package is 50,000 naira and covers setup, training for two dispatchers and a fortnight of support.",
+              "kind": "decision",
+              "owner": null,
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 7,
+                  "quote": "We can set up both. The onboarding package",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "column",
+          "title": "Who does what",
+          "cards": [
+            {
+              "text": "Noted. When would you like to start?",
+              "kind": "action",
+              "owner": "Ada Lovelace",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 11,
+                  "quote": "Noted. When would you like to start?",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "First week of December works. I will send the written plan by Friday.",
+              "kind": "action",
+              "owner": "Ada Lovelace",
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 13,
+                  "quote": "First week of December works. I will send",
+                  "ref": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "column",
+          "title": "Still open",
+          "cards": [
+            {
+              "text": "Of course. Will she join a short call?",
+              "kind": "question",
+              "owner": null,
+              "sources": [
+                {
+                  "kind": "line",
+                  "meeting_id": 1,
+                  "line": 15,
+                  "quote": "Of course. Will she join a short call?",
+                  "ref": null
+                }
+              ]
+            },
+            {
+              "text": "Confirm the date: [need: date]",
+              "kind": "question",
+              "owner": null,
+              "sources": []
+            }
+          ]
+        },
+        {
+          "type": "column",
+          "title": "Parked",
+          "cards": []
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "use_board",
+        "message": "A board is changed one step at a time. Use the board's own screen to edit it."
+      }
+    }
+  }
+}

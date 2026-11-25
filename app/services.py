@@ -83,6 +83,7 @@ from app.pipeline import (
     send_again,
 )
 from app.placement import PlacementRefused, PlacementRequest
+from app.recipes import cleanup as recipe_cleanup
 from app.transcript_text import version_of
 
 logger = logging.getLogger(__name__)
@@ -924,6 +925,8 @@ def delete_meeting(session: Session, provider: BotProvider, meeting: Meeting) ->
         session.execute(
             delete(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
         )
+        # The drafts made from this meeting alone go with it; cross-meeting ones stay (spec 5.4a).
+        recipe_cleanup.delete_drafts_of(session, [meeting_id])
         session.delete(locked)
         session.commit()
     except OperationalError as exc:  # the mail worker holds the row while it sends

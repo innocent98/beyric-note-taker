@@ -1,0 +1,29 @@
+{
+  "note": "A board that already has 12 columns: 422 `board_full`.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/documents/3/board",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revision": "2026-11-24T19:28:08.857617Z",
+      "op": "add_column",
+      "title": "One too many"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "board_full",
+        "message": "A board holds at most 12 columns."
+      }
+    }
+  }
+}

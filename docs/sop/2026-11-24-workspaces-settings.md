@@ -1,6 +1,6 @@
 # SOP: Workspaces settings (slice W2: Tasks 5, 6, 7 and decision D4)
 
-**What shipped.** Templates and vocabulary belong to a workspace (owners and admins write, members read and use); the pipeline, the translation, the notes rewrite, Send now and the mails read the MEETING's workspace instead of the recorder's own lists; a person's note taker name, auto-join rule and its two boxes and calendar template are kept per person per workspace (`workspace_prefs`); the Settings screen is split into "This workspace" and "Personal"; and a meeting BORN in a team workspace is shared with that workspace from the first second (D4). Branch `feature/workspaces-settings`, base `feature/workspaces`, the PR into `feature/workspaces`. Migration `0071` (placeholder number, chained on `0070`; the lead re-chains).
+**What shipped.** Templates and vocabulary belong to a workspace (owners and admins write, members read and use); the pipeline, the translation, the notes rewrite, Send now and the mails read the MEETING's workspace instead of the recorder's own lists; a person's note taker name, auto-join rule and its two boxes and calendar template are kept per person per workspace (`workspace_prefs`); the Settings screen is split into "This workspace" and "Personal"; and a meeting BORN in a team workspace is shared with that workspace from the first second (D4). Branch `feature/workspaces-settings`, base `feature/workspaces`, the PR into `feature/workspaces`. Migration `0063` (placeholder number, chained on `0062`; the lead re-chains).
 
 Spec: `docs/superpowers/specs/2026-11-24-workspaces-design.md` (sections 3, 12.1, 12.5, 12.7). Plan: `docs/superpowers/plans/2026-11-24-workspaces.md`. Foundation SOP: `docs/sop/2026-11-24-workspaces-foundation.md`. FE guide: `docs/fe-integration-guide-workspaces-settings.md` (captures `docs/fe-captures/workspaces/settings-*.json`).
 
@@ -13,8 +13,8 @@ After W1 every meeting lived in one workspace but the notes were still written w
 | Decision | Choice |
 |---|---|
 | Who writes | Owners and admins write a workspace's templates and terms (403 `team_forbidden`); members read and use them. Another workspace's row, and a workspace the caller is not in, is 404 (the existence check comes before the role check, so a member never learns more from a 403). The personal workspace is its person's own. |
-| Uniqueness | A template name is unique among a workspace's live templates and a term among its terms, whoever wrote them (`uq_templates_team_name`, `uq_vocabulary_team_term`). The cutover had copied several members' templates into one workspace: migration `0071` retires a later copy with the same instructions (what pointed at it moves to the kept one) and renames one with different instructions "Name (2)", so nothing a person wrote is lost or changed. |
-| `templates.team_id` | Made NOT NULL: `0070` filled every row, and `0071` stops if one is null rather than guess. |
+| Uniqueness | A template name is unique among a workspace's live templates and a term among its terms, whoever wrote them (`uq_templates_team_name`, `uq_vocabulary_team_term`). The cutover had copied several members' templates into one workspace: migration `0063` retires a later copy with the same instructions (what pointed at it moves to the kept one) and renames one with different instructions "Name (2)", so nothing a person wrote is lost or changed. |
+| `templates.team_id` | Made NOT NULL: `0062` filled every row, and `0063` stops if one is null rather than guess. |
 | New workspace | `teams.create_owned_team` seeds the default templates (made by the creator) and sets `share_new_meetings` true. Existing teams keep the value they had (migration touches nothing). |
 | Copy from personal | `POST /api/templates/copy-from-personal` and `/api/vocabulary/copy-from-personal` (owner or admin of a team workspace; 409 `personal_team` for the personal one): a name already live is skipped, never overwritten; the personal rows stay. |
 | What a meeting reads | `workspace_prefs.for_meeting` / `terms`: the vocabulary and default template of `meeting.workspace_team_id`, never the recorder's. Used by the pipeline (`_terms`, shadow check, notes), the translation job, the notes rewrite, the vocabulary sent to the bot (`transcript_source.send_options(workspace_team_id=...)`), a resent bot's name, Send now's template check. Nothing reads the recorder's account for it, so it works after they left. |
@@ -43,7 +43,7 @@ After W1 every meeting lived in one workspace but the notes were still written w
 
 | Path | Change |
 |---|---|
-| `alembic/versions/0071_workspaces_settings.py` | uniqueness per workspace, dedupe, `templates.team_id` NOT NULL, `meetings.kept_private`, downgrade |
+| `alembic/versions/0063_workspaces_settings.py` | uniqueness per workspace, dedupe, `templates.team_id` NOT NULL, `meetings.kept_private`, downgrade |
 | `app/models.py` | `Template`/`VocabularyTerm` uniqueness, `Meeting.kept_private` |
 | `app/workspace_prefs.py` (new) | `Prefs`, `for_user`, `row_for_update`, `terms`, `default_template_id`, `for_meeting`, `mail_allowed` |
 | `app/api_workspace_prefs.py` (new), `app/api_schemas.py`, `app/api.py` | `/api/workspace-prefs`, templates and vocabulary routes on the active workspace, the two copy routes |
@@ -60,7 +60,7 @@ Scratch Postgres 17 (Docker, removed afterwards), only named test files, never t
 
 ## Operate / roll back
 
-`alembic downgrade 0070` restores the per-author uniqueness and drops `kept_private`; templates retired or renamed by the upgrade stay so, and per-workspace prefs written meanwhile stay in `workspace_prefs` (0070's table). Nothing deploys before the whole release.
+`alembic downgrade 0062` restores the per-author uniqueness and drops `kept_private`; templates retired or renamed by the upgrade stay so, and per-workspace prefs written meanwhile stay in `workspace_prefs` (0062's table). Nothing deploys before the whole release.
 
 ## Follow-ups
 

@@ -1,0 +1,32 @@
+{
+  "note": "An unknown format: 422 `validation_error`, the field is `format`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/1/export?format=rtf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "starts_with_bytes": "7b226572",
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "format",
+            "message": "Input should be 'md', 'txt', 'csv', 'xlsx', 'docx' or 'pdf'"
+          }
+        ]
+      }
+    }
+  }
+}

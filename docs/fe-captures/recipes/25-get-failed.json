@@ -1,0 +1,42 @@
+{
+  "note": "`status: \"failed\"` with a `failure_code` and a plain `failure_message` to show. A failed attempt still counts against the day's 20.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/3",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": 3,
+      "title": "Follow-up email",
+      "output_type": "email",
+      "recipe_key": "follow_up_email",
+      "recipe_id": null,
+      "status": "failed",
+      "edited": false,
+      "meeting_ids": [
+        2
+      ],
+      "created_at": "2026-11-24T13:39:09.675066Z",
+      "updated_at": "2026-11-24T13:39:09.769414Z",
+      "blocks": [],
+      "checks": {
+        "blanks": [],
+        "flags": []
+      },
+      "stale": false,
+      "sources_available": true,
+      "left_out_count": 0,
+      "failure_code": "model_reply",
+      "failure_message": "The writing service sent back something unusable. Try again."
+    }
+  }
+}

@@ -11,6 +11,10 @@ import type {
   ConnectStart,
   Decision,
   DecisionChanges,
+  DocumentDraft,
+  DocumentList,
+  DocumentExportFormat,
+  DocumentRequest,
   DecisionList,
   DecisionStatus,
   EmailPreferences,
@@ -46,6 +50,8 @@ import type {
   RemovedList,
   BroughtBack,
   Pilot,
+  PickerPreview,
+  PickerSpec,
   Project,
   ProjectChanges,
   ProjectList,
@@ -66,6 +72,12 @@ import type {
   TasksSettings,
   Template,
   TemplateCopy,
+  Brief,
+  BriefImported,
+  Recipe,
+  RecipeChanges,
+  RecipeInput,
+  RecipeList,
   ShareBody,
   ShareCreated,
   ShareList,
@@ -88,6 +100,7 @@ import type {
   WorkspacePrefs,
   WorkspacePrefsInput,
 } from "./types";
+import type { BoardDocument, BoardOp } from "../board";
 import type {
   AdminPayment,
   AdminRefund,
@@ -166,7 +179,7 @@ export type ApiOptions = {
 type Query = Record<string, string | number | undefined>;
 // `team` names the team of this one call (null: none) in place of `teamId`'s: the meeting page asks
 // about the team the MEETING belongs to, whatever the tab's team is.
-type Call = { body?: unknown; query?: Query; write?: boolean; accept?: string; team?: number | null };
+type Call = { body?: unknown; form?: FormData; query?: Query; write?: boolean; accept?: string; team?: number | null };
 
 export const TEAM_HEADER = "X-Team-Id";
 export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
@@ -228,7 +241,7 @@ export function createApi(options: ApiOptions = {}) {
   // team being gone triggers `onTeamGone`.
   const teamSent = new WeakMap<Response, { team: number; explicit: boolean }>();
 
-  async function send(method: string, path: string, { body, query, write, accept, team }: Call): Promise<Response> {
+  async function send(method: string, path: string, { body, form, query, write, accept, team }: Call): Promise<Response> {
     const search = query
       ? Object.entries(query)
           .filter(([, v]) => v !== undefined)
@@ -241,7 +254,8 @@ export function createApi(options: ApiOptions = {}) {
     };
     const teamId = isTeamScoped(path, method) ? (team !== undefined ? team : (options.teamId?.() ?? null)) : null;
     if (teamId !== null) headers[TEAM_HEADER] = String(teamId);
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    // A file goes as multipart: the browser writes the Content-Type with the boundary itself.
+    if (body !== undefined && form === undefined) headers["Content-Type"] = "application/json";
     if (write) {
       sentCsrf = csrf ?? (await readSession()).csrf_token;
       headers["X-CSRF-Token"] = sentCsrf;
@@ -251,7 +265,7 @@ export function createApi(options: ApiOptions = {}) {
       res = await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: form !== undefined ? form : body === undefined ? undefined : JSON.stringify(body),
         cache: "no-store",
         redirect: "manual",
       });
@@ -446,6 +460,66 @@ export function createApi(options: ApiOptions = {}) {
       get: () => request<WorkspacePrefs>("GET", "/api/workspace-prefs"),
       put: (body: WorkspacePrefsInput) => request<WorkspacePrefs>("PUT", "/api/workspace-prefs", { body, write: true }),
     },
+    // Meeting recipes (docs/fe-integration-guide-recipes-library.md). `team` names the team a call is about in
+    // place of the tab's: the Make dialog's switch. A member's write to a team recipe or the brief is 403
+    // `team_forbidden`; `importFile` is the owner's and admin's only and saves nothing (the text comes back
+    // for review, then `brief.save`).
+    recipes: {
+      list: (team?: number | null) => request<RecipeList>("GET", "/api/recipes", { team }),
+      create: (body: RecipeInput, team?: number | null) =>
+        request<Recipe>("POST", "/api/recipes", { body, write: true, team }),
+      update: (id: number, body: RecipeChanges) => request<Recipe>("PUT", `/api/recipes/${id}`, { body, write: true }),
+      archive: (id: number) => request<void>("DELETE", `/api/recipes/${id}`, { write: true }),
+      // Cross-meeting recipes. `resolvePicker` previews the meetings a choice means (a recurring meeting,
+      // a project, a sprint, a date range or hand-picked ids): at most 12, newest first, and how many
+      // were left out because the caller cannot read them (never named). Send its ids as `meeting_ids`
+      // and the same spec as `picker` when making the draft. 404 for a series, project or sprint that
+      // is not the caller's; 422 `invalid_date_range`.
+      resolvePicker: (body: PickerSpec, team?: number | null) =>
+        request<PickerPreview>("POST", "/api/recipes/picker/resolve", { body, write: true, team }),
+    },
+    brief: {
+      get: (team?: number | null) => request<Brief>("GET", "/api/briefs", { team }),
+      save: (text: string, team?: number | null) =>
+        request<Brief>("PUT", "/api/briefs", { body: { text }, write: true, team }),
+      importFile: (file: File, team?: number | null) => {
+        const form = new FormData();
+        form.append("file", file, file.name);
+        return request<BriefImported>("POST", "/api/briefs/import", { form, write: true, team });
+      },
+    },
+    // Recipe drafts (docs/fe-integration-guide-recipes.md, docs/fe-integration-guide-recipes-documents.md).
+    // `create` answers 202 `writing` (ask `get` again every 2 seconds); `edit` sends every block as it now
+    // stands (409 `writing` / `not_ready`, 422 `blocks_invalid`); `remove` is a discard (204);
+    // `export` is a file built from the saved blocks (`table` picks the table of a CSV).
+    documents: {
+      get: (id: number) => request<DocumentDraft>("GET", `/api/documents/${id}`),
+      // `team` names the team whose brief and team recipes the draft uses (the Make dialog's switch).
+      create: (body: DocumentRequest, team?: number | null) =>
+        request<DocumentDraft>("POST", "/api/documents", { body, write: true, team }),
+      edit: (id: number, body: { blocks: DocumentDraft["blocks"]; title?: string }) =>
+        request<DocumentDraft>("PATCH", `/api/documents/${id}`, { body, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/documents/${id}`, { write: true }),
+      // The drafts, newest first: `mine` (the default), `shared` (teammates' drafts shared with a team the
+      // person is in), `meetingId` (made from that meeting); `beforeId` is the smallest id of the page before.
+      list: (query: { mine?: boolean; shared?: boolean; meetingId?: number; beforeId?: number; limit?: number } = {}) =>
+        request<DocumentList>("GET", "/api/documents", {
+          query: {
+            mine: query.mine === undefined ? undefined : String(query.mine),
+            shared: query.shared === undefined ? undefined : String(query.shared),
+            meeting_id: query.meetingId,
+            before_id: query.beforeId,
+            limit: query.limit,
+          },
+        }),
+      // Read-only sharing with the team the draft was made in (`doc.team`; no team is named, the server
+      // ignores the tab's): 200 with the draft; 409 `not_ready`, `personal_team`, `team_left`.
+      // `unshare` stops it for every team (204).
+      share: (id: number) => request<DocumentDraft>("POST", `/api/documents/${id}/share`, { write: true }),
+      unshare: (id: number) => request<void>("DELETE", `/api/documents/${id}/share`, { write: true }),
+      export: (id: number, format: DocumentExportFormat, table = 0) =>
+        download(`/api/documents/${id}/export`, { format, table }),
+    },
     // Ask Beyric: `scope` is the counts and the suggestion chips; `ask` answers one question (422
     // `question_invalid`, 429 `ask_limit`, 502 `ask_failed` carry a message written for the person).
     ask: {
@@ -629,6 +703,13 @@ export function createApi(options: ApiOptions = {}) {
     questions: {
       update: (id: number, body: QuestionChanges) =>
         request<OpenQuestion>("PATCH", `/api/questions/${id}`, { body, write: true }),
+    },
+    // The board of a meeting (docs/fe-integration-guide-recipes-board.md): ONE operation per call,
+    // sent with the `updated_at` of the draft the screen last saw as its `revision`. Answers the
+    // whole draft; 409 `stale_board` means the board changed meanwhile: reload it.
+    board: {
+      edit: (id: number, revision: string, op: BoardOp) =>
+        request<BoardDocument>("PATCH", `/api/documents/${id}/board`, { body: { ...op, revision }, write: true }),
     },
     // The bell: what the app has told the user, newest first. `readAll` answers the new unread count.
     notifications: {

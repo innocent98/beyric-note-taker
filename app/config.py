@@ -580,6 +580,16 @@ class Settings(BaseSettings):
     # model-calling questions one person may ask in a rolling 24 hours. Both optional.
     ask_model: str = "gpt-6-luna"
     ask_daily_limit: int = Field(default=30, ge=0)
+    # Meeting recipes (app/recipes): the call that writes a draft, how many drafts one person may
+    # start in a rolling 24 hours across all recipes (every attempt that calls the model counts,
+    # failures and regenerations included), the team brief's size, the most blocks a draft keeps,
+    # and the limits on a file imported into a brief.
+    recipe_model: str = "gpt-6-luna"
+    recipe_daily_limit: int = Field(default=20, ge=0)
+    brief_max_chars: int = Field(default=12000, ge=1)
+    draft_max_blocks: int = Field(default=60, ge=1)
+    import_max_bytes: int = Field(default=5_000_000, ge=1)
+    import_max_pages: int = Field(default=40, ge=1)
     # The call that finds topics repeated across a series' meetings (app/topics.py): one per series
     # when its last meeting's notes are read. Optional.
     topics_model: str = "gpt-6-luna"

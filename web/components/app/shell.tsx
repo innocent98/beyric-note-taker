@@ -11,7 +11,7 @@ import { SHELL_DEFAULT_TEAM, SHELL_MARK } from "@/lib/active-team";
 import type { TeamSummary } from "@/lib/api/types";
 import { initials } from "@/lib/format";
 
-export type NavSection = "meetings" | "ask" | "tasks" | "projects" | "decisions" | "review" | "team" | "teams" | "notifications" | "templates" | "vocabulary" | "settings" | "billing";
+export type NavSection = "meetings" | "ask" | "tasks" | "projects" | "decisions" | "review" | "team" | "teams" | "notifications" | "templates" | "recipes" | "documents" | "vocabulary" | "settings" | "billing";
 
 export type ShellUser = { name: string | null; email: string };
 
@@ -84,6 +84,8 @@ export function AppShell({
         <div className="nav-label">Configure</div>
         <nav className="nav" aria-label="Configure">
           <NavLink href="/templates" label="Templates" current={current === "templates"} />
+          {scoped("/recipes", "Recipes", "recipes")}
+          {scoped("/documents", "Documents", "documents")}
           <NavLink href="/vocabulary" label="Vocabulary" current={current === "vocabulary"} />
           {scoped("/settings", "Settings", "settings")}
           <BillingNavLink current={current === "billing"} />

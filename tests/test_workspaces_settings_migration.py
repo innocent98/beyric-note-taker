@@ -1,7 +1,7 @@
-"""Migration 0071 (workspaces settings, slice W2) on a seeded dataset.
+"""Migration 0063 (workspaces settings, slice W2) on a seeded dataset.
 
-The cutover (0070) copied several members' templates and terms into one workspace, so the same name
-or term can be there more than once. 0071 makes a workspace's names and terms unique:
+The cutover (0062) copied several members' templates and terms into one workspace, so the same name
+or term can be there more than once. 0063 makes a workspace's names and terms unique:
 
 * of equal names the lowest id stays; a later one with the SAME instructions is retired (a meeting
   may name it) and what pointed at it moves to the one that stays; one with DIFFERENT instructions
@@ -24,19 +24,19 @@ owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
 
-def test_0071_follows_0070_and_is_an_ancestor_of_the_only_head(scratch_url):
-    """Later slices chain on top of 0071, so it is not the head forever: it must exist, follow 0070
+def test_0063_follows_0062_and_is_an_ancestor_of_the_only_head(scratch_url):
+    """Later slices chain on top of 0063, so it is not the head forever: it must exist, follow 0062
     and lie under the single current head."""
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
     heads = script.get_heads()
     assert len(heads) == 1
-    assert script.get_revision("0071").down_revision == "0070"
-    assert "0071" in {rev.revision for rev in script.walk_revisions(base="base", head=heads[0])}
+    assert script.get_revision("0063").down_revision == "0062"
+    assert "0063" in {rev.revision for rev in script.walk_revisions(base="base", head=heads[0])}
 
 
-def test_0071_makes_names_and_terms_unique_per_workspace_without_losing_anything(scratch_url):
+def test_0063_makes_names_and_terms_unique_per_workspace_without_losing_anything(scratch_url):
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0070")
+    command.upgrade(cfg, "0062")
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         seeded = one(conn, "select count(*) from templates")  # what the first migrations left
@@ -94,7 +94,7 @@ def test_0071_makes_names_and_terms_unique_per_workspace_without_losing_anything
                 {"o": uid, "t": x, "m": term},
             )
 
-    command.upgrade(cfg, "0071")
+    command.upgrade(cfg, "0063")
 
     with engine.connect() as conn:
         rows = {
@@ -132,7 +132,7 @@ def test_0071_makes_names_and_terms_unique_per_workspace_without_losing_anything
         )
         assert nullable == "NO"
 
-    command.downgrade(cfg, "0070")
+    command.downgrade(cfg, "0062")
     with engine.connect() as conn:
         assert one(conn, "select count(*) from templates") == seeded + 3  # nothing lost
         nullable = one(
@@ -141,12 +141,12 @@ def test_0071_makes_names_and_terms_unique_per_workspace_without_losing_anything
             "where table_name = 'templates' and column_name = 'team_id'",
         )
         assert nullable == "YES"
-    command.upgrade(cfg, "0071")
+    command.upgrade(cfg, "0063")
     engine.dispose()
 
 
-def test_0071_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
+def test_0063_adds_nothing_to_an_empty_database_and_round_trips(scratch_url):
     cfg = alembic_config(scratch_url)
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "0070")
+    command.downgrade(cfg, "0062")
     command.upgrade(cfg, "head")

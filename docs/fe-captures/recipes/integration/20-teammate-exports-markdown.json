@@ -1,0 +1,20 @@
+{
+  "note": "A reader may export the text they were shared (no sources are in an export).",
+  "client": "tunde (teammate)",
+  "request": {
+    "method": "GET",
+    "path": "/api/documents/2/export?format=md",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/markdown; charset=utf-8",
+      "content-disposition": "attachment; filename=\"Follow-up email.md\"; filename*=UTF-8''Follow-up%20email.md"
+    },
+    "body": "Subject: Thanks for today, next steps\n\nHi there,\n\nThank you for your time today. Here is a short recap of what we covered.\n\n- The acquisition of Orion for 9 million dollars stays between us.\n- The acquisition of Orion for 9 million dollars stays between us.\n- The acquisition of Orion for 9 million dollars stays between us.\n\nNext step: \\[need: date of the next step\\]\n\nKind regards"
+  }
+}

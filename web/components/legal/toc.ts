@@ -26,7 +26,7 @@ export const TERMS_TOC: ReadonlyArray<readonly [string, string]> = [
   ["pilot", "Pilot, fees and limits"],
   ["recording", "Recording laws and consent"],
   ["content", "Your content"],
-  ["accuracy", "Accuracy of notes"],
+  ["accuracy", "Accuracy of notes and documents"],
   ["use", "Acceptable use"],
   ["third", "Third-party services"],
   ["termination", "Suspension and termination"],

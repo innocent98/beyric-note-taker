@@ -15,6 +15,7 @@ from app.ai_versions import (
     EXTRACT_REVIEW_PROMPT_VERSION,
     LABEL_PROMPT_VERSION,
     NOTES_PROMPT_VERSION,
+    RECIPE_PROMPT_VERSION,
     TOPICS_PROMPT_VERSION,
     TRANSLATE_PROMPT_VERSION,
     VOCABULARY_PROMPT_VERSION,
@@ -27,6 +28,7 @@ __all__ = [
     "EXTRACT_REVIEW_PROMPT_VERSION",
     "LABEL_PROMPT_VERSION",
     "NOTES_PROMPT_VERSION",
+    "RECIPE_PROMPT_VERSION",
     "TOPICS_PROMPT_VERSION",
     "TRANSLATE_PROMPT_VERSION",
     "VOCABULARY_PROMPT_VERSION",
@@ -43,7 +45,14 @@ _VERSION_OF_KIND = {
     "ask": ASK_PROMPT_VERSION,
     "topics": TOPICS_PROMPT_VERSION,
     "vocabulary": VOCABULARY_PROMPT_VERSION,
+    "recipe": RECIPE_PROMPT_VERSION,
 }
+
+
+def _error_text(error: BaseException | None, detail: str | None) -> str | None:
+    if detail:
+        return detail[:100]
+    return type(error.__cause__ or error).__name__ if error is not None else None
 
 
 def record(
@@ -59,11 +68,14 @@ def record(
     prompt_version: str | None = None,
     user_id: int | None = None,
     audio_seconds: int | None = None,
+    detail: str | None = None,
 ) -> AiRun:
     """Add one call to the ledger (the caller commits). `error` is stored as a class name only:
     the underlying one when the exception wraps another (an `ExtractionFailed` over a
     `RateLimitError` reads `RateLimitError`). `prompt_version` defaults to the kind's usual
-    one. `user_id` is set where a per-account count is needed (translations)."""
+    one. `user_id` is set where a per-account count is needed (translations). `detail` is a short
+    sentence about the SHAPE of a refused reply (positions and counts, never text): it is stored
+    instead of the class name, cut to the column's 100 characters."""
     run = AiRun(
         meeting_id=meeting_id,
         user_id=user_id,
@@ -74,7 +86,7 @@ def record(
         output_tokens=output_tokens,
         audio_seconds=audio_seconds,
         status=status,
-        error=type(error.__cause__ or error).__name__ if error is not None else None,
+        error=_error_text(error, detail),
     )
     session.add(run)
     session.flush()
@@ -119,6 +131,7 @@ def settle(
     input_tokens: int | None = None,
     output_tokens: int | None = None,
     error: BaseException | None = None,
+    detail: str | None = None,
 ) -> None:
     """Finish a `pending` row (written before a long model call, so that nothing is held while it
     runs and a crash still leaves a row that counts): its outcome, tokens and error class name.
@@ -130,6 +143,6 @@ def settle(
             status=status,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            error=type(error.__cause__ or error).__name__ if error is not None else None,
+            error=_error_text(error, detail),
         )
     )
