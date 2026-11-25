@@ -66,6 +66,7 @@
   - [x] Opus review of every permission path; findings and fixes in the SOP
   - [x] Privacy policy and terms made true for workspaces (both copies, tested equal; `TERMS_VERSION` 2026-11-25; no notice-of-change promise)
   - [x] FE guide `docs/fe-integration-guide-workspaces.md` section 10 from 32 live captures (`docs/fe-captures/workspaces-final/`)
+  - [x] Notifications follow their meeting's workspace after share, move, move back, leave and workspace delete (`teams.refile_notifications`, no migration; tests in `tests/test_workspace_review_fixes.py`); a leaver loses calendar connection and joins in the workspace (tested)
   - [ ] CI green on the final head, then his typed "merge #N"; after deploy: server check `alembic current` shows `0064 (head)`
   - [ ] **Not verified:** a real Google or Microsoft calendar in two workspaces; real production data; a model-written draft for a member of a paid workspace
 

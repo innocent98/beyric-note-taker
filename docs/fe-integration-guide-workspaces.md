@@ -554,6 +554,8 @@ This guide is the entry point. The other slices have their own guides, each veri
 
 ### Things the page must do that no single response shows
 
+- **A notification follows its meeting's workspace.** After a meeting is shared, moved, moved back or its recorder leaves, `GET /api/notifications` in the new workspace lists the note and the old workspace's list and unread dot lose it (the session's `unread_notifications` and `other_workspaces[].unread_notifications` follow). A person who left a workspace has the notes about it in their personal workspace. The page needs no change; do not cache the bell across a share or a leave. **Not captured live** (the behaviour is covered by `tests/test_workspace_review_fixes.py`; the shapes are those of section 6).
+
 - **After the release is deployed, every account has a personal workspace and every old meeting is in one workspace.** Nothing the person could read before is hidden and nothing was shared: the existing `shared_team_id` stays as it was (rehearsed on a copy of production-shaped data, `docs/fe-captures/workspaces-cutover/cutover-rehearsal.txt`). A person who used two teams will find them as two workspaces; their **calendar connection, templates and vocabulary** moved to their default workspace (the one they already saw their meetings in) and were copied once.
 - **The header is required context.** The web must send `X-Team-Id` on every call that is not the person's own (section 2); a missing header is the default workspace, never "everything". A call that forgets it silently shows the default workspace.
 - **Personal recipes are not per workspace.** A recipe a person wrote for themselves (`source: "personal"`) appears in every workspace of theirs; only team recipes and the brief change. Do not label them with a workspace.
@@ -570,4 +572,5 @@ This guide is the entry point. The other slices have their own guides, each veri
 | Removal ends access to shared drafts, recipes and the team at once | verified live (29 to 32) |
 | A draft actually **written** by the model for such a member | **not run live**: the capture has no model and no draft worker; the worker is the recipes release's, covered by `tests/test_recipe_jobs.py` |
 | Personal recipes shown in every workspace | by design, stated from the code (`app/api_recipe_library.py` lists personal rows for the person whatever the header); no capture of it |
+| Notifications re-filed after share, move and leave | **not run live**: covered by `tests/test_workspace_review_fixes.py`; the list and session shapes are the verified ones of section 6 |
 | Cutover on production-shaped data | rehearsed on a scratch database (`docs/fe-captures/workspaces-cutover/cutover-rehearsal.txt`); not run on the real server |

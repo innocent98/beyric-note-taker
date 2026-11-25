@@ -188,6 +188,7 @@ def give_back_meeting(session: Session, meeting: Meeting) -> None:
         meeting.workspace_team_id = home.id  # filed back in their personal workspace
         meeting.shared_team_id = None
         teams.rehome_tasks(session, meeting, target=home)
+        teams.refile_notifications(session, [meeting.id])
         # Flag on: its series row goes with the team (the foreign key would null it), so it
         # follows to its recorder's personal row first.
         series.follow_meeting(session, meeting, actor=series.SYSTEM)

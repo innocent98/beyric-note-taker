@@ -10,13 +10,13 @@ release.md): each fix has a test that fails without it.
 """
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import select
 
 from app import meeting_teams, tasks, teams
-from app.models import CalendarConnection, Milestone, Task
+from app.models import CalendarConnection, Meeting, Milestone, Task
 from app.recipes import service as recipe_service
 from app.services import Refused
 from tests.test_api_tasks import add_task
@@ -166,3 +166,128 @@ def test_deleting_a_workspace_keeps_the_grant_another_workspace_uses(
     assert google.revoked == []
     assert connections(session, owner)[home.id].status == "connected"
     assert disconnect_in(web, home).status_code == 200
+
+
+# ---- 5. notifications follow the meeting's workspace ----
+
+
+def bell(session, user, meeting) -> dict[int, int]:
+    """Which workspace each of the person's notifications about the meeting is filed in."""
+    session.expire_all()
+    from app.models import Notification
+
+    return {
+        n.user_id: n.team_id
+        for n in session.scalars(
+            select(Notification).where(
+                Notification.meeting_id == meeting.id, Notification.user_id == user.id
+            )
+        )
+    }
+
+
+def test_a_notification_follows_its_meeting_when_it_is_shared_moved_and_moved_back(session, cast):
+    meeting = cast.meetings["p"]  # Pat's, in his personal workspace; "DATA_P note" is about it
+    personal = teams.personal_team(session, cast.pat.id)
+    assert bell(session, cast.pat, meeting) == {cast.pat.id: personal.id}
+
+    meeting_teams.share(session, cast.pat, meeting, cast.x.id)
+    session.commit()
+    assert bell(session, cast.pat, meeting) == {cast.pat.id: cast.x.id}  # shared: X's bell now
+
+    meeting_teams.unshare(session, meeting)
+    session.commit()
+    assert bell(session, cast.pat, meeting) == {cast.pat.id: cast.x.id}  # still filed in X
+
+    meeting.workspace_team_id = personal.id  # (the meeting goes home below, by the real writer)
+    meeting_teams.move(session, cast.pat, meeting, cast.y.id)
+    session.commit()
+    assert bell(session, cast.pat, meeting) == {cast.pat.id: cast.y.id}
+
+    meeting_teams.move_back(session, cast.pat, meeting)
+    session.commit()
+    assert bell(session, cast.pat, meeting) == {cast.pat.id: personal.id}
+
+
+def test_a_leaver_keeps_no_note_about_the_workspace_and_what_they_recorded_goes_home(session, cast):
+    from app.models import Notification
+
+    mine = cast.meetings["x"]  # Pat recorded it in X (shared); "DATA_X note" is his
+    theirs = [
+        m
+        for m in session.scalars(select(Meeting).where(Meeting.workspace_team_id == cast.x.id))
+        if m.owner_user_id == cast.ada.id
+    ][0]  # Ada's meeting shared to X
+    session.add(
+        Notification(
+            user_id=cast.pat.id,
+            kind="k",
+            title="about Ada's meeting",
+            dedupe_key="ada-x",
+            meeting_id=theirs.id,
+            team_id=cast.x.id,
+        )
+    )
+    session.add(
+        Notification(
+            user_id=cast.ada.id,
+            kind="k",
+            title="about Pat's meeting",
+            dedupe_key="pat-x",
+            meeting_id=mine.id,
+            team_id=cast.x.id,
+        )
+    )
+    session.commit()
+    personal = teams.personal_team(session, cast.pat.id)
+    ada_home = teams.personal_team(session, cast.ada.id)
+
+    teams.leave(session, cast.pat, datetime.now(UTC), team_id=cast.x.id)
+    session.commit()
+
+    # Pat's note about his own meeting and about Ada's: in his personal workspace
+    assert bell(session, cast.pat, mine) == {cast.pat.id: personal.id}
+    assert bell(session, cast.pat, theirs) == {cast.pat.id: personal.id}
+    # Ada, still in X, has a note about a meeting that went home with Pat: her personal workspace
+    assert bell(session, cast.ada, mine) == {cast.ada.id: ada_home.id}
+    session.refresh(mine)
+    assert mine.workspace_team_id == personal.id
+
+
+def test_a_leaver_loses_the_calendar_connection_and_every_join_in_the_workspace(session, cast):
+    """Confirms the leaver loses calendar auto-joins (workspaces design 12.3)."""
+    from app.models import ScheduledJoin
+
+    before = session.scalars(
+        select(ScheduledJoin).where(
+            ScheduledJoin.user_id == cast.pat.id, ScheduledJoin.team_id == cast.x.id
+        )
+    ).all()
+    assert (
+        before
+        and session.scalars(
+            select(CalendarConnection).filter_by(user_id=cast.pat.id, team_id=cast.x.id)
+        ).all()
+    )
+
+    teams.leave(session, cast.pat, datetime.now(UTC), team_id=cast.x.id)
+    session.commit()
+
+    assert (
+        session.scalars(
+            select(ScheduledJoin).where(
+                ScheduledJoin.user_id == cast.pat.id, ScheduledJoin.team_id == cast.x.id
+            )
+        ).all()
+        == []
+    )
+    assert (
+        session.scalars(
+            select(CalendarConnection).filter_by(user_id=cast.pat.id, team_id=cast.x.id)
+        ).all()
+        == []
+    )
+    # his other workspaces' calendars are untouched
+    assert session.scalars(
+        select(CalendarConnection).filter_by(user_id=cast.pat.id, team_id=cast.y.id)
+    ).all()

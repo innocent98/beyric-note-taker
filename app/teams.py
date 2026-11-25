@@ -15,7 +15,7 @@ The rules that make that safe live here, in one place:
 
 from datetime import datetime
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app import entitlements
@@ -166,6 +166,40 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     )
 
 
+def refile_notifications(
+    session: Session, meeting_ids: list[int] | None = None, user_id: int | None = None
+) -> None:
+    """A notification follows its meeting's workspace (workspaces design section 3): after a meeting
+    is shared, moved, moved back, given back or its recorder leaves, the notifications about it are
+    re-filed in the meeting's CURRENT workspace for every person who is a member of it, and in
+    their own personal workspace for anyone who is not (a person who left must not keep a note
+    about it in a workspace they are no longer in). `meeting_ids`: the notifications about these
+    meetings; `user_id`: all of this person's notifications that are about a meeting. Notifications
+    about no meeting (hours, account notices) never move. In the caller's transaction, no commit."""
+    if not meeting_ids and user_id is None:
+        return
+    scope = []
+    params: dict = {}
+    if meeting_ids:
+        scope.append("n.meeting_id = any(:meeting_ids)")
+        params["meeting_ids"] = list(meeting_ids)
+    if user_id is not None:
+        scope.append("n.user_id = :user_id")
+        params["user_id"] = user_id
+    session.execute(
+        text(
+            "update notifications n set team_id = coalesce("
+            "(select m.workspace_team_id from meetings m "
+            " join team_members tm on tm.team_id = m.workspace_team_id and tm.user_id = n.user_id "
+            " where m.id = n.meeting_id), "
+            "(select p.id from teams p where p.owner_user_id = n.user_id and p.is_personal "
+            " order by p.id limit 1), n.team_id) "
+            "where n.meeting_id is not null and (" + " or ".join(scope) + ")"  # noqa: S608
+        ),
+        params,
+    )
+
+
 def keep_private_tasks(session: Session, meeting: Meeting) -> None:
     """ "Keep private" on a meeting filed in a team's workspace: the meeting stays in the workspace
     but only its recorder reads it, so what the AI took from it must not stay readable to the team
@@ -311,6 +345,9 @@ def dissolve_team(session: Session, team: Team) -> None:
     A template a kept meeting was written with outlives the team (taken out of use if its owner is
     gone, `app/deletion.py`): it moves to that meeting's workspace; every other row of the team's
     goes. Vocabulary goes with the team. In the caller's transaction, no commit."""
+    filed_here = list(
+        session.scalars(select(Meeting.id).where(Meeting.workspace_team_id == team.id))
+    )
     session.execute(
         update(Meeting)
         .where(Meeting.workspace_team_id == team.id)
@@ -325,6 +362,7 @@ def dissolve_team(session: Session, team: Team) -> None:
             .scalar_subquery()
         )
     )
+    refile_notifications(session, filed_here)  # their notes survive in the recorders' workspaces
     kept = select(Meeting.template_id)
     session.execute(delete(Template).where(Template.team_id == team.id, Template.id.not_in(kept)))
     session.execute(
@@ -527,6 +565,15 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
     # What they recorded into this workspace and kept (not moved) goes back to their personal
     # workspace: it is private to them now, and a person outside a workspace lists nothing in it.
     # A moved meeting is the team's: it stays, and the recorder shows as "Former member".
+    going_home = list(
+        session.scalars(
+            select(Meeting.id).where(
+                Meeting.owner_user_id == user.id,
+                Meeting.workspace_team_id == old_team_id,
+                Meeting.owner_team_id.is_(None),
+            )
+        )
+    )
     session.execute(
         update(Meeting)
         .where(
@@ -561,6 +608,9 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
     )
     session.delete(member)
     session.flush()
+    # The bell follows the meetings: what the person recorded went home with them, and their notes
+    # about the team's meetings leave the workspace they are no longer in.
+    refile_notifications(session, going_home, user.id)
     return home
 
 

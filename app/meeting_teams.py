@@ -53,6 +53,7 @@ def _touched(session: Session, meeting: Meeting, actor: series_rules.Actor) -> N
     admin of the team makes its recurring card then, and clears a removed scope's mark); `SYSTEM`
     for unshare and move back, which go to the recorder's personal card."""
     teams.rehome_tasks(session, meeting)
+    teams.refile_notifications(session, [meeting.id])  # the bell follows the meeting
     before = meeting.series_id
     # flag on: into the row of its new scope
     series_rules.follow_meeting(
