@@ -1,0 +1,28 @@
+{
+  "note": "Ada's plan lapsed: refused again, 403 `plan_inactive`.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/documents",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipe_key": "follow_up_email",
+      "meeting_ids": [
+        1
+      ]
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "plan_inactive",
+        "message": "Making documents needs an active plan or trial. You can still read, search and export your notes, and use your tasks and decisions."
+      }
+    }
+  }
+}
