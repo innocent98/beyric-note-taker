@@ -15,7 +15,7 @@ import hashlib
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -45,11 +45,22 @@ def effective_cap(session: Session, user: User) -> int | None:
     return state.default_hours_cap_seconds if state else DEFAULT_CAP_SECONDS
 
 
+def owned_entries(user: User):
+    """The usage rows (a `WHERE` clause on `UsageEntry`) counted against `user`: the ones made for
+    this account (`user_id`), plus the ones a DELETED account left (no `user_id`) under this
+    address's fingerprint, so deleting an account and signing up again does not reset the hours.
+    A row that belongs to another account is never matched by an address that changed hands
+    (review S2, delta 4): whoever takes over an address does not inherit what the last one
+    recorded."""
+    return or_(
+        UsageEntry.user_id == user.id,
+        and_(UsageEntry.user_id.is_(None), UsageEntry.email_hash == email_hash(user.email)),
+    )
+
+
 def ledger_seconds(session: Session, user: User) -> int:
     return session.scalar(
-        select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-            or_(UsageEntry.user_id == user.id, UsageEntry.email_hash == email_hash(user.email))
-        )
+        select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(owned_entries(user))
     )
 
 

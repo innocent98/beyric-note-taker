@@ -39,8 +39,10 @@ from app.billing.routing import provider_for
 from app.billing.types import (
     BadEvent,
     BillingError,
+    ChargeBlocked,
     IgnoredEvent,
     NoRecord,
+    NothingMoved,
     ProviderError,
     WebhookRejected,
 )
@@ -689,6 +691,33 @@ def test_a_charge_that_failed_for_another_reason_is_still_an_error(answer):
     assert not isinstance(caught.value, OutcomeUnknown)
 
 
+@pytest.mark.parametrize("answer", [reply("{}", 401), reply("{}", 403), reply("{}", 429)])
+def test_a_charge_refused_for_a_key_or_a_rate_limit_is_blocked(answer):
+    """The vendor said no before doing anything, and for a reason that is ours or theirs, never
+    the customer's: the renewal clock must not count it."""
+    with pytest.raises(ChargeBlocked):
+        Wire(answer).provider().charge_saved_method(
+            "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+
+
+def test_a_charge_with_no_key_is_blocked():
+    wire = Wire(reply(CHARGE_OK))
+    with pytest.raises(ChargeBlocked):
+        wire.provider(flutterwave_secret_key="   ", flutterwave_secret_hash="").charge_saved_method(
+            "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    assert wire.requests == []
+
+
+def test_a_charge_with_an_odd_status_code_may_have_happened_so_is_not_nothing_moved():
+    with pytest.raises(ProviderError) as caught:
+        Wire(reply("x", 418)).provider().charge_saved_method(
+            "FAKE-NOT-A-TOKEN", 1800, "USD", REF, payer_email="payer@example.test"
+        )
+    assert not isinstance(caught.value, NothingMoved)
+
+
 def test_an_unknown_outcome_is_not_a_provider_error():
     """A caller that retries on `ProviderError` must never catch a lost refund or charge."""
     assert issubclass(OutcomeUnknown, BillingError)
@@ -743,7 +772,7 @@ def test_a_charge_that_cannot_be_made_properly_sends_nothing(kwargs):
         payer_email="payer@example.test",
     )
     wire = Wire(reply(CHARGE_OK))
-    with pytest.raises(ProviderError):
+    with pytest.raises(NothingMoved):  # a ProviderError that says nothing was charged
         wire.provider().charge_saved_method(**{**values, **kwargs})
     assert wire.requests == []
 

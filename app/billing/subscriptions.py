@@ -260,6 +260,9 @@ def start_pack_checkout(
     sub = live_row(db, user.id)
     if sub is None:
         raise Refused(409, "plan_required", "You need a plan to buy extra hours.")
+    # Stage S9: a refund of the plan's first payment that is not settled may end the plan, and a
+    # pack is a new charge on it (review N1): it waits like the other charges.
+    _refuse_while_refunding(db, sub)
     product = plans.get_product(db, product_code, sub.currency)
     if product is None:
         raise Refused(404, "product_not_found", "That pack is not on sale in your currency.")
