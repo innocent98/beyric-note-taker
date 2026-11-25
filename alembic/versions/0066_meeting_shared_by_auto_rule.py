@@ -11,15 +11,15 @@ meeting shared by the rule from now on carries it until the recorder shares, uns
 
 Downgrade drops the column; nothing else depends on it.
 
-Revision ID: 0065
-Revises: 0064
+Revision ID: 0066
+Revises: 0065
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0065"
-down_revision = "0064"
+revision = "0066"
+down_revision = "0065"
 branch_labels = None
 depends_on = None
 

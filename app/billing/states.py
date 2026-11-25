@@ -50,6 +50,7 @@ LAST_ATTEMPT = len(ATTEMPT_OFFSETS) - 1
 CHARGE_FAILED_0 = "charge_failed_0"  # the attempt at the due moment did not pay
 CHARGE_FAILED_1 = "charge_failed_1"  # the day-1 retry did not pay
 CHARGE_FAILED_2 = "charge_failed_2"  # the day-2 retry did not pay
+CHARGE_BLOCKED = "charge_blocked"  # a charge refused for OUR key or a rate limit: not their failure
 PAYMENT_SUCCEEDED = "payment_succeeded"  # a verified payment for this subscription's period
 PAYMENT_STALE = "payment_stale"  # a verified payment for a period that was already settled
 GRACE_ENDED = "grace_ended"  # 72 hours after the due moment, unpaid
@@ -95,6 +96,9 @@ def _t(status: str, *effects: str) -> Transition:
 TABLE: dict[tuple[str, str], Transition] = {
     # --- active
     (ACTIVE, CHARGE_FAILED_0): _t(PAST_DUE, OPEN_GRACE, SCHEDULE_NEXT_ATTEMPT, NOTIFY_FAILED),
+    # A charge our key or a rate limit refused is not the person's failure: the grace opens (their
+    # hours stay usable, Pay now works), but no retry is spent and no mail says it failed.
+    (ACTIVE, CHARGE_BLOCKED): _t(PAST_DUE, OPEN_GRACE),
     (ACTIVE, PAYMENT_SUCCEEDED): _t(ACTIVE, START_PERIOD),
     (ACTIVE, PAYMENT_STALE): _t(ACTIVE, NEEDS_REFUND),
     (ACTIVE, PERIOD_ENDED_CANCELED): _t(CANCELED),
@@ -105,6 +109,10 @@ TABLE: dict[tuple[str, str], Transition] = {
     (ACTIVE, ACCOUNT_DELETED): _t(ENDED),
     (ACTIVE, REFUNDED): _t(ENDED),
     # --- past_due: the 3 days of grace. Change plan and resume are refused (not in the table).
+    (PAST_DUE, CHARGE_BLOCKED): _t(PAST_DUE),  # the grace is extended by the caller, with a cap
+    # The first real failure of a row a block (`CHARGE_BLOCKED`) put in the grace while attempt 0
+    # was still to come: the grace is already open, so only the mail and the next attempt follow.
+    (PAST_DUE, CHARGE_FAILED_0): _t(PAST_DUE, SCHEDULE_NEXT_ATTEMPT, NOTIFY_FAILED),
     (PAST_DUE, CHARGE_FAILED_1): _t(PAST_DUE, SCHEDULE_NEXT_ATTEMPT),
     (PAST_DUE, CHARGE_FAILED_2): _t(PAST_DUE, STOP_ATTEMPTS, NOTIFY_LAST_DAY),
     (PAST_DUE, PAYMENT_SUCCEEDED): _t(ACTIVE, START_PERIOD, EXPIRE_LEFTOVER),
@@ -163,6 +171,8 @@ def due_action(s: Snapshot, now: datetime) -> Due:
             return Due(NONE)
         if s.cancel_at_period_end:
             return Due(END_CANCELED)
+        if s.next_charge_at is not None and now < s.next_charge_at:
+            return Due(NONE)  # held back: a charge refused for a reason that is not the person's
         return Due(CHARGE, 0)
     if s.status == PAST_DUE:
         ends = s.grace_ends_at or grace_end(s.current_period_end)

@@ -1,6 +1,6 @@
 # SOP: Make the auto-share rule visible ("Shared with <team> by your auto-share rule")
 
-**What shipped.** The saved "Share my new meetings with <team>" rule keeps working exactly as before, but it is now said plainly in two places: the Settings card says it also applies to meetings recorded in the **Personal** workspace, and a meeting the rule shared says so on its page with the existing Stop sharing button and a link to Settings. One additive API field (`shared_by_auto_share`), one additive column (migration `0065`). PR: `feature/auto-share-visible-label` into `main` (number in the checklist entry). Not merged: waits for Adebayo's typed word.
+**What shipped.** The saved "Share my new meetings with <team>" rule keeps working exactly as before, but it is now said plainly in two places: the Settings card says it also applies to meetings recorded in the **Personal** workspace, and a meeting the rule shared says so on its page with the existing Stop sharing button and a link to Settings. One additive API field (`shared_by_auto_share`), one additive column (migration `0066`). PR: `feature/auto-share-visible-label` into `main` (number in the checklist entry). Not merged: waits for Adebayo's typed word.
 
 Spec context: `docs/sop/2026-11-25-workspaces-release.md` and `docs/superpowers/specs/2026-11-24-workspaces-design.md` (the rule is the person's explicit choice and a test asserts it on purpose: `tests/test_workspace_scope.py`).
 
@@ -24,7 +24,7 @@ The rule publishes a meeting recorded in a person's Personal workspace to the ch
 
 | Area | Files |
 |---|---|
-| Model and migration | `app/models.py` (`Meeting.shared_by_auto_rule`, listener), `alembic/versions/0065_meeting_shared_by_auto_rule.py` (down revision `0064`; downgrade drops the column) |
+| Model and migration | `app/models.py` (`Meeting.shared_by_auto_rule`, listener), `alembic/versions/0066_meeting_shared_by_auto_rule.py` (down revision `0065`; downgrade drops the column) |
 | Rule | `app/teams.py` `apply_share_default` |
 | API | `app/api_schemas.py` (`MeetingDetail`), `app/api.py` (`_detail`), `docs/openapi.json`, `web/lib/api/schema.d.ts` (both regenerated: `PYTHONPATH=. python scripts/export_openapi.py`, `npm run gen:api`) |
 | Web | `settings-auto-share.tsx`, `meeting-team-card.tsx`, `web/tests/helpers.ts` (older captures default the field to false) |
@@ -33,11 +33,11 @@ The rule publishes a meeting recorded in a person's Personal workspace to the ch
 
 ## Verification
 
-Run locally: `ruff check .`, `ruff format --check .` (the pinned 0.17.3), `export_openapi.py --check`, `npm run typecheck`, `npm run lint` (4 pre-existing warnings, none in these files), the touched test files above plus `tests/test_workspace_scope.py` (the test that asserts the rule on purpose) and `web/tests/meeting-team-card.test.tsx`; the migration on a scratch Postgres (upgrade to `0065`, downgrade to `0064`, upgrade to head). Not run locally, left to CI: the full suites. The API shapes in the guide and in the web test come from the live capture against the running app (stand-in bot, no model: the notes step is stood in for by the one call the pipeline makes).
+Run locally: `ruff check .`, `ruff format --check .` (the pinned 0.17.3), `export_openapi.py --check`, `npm run typecheck`, `npm run lint` (4 pre-existing warnings, none in these files), the touched test files above plus `tests/test_workspace_scope.py` (the test that asserts the rule on purpose) and `web/tests/meeting-team-card.test.tsx`; the migration on a scratch Postgres (upgrade to `0066`, downgrade to `0066`, upgrade to head). Not run locally, left to CI: the full suites. The API shapes in the guide and in the web test come from the live capture against the running app (stand-in bot, no model: the notes step is stood in for by the one call the pipeline makes).
 
 ## Operate / roll back
 
-Deploy applies `0065` (a nullable-free column with a server default: instant). Roll back by reverting the PR and `alembic downgrade 0064`; nothing else depends on the column and no access rule reads it (`app/visibility.py` never does).
+Deploy applies `0066` (a nullable-free column with a server default: instant). Roll back by reverting the PR and `alembic downgrade 0065`; nothing else depends on the column and no access rule reads it (`app/visibility.py` never does).
 
 ## Follow-ups (suggestions, not changed here)
 

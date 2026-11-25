@@ -41,7 +41,7 @@ are `app/feature_gates.py`.
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import usage
@@ -112,8 +112,31 @@ class JoinDecision:
 
 
 def mine(user: User, user_id_column, hash_column):
-    """`user`'s rows, by id or by the fingerprint of the email, as `ledger_seconds` does."""
+    """`user`'s rows, by id OR by the fingerprint of the email. Only for the trial's abuse check
+    (`trial.had_one`): spending a grant uses `my_grants` and counting usage `usage.owned_entries`,
+    which never match an address that changed hands."""
     return or_(user_id_column == user.id, hash_column == usage.email_hash(user.email))
+
+
+def my_grants(user: User):
+    """The grants `user` may SPEND (a `WHERE` clause on `HourGrant`): the ones made for this account
+    (`user_id`). A plan period, a pack and an admin gift belong to the person who paid for or was
+    given them, so they are never matched by an email address: an address changes hands (a Google
+    account's address is rewritten, a mailbox is given to someone new), and the fingerprint kept on
+    the grant would hand a stranger the hours (review S2).
+
+    The one exception is the free hours of an account that was deleted (a `trial` or `pilot` grant
+    whose `user_id` is gone): the person who signs up again with the same address finds them again
+    by the fingerprint, as the design always said. The fingerprint is otherwise only an abuse check
+    (`trial.had_one`: no second trial for an address that had one)."""
+    return or_(
+        HourGrant.user_id == user.id,
+        and_(
+            HourGrant.user_id.is_(None),
+            HourGrant.kind.in_(BACKLOG_KINDS),
+            HourGrant.email_hash == usage.email_hash(user.email),
+        ),
+    )
 
 
 def spend_key(grant: HourGrant) -> tuple:
@@ -134,7 +157,7 @@ def grants_in_force(session: Session, user: User, now: datetime) -> list[list]:
     )
     rows = session.execute(
         select(HourGrant, allocated).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash),
+            my_grants(user),
             HourGrant.starts_at <= now,
             or_(HourGrant.expires_at.is_(None), HourGrant.expires_at > now),
         )
@@ -157,7 +180,7 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
             func.max(HourGrant.expires_at),
             func.count().filter(HourGrant.expires_at.is_(None)),
         ).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash),
+            my_grants(user),
             HourGrant.kind.in_(BACKLOG_KINDS),
         )
     ).one()
@@ -166,7 +189,7 @@ def unallocated_seconds(session: Session, user: User, exclude_entry_id: int | No
     if since is None:
         return 0
     query = select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-        mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+        usage.owned_entries(user),
         UsageEntry.counted_at > since,
         ~select(UsageAllocation.id).where(UsageAllocation.usage_entry_id == UsageEntry.id).exists(),
     )
@@ -181,16 +204,14 @@ def pre_pilot_seconds(session: Session, user: User) -> int:
     """Usage counted at or before the moment the person's pilot grants were made (migration 0049
     made each as the old cap minus the ledger of that moment). 0 with no pilot grant."""
     since = session.scalar(
-        select(func.min(HourGrant.starts_at)).where(
-            mine(user, HourGrant.user_id, HourGrant.email_hash), HourGrant.kind == "pilot"
-        )
+        select(func.min(HourGrant.starts_at)).where(my_grants(user), HourGrant.kind == "pilot")
     )
     if since is None:
         return 0
     return int(
         session.scalar(
             select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
-                mine(user, UsageEntry.user_id, UsageEntry.email_hash),
+                usage.owned_entries(user),
                 UsageEntry.counted_at <= since,
             )
         )
