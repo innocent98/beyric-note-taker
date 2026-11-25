@@ -19,12 +19,12 @@
 - [ ] **Not verified:** the real server's build time and the deploy script path
 
 **Addendum 2026-11-24: WORKSPACES release** (integration branch `feature/workspaces`; spec `docs/superpowers/specs/2026-11-24-workspaces-design.md`, plan `docs/superpowers/plans/2026-11-24-workspaces.md`; one release, nothing deploys until W5 is done):
-- [ ] W1 Foundation (SOP `docs/sop/2026-11-24-workspaces-foundation.md`, migration `0070` placeholder)
+- [x] W1 Foundation (SOP `docs/sop/2026-11-24-workspaces-foundation.md`, migration `0070` placeholder)
   - [x] T1 Columns, models, backfill migration and the cutover rehearsal test (`tests/test_workspaces_migration.py`); verified locally on a scratch Postgres, not on production data
   - [x] T2 One workspace context (`app/workspace_context.py`), `MULTI_TEAM_ENABLED` removed (`.env.example`, `deploy/README.md`, `scripts/clean_env.py`)
   - [x] T3 Every list, count, badge, Ask and notification narrowed; strict route guard `tests/test_workspace_leaks.py` (calendar, templates and vocabulary GETs are listed as pending W2/W3)
-  - [ ] T4 Web: header everywhere, auto-switch with toast, switcher unread dots (PR B)
-  - [ ] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`)
+  - [x] T4 Web: header everywhere, auto-switch with toast, switcher unread dots (PR B; looked at in a real browser at 1280 and 390 px; SOP section "Task 4")
+  - [x] FE guide `docs/fe-integration-guide-workspaces.md` from real captures (`scripts/capture_workspaces.py`, `docs/fe-captures/workspaces/`)
 - [ ] W2 Templates, vocabulary, notifications, settings per workspace; the pipeline reads the meeting's workspace (T5 to T7)
 - [ ] W3 Calendar connections per workspace, arbitration, recurring per workspace (T8, T9)
 - [ ] W4 Plan limit, workspace delete and leave, classes, the feature-gate rule for members (T10 to T12)

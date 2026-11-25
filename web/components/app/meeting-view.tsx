@@ -34,6 +34,7 @@ import { ApiError, errorMessage } from "@/lib/api/client";
 import { GateText } from "@/components/billing/gate-text";
 import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember, TeamSummary } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
+import { MeetingWorkspaceSync } from "@/components/app/meeting-workspace-sync";
 import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { useScrollToRow } from "@/lib/transcript-scroll";
@@ -291,6 +292,7 @@ export function MeetingView({
 
   return (
     <div className="stack-lg">
+      <MeetingWorkspaceSync workspace={meeting.workspace ?? null} teams={teams} />
       <AppLink className="crumb" href="/">
         <Icon name="back" size={14} />
         All meetings

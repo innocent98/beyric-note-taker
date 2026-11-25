@@ -1,0 +1,42 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "notifications": [
+        {
+          "id": 4,
+          "kind": "usage.warning",
+          "severity": "warning",
+          "title": "You have used 80 percent of your hours",
+          "body": "",
+          "meeting_id": null,
+          "created_at": "2026-11-24T22:37:45.714160Z",
+          "read_at": null
+        },
+        {
+          "id": 1,
+          "kind": "meeting.ready",
+          "severity": "info",
+          "title": "Notes ready: pat_private",
+          "body": "",
+          "meeting_id": 1,
+          "created_at": "2026-11-24T22:37:45.714160Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}
