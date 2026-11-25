@@ -150,6 +150,21 @@ def owns(session: Session, user: User, meeting: Meeting) -> bool:
     return meeting.owner_user_id == user.id or role in MANAGER_ROLES
 
 
+def in_meeting_workspace(session: Session, user: User, meeting: Meeting) -> bool:
+    """True while `user` is a current member of the workspace the meeting is filed in. What a
+    meeting is written with (its workspace's templates and vocabulary) is read for the person who
+    asks only if they still belong to that workspace: a recorder who left, or anyone who never was
+    in it, gets nothing of it, whatever they may otherwise do with the meeting."""
+    return (
+        session.scalar(
+            select(TeamMember.id).where(
+                TeamMember.team_id == meeting.workspace_team_id, TeamMember.user_id == user.id
+            )
+        )
+        is not None
+    )
+
+
 def recorded_by(session: Session, user: User, meeting: Meeting) -> bool:
     """True when `user` recorded the meeting AND may still change it (a moved meeting's recorder
     who left its team does not). For what only the recorder does, even on a team's meeting:

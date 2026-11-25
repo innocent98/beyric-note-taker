@@ -345,7 +345,10 @@ def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int, int]:
     user = session.get(User, req.user_id)
     if user is None:
         raise ValueError("no such user")
-    workspace_id = req.workspace_team_id or teams.ensure_personal_team(session, user).id
+    workspace_id = teams.ensure_personal_team(session, user).id
+    if req.workspace_team_id is not None:
+        # a workspace the person left (an old calendar join) records into their personal one
+        workspace_id = workspace_prefs.workspace_for(session, user.id, req.workspace_team_id)
     template_id = req.template_id
     if template_id is None:
         template_id = workspace_prefs.default_template_id(session, workspace_id, user.id)

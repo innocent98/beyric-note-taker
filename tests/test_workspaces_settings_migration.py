@@ -24,10 +24,14 @@ owner_env = migrations.owner_env
 scratch_url = migrations.scratch_url
 
 
-def test_0071_follows_0070_and_is_the_only_head(scratch_url):
+def test_0071_follows_0070_and_is_an_ancestor_of_the_only_head(scratch_url):
+    """Later slices chain on top of 0071, so it is not the head forever: it must exist, follow 0070
+    and lie under the single current head."""
     script = ScriptDirectory.from_config(alembic_config(scratch_url))
-    assert script.get_heads() == ["0071"]
+    heads = script.get_heads()
+    assert len(heads) == 1
     assert script.get_revision("0071").down_revision == "0070"
+    assert "0071" in {rev.revision for rev in script.walk_revisions(base="base", head=heads[0])}
 
 
 def test_0071_makes_names_and_terms_unique_per_workspace_without_losing_anything(scratch_url):
