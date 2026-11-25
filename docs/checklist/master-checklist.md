@@ -13,7 +13,7 @@
 - [ ] CI green on the final head, then his typed "merge #N"
 - [ ] Not done: recipe descriptions written by hand per starter (the first sentence of the instruction is used); "recently used" is per browser, not stored on the server
 
-**Addendum 2026-11-25: Documents, Recipes, Ask and Notifications follow the active workspace** (branch `fix/workspace-follows-documents-and-recipes`, SOP `docs/sop/2026-11-25-workspace-follows-documents-and-recipes.md`, walkthrough `docs/guides/recipes-and-documents-walkthrough.md`; web only, no migration; PR number below once open; **not merged: waits for his typed word**)
+**Addendum 2026-11-25: Documents, Recipes, Ask and Notifications follow the active workspace** (branch `fix/workspace-follows-documents-and-recipes`, SOP `docs/sop/2026-11-25-workspace-follows-documents-and-recipes.md`, walkthrough `docs/guides/recipes-and-documents-walkthrough.md`; web only, no migration; PR #286, merged)
 - [x] Cause reproduced live: `TEAM_PAGES` lacked these pages, so sidebar links had no `?team=` and the server render read the default workspace while browser calls read the chosen one
 - [x] The four pages are team pages (`requireTeamOwner`, views keyed by workspace); `/documents/[id]` moves the tab to the draft's workspace; tests first, touched tests green
 - [x] Recipe list hint under the list (where My recipes and Team recipes appear); owner walkthrough with 10 live screenshots
