@@ -4,13 +4,14 @@ import { AppShell } from "@/components/app/shell";
 import { AskView } from "@/components/app/ask-view";
 import { ApiError } from "@/lib/api/client";
 import type { AskScope } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner, getShellTeams } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireTeamOwner, getShellTeams } from "@/lib/api/server";
 import { initials } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Ask Beyric", robots: { index: false, follow: false } };
 
-export default async function AskPage() {
-  const api = await requireOwner();
+// Ask searches the active workspace only, so its scope line is read for `?team=` (else the default workspace).
+export default async function AskPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { api, teamId } = await requireTeamOwner("/ask", await searchParams);
   // A failed scope load is not an error page: the box still works, only the chips and the scope
   // line are left out. A 401 still goes to /login.
   let scope: AskScope | null = null;
@@ -29,7 +30,7 @@ export default async function AskPage() {
       unread={await getUnreadNotifications()} user={user} teams={await getShellTeams()}
       timeZone={await getTimeZone()}
     >
-      <AskView scope={scope} initials={name ? initials(name) : "?"} />
+      <AskView key={teamId ?? "default"} scope={scope} initials={name ? initials(name) : "?"} />
     </AppShell>
   );
 }

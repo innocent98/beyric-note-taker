@@ -56,6 +56,28 @@ describe("the list", () => {
     expect(screen.queryByRole("heading", { name: "Team recipes" })).toBeNull();
   });
 
+  it("says where the empty groups will appear, so the person knows they are not missing", () => {
+    // A team the person manages that has no recipe of its own, and none of the person's own (the capture's team
+    // is the personal space, so it is named and marked as a team here).
+    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: false, name: "Platform team" } }} brief={brief} />);
+    const list = screen.getByRole("region", { name: "Recipes" });
+    expect(within(list).getByText(/My recipes appear here, under the starters, once you copy a starter/)).toBeTruthy();
+    expect(within(list).getByText(new RegExp(`Team recipes appear here once an owner or admin of Platform team saves one`))).toBeTruthy();
+  });
+
+  it("says nothing about a group that has recipes in it", () => {
+    render(<RecipesView initial={withOwn(asMember, personal)} brief={memberBrief} />);
+    const list = screen.getByRole("region", { name: "Recipes" });
+    expect(within(list).queryByText(/appear here/)).toBeNull();
+  });
+
+  it("says nothing of team recipes in a personal space (there is no team to save one for)", () => {
+    render(<RecipesView initial={{ ...owner, team: { ...owner.team, is_personal: true } }} brief={brief} />);
+    const list = screen.getByRole("region", { name: "Recipes" });
+    expect(within(list).getByText(/My recipes appear here/)).toBeTruthy();
+    expect(within(list).queryByText(/Team recipes appear here/)).toBeNull();
+  });
+
   it("shows a starter read-only, with how to change it", async () => {
     render(<RecipesView initial={owner} brief={brief} />);
     await pick(/Follow-up email/);
