@@ -1356,6 +1356,26 @@ def test_a_charge_blocked_by_our_key_or_a_rate_limit_is_not_the_customers_failur
     assert len(grants(session, ada, "plan_period")) == 2
 
 
+def test_a_blocked_charge_is_held_back_only_until_the_grace_would_end(
+    session, ada, admin, providers, bought
+):
+    """Our key staying broken must not keep an `active` row held and retried for ever: once the
+    hold would run past the grace, the attempt counts like any other and the ordinary lapse comes."""
+    due = bought
+    providers.usd.charge_outcome = "blocked"
+    late = due + timedelta(hours=71, minutes=45)  # a 30-minute hold would pass the grace's end
+
+    tick(session, late)
+
+    sub = live(session, ada)
+    assert (sub.status, sub.retry_count) == ("past_due", 1)  # moved by the machine, not held
+    assert notices(session, ada, "billing.failed")
+    assert notices(session, admin, "admin.billing_charge_blocked")
+
+    tick(session, due + timedelta(hours=73))
+    assert live(session, ada) is None  # lapsed at the normal moment
+
+
 def test_giving_up_never_overwrites_a_payment_a_webhook_settled_meanwhile(
     session, ada, admin, providers, bought, engine, monkeypatch
 ):

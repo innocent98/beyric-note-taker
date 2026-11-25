@@ -38,7 +38,9 @@ order matters, and money is only ever moved by a row we made first:
 - the call was refused for a reason that is ours or the provider's, not the person's
   (`ChargeBlocked`: our key missing or refused, a rate limit): NOT their failure. The payment is
   closed (`failed`, with no slot), the status machine does not move (no grace, no mail, no retry
-  spent), the admins are told, and the charge is held back `BLOCKED_RETRY` (`next_charge_at`);
+  spent), the admins are told, and the charge is held back `BLOCKED_RETRY` (`next_charge_at`)
+  until a hold would run past the end of the grace: then it counts like any other failed attempt
+  and the ordinary lapse follows (a broken key never holds a plan `active` for ever);
 - the call got no answer and the lookup by our reference cannot find it, or the provider keeps
   saying `pending` with no page for the payer: the attempt waits `UNRESOLVED_AFTER`, then COUNTS as
   a failed attempt for the clock only (`_note_unresolved` tells the admins; grace, mails, the retry
@@ -319,7 +321,7 @@ def _attempt(
     except ChargeBlocked as blocked:
         # Our key or a rate limit refused it: nothing was charged and it says nothing about the
         # person, so it is not their failed attempt (see the module note).
-        return _charge_blocked(session, payment_id, sub_id, cycle, now, blocked)
+        return _charge_blocked(session, payment_id, sub_id, cycle, n, now, blocked)
     except NothingMoved as refused:
         # The provider refused the call (or it was never made): no charge exists, unless an
         # earlier call under this reference made one, so it is asked once. Nothing found means
@@ -431,6 +433,7 @@ def _charge_blocked(
     payment_id: int,
     sub_id: int,
     cycle: datetime,
+    n: int,
     now: datetime,
     blocked: ChargeBlocked,
 ) -> None:
@@ -438,6 +441,7 @@ def _charge_blocked(
     limit): not the person's failed attempt. The payment row is kept as history (`failed`) but
     loses its slot (`attempt` null) so the retry can use it; the subscription is not moved, only
     held back `BLOCKED_RETRY`; the admins are told (once an hour per provider)."""
+    held = True
     closed = session.execute(
         update(Payment)
         .where(Payment.id == payment_id, Payment.status == "pending")
@@ -451,8 +455,11 @@ def _charge_blocked(
             .execution_options(populate_existing=True)
         ).one_or_none()
         if sub is not None and sub.status in states.LIVE and sub.current_period_end == cycle:
-            sub.next_charge_at = now + BLOCKED_RETRY
-            sub.updated_at = now
+            if now + BLOCKED_RETRY < states.grace_end(cycle):
+                sub.next_charge_at = now + BLOCKED_RETRY
+                sub.updated_at = now
+            else:
+                held = False  # a hold would run past the grace: it counts like any other attempt
         provider = session.scalar(select(Payment.provider).where(Payment.id == payment_id))
         logger.warning(
             "renewal payment %s: charge blocked (%s)", payment_id, type(blocked).__name__
@@ -468,6 +475,8 @@ def _charge_blocked(
             "it lasts past the end of the 3 days after the due moment the plan lapses.",
         )
     session.commit()
+    if closed and not held:
+        _fail(session, sub_id, cycle, n, now)
 
 
 def _note_unresolved(session: Session, payment: Payment, why: str) -> bool:
